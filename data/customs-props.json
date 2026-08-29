@@ -435,6 +435,816 @@
     60,
     50
    ]
+  },
+  {
+   "type": "railcar",
+   "name": "Locomotive",
+   "x": 363.9,
+   "z": -124.2,
+   "w": 3.4,
+   "l": 14,
+   "h": 4,
+   "rot": 177,
+   "color": [
+    60,
+    60,
+    65
+   ]
+  },
+  {
+   "type": "tanker",
+   "name": "Tanker",
+   "x": 427.9,
+   "z": -64,
+   "w": 3.5,
+   "l": 13,
+   "h": 3.6,
+   "rot": 39,
+   "color": [
+    205,
+    205,
+    210
+   ]
+  },
+  {
+   "type": "wall",
+   "name": "Fortress wall W",
+   "path": [
+    [
+     218,
+     -158
+    ],
+    [
+     218,
+     -92
+    ]
+   ],
+   "w": 0.5,
+   "h": 3.5,
+   "color": [
+    150,
+    148,
+    142
+   ]
+  },
+  {
+   "type": "wall",
+   "name": "Fortress wall E",
+   "path": [
+    [
+     180,
+     -158
+    ],
+    [
+     180,
+     -92
+    ]
+   ],
+   "w": 0.5,
+   "h": 3.5,
+   "color": [
+    150,
+    148,
+    142
+   ]
+  },
+  {
+   "type": "wall",
+   "name": "Fortress wall N",
+   "path": [
+    [
+     218,
+     -158
+    ],
+    [
+     180,
+     -158
+    ]
+   ],
+   "w": 0.5,
+   "h": 3.5,
+   "color": [
+    150,
+    148,
+    142
+   ]
+  },
+  {
+   "type": "wall",
+   "name": "Fortress wall S",
+   "path": [
+    [
+     218,
+     -92
+    ],
+    [
+     180,
+     -92
+    ]
+   ],
+   "w": 0.5,
+   "h": 3.5,
+   "color": [
+    150,
+    148,
+    142
+   ]
+  },
+  {
+   "type": "wall",
+   "name": "Fortress inner wall",
+   "path": [
+    [
+     204.9,
+     -154.5
+    ],
+    [
+     204.9,
+     -108.7
+    ]
+   ],
+   "w": 0.5,
+   "h": 3.5,
+   "color": [
+    150,
+    148,
+    142
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container stack",
+   "x": 233,
+   "z": -89,
+   "w": 3,
+   "l": 16,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    170,
+    60,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Containers",
+   "x": 229.8,
+   "z": -100,
+   "w": 2.5,
+   "l": 7,
+   "h": 2.6,
+   "rot": 80,
+   "color": [
+    70,
+    110,
+    70
+   ]
+  },
+  {
+   "type": "tanker",
+   "name": "Yellow tank",
+   "x": 207.5,
+   "z": -77.3,
+   "w": 4,
+   "l": 10,
+   "h": 3.2,
+   "rot": 30,
+   "color": [
+    200,
+    180,
+    60
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 205,
+   "z": -95.6,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    50,
+    110,
+    150
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 200.3,
+   "z": -95.6,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    170,
+    60,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 254.6,
+   "z": -112.6,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    170,
+    60,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 267,
+   "z": -107.4,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    50,
+    110,
+    150
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 273,
+   "z": -99.5,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    70,
+    110,
+    70
+   ]
+  },
+  {
+   "type": "crane",
+   "name": "Crane",
+   "x": 171,
+   "z": -112.6,
+   "w": 2,
+   "l": 20,
+   "h": 6,
+   "rot": 39,
+   "color": [
+    220,
+    180,
+    60
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Trailer",
+   "x": 79,
+   "z": -132.1,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 95,
+   "color": [
+    225,
+    225,
+    220
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Trailer",
+   "x": 74.9,
+   "z": -132.7,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 95,
+   "color": [
+    225,
+    225,
+    220
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Trailer",
+   "x": 70.2,
+   "z": -133.4,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 95,
+   "color": [
+    225,
+    225,
+    220
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Truck with crane",
+   "x": 103.3,
+   "z": -122.9,
+   "w": 3,
+   "l": 8,
+   "h": 3,
+   "rot": 90,
+   "color": [
+    190,
+    50,
+    40
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Containers",
+   "x": 49.7,
+   "z": -187.6,
+   "w": 2.5,
+   "l": 14,
+   "h": 2.6,
+   "rot": 21,
+   "color": [
+    210,
+    110,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 105.2,
+   "z": -112.5,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    210,
+    110,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 105.2,
+   "z": -109.2,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    50,
+    110,
+    150
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 126.8,
+   "z": -146.5,
+   "w": 2.5,
+   "l": 10,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    210,
+    110,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 109.8,
+   "z": -165.4,
+   "w": 2.5,
+   "l": 10,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    200,
+    180,
+    60
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 128,
+   "z": -125.5,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    80,
+    130,
+    130
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 30.7,
+   "z": -158.2,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    210,
+    110,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 49,
+   "z": -150.4,
+   "w": 2.5,
+   "l": 6,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    50,
+    110,
+    150
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail tanker car",
+   "x": -146.4,
+   "z": -86.3,
+   "w": 3.5,
+   "l": 12,
+   "h": 3.6,
+   "rot": 90,
+   "color": [
+    150,
+    150,
+    150
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail tanker car",
+   "x": -146.4,
+   "z": -73.2,
+   "w": 3.5,
+   "l": 12,
+   "h": 3.6,
+   "rot": 90,
+   "color": [
+    150,
+    150,
+    150
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail tanker car",
+   "x": -146.4,
+   "z": -61.5,
+   "w": 3.5,
+   "l": 12,
+   "h": 3.6,
+   "rot": 90,
+   "color": [
+    150,
+    150,
+    150
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail car",
+   "x": -169.2,
+   "z": -121.6,
+   "w": 3,
+   "l": 15,
+   "h": 3.4,
+   "rot": 90,
+   "color": [
+    55,
+    60,
+    55
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": -198,
+   "z": -133.4,
+   "w": 2.5,
+   "l": 7,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    80,
+    130,
+    130
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": -193.4,
+   "z": -126.2,
+   "w": 2.5,
+   "l": 6,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    200,
+    180,
+    60
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": -204.8,
+   "z": -121.4,
+   "w": 2.5,
+   "l": 6,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    170,
+    60,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": -182.7,
+   "z": -149.7,
+   "w": 2.5,
+   "l": 6,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    50,
+    110,
+    150
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": -188.2,
+   "z": -136.6,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 30,
+   "color": [
+    210,
+    110,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container stack",
+   "x": -173.2,
+   "z": -78.4,
+   "w": 2.5,
+   "l": 12,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    210,
+    110,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": -181,
+   "z": -78.4,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 60,
+   "color": [
+    200,
+    180,
+    60
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Containers",
+   "x": -205.8,
+   "z": -66.7,
+   "w": 2.5,
+   "l": 12,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    50,
+    110,
+    150
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Truck with crane",
+   "x": -171.9,
+   "z": -155.6,
+   "w": 3,
+   "l": 10,
+   "h": 3,
+   "rot": 150,
+   "color": [
+    190,
+    50,
+    40
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Trailer",
+   "x": -186.2,
+   "z": -228.2,
+   "w": 3,
+   "l": 9,
+   "h": 3.2,
+   "rot": 90,
+   "color": [
+    90,
+    110,
+    150
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Truck",
+   "x": -195.3,
+   "z": -226.2,
+   "w": 3,
+   "l": 8,
+   "h": 3,
+   "rot": 90,
+   "color": [
+    80,
+    85,
+    90
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Truck",
+   "x": -210.3,
+   "z": -231,
+   "w": 3,
+   "l": 10,
+   "h": 3,
+   "rot": 90,
+   "color": [
+    80,
+    85,
+    90
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Truck",
+   "x": -218.8,
+   "z": -231,
+   "w": 3,
+   "l": 10,
+   "h": 3,
+   "rot": 90,
+   "color": [
+    80,
+    85,
+    90
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Truck",
+   "x": -232.6,
+   "z": -231,
+   "w": 3,
+   "l": 10,
+   "h": 3,
+   "rot": 90,
+   "color": [
+    80,
+    85,
+    90
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Trailer",
+   "x": -239.1,
+   "z": -230.1,
+   "w": 3,
+   "l": 13,
+   "h": 3.4,
+   "rot": 90,
+   "color": [
+    225,
+    225,
+    220
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Containers",
+   "x": -182.2,
+   "z": -229.5,
+   "w": 2.5,
+   "l": 13,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    70,
+    110,
+    70
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Containers",
+   "x": -204.5,
+   "z": -229.5,
+   "w": 2.5,
+   "l": 13,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    70,
+    110,
+    70
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container stack",
+   "x": -160,
+   "z": -172,
+   "w": 4,
+   "l": 18,
+   "h": 3,
+   "rot": 90,
+   "color": [
+    150,
+    50,
+    45
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Trailer",
+   "x": -184.2,
+   "z": -212.5,
+   "w": 3,
+   "l": 8,
+   "h": 3.2,
+   "rot": 90,
+   "color": [
+    225,
+    225,
+    220
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Trailer",
+   "x": -179,
+   "z": -214.4,
+   "w": 3,
+   "l": 8,
+   "h": 3.2,
+   "rot": 90,
+   "color": [
+    225,
+    225,
+    220
+   ]
   }
  ]
 }
