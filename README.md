@@ -19,7 +19,8 @@ Maps today: **Customs, Reserve, Woods** (`?map=customs|reserve|woods`).
 | Data builders | `scripts/` | `build-community-data.mjs` (extracts/spawns/loot from SPT + EFT Wiki), `build-3d.mjs` (SVG → 3D geometry, terrain, roads, bridges), `ingest-elevation.mjs`, `build-quests.mjs`, `fetch-quest-images.mjs`, `warm-tiles.mjs` |
 | Hand-authored inputs | `data/<map>-props.json`, `data/<map>-roads.json`, tables inside `scripts/build-3d.mjs` | traced from the satellite render |
 | Live position | `companion/` (runs on the game PC), `relay/` (WebSocket rooms, Fly.io) | pairing code → `?live=CODE` or the Live panel |
-| Docs | `docs/` | playbook, plans, progress, onboarding |
+| AI quest assistant | `api/assistant.js` (Vercel function), `src/assistant.js` (Ask panel) | DeepSeek, grounded on `quests.json`; returns actions the site runs through `window.tz` |
+| Docs | `docs/` | playbook, plans, progress, onboarding; machine setup notes in `docs/setup/` (e.g. LAN Mouse KVM between the two laptops) |
 
 ## Run it
 
@@ -27,7 +28,11 @@ Maps today: **Customs, Reserve, Woods** (`?map=customs|reserve|woods`).
 npm install
 npm run dev            # http://localhost:5173  (dev server caches tarkov.dev tiles under .cache/)
 npm run build && npm run preview   # production build on :4173 (what headless screenshots use)
+vercel dev --listen 3000           # optional, in a second shell: serves /api/assistant (the AI Ask panel); npm run dev proxies to it
 ```
+
+The Ask panel needs `DEEPSEEK_API_KEY` in the Vercel project env (`vercel env pull .env.local` to use it locally — the key
+is never bundled into the client). Offline checks for the retrieval/parsing logic: `node scripts/test-assistant.mjs`.
 
 Useful URLs: `?view=3d`, `?map=woods`, `?live=CODE`, `?base=satellite&debug=roads` (road overlay check),
 `?relief=1|2|3`, `?trees=0`, `?floor=U`, `?quest=<slug>` (quest layer).
