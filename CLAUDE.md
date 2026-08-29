@@ -86,3 +86,33 @@ pairing code) and `.env.local` out of git (already ignored).
 - Maps phase: Codex (GPT-5.6-Sol) builds Reserve + Woods on branch `codex/maps` (worktree ~/tarkovzero-codex) from `docs/MAP-BUILD-PLAYBOOK.md`; plans/progress under `docs/plans/`. Review + merge, don't redo.
 - Multi-map (2026-08-29, built by Codex GPT-5.6-Sol): registry in `src/mapdata.js` (`MAPS`, `selectMap`), `?map=customs|reserve|woods`, header title = map picker; per-map data `public/data/<map>.json` + `<map>-3d.json`, `data/<map>-props.json`, `<map>-roads.json`; builders take a map key (`node scripts/build-3d.mjs reserve`). Plans/reports: `docs/plans/` (MULTIMAP, reserve, woods, PROGRESS, REVIEW-1). Customs outputs are a byte-identical regression gate (sha256 in PROGRESS.md). Open playtest questions are listed at the end of PROGRESS.md.
 - Terrain realism (2026-08-29, Codex fix passes 3–4): heightfield built from samples via `scripts/ingest-elevation.mjs` (SPT spawns + loose-loot positions extracted from the official SPT 4.1.2 release archive + companion `elevation-<map>.jsonl` survey logs; see `docs/plans/ELEVATION.md`), 5 m multi-scale fit, outlier rejection; `TERRAIN_FEATURES` only as sparse-area fallback. Canopy blocks replaced by individual tree crowns (muted, ≥3 m off roads/footprints); Nature toggles (Trees/Rocks, `?trees=0`, `?rocks=0`) in the View section. Marker `level` field (surface/underground/upper) with UNDERGROUND badges/labels. Customs data now changes legitimately per pass — hashes in PROGRESS.md.
+
+## Quest layer (2026-08-29)
+- Data: `scripts/build-quests.mjs` → `public/data/quests.json` (517 quests / 1457 objectives / 475 zones, ~750 KB).
+  Inputs (all under `scripts/data/tasks/`, git-ignored, auto-fetched when missing):
+  `tasks-mirror.json` (from `scripts/crawl-tasks-mirror.mjs` — tarkov.dev `Task` objects scraped off the
+  tarkov.muedsa.com mirror because api.tarkov.dev is still 422/down; names + descriptions are **Chinese** there,
+  but ids, types, maps and objective **zones with game coordinates** are language-independent),
+  `spt-en.json` (SPT server English locale: `<taskId> name`, `<objectiveId>`, `<itemId> Name`, `<traderId> Nickname`),
+  `spt-quests.json`, plus `public/data/quest-images.json` (wiki screenshots, built by `scripts/fetch-quest-images.mjs`).
+  Re-run `npm run build-quests` after the images file grows.
+- English coverage: 464/517 task names and 1219/1457 objective lines come from the SPT locale; the rest are
+  synthesised from the structured fields (`synthText()`), and identical synthesised rows inside one quest get
+  numbered "(n of m)". No Chinese survives into quests.json (asserted at build).
+- Zones: `position` is the centre, `outline` the ground rectangle. tarkov.dev ships a few stale/doubled outlines
+  (Woods `bunker1`), so an outline is dropped when its centroid is >40 m from the position. `level`
+  (surface/underground/upper) is derived by sampling `<map>-3d.json`'s heightfield against the zone's y.
+- UI: `src/quests.js` (rail panel: search → select → objective checklist; 2D Leaflet layer; the shared card),
+  `#quest-block` in index.html, `.q*` styles at the end of style.css. Selection order picks the quest colour
+  (`QUEST_COLORS`); badges number the quest's points 1..N so "mark 3 tankers" reads 1,2,3. Coincident pins
+  (two objectives in one room) are fanned 2.6 m apart for **drawing only** — `position` stays exact.
+- Icon: `quest-objective` in `icons.js` — a **hexagon** badge (new `shape:'hex'`), glyph `flag-objective` by
+  Delapouite (game-icons.net, CC BY; credit is in the rail footer). Quest colour lives on the ring, not the badge,
+  so 3D can reuse one atlas entry per number (`quest-objective:1..12`, built in map3d's `atlasEntries`).
+- 3D: `questLayers()` in map3d.js — `quest-zone-fill`/`quest-zone-line` (draped, dashed), `quest-ring`,
+  `quest-markers` (IconLayer, pickable → `src.onQuestClick`). Deck has no popups, so the photo card is an HTML
+  element (`#quest-card`) positioned each frame from the new `api.project(x, z)` (viewport.project of `Pg()`).
+- State: `?quest=slug1,slug2` + localStorage (`tz:quests`, `tz:questDone`, `tz:questsVisible`, `tz:questsOpen`).
+  "Quest objectives" is its own toggle row, hidden until a quest is selected. Keyboard: **Q** opens the panel.
+- AI hook: `window.tz.quests.{select,deselect,toggle,markObjective,flyTo,points,selected,all,setVisible,open}`
+  plus `window.tz.{map,view,setView,flyTo}`.

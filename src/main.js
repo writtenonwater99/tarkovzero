@@ -7,6 +7,7 @@ import { placeLabelsLayer } from './placeLabels.js';
 import { LABELS } from './labels.js';
 import { KINDS, iconHtml, extractLetter } from './icons.js';
 import { createLive, esc } from './live.js';
+import { createQuests } from './quests.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -530,6 +531,22 @@ function ping(x, z) {
   setTimeout(() => m.remove(), 3400);
 }
 
+/* -------------------------------------------------------- quest layer ---- */
+// Quest objectives are their own layer group: fed by public/data/quests.json, drawn as numbered
+// hexagon pins + translucent zone polygons in 2D (Leaflet) and 3D (deck), hidden until the player
+// picks a quest. See src/quests.js.
+const quests = createQuests({
+  map,
+  mapKey: mapData.key,
+  store,
+  flyTo,
+  is3d,
+  refresh3d: () => view3d?.refresh(),
+  project3d: (x, z) => view3d?.project?.(x, z) ?? null,
+});
+quests.layer.addTo(map);
+quests.init();
+
 /* --------------------------------------------------------- live panel ---- */
 const liveEl = $('#live'), liveToggle = $('#live-toggle'), liveSum = $('#live-sum');
 let liveOpen = store.get('liveOpen', false), liveCollapseTimer = 0;
@@ -599,6 +616,8 @@ async function setView(mode) {
         markers: () => markerPoints.filter((m) => visibleKinds().has(m.kind)),
         labels: labelSet,
         players: () => [...live.players.values()],
+        quests: () => quests.deckData(),
+        onQuestClick: (obj) => quests.onDeckClick(obj),
         onViewChange: (v) => {
           v3 = { ...v3, ...v };
           map.setView([-v3.target[1], -v3.target[0]], v3.zoom + 2.06, { animate: false });
@@ -616,6 +635,10 @@ async function setView(mode) {
     // #map was display:none while 3D drove it — remeasure before Leaflet draws again.
     map.invalidateSize({ animate: false });
   }
+  // The quest card is a Leaflet popup in 2D and a floating HTML card in 3D — neither survives the
+  // switch, so close it rather than leave a card pinned to nothing.
+  quests.closeCard();
+  map.closePopup();
   idleCoords();
   updateHud();
 }
@@ -693,10 +716,11 @@ window.addEventListener('resize', () => { if (!mobile()) document.body.classList
 document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
   if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); findEl.focus(); findEl.select(); return; }
-  if (e.key === 'Escape') { closePops(); map.closePopup(); if (mobile()) sheet('peek'); return; }
+  if (e.key === 'Escape') { closePops(); map.closePopup(); quests.closeCard(); if (mobile()) sheet('peek'); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === '/') { e.preventDefault(); findEl.focus(); return; }
   if (e.key === '3') { setView(is3d() ? '2d' : '3d'); return; }
+  if (e.key === 'q' || e.key === 'Q') { quests.setOpen(true); $('#quest-find')?.focus(); return; }
   if (e.key === 'l' || e.key === 'L') { setLabels(!labelsShown); return; }
   if (e.key === 'f' || e.key === 'F') { $('#hud-fit').click(); return; }
   if (e.key === 'n' || e.key === 'N') { if (is3d()) $('#hud-north').click(); return; }
@@ -710,6 +734,33 @@ document.addEventListener('keydown', (e) => {
     if (row) { const k = row.dataset.kind; setKind(k, !onKinds.has(k)); }
   }
 });
+
+/* ------------------------------------------------------------ tz API ----- */
+// Small stable surface so an assistant (or the console) can drive the map:
+//   tz.quests.select('the-punisher-part-1'); tz.quests.flyTo('<objectiveId>'); tz.quests.markObjective(id)
+window.tz = {
+  map: mapData.key,
+  get view() { return is3d() ? '3d' : '2d'; },
+  setView,
+  flyTo,
+  quests: {
+    /** Select a quest by slug (adds it to the map). Returns false if the slug is unknown. */
+    select: (slug) => quests.select(slug),
+    deselect: (slug) => quests.deselect(slug),
+    toggle: (slug) => quests.toggle(slug),
+    /** Tick/untick an objective. `value` omitted flips it. Returns the new state. */
+    markObjective: (objectiveId, value) => quests.markObjective(objectiveId, value),
+    /** Centre the map on an objective and open its card. */
+    flyTo: (objectiveId) => quests.flyToObjective(objectiveId),
+    /** Everything currently on the map: [{id, questSlug, objectiveId, badge, position, level}] */
+    points: () => quests.points().map((p) => ({ id: p.id, questSlug: p.questSlug, objectiveId: p.objectiveId, badge: p.badge, text: p.objective.text, position: p.position, level: p.level })),
+    selected: () => quests.selectedSlugs(),
+    /** The full quest list (loads it if it has not been fetched yet). */
+    all: async () => (await quests.load()),
+    setVisible: (on) => quests.setVisible(on),
+    open: (on = true) => quests.setOpen(on),
+  },
+};
 
 updateHud();
 if (starts3d) setView('3d');

@@ -378,3 +378,111 @@ body.view-3d .hud-btn.only-3d{display:grid}
 .leaflet-labelsMinor-pane .place-label{font-weight:600;letter-spacing:.045em;text-transform:none;color:#CFCCC1;
   font-size:calc((10.5px + 2.4px*(var(--z) - 2))*var(--s,1))}
 #map.base-roadmap .leaflet-labelsMinor-pane .place-label{color:#4A524F;text-shadow:0 0 3px #fff,0 0 3px #fff}
+
+/* ---------- quests ---------------------------------------------------------
+   The quest layer: rail panel (search -> quest -> objectives), the numbered pin,
+   and the recognition-photo card shared by the 2D popup and the 3D overlay.
+--------------------------------------------------------------------------- */
+.block-quests{padding:10px var(--gutter)}
+.quest-head{width:100%;appearance:none;background:none;border:0;padding:0;cursor:pointer;color:inherit;text-align:left;margin-bottom:0}
+.quest-head .quest-ico{color:var(--text-mute);flex:0 0 auto;transition:color var(--t-fast)}
+.quest-head.armed .quest-ico{color:var(--quest,#D8A32B)}
+.quest-head .chev{margin-left:auto;color:var(--text-ghost);transition:transform var(--t-fast)}
+.quest-head[aria-expanded=true] .chev{transform:rotate(90deg)}
+.quest-sum{font:400 var(--fs-micro) var(--f-mono);color:var(--text-ghost);margin-left:auto;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px}
+.quest-head .chev + *{margin-left:0}
+#quests{margin-top:8px}
+.find-quest{margin-bottom:0}
+.qres{gap:8px}
+.qres.on{box-shadow:inset 2px 0 0 var(--quest,#D8A32B)}
+.qpip{width:7px;height:7px;flex:0 0 7px;border-radius:2px;background:var(--line);transform:rotate(45deg)}
+.qpip.lit{background:#D8A32B}
+.row.quest-row{margin-top:8px;--cat:#D8A32B}
+.qempty{margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:var(--r-md);
+  font:400 12px/1.5 var(--f-body);color:var(--text-ghost)}
+.qempty .qpip{display:inline-block;background:#D8A32B;vertical-align:middle;margin:0 2px}
+
+.qsel{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.qsel-q{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel-2);overflow:hidden;
+  box-shadow:inset 2px 0 0 var(--qc)}
+.qsel-head{display:flex;align-items:center;gap:6px;padding:6px 7px;border-bottom:1px solid var(--line-soft)}
+.qsel-head b{font:600 13px/1.15 var(--f-display);letter-spacing:.03em;text-transform:uppercase;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.qdot{width:8px;height:8px;border-radius:2px;flex:0 0 8px;transform:rotate(45deg)}
+.qmeta{font:400 10px var(--f-mono);color:var(--text-ghost);white-space:nowrap}
+.qx{appearance:none;background:none;border:0;color:var(--text-ghost);cursor:pointer;font-size:12px;
+  width:18px;height:18px;border-radius:var(--r-sm);flex:0 0 18px}
+.qx:hover{color:var(--danger);background:var(--panel-hi)}
+.qobjs{display:flex;flex-direction:column}
+.qobj{display:grid;grid-template-columns:14px 20px 1fr auto;align-items:start;gap:6px;padding:6px 7px;cursor:pointer;
+  border-top:1px solid var(--line-soft)}
+.qobj:first-child{border-top:0}
+.qobj:hover{background:var(--panel-hi)}
+.qobj .qbox{width:12px;height:12px;margin-top:2px;border:1px solid var(--line);border-radius:2px;background:var(--panel);
+  display:grid;place-items:center}
+.qobj input:checked + .qbox{background:var(--acc-dim);border-color:var(--acc-dim)}
+.qobj input:checked + .qbox::after{content:'';width:6px;height:3px;border-left:1.6px solid var(--cream);
+  border-bottom:1.6px solid var(--cream);transform:rotate(-45deg) translate(.5px,-1px)}
+.qobj input:focus-visible + .qbox{outline:2px solid var(--focus);outline-offset:1px}
+.qobj .qtext{font:400 12px/1.4 var(--f-body);color:var(--text-dim);min-width:0;overflow-wrap:anywhere}
+.qobj .qtext i{color:var(--text-ghost);font-style:normal}
+.qobj.done .qtext{color:var(--text-ghost);text-decoration:line-through}
+.qobj.qoff{opacity:.62}
+.qnum{display:inline-grid;place-items:center;min-width:18px;height:16px;padding:0 4px;border-radius:3px;
+  font:700 10.5px/1 var(--f-mono);color:#0E1211;flex:0 0 auto}
+.qnum-off{background:var(--panel-hi);color:var(--text-ghost)}
+.qfly{appearance:none;background:none;border:0;color:var(--text-ghost);cursor:pointer;font-size:11px;
+  width:18px;height:18px;border-radius:var(--r-sm)}
+.qfly:hover{color:var(--text);background:var(--panel-hi)}
+
+/* ---------- quest pin (2D) ---------- */
+.qpin{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--qc) 22%,transparent) 40%,transparent 70%);
+  box-shadow:0 0 0 2px var(--qc), 0 0 0 3.5px rgba(10,14,12,.85);filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+.qpin.qdone{opacity:.5}
+.qtip{background:rgba(11,15,13,.95)!important;border:1px solid var(--line)!important;color:var(--text-dim)!important;
+  font:400 12px/1.4 var(--f-body)!important;max-width:230px;box-shadow:var(--shadow-hud)!important}
+.qtip::before{border-top-color:var(--line)!important}
+.leaflet-interactive.qzone{cursor:default}
+
+/* ---------- the card (2D popup body + 3D floating) ---------- */
+.qcard{position:absolute;z-index:520;width:300px;max-width:calc(100% - 16px);
+  background:var(--glass);backdrop-filter:var(--glass-blur);border:1px solid var(--line);
+  border-radius:var(--r-lg);box-shadow:var(--shadow-hud);padding:8px 9px}
+.qcard.qcard-fixed{left:auto!important;right:12px;top:12px!important}
+.qcard-x{position:absolute;top:4px;right:5px;appearance:none;background:none;border:0;color:var(--text-ghost);
+  cursor:pointer;font-size:12px;width:20px;height:20px;border-radius:var(--r-sm);z-index:1}
+.qcard-x:hover{color:var(--text);background:var(--panel-hi)}
+.qpopup .leaflet-popup-content-wrapper{padding:2px}
+.qpopup .leaflet-popup-content{margin:6px 8px;width:auto!important}
+.qcard-head{display:flex;align-items:center;gap:6px;margin-bottom:5px;padding-right:18px}
+.qcard-head b{font:600 13px/1.15 var(--f-display);letter-spacing:.04em;text-transform:uppercase;color:var(--text);
+  margin:0!important;display:inline!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qcard-obj{display:flex;align-items:flex-start;gap:6px}
+.qcard-obj .qtext{font:400 12.5px/1.45 var(--f-body);color:var(--text);overflow-wrap:anywhere}
+.qtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.qtag{font:600 9.5px/1 var(--f-mono);letter-spacing:.1em;color:var(--text-mute);border:1px solid var(--line);
+  border-radius:2px;padding:3px 4px}
+.qtag-u{color:#FFD28A;border-color:rgba(255,210,138,.4)}
+.qshot{position:relative;margin:7px 0 0;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--line);background:#0A0E0C}
+.qshot img{display:block;width:100%;height:auto;max-height:190px;object-fit:cover}
+.qshot figcaption{padding:4px 6px;font:400 11px/1.35 var(--f-body);color:var(--text-mute);background:var(--panel)}
+.qnav{position:absolute;top:50%;transform:translateY(-50%);appearance:none;width:22px;height:34px;border:0;
+  background:rgba(8,12,10,.62);color:var(--cream);cursor:pointer;font-size:16px;line-height:1}
+.qnav:hover{background:rgba(8,12,10,.85)}
+.qprev{left:0;border-radius:0 3px 3px 0}
+.qnext{right:0;border-radius:3px 0 0 3px}
+.qcount{position:absolute;top:4px;right:4px;background:rgba(8,12,10,.72);color:var(--text-dim);
+  font-size:9.5px;padding:2px 5px;border-radius:var(--r-pill)}
+.qcard-foot{display:flex;align-items:center;gap:6px;margin-top:7px}
+.qcard-foot .ghost{height:22px;font-size:10.5px;text-decoration:none;display:inline-flex;align-items:center}
+.qcheck{display:inline-flex;align-items:center;gap:5px;margin-right:auto;cursor:pointer;
+  font:400 11px var(--f-mono);color:var(--text-dim)}
+.qcheck input{accent-color:var(--acc);width:13px;height:13px}
+.qcredit{margin-top:5px;font:400 9.5px var(--f-mono);color:var(--text-ghost)}
+.qcredit a{color:var(--text-mute)}
+@media (max-width:760px){
+  .qcard{width:min(300px,calc(100vw - 24px))}
+  .qshot img{max-height:150px}
+}
