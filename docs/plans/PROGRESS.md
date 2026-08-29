@@ -71,3 +71,40 @@ The SwiftShader/headless environment renders the deck.gl canvas black for Custom
 ## Repository-state limitation
 
 Commits could not be created in this worktree. `.git` points to `/home/zeq/tarkovzero/.git/worktrees/tarkovzero-codex`, and that shared metadata path is read-only in the current managed filesystem; Git fails while creating `index.lock`. All requested files and screenshots are present in the workspace, no push was attempted, and no existing user change was discarded. Once the Git metadata is writable, the intended phase commits are: plans, multi-map refactor, Reserve, Woods, and this final report.
+
+## Fix pass 1
+
+### Changed
+
+- Woods: made `USEC CAMP` literal and unambiguous; replaced Cultist Village with `Sunken Village / Abandoned Village`; added major labels for Scav House, Sniper Rock, the mountain spine, Bridge V-Ex, Friendship / Scav Bridge, and Railway Bridge to Tarkov. Scav House now tags the correct footprint and gets a distinct warm wall/roof palette and gable treatment.
+- Woods rock forms: large SVG ridge footprints now keep a low base and receive separated, footprint-contained summits/outcrops with deterministic varied heights. The generated set grows from 282 undifferentiated extrusions to 335 forms. Sniper Rock is a 6.2 m base with 11.2 m and 8.7 m forms; the mountain-spine base is 10 m with separated forms up to the evidenced 42 m rise.
+- Reserve chess audit: retained the complete tarkov.dev set (White/Black Pawn, White/Black Bishop, White/Black Knight, White King, White Rook, White Queen) and removed the duplicate/generic label collisions. The shared landmarks are now `White Rook / Train Station` and `White Queen / Dome`; Black Pawn is a clear horizontal major label beside the helipad cluster.
+- Reserve landmarks: replaced the misidentified central transport-plane props with a 23.5 m helipad, H markings, fuselage, tail boom, crossed main rotor, and tail rotor at the SVG `Chopper` location. Added a brighter radar pedestal/cap/mast so Dome carries a stronger hilltop silhouette. `Barracks` is now `Military Guard Barracks`.
+- Reserve callouts: replaced E1/E2/warehouse-bunker generalities with Bunker Hermetic Door, Depot Hermetic Door, D-2, Command Bunker, Storage Bunker Tunnels, Dome Tunnels, K1–K6 storage labels, and the five named pawn/bishop/King hermetic connections.
+- Reserve underground: the builder now uses the actual `Bunkers` SVG subpaths rather than seven coarse floor-extent rectangles. Selecting U hides the surface buildings, highlights the command/storage networks in amber with outlined `U` badges, and swaps surface labels for the underground callout set. `?floor=U` is accepted for a reproducible permalink/capture, and a saved/query floor is applied when 3D first initializes.
+- Cross-map: no place-label size exceeds Customs' maximum (all three maps max at `size: 100`), and the shared `labels-major`/`labels-minor` sizes were not changed. Map/extract/chip icons remain pixel-sized with fixed pixel clamps. The existing 3D compass now also carries a literal `N`, and still rotates with the orbit on every map.
+
+### Verified
+
+- Audited Reserve against the stored exact tarkov.dev map entry/SVG and Wiki revision: all nine chess anchors are present; the Wiki's command-bunker/D-2/hermetic terminology is represented; Black Rook was not invented because tarkov.dev has no such Reserve label.
+- `?map=woods&base=satellite&debug=roads`: all three cyan bridge decks remain on the satellite crossings and keep their documented names. The fitted overlay shows Bridge V-Ex and Railway Bridge to Tarkov; the focused Friendship capture proves the co-op/Scav crossing and road endpoint.
+- `?map=reserve&base=satellite&debug=roads`: road classes and the limit remain aligned after the label/landmark work; the fitted view shows every chess anchor, both named hermetic doors, the helicopter label, Military Guard Barracks, and White Queen / Dome.
+- Generated-data invariants: Reserve has nine helicopter/helipad pieces, four Dome radar pieces, ten real underground SVG subpaths grouped into command/storage networks, and finite output. Scav House resolves 2.6 m from its labelled building centroid and receives both colour and gable style. Woods' three label anchors resolve to the generated bridge midpoints (the railway label is shifted inward for edge safety).
+- `npm run build` passes; Vite reports only the existing deck.gl chunk-size advisory. `node scripts/build-3d.mjs reserve`, `woods`, and `customs` pass deterministically; `git diff --check` passes.
+- Customs regression gate remains byte-identical after the shared builder/runtime edits:
+
+```text
+a6aadd836a978892f5b342c3412c9a00ed36463e695f9800b6502e3671f90d26  public/data/customs-3d.json
+7fa80f4f896998b0537c18d4da3cf6af8e19cb3be7127e0c1520f08547d9ebdf  public/data/customs.json
+```
+
+Selected captures:
+
+- Woods: `scratch/fix-pass-1/woods-2d.png`, `woods-roads.png`, `woods-friendship-roads.png`, `woods-3d-rocks.png`
+- Reserve: `scratch/fix-pass-1/reserve-2d.png`, `reserve-roads.png`, `reserve-3d-underground.png`
+
+### Remains
+
+1. SwiftShader still intermittently renders the heavier Reserve surface scene black; native headless GL does the same on this host. The successful Reserve U and Woods rock captures are extremely over-zoomed/blurry as warned in the playbook, so a real-GPU pass remains the final silhouette/antialias gate for the helicopter, Dome cap/mast, and ridge transitions.
+2. Icons are screen-sized, and the new per-map hierarchy removes the reviewed worst label collisions, but count-based marker clustering and general automatic 2D place-label collision/edge avoidance remain separate lower-priority UI work.
+3. The Reserve underground shape/labels are authoritative map geometry and terminology, but the detached Wiki-panel controls and D-2/Hermetic endpoints still warrant the in-game position trace already requested above.
