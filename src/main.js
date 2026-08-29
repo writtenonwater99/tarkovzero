@@ -5,7 +5,7 @@ import { loadMapData } from './api.js';
 import { roadmapLayer } from './roadmap.js';
 import { placeLabelsLayer } from './placeLabels.js';
 import { CUSTOMS_LABELS } from './labels.js';
-import { KINDS, iconHtml } from './icons.js';
+import { KINDS, iconHtml, extractLetter } from './icons.js';
 import { createLive, esc } from './live.js';
 
 const mapData = CUSTOMS;
@@ -65,16 +65,16 @@ map.on('mousemove', (e) => {
 });
 
 const icons = {};
-const iconFor = (kind) => (icons[kind] ??= L.divIcon({ className: '', html: iconHtml(kind), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
-const marker = (p, kind, html) => L.marker(pos(p), { icon: iconFor(kind) }).bindPopup(html);
+const iconFor = (kind, letter = null) => (icons[kind + ':' + letter] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
+const marker = (p, kind, html, name = null) => L.marker(pos(p), { icon: iconFor(kind, kind.startsWith('extract') ? extractLetter(name) : null) }).bindPopup(html);
 
 /** Classify raw map data into marker points: [{kind, position, html}] — shared by the 2D and 3D views. */
 export function classify(d) {
   const out = [];
-  const add = (kind, position, html) => out.push({ kind, position, html });
+  const add = (kind, position, html, name = null) => out.push({ kind, position, html, name });
   for (const e of d.extracts) {
     const f = ['pmc', 'scav', 'transit'].includes(e.faction) ? e.faction : 'shared';
-    add('extract-' + f, e.position, `<b>${e.name}</b><br>Extract · ${f}${e.note ? `<br><i>${e.note}</i>` : ''}`);
+    add('extract-' + f, e.position, `<b>${e.name}</b><br>Extract · ${f}${e.note ? `<br><i>${e.note}</i>` : ''}`, e.name);
   }
   for (const s of d.spawns) {
     const isBoss = s.categories.includes('boss');
@@ -97,7 +97,7 @@ function buildLayers(d) {
   const groups = {};
   for (const m of markerPoints) {
     (groups[m.kind] ??= { ...KINDS[m.kind], layer: L.layerGroup(), n: 0 });
-    groups[m.kind].layer.addLayer(marker(m.position, m.kind, m.html)); groups[m.kind].n++;
+    groups[m.kind].layer.addLayer(marker(m.position, m.kind, m.html, m.name)); groups[m.kind].n++;
   }
   return groups;
 }
