@@ -446,6 +446,7 @@ const rockMasses = rockPolys.map((poly, index) => {
 // turns Sniper Rock and the mountain spine into flat monoliths, so retain a low
 // base footprint and raise several separated, footprint-contained forms above it.
 const distToRing = ([x, z], poly) => { let best = Infinity; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2)); best = Math.min(best, Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)); } return best; };
+const distToPath = ([x, z], path) => { let best = Infinity; for (let i = 1; i < path.length; i++) { const a = path[i - 1], b = path[i], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2)); best = Math.min(best, Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)); } return best; };
 function splitWoodsRock({ poly, height, evidence }, index) {
   const A = area(poly);
   if (A < 650 || height < 7) return [{ poly, height }];
@@ -498,24 +499,32 @@ if (cfg.proceduralTrees) {
 }
 // The SVG canopy rings are only a forest mask. Rendering them as raised slabs created the
 // reviewed green puzzle pieces. Retain them as a quiet understory tint and fill each ring with
-// deterministic individual crowns. About 0.2 crowns/m² gives Customs ~4k trees; cap the larger
-// Woods mask so a single SolidPolygonLayer remains comfortable on ordinary GPUs.
+// deterministic individual crowns. Forest is deliberately open overall, while an edge-depth
+// acceptance bias gathers more crowns in each canopy polygon's core. Crown extents (not merely
+// their centres) stay at least 3 m from every road edge and building footprint.
 const totalTreeArea = treePolys.reduce((sum, poly) => sum + area(poly), 0);
-const wantedTrees = Math.min(6000, Math.round(totalTreeArea * 0.2));
+const wantedTrees = Math.min(key === 'woods' ? 2600 : 1800, Math.round(totalTreeArea * (key === 'woods' ? 0.045 : 0.065)));
 const treeDensity = totalTreeArea ? wantedTrees / totalTreeArea : 0;
-const TREE_COLORS = [[31, 55, 34], [43, 68, 39], [55, 78, 43]];
+const TREE_COLORS = [[43, 61, 43], [49, 68, 46], [57, 75, 50]];
 const treeCrowns = [];
 for (let index = 0; index < treePolys.length; index++) {
   const poly = treePolys[index], [x1, z1, x2, z2] = bbox(poly);
   const count = Math.max(1, Math.round(area(poly) * treeDensity));
   let accepted = 0;
-  for (let attempt = 0; accepted < count && attempt < count * 30; attempt++) {
+  for (let attempt = 0; accepted < count && attempt < count * 80; attempt++) {
     const x = x1 + hash2(index * 100003 + attempt * 17, 211) * (x2 - x1);
     const z = z1 + hash2(index * 70001 + attempt * 29, 307) * (z2 - z1);
-    if (!inPoly([x, z], poly) || out0.water.some((w) => inPoly([x, z], w)) || buildings.some((b) => inPoly([x, z], b.poly))) continue;
-    if (roads.some((r) => r.path.some((q) => Math.hypot(q[0] - x, q[1] - z) < r.width / 2 + 1.5))) continue;
-    const radius = 1.5 + hash2(index * 313 + attempt, 401) * 2.5;
-    const height = 6 + hash2(index * 431 + attempt, 503) * 6;
+    if (!inPoly([x, z], poly) || out0.water.some((w) => inPoly([x, z], w))) continue;
+    const edgeDepth = distToRing([x, z], poly);
+    const coreScale = Math.max(3, Math.min(x2 - x1, z2 - z1) * 0.24);
+    const coreWeight = 0.28 + 0.72 * Math.min(1, edgeDepth / coreScale);
+    if (hash2(index * 17011 + attempt * 47, 353) > coreWeight) continue;
+    const radius = 1.4 + hash2(index * 313 + attempt, 401) * 1.8;
+    // Leave a small generation margin so one-decimal JSON rounding cannot eat into 3 m.
+    const clearance = radius + 3.2;
+    if (buildings.some((b) => inPoly([x, z], b.poly) || distToRing([x, z], b.poly) < clearance)) continue;
+    if (roads.some((r) => distToPath([x, z], r.path) < r.width / 2 + clearance)) continue;
+    const height = 4.6 + hash2(index * 431 + attempt, 503) * 4.4;
     const color = TREE_COLORS[Math.floor(hash2(index * 541 + attempt, 601) * TREE_COLORS.length) % TREE_COLORS.length];
     treeCrowns.push({ x: +x.toFixed(1), z: +z.toFixed(1), radius: +radius.toFixed(1), height: +height.toFixed(1), color });
     accepted++;

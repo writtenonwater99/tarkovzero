@@ -3,7 +3,7 @@ import L from 'leaflet';
 // Google-Maps-style ("roadmap") theme applied to tarkov.dev's class-based SVG geometry.
 const THEME = `
   .land        { fill:#f1f3f4 }
-  .trees       { fill:#c5e1a5 }
+  .trees       { fill:#d4dcd0 }
   .water       { fill:#9cc4f5 }
   .cement      { fill:#e6e6e6 }
   .rock        { fill:#dcdcdc }
