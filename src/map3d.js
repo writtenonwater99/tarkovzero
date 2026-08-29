@@ -8,14 +8,14 @@ import { esc, COLORS } from './live.js';
 
 const C = {
   grass: [62, 92, 48], grassHigh: [122, 140, 66], land: [62, 92, 48], water: [24, 44, 58], shore: [120, 170, 200, 160], pavement: [112, 116, 108],
-  road: [128, 130, 124], roadEdge: [60, 62, 58], highway: [150, 140, 100], highwayEdge: [92, 84, 56], track: [104, 94, 66], dirt: [122, 108, 78],
+  road: [128, 130, 124], roadEdge: [60, 62, 58], highway: [119, 120, 106], highwayEdge: [86, 91, 80], track: [104, 94, 66], dirt: [122, 108, 78],
   rail: [128, 118, 100], sleeper: [90, 84, 72], fence: [96, 88, 74], fenceTop: [60, 54, 46],
   building: [168, 158, 142], buildingMulti: [150, 140, 124], roofWarehouse: [128, 122, 112], roofHouse: [110, 96, 84], tank: [146, 150, 148], tower: [122, 124, 120],
   tree: [34, 62, 32], treeTop: [58, 96, 46], rock: [168, 158, 136], bridge: [126, 120, 108], bridgeRail: [70, 66, 60], pier: [104, 100, 92],
-  contour: [46, 70, 36, 150], contourMajor: [36, 56, 28, 220], oob: [20, 24, 22], cliff: [44, 44, 40], cliffTop: [150, 142, 124], shade: [0, 0, 0, 60], floorLine: [0, 0, 0, 70],
+  contour: [46, 70, 36, 150], contourMajor: [36, 56, 28, 220], oob: [20, 24, 22], cliff: [85, 82, 73], cliffShadow: [41, 45, 41], cliffTop: [133, 129, 116], shade: [0, 0, 0, 60], floorLine: [0, 0, 0, 70],
   underground: [40, 40, 40, 110], buildingHover: [255, 214, 90], cream: [245, 242, 232], ink: [12, 16, 14], amber: [255, 214, 90],
 };
-const HYPSO = [[54, 84, 44], [62, 92, 48], [74, 104, 52], [88, 118, 56], [104, 130, 60], [122, 140, 66]];
+const HYPSO = [[53, 95, 46], [60, 100, 50], [65, 105, 54], [80, 116, 59], [97, 127, 63]];
 const P = ([x, z], y = 0) => [-x, -z, y];
 let H = () => 0; // terrain height at game (x, z); set once data is loaded
 const Pg = ([x, z], dy = 0) => P([x, z], H(x, z) + dy); // draped point
@@ -51,9 +51,9 @@ function cliffStrips(limit) {
   for (let i = 0; i < limit.length; i++) {
     const a = limit[i], b = limit[(i + 1) % limit.length]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 0.5) continue;
     let nx = -dz / L, nz = dx / L; const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2; if ((mx + nx - c[0]) ** 2 + (mz + nz - c[1]) ** 2 < (mx - c[0]) ** 2 + (mz - c[1]) ** 2) { nx = -nx; nz = -nz; } // outward
-    const w = 3; const poly = [a, b, [b[0] + nx * w, b[1] + nz * w], [a[0] + nx * w, a[1] + nz * w]];
+    const jit = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1; const w = 2.2 + jit * 3.5; const poly = [a, b, [b[0] + nx * w, b[1] + nz * w], [a[0] + nx * w, a[1] + nz * w]];
     const h = (H(a[0], a[1]) + H(b[0], b[1])) / 2 - VOID_Z;
-    out.push({ poly, h: h - 0.9, color: C.cliff }); out.push({ poly, h: h + 0.3, color: C.cliffTop, top: true });
+    out.push({ poly, h: h - 1.2 - jit * 1.5, color: jit > 0.55 ? C.cliff : C.cliffShadow }); if (jit > 0.3) out.push({ poly, h: h + 0.2 + jit * 0.6, color: C.cliffTop, top: true });
   }
   return out;
 }
@@ -263,10 +263,10 @@ export async function createView3d(container, mapData, src) {
   const lift = (d) => (major(d) ? 26 : 16) * ((d.size ?? 100) / 100);
   const ring16 = (pos, r, dy) => { const pts = []; for (let i = 0; i <= 16; i++) pts.push(Pg([pos[0] + r * Math.cos((i / 16) * 2 * Math.PI), pos[1] + r * Math.sin((i / 16) * 2 * Math.PI)], dy)); return pts; };
   const pingLayers = (labelsAll) => { const labels = labelsAll.filter((d) => major(d) || viewState.zoom >= 0.8); return [
-    new PathLayer({ id: 'ping-ring', data: labels, getPath: (d) => ring16(d.position, major(d) ? 2.2 : 1.4, 0.1), getColor: [245, 242, 232, 190], getWidth: 1.5, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'ping-ring', data: labels, getPath: (d) => ring16(d.position, major(d) ? 1.65 : 1.05, 0.1), getColor: [201, 198, 184, 190], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new ScatterplotLayer({ id: 'ping-dot', data: labels, getPosition: (d) => Pg(d.position, 0.15), getRadius: 0.7, radiusUnits: 'meters', radiusMinPixels: 1.5, getFillColor: C.cream, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new LineLayer({ id: 'ping-stem-shadow', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [12, 16, 14, 160], getWidth: 3.5, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-stem', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [245, 242, 232, 200], getWidth: 1.5, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new LineLayer({ id: 'ping-stem', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [201, 198, 184, 190], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new ScatterplotLayer({ id: 'ping-cap', data: labels, getPosition: (d) => Pg(d.position, lift(d) - 1.5), getRadius: 3, radiusUnits: 'pixels', getFillColor: C.cream, getLineColor: C.ink, lineWidthMinPixels: 1, stroked: true, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ]; };
   const dynamicLayers = () => {
@@ -276,12 +276,12 @@ export async function createView3d(container, mapData, src) {
     return [
       new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind === 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => (d.kind.startsWith('extract') && extractLetter(d.name) ? d.kind + ':' + extractLetter(d.name) : d.kind), getSize: 26, sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 32, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       // everything else lies flat on the ground like chips on a table
-      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && d.kind !== 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: (d) => d.kind, getSize: 22, sizeUnits: 'pixels', sizeMinPixels: 12, sizeMaxPixels: 24, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && d.kind !== 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: (d) => d.kind, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       ...pingLayers(labels),
       ...[true, false].map((isMajor) => new TextLayer({ id: isMajor ? 'labels-major' : 'labels-minor',
         data: labels.filter((d) => major(d) === isMajor && (isMajor || viewState.zoom >= 0.8)).map((d) => ({ p: Pg(d.position, lift(d) + 1.5), t: isMajor ? d.text.toUpperCase() : d.text })),
-        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 9.5 : 7, sizeUnits: 'meters', sizeMinPixels: isMajor ? 11 : 9, sizeMaxPixels: isMajor ? 19 : 14,
-        getColor: isMajor ? [245, 242, 232] : [214, 214, 200], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: { sdf: true }, outlineWidth: 3, outlineColor: [12, 16, 14, 235],
+        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 8 : 6, sizeUnits: 'meters', sizeMinPixels: isMajor ? 10 : 8, sizeMaxPixels: isMajor ? 16 : 12,
+        getColor: isMajor ? [227, 225, 215] : [205, 205, 192], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: { sdf: true }, outlineWidth: 2, outlineColor: [32, 37, 34, 240],
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.3)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z) + 0.2)), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
