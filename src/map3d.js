@@ -36,7 +36,7 @@ export async function createView3d(container, mapData, src) {
 
   const lighting = new LightingEffect({
     ambient: new AmbientLight({ color: [255, 255, 255], intensity: 0.85 }),
-    sun: new DirectionalLight({ color: [255, 250, 240], intensity: 0.9, direction: [-0.6, -0.4, -1], _shadow: true }),
+    sun: new DirectionalLight({ color: [255, 250, 240], intensity: 0.9, direction: [-0.6, -0.4, -1] }),
   });
 
   const staticLayers = () => [
@@ -75,7 +75,7 @@ export async function createView3d(container, mapData, src) {
   const hex = (h, a = 255) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
   const deck = new Deck({
-    parent: container, views: new OrbitView({ orbitAxis: 'Z', fovy: 22 }), controller: { inertia: 300 },
+    parent: container, views: new OrbitView({ orbitAxis: 'Z', fovy: 22 }), controller: { dragMode: 'pan', inertia: 300 }, // left-drag pans, right/shift-drag rotates
     initialViewState: viewState, effects: [lighting], getCursor: ({ isHovering }) => (isHovering ? 'pointer' : 'grab'),
     onViewStateChange: ({ viewState: v }) => { viewState = v; deck.setProps({ viewState: v }); src.onViewChange?.(v); },
     getTooltip: ({ object, layer }) => {
