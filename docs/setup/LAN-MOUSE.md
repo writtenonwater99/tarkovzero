@@ -18,6 +18,9 @@ The Windows side stays as it is; this page rebuilds the **Linux** side after a r
   `2a:ec:3b:3b:0e:aa:53:1b:43:96:33:31:ef:57:f2:a4:07:f7:1b:21:12:55:ae:0f:4d:21:45:5a:3c:76:13:74`, hostname `ZEQUENCE107`,
   LAN IP `192.168.4.86` (DHCP — check with `ipconfig` on Windows if it moved).
 
+**Backup location:** the identity certificate, `config.toml` and the service file are stored in the PRIVATE repo
+`github.com/writtenonwater99/tarkovzero-private` (restore commands in its README). Keep that repo private.
+
 ## Fresh Linux install — steps
 
 1. Install and create the config:
