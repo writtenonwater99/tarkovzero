@@ -9,7 +9,8 @@ let svg;
 try { svg = await readFile('.cache/maps/svg/Customs.svg', 'utf8'); } catch { svg = await (await fetch(SVG_URL)).text(); }
 const maps = JSON.parse(await readFile('scripts/tarkov-dev-maps.json', 'utf8'));
 const props = JSON.parse(await readFile('data/customs-props.json', 'utf8')).props;
-const extraRoads = JSON.parse(await readFile('data/customs-roads.json', 'utf8')).add;
+const roadEdits = JSON.parse(await readFile('data/customs-roads.json', 'utf8'));
+const extraRoads = roadEdits.add;
 const customs = maps.find((m) => m.normalizedName === 'customs').maps[0];
 const [, , VW, VH] = svg.match(/viewBox="([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"/).slice(1).map(Number);
 const toGame = ([sx, sy]) => [+(BOUNDS.xMax - (sx / VW) * (BOUNDS.xMax - BOUNDS.xMin)).toFixed(1), +(BOUNDS.zMin + (sy / VH) * (BOUNDS.zMax - BOUNDS.zMin)).toFixed(1)];
@@ -160,6 +161,11 @@ for (const r of roads) {
   const hits = r.path.filter(nearPaved).length;
   if (hits / r.path.length < 0.35) { r.kind = 'track'; r.width = 2.2; }
 }
+// audited edits: reclassify / remove roads by nearest midpoint (from data/customs-roads.json)
+const midOf = (path) => path[Math.floor(path.length / 2)];
+const nearestRoad = (pt) => roads.reduce((best, r) => { const m = midOf(r.path); const d = Math.hypot(m[0] - pt[0], m[1] - pt[1]); return d < best.d ? { d, r } : best; }, { d: Infinity, r: null });
+for (const e of roadEdits.reclassify || []) { const n = nearestRoad(e.mid); if (n.r && n.d < 60) { n.r.kind = e.to; n.r.fixed = true; if (e.to === 'dirt' || e.to === 'track') n.r.width = e.to === 'dirt' ? 3.5 : 2.2; } }
+for (const e of roadEdits.remove || []) { const n = nearestRoad(e.mid); if (n.r && n.d < 40) roads.splice(roads.indexOf(n.r), 1); }
 console.log(`roads: ${JSON.stringify(roads.reduce((a, r) => ((a[r.kind] = (a[r.kind] || 0) + 1), a), {}))}`);
 // fences: clip to limit and open a gap where a road crosses (gates)
 const fenceLines = linesIn('Fence').flatMap((p) => clipPath(p, 2));

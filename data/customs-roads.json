@@ -1,17 +1,431 @@
 {
-  "_doc": "Hand-traced roads missing from the tarkov.dev SVG, in game coords [x, z]. kind: highway|main|small|track|dirt. fixed=true keeps the class (no auto-downgrade). Traced from the satellite render.",
-  "add": [
-    { "name": "Warehouse 7 – Depot lane", "kind": "small", "width": 4, "fixed": true, "path": [[505, -124.5], [506.3, -43.4]] },
-    { "name": "ZB-1012 curve", "kind": "small", "width": 4, "fixed": true, "path": [[507.6, -124.5], [455.2, -124.5], [439.5, -100.9], [431.7, -74.8], [429.1, -43.4]] },
-    { "name": "Warehouse 3 – Warehouse 4 connector", "kind": "small", "width": 4, "fixed": true, "path": [[439.5, -129.7], [350.5, -127.1]] },
-    { "name": "Tank farm internal road", "kind": "small", "width": 4, "fixed": true, "path": [[591.4, -132.4], [588.7, -48.6]] },
-    { "name": "Boiler south service road", "kind": "small", "width": 4, "fixed": true, "path": [[165.7, -27.6], [42.7, -27.6]] },
-    { "name": "Big Red west road", "kind": "small", "width": 5, "fixed": true, "path": [[-176, -212], [-176, -42]] },
-    { "name": "Big Red east lane", "kind": "small", "width": 4, "fixed": true, "path": [[-242, -198], [-242, -42]] },
-    { "name": "Storage aisle 1", "kind": "track", "width": 2.5, "fixed": true, "path": [[-262.8, -177.6], [-262.8, -83.4]] },
-    { "name": "Storage aisle 2", "kind": "track", "width": 2.5, "fixed": true, "path": [[-286.4, -177.6], [-286.4, -83.4]] },
-    { "name": "Storage aisle 3", "kind": "track", "width": 2.5, "fixed": true, "path": [[-307.3, -177.6], [-307.3, -83.4]] },
-    { "name": "SW diagonal to New Gas", "kind": "dirt", "width": 4, "fixed": true, "path": [[454.4, 224.7], [394.2, 114.8], [352.4, 75.5], [323.6, 36.2], [310.5, 17.9]] },
-    { "name": "Bus Station – Dorms track", "kind": "track", "width": 2.5, "fixed": true, "path": [[237.2, 67.6], [226.7, 99], [216.2, 130.5]] }
-  ]
+ "_doc": "Hand-traced roads missing from the tarkov.dev SVG, in game coords [x, z]. kind: highway|main|small|track|dirt. fixed=true keeps the class (no auto-downgrade). Traced from the satellite render.",
+ "add": [
+  {
+   "name": "Warehouse 7 \u2013 Depot lane",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     505,
+     -124.5
+    ],
+    [
+     506.3,
+     -43.4
+    ]
+   ]
+  },
+  {
+   "name": "ZB-1012 curve",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     507.6,
+     -124.5
+    ],
+    [
+     455.2,
+     -124.5
+    ],
+    [
+     439.5,
+     -100.9
+    ],
+    [
+     431.7,
+     -74.8
+    ],
+    [
+     429.1,
+     -43.4
+    ]
+   ]
+  },
+  {
+   "name": "Warehouse 3 \u2013 Warehouse 4 connector",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     439.5,
+     -129.7
+    ],
+    [
+     350.5,
+     -127.1
+    ]
+   ]
+  },
+  {
+   "name": "Tank farm internal road",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     591.4,
+     -132.4
+    ],
+    [
+     588.7,
+     -48.6
+    ]
+   ]
+  },
+  {
+   "name": "Boiler south service road",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     165.7,
+     -27.6
+    ],
+    [
+     42.7,
+     -27.6
+    ]
+   ]
+  },
+  {
+   "name": "Big Red west road",
+   "kind": "small",
+   "width": 5,
+   "fixed": true,
+   "path": [
+    [
+     -176,
+     -212
+    ],
+    [
+     -176,
+     -42
+    ]
+   ]
+  },
+  {
+   "name": "Big Red east lane",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     -242,
+     -198
+    ],
+    [
+     -242,
+     -42
+    ]
+   ]
+  },
+  {
+   "name": "Storage aisle 1",
+   "kind": "track",
+   "width": 2.5,
+   "fixed": true,
+   "path": [
+    [
+     -262.8,
+     -177.6
+    ],
+    [
+     -262.8,
+     -83.4
+    ]
+   ]
+  },
+  {
+   "name": "Storage aisle 2",
+   "kind": "track",
+   "width": 2.5,
+   "fixed": true,
+   "path": [
+    [
+     -286.4,
+     -177.6
+    ],
+    [
+     -286.4,
+     -83.4
+    ]
+   ]
+  },
+  {
+   "name": "Storage aisle 3",
+   "kind": "track",
+   "width": 2.5,
+   "fixed": true,
+   "path": [
+    [
+     -307.3,
+     -177.6
+    ],
+    [
+     -307.3,
+     -83.4
+    ]
+   ]
+  },
+  {
+   "name": "SW diagonal to New Gas",
+   "kind": "dirt",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     454.4,
+     224.7
+    ],
+    [
+     394.2,
+     114.8
+    ],
+    [
+     352.4,
+     75.5
+    ],
+    [
+     323.6,
+     36.2
+    ],
+    [
+     310.5,
+     17.9
+    ]
+   ]
+  },
+  {
+   "name": "Bus Station \u2013 Dorms track",
+   "kind": "track",
+   "width": 2.5,
+   "fixed": true,
+   "path": [
+    [
+     237.2,
+     67.6
+    ],
+    [
+     226.7,
+     99
+    ],
+    [
+     216.2,
+     130.5
+    ]
+   ]
+  },
+  {
+   "name": "Warehouse 4 east access (N-S between W4 and Oil Rig yard)",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     312,
+     -127
+    ],
+    [
+     312,
+     -60
+    ],
+    [
+     312,
+     5
+    ]
+   ]
+  },
+  {
+   "name": "Old Gas \u2013 Scav Sniper road",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     318,
+     -164
+    ],
+    [
+     299,
+     -190
+    ],
+    [
+     273,
+     -203
+    ]
+   ]
+  },
+  {
+   "name": "Fortress \u2013 Crackhouse connector",
+   "kind": "dirt",
+   "width": 3.5,
+   "fixed": true,
+   "path": [
+    [
+     103,
+     -132
+    ],
+    [
+     77,
+     -143
+    ],
+    [
+     58,
+     -158
+    ]
+   ]
+  },
+  {
+   "name": "Old Construction yard access (tank yard to main road)",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     104,
+     -9
+    ],
+    [
+     105,
+     18
+    ]
+   ]
+  },
+  {
+   "name": "Warehouse 17 north access to main road",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     45,
+     -106
+    ],
+    [
+     11,
+     -101
+    ],
+    [
+     -7,
+     -93
+    ]
+   ]
+  },
+  {
+   "name": "Storage south lane",
+   "kind": "small",
+   "width": 4,
+   "fixed": true,
+   "path": [
+    [
+     -255,
+     -70
+    ],
+    [
+     -326,
+     -73
+    ]
+   ]
+  },
+  {
+   "name": "Old Road south of Dorms 3-Story",
+   "kind": "dirt",
+   "width": 3.5,
+   "fixed": true,
+   "path": [
+    [
+     214,
+     170
+    ],
+    [
+     193,
+     193
+    ],
+    [
+     169,
+     209
+    ]
+   ]
+  }
+ ],
+ "reclassify": [
+  {
+   "mid": [
+    142,
+    -135
+   ],
+   "to": "dirt",
+   "why": "Broad compacted E-W construction road through Fortress yard, not a faint trail"
+  },
+  {
+   "mid": [
+    234,
+    -132
+   ],
+   "to": "dirt",
+   "why": "Wide N-S construction road on the west side of Fortress"
+  },
+  {
+   "mid": [
+    90,
+    -92
+   ],
+   "to": "dirt",
+   "why": "Fortress SE road to Repair Shop is a wide service road"
+  },
+  {
+   "mid": [
+    203,
+    151
+   ],
+   "to": "dirt",
+   "why": "Dorms perimeter loop surface reads as gravel/dirt drive, not asphalt"
+  },
+  {
+   "mid": [
+    -196,
+    -191
+   ],
+   "to": "dirt",
+   "why": "Trailer Park spur south of the E-W lane is a faint lot track"
+  },
+  {
+   "mid": [
+    -264,
+    -192
+   ],
+   "to": "dirt",
+   "why": "Trailer Park spur (east) is a faint lot track"
+  },
+  {
+   "mid": [
+    -273,
+    -52
+   ],
+   "to": "main",
+   "why": "Same road hierarchy as the red main road west of the river; class change at the bridge is inconsistent"
+  }
+ ],
+ "remove": [
+  {
+   "mid": [
+    552,
+    -64
+   ],
+   "why": "Streamer House orange N-S spur is a narrow yard/fence corridor, no visible track"
+  },
+  {
+   "mid": [
+    208,
+    -109
+   ],
+   "why": "Fortress inner dashed segment crosses the Fortress building footprint and rubble, no continuous trail"
+  }
+ ]
 }
