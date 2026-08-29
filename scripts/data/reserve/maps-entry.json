@@ -1,0 +1,906 @@
+{
+  "normalizedName": "reserve",
+  "primaryPath": "/map/reserve-3d",
+  "maps": [
+    {
+      "key": "reserve",
+      "projection": "interactive",
+      "minZoom": 2,
+      "maxZoom": 6,
+      "transform": [
+        0.395,
+        122.0,
+        0.395,
+        137.65
+      ],
+      "coordinateRotation": 180,
+      "bounds": [
+        [
+          289,
+          -293
+        ],
+        [
+          -303,
+          244
+        ]
+      ],
+      "svgBounds": [
+        [
+          289,
+          -274
+        ],
+        [
+          -303,
+          272
+        ]
+      ],
+      "author": "Shebuka",
+      "authorLink": "https://github.com/the-hideout/tarkov-dev-svg-maps/",
+      "svgPath": "https://assets.tarkov.dev/maps/svg/Reserve.svg",
+      "svgLayer": "Ground_Level",
+      "tilePath": "https://assets.tarkov.dev/maps/reserve/main/{z}/{x}/{y}.png",
+      "heightRange": [
+        -7,
+        10000
+      ],
+      "layers": [
+        {
+          "name": "2nd Floor",
+          "tilePath": "https://assets.tarkov.dev/maps/reserve/2nd/{z}/{x}/{y}.png",
+          "show": false,
+          "extents": [
+            {
+              "height": [
+                22.1,
+                25.7
+              ],
+              "bounds": [
+                [
+                  [
+                    1,
+                    164
+                  ],
+                  [
+                    -17,
+                    199
+                  ],
+                  "dome"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -3.5,
+                -0.64
+              ],
+              "bounds": [
+                [
+                  [
+                    -77,
+                    26
+                  ],
+                  [
+                    -177,
+                    106
+                  ],
+                  "pawns"
+                ],
+                [
+                  [
+                    62,
+                    59
+                  ],
+                  [
+                    51,
+                    108
+                  ],
+                  "checkpoint fence tower"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -3.5,
+                -0.64
+              ],
+              "bounds": [
+                [
+                  [
+                    -104,
+                    -37
+                  ],
+                  [
+                    -177,
+                    5
+                  ],
+                  "black bishop"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -3.9,
+                -0.6
+              ],
+              "bounds": [
+                [
+                  [
+                    -47,
+                    -47
+                  ],
+                  [
+                    -85,
+                    -18
+                  ],
+                  "white bishop"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -4.3,
+                -2.2
+              ],
+              "bounds": [
+                [
+                  [
+                    -19.91,
+                    -13
+                  ],
+                  [
+                    -78,
+                    39
+                  ],
+                  "white king"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -3.8,
+                -1.1
+              ],
+              "bounds": [
+                [
+                  [
+                    99,
+                    -50
+                  ],
+                  [
+                    -2,
+                    7
+                  ],
+                  "knights"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -1.9,
+                11.3
+              ],
+              "bounds": [
+                [
+                  [
+                    191,
+                    -175
+                  ],
+                  [
+                    137,
+                    -120
+                  ],
+                  "train depot"
+                ]
+              ]
+            },
+            {
+              "height": [
+                1,
+                8
+              ],
+              "bounds": [
+                [
+                  [
+                    -109,
+                    -156
+                  ],
+                  [
+                    -119,
+                    -147
+                  ],
+                  "towers"
+                ],
+                [
+                  [
+                    289,
+                    -92
+                  ],
+                  [
+                    299,
+                    -82
+                  ],
+                  "towers"
+                ],
+                [
+                  [
+                    3,
+                    -210
+                  ],
+                  [
+                    -7,
+                    -200
+                  ],
+                  "towers"
+                ],
+                [
+                  [
+                    195,
+                    -260
+                  ],
+                  [
+                    185,
+                    -250
+                  ],
+                  "towers"
+                ],
+                [
+                  [
+                    276,
+                    17
+                  ],
+                  [
+                    266,
+                    27
+                  ],
+                  "towers"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -4.1,
+                -1.2
+              ],
+              "bounds": [
+                [
+                  [
+                    -128,
+                    -139
+                  ],
+                  [
+                    -146,
+                    -120
+                  ],
+                  "scav lands"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "name": "3rd Floor",
+          "tilePath": "https://assets.tarkov.dev/maps/reserve/3rd/{z}/{x}/{y}.png",
+          "show": false,
+          "extents": [
+            {
+              "height": [
+                25.7,
+                29.3
+              ],
+              "bounds": [
+                [
+                  [
+                    1,
+                    164
+                  ],
+                  [
+                    -17,
+                    199
+                  ],
+                  "dome"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -0.64,
+                2.23
+              ],
+              "bounds": [
+                [
+                  [
+                    -77,
+                    26
+                  ],
+                  [
+                    -177,
+                    106
+                  ],
+                  "pawns"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -0.64,
+                2.23
+              ],
+              "bounds": [
+                [
+                  [
+                    -104,
+                    -37
+                  ],
+                  [
+                    -177,
+                    5
+                  ],
+                  "black bishop"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -0.6,
+                10
+              ],
+              "bounds": [
+                [
+                  [
+                    -47,
+                    -47
+                  ],
+                  [
+                    -85,
+                    -18
+                  ],
+                  "white bishop"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -2.2,
+                2.14
+              ],
+              "bounds": [
+                [
+                  [
+                    -19.91,
+                    -13
+                  ],
+                  [
+                    -78,
+                    39
+                  ],
+                  "white king"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -1.1,
+                1.6
+              ],
+              "bounds": [
+                [
+                  [
+                    99,
+                    -50
+                  ],
+                  [
+                    -2,
+                    7
+                  ],
+                  "knights"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "name": "4th Floor",
+          "tilePath": "https://assets.tarkov.dev/maps/reserve/4th/{z}/{x}/{y}.png",
+          "show": false,
+          "extents": [
+            {
+              "height": [
+                29.3,
+                36
+              ],
+              "bounds": [
+                [
+                  [
+                    1,
+                    164
+                  ],
+                  [
+                    -17,
+                    199
+                  ],
+                  "dome"
+                ]
+              ]
+            },
+            {
+              "height": [
+                2.23,
+                5
+              ],
+              "bounds": [
+                [
+                  [
+                    -77,
+                    26
+                  ],
+                  [
+                    -177,
+                    106
+                  ],
+                  "pawns"
+                ]
+              ]
+            },
+            {
+              "height": [
+                2.15,
+                6.6
+              ],
+              "bounds": [
+                [
+                  [
+                    -19.91,
+                    -13
+                  ],
+                  [
+                    -78,
+                    39
+                  ],
+                  "white king"
+                ]
+              ]
+            },
+            {
+              "height": [
+                1.6,
+                4.7
+              ],
+              "bounds": [
+                [
+                  [
+                    99,
+                    -50
+                  ],
+                  [
+                    -2,
+                    7
+                  ],
+                  "knights"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "name": "5th Floor",
+          "tilePath": "https://assets.tarkov.dev/maps/reserve/5th/{z}/{x}/{y}.png",
+          "show": false,
+          "extents": [
+            {
+              "height": [
+                5,
+                9.5
+              ],
+              "bounds": [
+                [
+                  [
+                    -77,
+                    26
+                  ],
+                  [
+                    -177,
+                    106
+                  ],
+                  "pawns"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Bunkers",
+          "tilePath": "https://assets.tarkov.dev/maps/reserve/bunkers/{z}/{x}/{y}.png",
+          "svgLayer": "Bunkers",
+          "show": false,
+          "extents": [
+            {
+              "height": [
+                -10000,
+                -7.27
+              ],
+              "bounds": [
+                [
+                  [
+                    128,
+                    -208
+                  ],
+                  [
+                    18,
+                    -33
+                  ],
+                  "storage bunker"
+                ],
+                [
+                  [
+                    -46,
+                    -42
+                  ],
+                  [
+                    -176,
+                    127
+                  ],
+                  "command bunkers"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -10000,
+                -12
+              ],
+              "bounds": [
+                [
+                  [
+                    -40,
+                    124
+                  ],
+                  [
+                    -124,
+                    189
+                  ],
+                  "D2"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -10000,
+                18
+              ],
+              "bounds": [
+                [
+                  [
+                    23,
+                    173
+                  ],
+                  [
+                    -65,
+                    189
+                  ],
+                  "dome tunnels"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -7.27,
+                -3.2
+              ],
+              "bounds": [
+                [
+                  [
+                    74,
+                    -196
+                  ],
+                  [
+                    19,
+                    -149
+                  ],
+                  "bunker hermetic door bunkers"
+                ]
+              ]
+            },
+            {
+              "height": [
+                -11,
+                -4.6
+              ],
+              "bounds": [
+                [
+                  [
+                    -246,
+                    -79
+                  ],
+                  [
+                    -274,
+                    -53
+                  ],
+                  "E1 bunkers"
+                ],
+                [
+                  [
+                    238,
+                    -26
+                  ],
+                  [
+                    126,
+                    45
+                  ],
+                  "bunkers"
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "labels": [
+        {
+          "position": [
+            28,
+            -102
+          ],
+          "text": "K Buildings",
+          "bottom": -6
+        },
+        {
+          "position": [
+            -25,
+            180
+          ],
+          "text": "White Queen",
+          "rotation": -15,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -104,
+            93
+          ],
+          "text": "White Pawn",
+          "rotation": 14,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -140,
+            -14.5
+          ],
+          "text": "Black Bishop",
+          "rotation": 14,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -67,
+            -30
+          ],
+          "text": "White Bishop",
+          "rotation": 14,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -49.5,
+            15.5
+          ],
+          "text": "White King",
+          "rotation": 14,
+          "bottom": -6
+        },
+        {
+          "position": [
+            14.5,
+            -10.8
+          ],
+          "text": "Black Knight",
+          "bottom": -6
+        },
+        {
+          "position": [
+            82.2,
+            -30.2
+          ],
+          "text": "White Knight",
+          "bottom": -6
+        },
+        {
+          "position": [
+            149,
+            -124
+          ],
+          "text": "White Rook",
+          "bottom": -6
+        },
+        {
+          "position": [
+            161,
+            -149
+          ],
+          "text": "Train Station",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -165,
+            57
+          ],
+          "text": "Black Pawn",
+          "rotation": -75,
+          "bottom": -6
+        },
+        {
+          "position": [
+            167,
+            -222
+          ],
+          "text": "Barracks",
+          "bottom": -6
+        },
+        {
+          "position": [
+            -220,
+            -13
+          ],
+          "text": "E1 Bunkers",
+          "bottom": -6
+        },
+        {
+          "position": [
+            173,
+            -3
+          ],
+          "text": "E2 Bunkers",
+          "bottom": -6
+        },
+        {
+          "position": [
+            80,
+            -167
+          ],
+          "text": "д - Warehouse Bunkers",
+          "rotation": 14,
+          "bottom": -6
+        },
+        {
+          "position": [
+            96,
+            30
+          ],
+          "text": "Garage",
+          "rotation": -75,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            55.5,
+            60.6
+          ],
+          "text": "Mechanic",
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            29.7,
+            29.5
+          ],
+          "text": "Gas Station",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -31,
+            -150
+          ],
+          "text": "Shipping Yard",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -1,
+            -71
+          ],
+          "text": "K1",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            66,
+            -90
+          ],
+          "text": "K2",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -5.5,
+            -94
+          ],
+          "text": "K3",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            60,
+            -112
+          ],
+          "text": "K4",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -10.5,
+            -115
+          ],
+          "text": "K5",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            54,
+            -132
+          ],
+          "text": "K6",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -8.5,
+            175
+          ],
+          "text": "Dome",
+          "size": 80,
+          "bottom": -6
+        },
+        {
+          "position": [
+            -120,
+            37
+          ],
+          "text": "Tarmac",
+          "rotation": 14,
+          "size": 80,
+          "bottom": -6
+        }
+      ]
+    },
+    {
+      "key": "reserve-2d",
+      "projection": "2D",
+      "author": "Jindouz",
+      "authorLink": "https://www.reddit.com/user/Jindouz"
+    },
+    {
+      "key": "reserve-3d",
+      "projection": "3D",
+      "author": "re3mr",
+      "authorLink": "https://reemr.se"
+    },
+    {
+      "key": "reserve-3d-tunnels",
+      "projection": "3D",
+      "specific": "Tunnels",
+      "author": "re3mr",
+      "authorLink": "https://reemr.se"
+    }
+  ]
+}

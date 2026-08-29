@@ -1,0 +1,3016 @@
+{
+ "name": "Reserve",
+ "normalizedName": "reserve",
+ "source": "community (SPT database + EFT Wiki)",
+ "builtAt": "2026-08-29T10:45:21.889Z",
+ "extracts": [
+  {
+   "id": "wiki-49",
+   "name": "D-2",
+   "faction": "pmc",
+   "note": "1.Requires lever activation in the command part of the underground bunker system<br/>\n2.Press the button on the wall next to the sliding door",
+   "position": {
+    "x": -82,
+    "y": 0,
+    "z": 157
+   }
+  },
+  {
+   "id": "wiki-76",
+   "name": "Bunker Hermetic Door",
+   "faction": "shared",
+   "note": "Requires lever activation in the shack west of the white pawn barracks",
+   "position": {
+    "x": 48,
+    "y": 0,
+    "z": -184
+   }
+  },
+  {
+   "id": "wiki-79",
+   "name": "Cliff Descent",
+   "faction": "pmc",
+   "note": "Requires:<br/>\nRed Rebel ice pick<br/>\nParacord<br/>\nNo armor vest equipped",
+   "position": {
+    "x": -13,
+    "y": 0,
+    "z": 203.1
+   }
+  },
+  {
+   "id": "wiki-80",
+   "name": "Scav Lands (Co-Op)",
+   "faction": "shared",
+   "note": "Requires PMC + Scav",
+   "position": {
+    "x": -123.5,
+    "y": 0,
+    "z": -145.5
+   }
+  },
+  {
+   "id": "wiki-81",
+   "name": "Armored Train",
+   "faction": "shared",
+   "note": "Stays for 7 min<br/>Honks twice on arrival<br/>\nHonks once 1 min before departure<br/>\nHonks twice on closing doors",
+   "position": {
+    "x": 127.7,
+    "y": 0,
+    "z": -143.3
+   }
+  },
+  {
+   "id": "wiki-82",
+   "name": "Checkpoint Fence",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 67.7,
+    "y": 0,
+    "z": 137.8
+   }
+  },
+  {
+   "id": "wiki-83",
+   "name": "Depot Hermetic Door",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 141,
+    "y": 0,
+    "z": 25
+   }
+  },
+  {
+   "id": "wiki-84",
+   "name": "Heating Pipe",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": -37.2,
+    "y": 0,
+    "z": -184.7
+   }
+  },
+  {
+   "id": "wiki-85",
+   "name": "Hole in the Wall by the Mountains",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": -264.7,
+    "y": 0,
+    "z": 43
+   }
+  },
+  {
+   "id": "wiki-86",
+   "name": "Sewer Manhole",
+   "faction": "shared",
+   "note": "Requires no backpack equipped",
+   "position": {
+    "x": 41.3,
+    "y": 0,
+    "z": 74.3
+   }
+  },
+  {
+   "id": "wiki-619",
+   "name": "Transit to Lighthouse",
+   "faction": "transit",
+   "note": "Only available 1 min after raid start",
+   "position": {
+    "x": 241.9,
+    "y": 0,
+    "z": -123.2
+   }
+  },
+  {
+   "id": "wiki-621",
+   "name": "Transit to Woods",
+   "faction": "transit",
+   "note": "Only available 1 min after raid start",
+   "position": {
+    "x": 220.9,
+    "y": 0,
+    "z": -202.2
+   }
+  },
+  {
+   "id": "wiki-622",
+   "name": "Transit to Customs",
+   "faction": "transit",
+   "note": "Only available 1 min after raid start",
+   "position": {
+    "x": -195.4,
+    "y": 0,
+    "z": -120.7
+   }
+  },
+  {
+   "id": "wiki-626",
+   "name": "Exit to Woods",
+   "faction": "shared",
+   "note": "Requires Minefield map (Reserve)",
+   "position": {
+    "x": 36.6,
+    "y": 0,
+    "z": -224.9
+   }
+  }
+ ],
+ "spawns": [
+  {
+   "position": {
+    "x": 148.7,
+    "y": -10.8,
+    "z": 38.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 141,
+    "y": -6.5,
+    "z": -223.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -85.1,
+    "y": -14.5,
+    "z": 36.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -118.6,
+    "y": -6.9,
+    "z": -3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -115.9,
+    "y": -5.5,
+    "z": -23
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -45.6,
+    "y": -6.5,
+    "z": 29.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -94.9,
+    "y": -14.8,
+    "z": 3.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": 62.3,
+    "y": -6.9,
+    "z": -174.5
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 65.8,
+    "y": -6.8,
+    "z": -39.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZonePTOR2"
+  },
+  {
+   "position": {
+    "x": 86.8,
+    "y": -6.8,
+    "z": -33.8
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 60.7,
+    "y": -6.7,
+    "z": 63.8
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 142.9,
+    "y": -10.8,
+    "z": 40.5
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -168.6,
+    "y": -6.3,
+    "z": 55.7
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 164.5,
+    "y": -6.8,
+    "z": -234.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -41,
+    "y": -6.5,
+    "z": 30.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 213.6,
+    "y": -6.8,
+    "z": -112.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -50.1,
+    "y": -6.5,
+    "z": 26.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -140.2,
+    "y": -7,
+    "z": -35.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": 147.1,
+    "y": -10.8,
+    "z": 34.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -40.8,
+    "y": -6.5,
+    "z": 26.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 148.8,
+    "y": -10.8,
+    "z": 36.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 189.6,
+    "y": -6.8,
+    "z": -101.5
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 215.5,
+    "y": -6.8,
+    "z": -114.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 217.3,
+    "y": -6.9,
+    "z": -172
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 164.8,
+    "y": -5.2,
+    "z": -161.4
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 219.2,
+    "y": -6.9,
+    "z": -174
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -99.9,
+    "y": -14.5,
+    "z": 17.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -167.8,
+    "y": -6.3,
+    "z": 59.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -148.2,
+    "y": -6.9,
+    "z": 45.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 73.4,
+    "y": -15.5,
+    "z": -38.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": -108.3,
+    "y": -10.4,
+    "z": 73.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 63.1,
+    "y": -6.9,
+    "z": -172
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -119,
+    "y": -5.5,
+    "z": -24.4
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -29.7,
+    "y": -6.8,
+    "z": -12.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR1"
+  },
+  {
+   "position": {
+    "x": -160.5,
+    "y": -6.3,
+    "z": 65.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -79,
+    "y": 21.3,
+    "z": 193.8
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 171.6,
+    "y": -5.2,
+    "z": -167.7
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -34.3,
+    "y": -6.5,
+    "z": 20.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 58.4,
+    "y": -12.2,
+    "z": -155.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": 38.6,
+    "y": -0.5,
+    "z": -184.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 156.5,
+    "y": -6.8,
+    "z": -234.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -150,
+    "y": -6.9,
+    "z": 47.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -162.3,
+    "y": -6.3,
+    "z": 62.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 243.1,
+    "y": -7.1,
+    "z": -88.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 41.4,
+    "y": -12.2,
+    "z": -110.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": 57.9,
+    "y": -6.7,
+    "z": 64.8
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 186.8,
+    "y": -6.8,
+    "z": -105
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -27.9,
+    "y": 12.6,
+    "z": 184.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -105.6,
+    "y": -14.5,
+    "z": 21.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -145.4,
+    "y": -6.9,
+    "z": 53.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -154.1,
+    "y": -6.2,
+    "z": -9.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": 23.6,
+    "y": -6.9,
+    "z": 8.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -74.1,
+    "y": -6.8,
+    "z": 27
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -37.5,
+    "y": -6.8,
+    "z": -172.3
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -117.6,
+    "y": -14.6,
+    "z": 58.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": 216.2,
+    "y": -6.8,
+    "z": -112.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 56.7,
+    "y": -6.7,
+    "z": 66.7
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -90.4,
+    "y": -14.5,
+    "z": 14.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -27.9,
+    "y": 12.6,
+    "z": 181.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -266.8,
+    "y": -6.2,
+    "z": 23.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": 32.5,
+    "y": -6.8,
+    "z": -11.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZonePTOR1"
+  },
+  {
+   "position": {
+    "x": -36,
+    "y": -6.5,
+    "z": 21.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 168.4,
+    "y": -6.8,
+    "z": -234.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 43,
+    "y": -6.8,
+    "z": -32.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR1"
+  },
+  {
+   "position": {
+    "x": -83.9,
+    "y": -6.8,
+    "z": 44.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": 126.4,
+    "y": -6.8,
+    "z": 45.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": 160.2,
+    "y": -5.1,
+    "z": -168.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 138.8,
+    "y": -6.8,
+    "z": -229.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 102.7,
+    "y": -6.9,
+    "z": -5.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR2"
+  },
+  {
+   "position": {
+    "x": -135.1,
+    "y": -6.7,
+    "z": -130
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 249.1,
+    "y": -6.4,
+    "z": -28.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": 217.5,
+    "y": -6.8,
+    "z": -109.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 214.6,
+    "y": -6.8,
+    "z": -109.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -121.9,
+    "y": -5.5,
+    "z": -21.7
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 25.9,
+    "y": -6.9,
+    "z": 7.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -47.6,
+    "y": -6.4,
+    "z": 20.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -32.2,
+    "y": -6.5,
+    "z": 13.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 141.4,
+    "y": -10.8,
+    "z": 41.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -6,
+    "y": -7,
+    "z": -182.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 174,
+    "y": -5.2,
+    "z": -166.8
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 188.8,
+    "y": -6.8,
+    "z": -106.4
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -50.7,
+    "y": -6.5,
+    "z": 15.7
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -82.4,
+    "y": -14.3,
+    "z": 28.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -138,
+    "y": -7.1,
+    "z": -130
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 23.5,
+    "y": -5.1,
+    "z": -128.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -36.4,
+    "y": -7,
+    "z": -167
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 22.7,
+    "y": -6.9,
+    "z": 5.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 23.2,
+    "y": -6.9,
+    "z": 6.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 189.5,
+    "y": -6.8,
+    "z": -96.3
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 55.9,
+    "y": -6.7,
+    "z": 65.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -150.8,
+    "y": -6.9,
+    "z": 45.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -86.1,
+    "y": -14.4,
+    "z": 21.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -265.5,
+    "y": -5.5,
+    "z": 13.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -42.1,
+    "y": -6.5,
+    "z": 23.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -115.4,
+    "y": -5.4,
+    "z": -26.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 225.1,
+    "y": -6.8,
+    "z": -123
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -40.6,
+    "y": -6.5,
+    "z": 20.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 86.2,
+    "y": -6.8,
+    "z": -36.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -43.4,
+    "y": -6.5,
+    "z": 28.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -146.9,
+    "y": -6.9,
+    "z": 49.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 63.7,
+    "y": -6.9,
+    "z": -168.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -264.5,
+    "y": -5.2,
+    "z": 11.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -71.5,
+    "y": 21.4,
+    "z": 193.8
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -62.3,
+    "y": -7,
+    "z": 37.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -252.8,
+    "y": -5.4,
+    "z": -0.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": 96.7,
+    "y": -7,
+    "z": -16.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR2"
+  },
+  {
+   "position": {
+    "x": -49.3,
+    "y": -6.5,
+    "z": 18.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 85.1,
+    "y": -6.7,
+    "z": -37.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -32.9,
+    "y": -7,
+    "z": -154.5
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -163.7,
+    "y": -6.3,
+    "z": 61.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 30.7,
+    "y": -12.2,
+    "z": -153.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": -148.9,
+    "y": -6.9,
+    "z": 43.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 25.7,
+    "y": -6.9,
+    "z": 4.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 248.3,
+    "y": -6.5,
+    "z": -32.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": -147.5,
+    "y": -6.9,
+    "z": 47.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 216.8,
+    "y": -6.8,
+    "z": -111.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -136.4,
+    "y": -14.6,
+    "z": 41.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -10.3,
+    "y": -7,
+    "z": -186
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 192.4,
+    "y": -6.8,
+    "z": -97.5
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -48.7,
+    "y": -6.4,
+    "z": 15.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 230.4,
+    "y": -6.8,
+    "z": -117.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 248.8,
+    "y": -6,
+    "z": -18
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": 214.5,
+    "y": -6.9,
+    "z": -116.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -33.7,
+    "y": -7,
+    "z": -156.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 212.5,
+    "y": -6.8,
+    "z": -115.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 104.8,
+    "y": -7,
+    "z": 12.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR2"
+  },
+  {
+   "position": {
+    "x": 160.2,
+    "y": -6.8,
+    "z": -234.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -34.9,
+    "y": -7,
+    "z": -169.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 213,
+    "y": -6.8,
+    "z": -114.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -6,
+    "y": -7,
+    "z": -180
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 1.8,
+    "y": -6.9,
+    "z": -40
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR1"
+  },
+  {
+   "position": {
+    "x": -104.2,
+    "y": -14.5,
+    "z": 33.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -89.8,
+    "y": -14.5,
+    "z": 17.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubCommand"
+  },
+  {
+   "position": {
+    "x": -53,
+    "y": -6.8,
+    "z": 40.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -76,
+    "y": 21.4,
+    "z": 194
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -78.7,
+    "y": 21.1,
+    "z": 191.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 62.8,
+    "y": -6.7,
+    "z": 63.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -163.1,
+    "y": -6.2,
+    "z": -6.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": 214.2,
+    "y": -6.8,
+    "z": -110.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 83.2,
+    "y": -12.2,
+    "z": -123.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": -114.9,
+    "y": -10.4,
+    "z": 76.4
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 45.4,
+    "y": -0.8,
+    "z": -196.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -44.8,
+    "y": -6.5,
+    "z": 27.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -149.4,
+    "y": -6.9,
+    "z": 49.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -48.3,
+    "y": -6.5,
+    "z": 15.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 170.3,
+    "y": -6.8,
+    "z": -234.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -53.5,
+    "y": -6.5,
+    "z": 33.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 197.1,
+    "y": -6.3,
+    "z": 42
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": 33.4,
+    "y": -12.2,
+    "z": -142.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": -7.3,
+    "y": -7,
+    "z": -183.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -49.6,
+    "y": -6.4,
+    "z": 16.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -35.4,
+    "y": -7,
+    "z": -34.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR1"
+  },
+  {
+   "position": {
+    "x": 61.5,
+    "y": -6.9,
+    "z": -177.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -115.7,
+    "y": -5.4,
+    "z": -20
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -112.1,
+    "y": -10.5,
+    "z": 75.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -151.6,
+    "y": -6.9,
+    "z": 43
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -39.9,
+    "y": -6.5,
+    "z": 22.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 39.7,
+    "y": -0.2,
+    "z": -188.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 137.2,
+    "y": -6.5,
+    "z": -232
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 216.7,
+    "y": -6.9,
+    "z": -176.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": 87.8,
+    "y": -6.8,
+    "z": -30.6
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 102.4,
+    "y": -7,
+    "z": 3.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR2"
+  },
+  {
+   "position": {
+    "x": 240.9,
+    "y": -7.1,
+    "z": -94.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -149.9,
+    "y": -6.2,
+    "z": -10.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -118.3,
+    "y": -10.5,
+    "z": 77.5
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 89.4,
+    "y": -6.8,
+    "z": -24.7
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -34.5,
+    "y": -6.5,
+    "z": 15
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 35.9,
+    "y": -0.3,
+    "z": -189.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -74.3,
+    "y": 21.4,
+    "z": 192
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -38.1,
+    "y": -6.5,
+    "z": 16.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 31.5,
+    "y": -12.2,
+    "z": -146.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": 146,
+    "y": -6.8,
+    "z": -230.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  },
+  {
+   "position": {
+    "x": -6.5,
+    "y": -6.7,
+    "z": -19.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR1"
+  },
+  {
+   "position": {
+    "x": -43.1,
+    "y": -6.5,
+    "z": 20.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 67.8,
+    "y": -7.3,
+    "z": -168.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -28.3,
+    "y": 12.6,
+    "z": 182.9
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -47.3,
+    "y": -6.5,
+    "z": 18.7
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 47.3,
+    "y": -12.1,
+    "z": -93.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": 255.1,
+    "y": -6.4,
+    "z": -42.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": -135.1,
+    "y": -6.7,
+    "z": -130
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -135.5,
+    "y": -6.7,
+    "z": -130
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 226.3,
+    "y": -6.8,
+    "z": 31.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": -174.1,
+    "y": -6.9,
+    "z": 1.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBarrack"
+  },
+  {
+   "position": {
+    "x": -120.8,
+    "y": -10.5,
+    "z": 78.1
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 173.8,
+    "y": -5.2,
+    "z": -169.2
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -148.7,
+    "y": -6.9,
+    "z": 51.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -136,
+    "y": -6.7,
+    "z": -130
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -40.8,
+    "y": -6.5,
+    "z": 17.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -149.6,
+    "y": -6.9,
+    "z": 41.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 122,
+    "y": -12.2,
+    "z": -120.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneSubStorage"
+  },
+  {
+   "position": {
+    "x": -26.8,
+    "y": 12.6,
+    "z": 182.8
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -47.3,
+    "y": -6.5,
+    "z": 14.3
+   },
+   "sides": [
+    "all"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -38.8,
+    "y": -6.5,
+    "z": 28.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 176.3,
+    "y": -5.9,
+    "z": 40.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBunkerStorage"
+  },
+  {
+   "position": {
+    "x": 60.5,
+    "y": -6.9,
+    "z": -56.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZonePTOR2"
+  },
+  {
+   "position": {
+    "x": 218,
+    "y": -6.9,
+    "z": -175.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneRailStrorage"
+  }
+ ],
+ "bosses": [
+  {
+   "name": "Glukhar",
+   "spawnChance": 0.3,
+   "spawnLocations": [
+    {
+     "name": "ZoneRailStrorage",
+     "chance": 1
+    },
+    {
+     "name": "ZonePTOR2",
+     "chance": 1
+    },
+    {
+     "name": "ZoneBarrack",
+     "chance": 1
+    },
+    {
+     "name": "ZoneSubStorage",
+     "chance": 1
+    }
+   ]
+  }
+ ],
+ "hazards": [],
+ "stationaryWeapons": [
+  {
+   "stationaryWeapon": {
+    "name": "AGS-30 automatic grenade launcher"
+   },
+   "position": {
+    "x": -26.9,
+    "y": 0,
+    "z": 165.5
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": 150.2,
+    "y": 0,
+    "z": -126.2
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": -3.4,
+    "y": 0,
+    "z": -203.5
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "AGS-30 automatic grenade launcher"
+   },
+   "position": {
+    "x": 227.2,
+    "y": 0,
+    "z": -7.1
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": -117,
+    "y": 0,
+    "z": -33.3
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": -125.6,
+    "y": 0,
+    "z": -10.5
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": -0.3,
+    "y": 0,
+    "z": 138
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "AGS-30 automatic grenade launcher"
+   },
+   "position": {
+    "x": -256.1,
+    "y": 0,
+    "z": -81.8
+   }
+  }
+ ],
+ "locks": [
+  {
+   "lockType": "door",
+   "key": {
+    "name": "RB-AO"
+   },
+   "position": {
+    "x": 194.9,
+    "y": 0,
+    "z": -204.5
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "RB-VO marked room"
+   },
+   "position": {
+    "x": 191.8,
+    "y": 0,
+    "z": -224.6
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "RB-ST"
+   },
+   "position": {
+    "x": 100.6,
+    "y": 0,
+    "z": 43.9
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "RB-KPRL"
+   },
+   "position": {
+    "x": -45.8,
+    "y": 0,
+    "z": 169.6
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "RB-KPRL"
+   },
+   "position": {
+    "x": -40.3,
+    "y": 0,
+    "z": 171.3
+   }
+  }
+ ],
+ "switches": [
+  {
+   "name": "Bunker Hermetic Door power lever",
+   "position": {
+    "x": -61.9,
+    "y": 0,
+    "z": 76.5
+   }
+  },
+  {
+   "name": "D-2 power lever",
+   "position": {
+    "x": -92,
+    "y": 0,
+    "z": 27
+   }
+  },
+  {
+   "name": "D-2 sliding door button",
+   "position": {
+    "x": -82,
+    "y": 0,
+    "z": 157
+   }
+  }
+ ]
+}
