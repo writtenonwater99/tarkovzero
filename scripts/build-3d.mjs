@@ -148,6 +148,15 @@ for (const r of roads) {
 }
 const realCrossing = (q) => bridges.some((b) => b.path.some((p) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 8));
 roads.length = 0; roads.push(...clipLines(roadsCut.filter((r) => !r.path.some((q) => overWater(q) && !realCrossing(q)))));
+// 'small' roads are only paved where they serve an industrial yard (touch pavement or a building); elsewhere they are trails
+const pav = polysIn('Pavement');
+const nearPaved = (q) => pav.some((pp) => inPoly(q, pp)) || buildings.some((b) => { const c = centroid(b.poly); return Math.hypot(c[0] - q[0], c[1] - q[1]) < 25; });
+for (const r of roads) {
+  if (r.kind !== 'small') continue;
+  const hits = r.path.filter(nearPaved).length;
+  if (hits / r.path.length < 0.35) { r.kind = 'track'; r.width = 2.2; }
+}
+console.log(`roads: ${JSON.stringify(roads.reduce((a, r) => ((a[r.kind] = (a[r.kind] || 0) + 1), a), {}))}`);
 // fences: clip to limit and open a gap where a road crosses (gates)
 const fenceLines = linesIn('Fence').flatMap((p) => clipPath(p, 2));
 const fencesCut = [];
