@@ -27,6 +27,45 @@ function offsetPath(p, d) {
   return p.map((q, i) => { const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)]; const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [q[0] - (dy / L) * d, q[1] + (dx / L) * d, q[2]]; });
 }
 function piers(b) { const p = bridgePath(b), out = []; for (let i = 3; i < p.length - 3; i += 3) if (p[i][2] >= b.height - 0.01) out.push({ pos: p[i], h: b.height - 0.3, w: b.width * 0.5 }); return out; }
+// ---- building identity geometry
+// oriented bounding rectangle (min area over edge directions) -> 4 corners in game coords, long axis first
+function obb(poly) {
+  let best = null;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, az] = poly[i], [bx, bz] = poly[(i + 1) % poly.length]; const L = Math.hypot(bx - ax, bz - az); if (L < 0.5) continue;
+    const ux = (bx - ax) / L, uz = (bz - az) / L; // axis
+    let mn = [Infinity, Infinity], mx = [-Infinity, -Infinity];
+    for (const [x, z] of poly) { const u = x * ux + z * uz, v = -x * uz + z * ux; mn = [Math.min(mn[0], u), Math.min(mn[1], v)]; mx = [Math.max(mx[0], u), Math.max(mx[1], v)]; }
+    const a = (mx[0] - mn[0]) * (mx[1] - mn[1]);
+    if (!best || a < best.a) best = { a, ux, uz, mn, mx };
+  }
+  const { ux, uz, mn, mx } = best; const toXZ = (u, v) => [u * ux - v * uz, u * uz + v * ux];
+  const long = mx[0] - mn[0] >= mx[1] - mn[1];
+  return { corners: [toXZ(mn[0], mn[1]), toXZ(mx[0], mn[1]), toXZ(mx[0], mx[1]), toXZ(mn[0], mx[1])], long, toXZ, mn, mx };
+}
+function gableRoof(b) { // two sloped quads from eaves to a ridge along the long axis
+  const o = obb(b.poly), eave = b.height * 0.72, ridge = b.height + 0.4, { mn, mx, toXZ } = o;
+  const [u0, u1, v0, v1] = [mn[0], mx[0], mn[1], mx[1]];
+  if (o.long) { const vm = (v0 + v1) / 2; return [
+    [[...toXZ(u0, v0), eave], [...toXZ(u1, v0), eave], [...toXZ(u1, vm), ridge], [...toXZ(u0, vm), ridge]],
+    [[...toXZ(u0, vm), ridge], [...toXZ(u1, vm), ridge], [...toXZ(u1, v1), eave], [...toXZ(u0, v1), eave]] ]; }
+  const um = (u0 + u1) / 2; return [
+    [[...toXZ(u0, v0), eave], [...toXZ(um, v0), ridge], [...toXZ(um, v1), ridge], [...toXZ(u0, v1), eave]],
+    [[...toXZ(um, v0), ridge], [...toXZ(u1, v0), eave], [...toXZ(u1, v1), eave], [...toXZ(um, v1), ridge]] ];
+}
+function columns(poly, spacing = 6) { const out = []; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const n = Math.max(1, Math.round(L / spacing)); for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); } return out; }
+function buildingParts(bs) {
+  const walls = [], roofs = [], slabs = [], posts = [], edges = [];
+  for (const b of bs) {
+    const st = b.style || 'box';
+    if (st === 'box' || st === 'tank') walls.push({ ...b, h: b.height });
+    if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [215, 220, 226] });
+    if (st === 'gable') { walls.push({ ...b, h: b.height * 0.72 }); const [r1, r2] = gableRoof(b); roofs.push({ pts: r1, color: b.roof ?? [150, 140, 130], b }, { pts: r2, color: (b.roof ?? [150, 140, 130]).map((c) => c * 0.82), b }); }
+    if (st === 'frame') { for (let k = 1; k <= b.floors; k++) { const z = k * 3.3; slabs.push({ poly: b.poly, z, color: [190, 190, 188, 205] }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]] }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: b.floors * 3.3, w: 0.7, color: [175, 175, 172] }); }
+    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? [235, 235, 235] }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]] }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: [200, 200, 200] }); }
+  }
+  return { walls, roofs, slabs, posts, edges };
+}
 const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x + w / 2, y + w / 2], [x - w / 2, y + w / 2]];
 
 export async function createView3d(container, mapData, src) {
@@ -74,13 +113,20 @@ export async function createView3d(container, mapData, src) {
     new PathLayer({ id: 'bridge-rails', shadowEnabled: false, data: (data.bridges || []).flatMap((b) => { const p = bridgePath(b).map((q) => [q[0], q[1], q[2] + 1.1]); return [offsetPath(p, b.width / 2 - 0.3), offsetPath(p, -(b.width / 2 - 0.3))]; }), getPath: (d) => d, getColor: C.bridgeRail, getWidth: 0.4, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'floor-lines', shadowEnabled: false, data: floorLines, getPath: (d) => d.path, getColor: C.floorLine, getWidth: 0.35, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ];
-  const buildingLayer = () => new SolidPolygonLayer({
-    id: 'buildings', data: data.buildings, getPolygon: (d) => ring(d.poly), extruded: true, getElevation: (d) => d.height,
-    getFillColor: (d, { index }) => (hover === index ? C.buildingHover : d.color ? d.color : d.kind === 'tank' ? C.tank : d.kind === 'powerline_towers' ? C.tower : d.floors > 1 ? C.buildingMulti : C.building),
-    updateTriggers: { getFillColor: hover }, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-    material: { ambient: 0.7, diffuse: 0.55, shininess: 12, specularColor: [30, 30, 30] },
-    onHover: (i) => { if (i.index !== hover) { hover = i.index; render(); } },
-  });
+  const parts = buildingParts(data.buildings);
+  const buildingLayer = () => [
+    new SolidPolygonLayer({
+      id: 'buildings', data: parts.walls, getPolygon: (d) => ring(d.poly), extruded: true, getElevation: (d) => d.h,
+      getFillColor: (d, { index }) => (hover === index ? C.buildingHover : d.color ? d.color : d.kind === 'tank' ? C.tank : d.kind === 'powerline_towers' ? C.tower : d.floors > 1 ? C.buildingMulti : C.building),
+      updateTriggers: { getFillColor: hover }, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      material: { ambient: 0.7, diffuse: 0.55, shininess: 12, specularColor: [30, 30, 30] },
+      onHover: (i) => { if (i.index !== hover) { hover = i.index; render(); } },
+    }),
+    new SolidPolygonLayer({ id: 'roofs', data: parts.roofs, getPolygon: (d) => d.pts.map(([x, z, y]) => P([x, z], y)), getFillColor: (d) => d.color, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.8, diffuse: 0.4 } }),
+    new SolidPolygonLayer({ id: 'slabs', shadowEnabled: false, data: parts.slabs, getPolygon: (d) => ringAt(d.poly, d.z), getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'posts', data: parts.posts, getPolygon: (d) => box(P(d.pos), d.w).map(([x, y]) => [x, y, 0]), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5 } }),
+    new PathLayer({ id: 'slab-edges', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path, getColor: [110, 110, 108], getWidth: 0.3, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+  ];
   const dynamicLayers = () => {
     const markers = src.markers();
     const players = src.players().filter((p) => p.last);
@@ -106,6 +152,7 @@ export async function createView3d(container, mapData, src) {
     getTooltip: ({ object, layer }) => {
       if (!object) return null;
       if (layer.id === 'buildings') return { html: `<b>${esc(object.place ?? object.name ?? object.kind)}</b><br>${object.floors} floor${object.floors > 1 ? 's' : ''} · ${object.height} m`, className: 'deck-tooltip' };
+      if (layer.id === 'roofs') return { html: `<b>${esc(object.b.place ?? object.b.name ?? object.b.kind)}</b><br>${object.b.floors} floor${object.b.floors > 1 ? 's' : ''} · ${object.b.height} m`, className: 'deck-tooltip' };
       if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
       if (layer.id === 'markers') return { html: object.html, className: 'deck-tooltip' };
       if (layer.id === 'players') return { html: `<b>${esc(object.name)}</b><br>x ${object.last.x} z ${object.last.z} y ${object.last.y ?? 0}`, className: 'deck-tooltip' };
@@ -114,7 +161,7 @@ export async function createView3d(container, mapData, src) {
   });
   const base = staticLayers();
   const extras = extraLayers();
-  function render() { deck.setProps({ layers: [...base, extras[0], buildingLayer(), ...extras.slice(1), ...dynamicLayers()] }); }
+  function render() { deck.setProps({ layers: [...base, extras[0], ...buildingLayer(), ...extras.slice(1), ...dynamicLayers()] }); }
   render();
   return {
     refresh: render,
