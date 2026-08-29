@@ -6,7 +6,7 @@ import { roadmapLayer } from './roadmap.js';
 import { placeLabelsLayer } from './placeLabels.js';
 import { CUSTOMS_LABELS } from './labels.js';
 import { KINDS, iconHtml } from './icons.js';
-import { createLive } from './live.js';
+import { createLive, esc } from './live.js';
 
 const mapData = CUSTOMS;
 const map = L.map('map', {
@@ -152,7 +152,7 @@ const liveEl = document.getElementById('live');
 const ui = { render() {
   const ps = [...live.players.values()];
   liveEl.innerHTML = `<div class="group">Live position</div>
-    ${ps.map((p) => `<div class="player"><span class="sw" style="background:${p.color}"></span><b title="double-click to rename" data-rn="${p.code}">${p.name}</b>${p.name !== p.code ? `<span class="code">${p.code}</span>` : ''}<span class="st">${p.status}</span><button class="small" data-rm="${p.code}">✕</button></div>`).join('')}
+    ${ps.map((p) => `<div class="player"><span class="sw" style="background:${esc(p.color)}"></span><b title="double-click to rename" data-rn="${esc(p.code)}">${esc(p.name)}</b>${p.name !== p.code ? `<span class="code">${esc(p.code)}</span>` : ''}<span class="st">${esc(p.status)}</span><button class="small" data-rm="${esc(p.code)}">✕</button></div>`).join('')}
     <input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX">
     <button id="live-add">${ps.length ? 'Add another' : 'Connect'}</button>
     <div class="err" id="live-err"></div>
