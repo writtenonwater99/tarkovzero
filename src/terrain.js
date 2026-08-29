@@ -1,7 +1,7 @@
 // src/terrain.js — smooth ground surface for the 3D view.
 //
-// Replaces the old per-quad `terrainQuads()` SolidPolygonLayer + `contours` PathLayer with ONE
-// SimpleMeshLayer: a pre-built, smoothly-shaded triangle mesh carrying a baked ground texture.
+// Replaces the old per-quad `terrainQuads()` SolidPolygonLayer + `contours` PathLayer with a
+// pre-built, smoothly-shaded ground mesh plus one continuous flat limit-skirt mesh.
 //
 // The old look ("puzzle pieces") had three causes, all fixed here together:
 //   a) per-quad flat colour from a 5-stop ramp  -> per-texel gradient baked into a 2048px texture
@@ -11,8 +11,8 @@
 // The source grid is a robust 5 m fit over survey, loose-loot and SPT spawn samples. One compact
 // Gaussian pass conditions quantisation without smearing a real crest into its surroundings.
 //
-// Relief is applied once, to the conditioned height field that becomes H(x,z). The mesh, skirt,
-// contours and every map3d layer therefore consume the same vertically-exaggerated ground.
+// Relief is applied once, to the conditioned height field that becomes H(x,z). The mesh, flat
+// limit skirt, contours and every map3d layer therefore consume the same exaggerated ground.
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
 import { COORDINATE_SYSTEM, LightingEffect, AmbientLight, DirectionalLight } from '@deck.gl/core';
@@ -21,7 +21,6 @@ import { COORDINATE_SYSTEM, LightingEffect, AmbientLight, DirectionalLight } fro
 const CELL = 2.5;          // mesh cell size in metres (10 m source grid subdivided 4x)
 const PAD = 8;             // metres of mesh built outside the limit bbox (hidden, gives the skirt room)
 const TEX_W = 2048;        // baked ground texture width
-const BAND_PX = 12;        // dark rows at the bottom of the texture, used by the skirt only
 const SHADE_GAIN = 2.6;    // mild cartographic boost on top of the displayed surface's real normals
 const DEFAULT_VOID_Z = -14;
 
@@ -30,11 +29,19 @@ const DEFAULT_VOID_Z = -14;
 const SUN_DIR = [-0.62, -0.42, -0.66];
 const FILL_DIR = [0.5, 0.35, -0.79];
 
-const GRASS = [[40, 62, 42], [50, 76, 45], [62, 88, 49], [80, 100, 54], [102, 114, 62]];
-const GRASS_DRY = [110, 106, 84];
-const GRASS_ROCK = [124, 118, 103];
-const YARD_EARTH = [112, 86, 57];
-const BAND_TOP = [66, 62, 54], BAND_BOT = [24, 27, 25];
+// Bright field palette: still olive/green and desaturated, but no longer loses its middle values
+// under the baked hillshade and the scene light.
+const GRASS = [[57, 82, 58], [68, 96, 62], [81, 108, 67], [101, 121, 73], [123, 137, 84]];
+const GRASS_DRY = [132, 126, 99];
+const GRASS_ROCK = [145, 138, 120];
+const YARD_EARTH = [133, 101, 68];
+const SURFACE = {
+  pavement: [112, 115, 108],
+  road: [137, 142, 133], roadEdge: [86, 91, 83],
+  highway: [150, 153, 141], highwayEdge: [96, 101, 91], marking: [230, 226, 207],
+  dirt: [139, 121, 88], dirtEdge: [103, 88, 64], track: [126, 105, 73],
+  rail: [132, 130, 121], sleeper: [99, 91, 75],
+};
 
 // ---------------------------------------------------------------- small maths helpers
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -138,11 +145,78 @@ function chamfer(mask, gw, gh) {
   return d;
 }
 
+// ---------------------------------------------------------------- baked map materials
+const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+function trace(ctx, path, close = false) {
+  if (!path?.length) return false;
+  ctx.beginPath(); ctx.moveTo(path[0][0], path[0][1]);
+  for (let i = 1; i < path.length; i++) ctx.lineTo(path[i][0], path[i][1]);
+  if (close) ctx.closePath();
+  return true;
+}
+function strokeMapPath(ctx, path, color, width, dash = []) {
+  if (!trace(ctx, path)) return;
+  ctx.strokeStyle = css(color); ctx.lineWidth = width; ctx.setLineDash(dash); ctx.stroke();
+}
+function offsetLine(path, distance) {
+  return path.map((p, i) => {
+    const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)];
+    const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz) || 1;
+    return [p[0] - (dz / len) * distance, p[1] + (dx / len) * distance];
+  });
+}
+function drawSleepers(ctx, path, spacing = 2.4, halfWidth = 1.25) {
+  let next = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1], b = path[i], dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz);
+    if (!len) continue;
+    while (next <= len) {
+      const t = next / len, x = a[0] + dx * t, z = a[1] + dz * t, nx = -dz / len, nz = dx / len;
+      ctx.beginPath(); ctx.moveTo(x - nx * halfWidth, z - nz * halfWidth); ctx.lineTo(x + nx * halfWidth, z + nz * halfWidth); ctx.stroke();
+      next += spacing;
+    }
+    next -= len;
+  }
+}
+
+// Pavement and every at-grade transport line are painted into the terrain texture. They therefore
+// share the mesh's exact vertices and can never stack, step, float, or z-fight on a steep relief.
+function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz) {
+  ctx.save();
+  ctx.setTransform(1 / mx, 0, 0, 1 / mz, -X0 / mx, -Z0 / mz);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  ctx.fillStyle = css(SURFACE.pavement);
+  for (const poly of data.pavement || []) if (trace(ctx, poly, true)) ctx.fill();
+
+  const paved = (data.roads || []).filter((d) => d.kind !== 'track' && d.kind !== 'dirt');
+  for (const d of paved) strokeMapPath(ctx, d.path, d.kind === 'highway' ? SURFACE.highwayEdge : SURFACE.roadEdge, d.width + 1.6);
+  for (const d of paved) strokeMapPath(ctx, d.path, d.kind === 'highway' ? SURFACE.highway : SURFACE.road, d.width);
+  for (const d of paved.filter((d) => d.kind === 'highway')) strokeMapPath(ctx, d.path, SURFACE.marking, 0.25, [6, 6]);
+
+  for (const d of (data.roads || []).filter((r) => r.kind === 'dirt')) {
+    strokeMapPath(ctx, d.path, SURFACE.dirtEdge, d.width + 1.2);
+    strokeMapPath(ctx, d.path, SURFACE.dirt, d.width);
+  }
+  for (const d of (data.roads || []).filter((r) => r.kind === 'track')) {
+    const width = Math.max(2.2, d.width || 0);
+    strokeMapPath(ctx, d.path, SURFACE.dirt, width + 0.8);
+    for (const side of [-1, 1]) strokeMapPath(ctx, offsetLine(d.path, side * width * 0.24), SURFACE.track, 0.48, [4.5, 2.8]);
+  }
+
+  for (const d of data.railway || []) {
+    ctx.strokeStyle = css(SURFACE.sleeper); ctx.lineWidth = 0.34; ctx.setLineDash([]);
+    drawSleepers(ctx, d.path);
+    for (const side of [-0.72, 0.72]) strokeMapPath(ctx, offsetLine(d.path, side), SURFACE.rail, 0.28);
+  }
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- main
-export function buildTerrain(data, relief = 2) {
+export function buildTerrain(data, relief = 3) {
   const t = data.terrain;
   const { x0, z0, step, cols, rows } = t;
-  relief = [1, 2, 3].includes(Number(relief)) ? Number(relief) : 2;
+  relief = [1, 2, 3].includes(Number(relief)) ? Number(relief) : 3;
   const conditioned = gaussian5(t.heights, cols, rows, 1); // ~5 m sigma: smooth cell noise, retain surveyed crests
   // This is the sole relief transform. Everything below, including the exported H(), reads `grid`.
   const grid = Float32Array.from(conditioned, (h) => h * relief);
@@ -162,7 +236,7 @@ export function buildTerrain(data, relief = 2) {
 
   // ================================================================ texture
   const TH_T = Math.round((TEX_W * D) / W);     // rows covering the ground
-  const TH = TH_T + BAND_PX;                    // + the skirt band
+  const TH = TH_T;
   const mx = W / TEX_W, mz = D / TH_T;          // metres per texel
 
   // fine height raster at texture resolution, built separably (bicubic == CR in x then CR in z)
@@ -265,33 +339,25 @@ export function buildTerrain(data, relief = 2) {
       px8[q] = clamp(r + dth, 0, 255); px8[q + 1] = clamp(g + dth, 0, 255); px8[q + 2] = clamp(b + dth, 0, 255); px8[q + 3] = 255;
     }
   }
-  // skirt band: a vertical dirt gradient the mesh skirt (and nothing else) samples
-  for (let py = TH_T; py < TH; py++) {
-    const u = (py - TH_T) / (BAND_PX - 1);
-    for (let px = 0; px < TEX_W; px++) {
-      const n = (vnoise(px * mx, py, 6) - 0.5) * 14, q = (py * TEX_W + px) * 4;
-      px8[q] = clamp(BAND_TOP[0] + (BAND_BOT[0] - BAND_TOP[0]) * u + n, 0, 255);
-      px8[q + 1] = clamp(BAND_TOP[1] + (BAND_BOT[1] - BAND_TOP[1]) * u + n, 0, 255);
-      px8[q + 2] = clamp(BAND_TOP[2] + (BAND_BOT[2] - BAND_TOP[2]) * u + n, 0, 255);
-      px8[q + 3] = 255;
-    }
-  }
   ctx.putImageData(img, 0, 0);
 
-  // dev aid: ?debugtex shows the baked ground texture over the map (judge the material at 1:1)
+  // (g) contours, drawn into the same canvas — perfectly smooth at any zoom, zero layers, no z-fighting
+  drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax);
+  // Roads/rail/pavement are last so map symbols cover contours exactly as they would on a printed
+  // topographic sheet. This is still the terrain's one texture, not a second draped surface.
+  drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz);
+
+  // dev aid: ?debugtex shows the complete baked ground texture at 1:1.
   if (typeof location !== 'undefined' && location.search.includes('debugtex')) {
     canvas.style.cssText = 'position:fixed;left:280px;top:0;width:1100px;height:auto;z-index:9999;image-rendering:pixelated';
     setTimeout(() => document.body.appendChild(canvas), 0);
   }
 
-  // (g) contours, drawn into the same canvas — perfectly smooth at any zoom, zero layers, no z-fighting
-  drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax);
-
   // ================================================================ mesh
   const NCX = Math.round(W / CELL), NCZ = Math.round(D / CELL);
   const cw = W / NCX, ch = D / NCZ;
   const NVX = NCX + 1, NVZ = NCZ + 1, NV = NVX * NVZ;
-  const vTop = TH_T / TH;                       // v of the last ground row
+  const vTop = 1;
   const pos = new Float32Array(NV * 3), nrm = new Float32Array(NV * 3), uv = new Float32Array(NV * 2);
   const E = CELL;                               // central-difference step for the normals
   for (let j = 0; j < NVZ; j++) {
@@ -311,38 +377,19 @@ export function buildTerrain(data, relief = 2) {
   }
   // clip: keep only cells whose centre is inside the limit polygon (scanline, ~2 ms)
   const keep = rasterRings([limit], new Uint8Array(NCX * NCZ), NCX, NCZ, X0, Z0, cw, ch);
-  const idx = [];
+  const kept = (i, j) => i >= 0 && j >= 0 && i < NCX && j < NCZ && keep[j * NCX + i];
+  const idx = [], cliffEdges = [];
   for (let j = 0; j < NCZ; j++) for (let i = 0; i < NCX; i++) {
     if (!keep[j * NCX + i]) continue;
     const a = j * NVX + i, b = a + 1, c = a + NVX + 1, d = a + NVX;
     idx.push(a, b, c, a, c, d);
+    if (!kept(i - 1, j)) cliffEdges.push([d, a]);
+    if (!kept(i + 1, j)) cliffEdges.push([b, c]);
+    if (!kept(i, j - 1)) cliffEdges.push([a, b]);
+    if (!kept(i, j + 1)) cliffEdges.push([c, d]);
   }
-  // skirt: every exposed boundary edge gets a vertical quad down to the void, textured from the band
-  const sPos = [], sNrm = [], sUv = [];
-  const kept = (i, j) => i >= 0 && j >= 0 && i < NCX && j < NCZ && keep[j * NCX + i];
-  const vBandTop = (TH_T + 2.5) / TH, vBandBot = (TH - 1.5) / TH;
-  const skirt = (ka, kb, nx, ny) => {
-    const base = NV + sPos.length / 3;
-    const ax = pos[ka * 3], ay = pos[ka * 3 + 1], az = pos[ka * 3 + 2];
-    const bx = pos[kb * 3], by = pos[kb * 3 + 1], bz = pos[kb * 3 + 2];
-    sPos.push(ax, ay, az, bx, by, bz, bx, by, voidZ, ax, ay, voidZ);
-    for (let n = 0; n < 4; n++) sNrm.push(nx, ny, 0.12);
-    sUv.push(uv[ka * 2], vBandTop, uv[kb * 2], vBandTop, uv[kb * 2], vBandBot, uv[ka * 2], vBandBot);
-    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-  };
-  for (let j = 0; j < NCZ; j++) for (let i = 0; i < NCX; i++) {
-    if (!keep[j * NCX + i]) continue;
-    const a = j * NVX + i, b = a + 1, c = a + NVX + 1, d = a + NVX;
-    if (!kept(i - 1, j)) skirt(d, a, 1, 0);
-    if (!kept(i + 1, j)) skirt(b, c, -1, 0);
-    if (!kept(i, j - 1)) skirt(a, b, 0, 1);
-    if (!kept(i, j + 1)) skirt(c, d, 0, -1);
-  }
-  const TOT = NV + sPos.length / 3;
-  const positions = new Float32Array(TOT * 3), normals = new Float32Array(TOT * 3), texCoords = new Float32Array(TOT * 2);
-  positions.set(pos); positions.set(sPos, NV * 3);
-  normals.set(nrm); normals.set(sNrm, NV * 3);
-  texCoords.set(uv); texCoords.set(sUv, NV * 2);
+  const TOT = NV;
+  const positions = pos, normals = nrm, texCoords = uv;
   const indices = new Uint32Array(idx); // > 65k vertices: WebGL2 requires 32-bit indices
 
   const mesh = new Geometry({
@@ -353,6 +400,28 @@ export function buildTerrain(data, relief = 2) {
       TEXCOORD_0: { value: texCoords, size: 2 },
     },
     indices: { value: indices, size: 1 },
+  });
+
+  // One unlit mesh is welded directly to every exposed terrain edge. Its top vertices are the
+  // terrain's own vertices (not a separately sampled approximation), so the seam is exact at all
+  // relief settings. Every bottom vertex lands on the shared void plane; there are no caps, bands,
+  // segment colours, lit boxes, or shadow receivers.
+  const cliffVerts = [...new Set(cliffEdges.flat())], cliffMap = new Map(cliffVerts.map((v, i) => [v, i]));
+  const cliffPos = new Float32Array(cliffVerts.length * 2 * 3), cliffNrm = new Float32Array(cliffVerts.length * 2 * 3), cliffIdx = new Uint32Array(cliffEdges.length * 6);
+  for (let i = 0; i < cliffVerts.length; i++) {
+    const v = cliffVerts[i], src = v * 3, top = i * 3, bottom = (i + cliffVerts.length) * 3;
+    cliffPos.set([pos[src], pos[src + 1], pos[src + 2]], top);
+    cliffPos.set([pos[src], pos[src + 1], voidZ], bottom);
+    cliffNrm.set([0, 0, 1], top); cliffNrm.set([0, 0, 1], bottom); // ignored by material:false
+  }
+  for (let i = 0; i < cliffEdges.length; i++) {
+    const a = cliffMap.get(cliffEdges[i][0]), b = cliffMap.get(cliffEdges[i][1]), q = i * 6;
+    cliffIdx.set([a, b, b + cliffVerts.length, a, b + cliffVerts.length, a + cliffVerts.length], q);
+  }
+  const cliffMesh = new Geometry({
+    topology: 'triangle-list',
+    attributes: { POSITION: { value: cliffPos, size: 3 }, NORMAL: { value: cliffNrm, size: 3 } },
+    indices: { value: cliffIdx, size: 1 },
   });
 
   const layer = () => new SimpleMeshLayer({
@@ -372,6 +441,11 @@ export function buildTerrain(data, relief = 2) {
     },
     material: { ambient: 0.95, diffuse: 0.55, shininess: 1, specularColor: [10, 12, 10] }, // ambient is high so the baked shading (not the flat-normal diffuse) sets the ground value
   });
+  const cliffLayer = () => new SimpleMeshLayer({
+    id: 'cliff', data: [{ p: [0, 0, 0] }], getPosition: (d) => d.p, mesh: cliffMesh,
+    getColor: [12, 14, 13], sizeScale: 1, material: false, shadowEnabled: false, pickable: false,
+    parameters: { cullMode: 'none' }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+  });
 
   const lighting = new LightingEffect({
     ambient: new AmbientLight({ color: [214, 224, 232], intensity: 0.62 }),
@@ -384,7 +458,7 @@ export function buildTerrain(data, relief = 2) {
   // into acne. Verified in headless. Relief therefore comes from the mesh normals plus the baked
   // two-light hillshade, which need no extra pass.
 
-  return { H, voidZ, layers: () => [layer()], lighting, stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, tex: [TEX_W, TH] } };
+  return { H, voidZ, layers: () => [cliffLayer(), layer()], lighting, stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, cliffSegments: cliffEdges.length, tex: [TEX_W, TH] } };
 }
 
 // ---------------------------------------------------------------- contours (baked, not a layer)

@@ -130,11 +130,11 @@ setNature('rocks', rocksShown, false);
 // persisted choice, matching the Trees/Rocks behavior above.
 const reliefChoices = new Set([1, 2, 3]);
 const reliefQuery = Number(new URLSearchParams(location.search).get('relief'));
-let relief = reliefChoices.has(reliefQuery) ? reliefQuery : Number(store.get('relief', 2));
-if (!reliefChoices.has(relief)) relief = 2;
+let relief = reliefChoices.has(reliefQuery) ? reliefQuery : Number(store.get('relief', 3));
+if (!reliefChoices.has(relief)) relief = 3;
 function setRelief(next, persist = true) {
   next = Number(next);
-  if (!reliefChoices.has(next)) next = 2;
+  if (!reliefChoices.has(next)) next = 3;
   relief = next;
   $$('#relief-toggle .seg-cell').forEach((b) => {
     const active = Number(b.dataset.relief) === relief;

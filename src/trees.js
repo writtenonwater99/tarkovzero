@@ -4,9 +4,10 @@ import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
 
-const FALLBACK_TONES = [[57, 80, 52], [68, 91, 58], [79, 103, 64]];
-const TRUNK = [70, 52, 35];
+const FALLBACK_TONES = [[72, 99, 65], [84, 112, 72], [96, 124, 79]];
+const TRUNK = [91, 69, 47];
 const FAR_ZOOM = -0.55;
+const brighten = (c) => c.map((v, i) => i < 3 ? Math.round(v + ([158, 174, 137][i] - v) * 0.18) : v);
 
 const hash = (a, b) => {
   const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
@@ -101,7 +102,7 @@ export function prepareTrees(source, mapKey) {
     return {
       ...t,
       type,
-      color: t.color ?? FALLBACK_TONES[tone],
+      color: t.color ? brighten(t.color) : FALLBACK_TONES[tone],
       rotation: t.rotation ?? hash(t.x + 101, t.z - 73) * 360,
       aspect: t.aspect ?? 0.84 + hash(t.x - 11, t.z + 37) * 0.3,
       trunkRadius: t.trunkRadius ?? 0.15 + hash(t.x + 7, t.z + 13) * 0.1,
@@ -113,6 +114,7 @@ export function prepareTrees(source, mapKey) {
 }
 
 export function treeLayers({ treeSet, H, zoom, relief }) {
+  // LOD is intentionally a function of camera zoom only. Relief changes placement, never density.
   const source = zoom < FAR_ZOOM ? treeSet.far : treeSet.all;
   const conifers = source.filter((t) => t.type === 'conifer');
   const broadleaf = source.filter((t) => t.type === 'broadleaf');
@@ -124,7 +126,7 @@ export function treeLayers({ treeSet, H, zoom, relief }) {
     getOrientation: (d) => [0, d.rotation, 0],
     updateTriggers: { getPosition: relief },
   };
-  const foliageMaterial = { ambient: 0.68, diffuse: 0.65, shininess: 1, specularColor: [8, 10, 7] };
+  const foliageMaterial = { ambient: 0.72, diffuse: 0.58, shininess: 1, specularColor: [8, 10, 7] };
   return [
     new SimpleMeshLayer({
       ...common, id: 'tree-trunks', data: source, mesh: TRUNK_MESH, getColor: TRUNK,
