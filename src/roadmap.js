@@ -1,28 +1,29 @@
 import L from 'leaflet';
 
-// Google-Maps-style ("roadmap") theme applied to tarkov.dev's class-based SVG geometry.
+// Bright paper-map theme applied to tarkov.dev's class-based SVG geometry. Sage land, mineral
+// greys, and warm structures keep it cohesive with 3D without resembling a Google basemap.
 const THEME = `
-  .land        { fill:#f1f3f4 }
-  .trees       { fill:#d4dcd0 }
-  .water       { fill:#9cc4f5 }
-  .cement      { fill:#e6e6e6 }
-  .rock        { fill:#dcdcdc }
-  .building    { fill:#e0dcd5; stroke:#c9c4bb; stroke-width:.6 }
-  .map_border  { fill:none; stroke:#bdbdbd; stroke-width:1.5 }
-  .fence       { fill:none; stroke:#cfcfcf; stroke-width:.7 }
-  .railroad    { fill:none; stroke:#9e9e9e; stroke-width:2; stroke-dasharray:4 3 }
-  .powerline   { fill:none; stroke:#b0b0b0; stroke-width:1; stroke-dasharray:3 3 }
-  .danger      { fill:#f28b82; fill-opacity:.35; stroke:#d93025; stroke-width:1 }
+  .land        { fill:#e1ead8 }
+  .trees       { fill:#bfd2b7 }
+  .water       { fill:#8fcbd5 }
+  .cement      { fill:#ddd9cf }
+  .rock        { fill:#cec9bb }
+  .building    { fill:#ddcfbb; stroke:#bcae9a; stroke-width:.6 }
+  .map_border  { fill:none; stroke:#a8aa9e; stroke-width:1.5 }
+  .fence       { fill:none; stroke:#bab9aa; stroke-width:.7 }
+  .railroad    { fill:none; stroke:#88887e; stroke-width:2; stroke-dasharray:4 3 }
+  .powerline   { fill:none; stroke:#999b90; stroke-width:1; stroke-dasharray:3 3 }
+  .danger      { fill:#dc8375; fill-opacity:.32; stroke:#b94d42; stroke-width:1 }
   /* roads: casing (drawn first) + fill */
-  .casing .road_tarmac, .casing .road_gravel { stroke:#c8c8c8 }
-  .road_tarmac { fill:none; stroke:#ffffff; stroke-linecap:round; stroke-linejoin:round }
-  .road_gravel { fill:none; stroke:#f5efe0; stroke-linecap:round; stroke-linejoin:round }
-  .casing .road_gravel { stroke:#d9d0bb }
+  .casing .road_tarmac, .casing .road_gravel { stroke:#b9b6aa }
+  .road_tarmac { fill:none; stroke:#eeece4; stroke-linecap:round; stroke-linejoin:round }
+  .road_gravel { fill:none; stroke:#e6d8bb; stroke-linecap:round; stroke-linejoin:round }
+  .casing .road_gravel { stroke:#c7b894 }
   .road_large  { stroke-width:11 }  .casing .road_large  { stroke-width:14 }
   .road_medium { stroke-width:7 }   .casing .road_medium { stroke-width:9.5 }
   .road_small  { stroke-width:4 }   .casing .road_small  { stroke-width:6 }
-  #High_Roads .road_tarmac { stroke:#fde293 } #High_Roads.casing .road_tarmac { stroke:#f5c664 }
-  #Main_Roads .road_tarmac { stroke:#fff8e1 }
+  #High_Roads .road_tarmac { stroke:#ead7a1 } #High_Roads.casing .road_tarmac { stroke:#c9ad69 }
+  #Main_Roads .road_tarmac { stroke:#f0e9d5 }
   .hidden      { display:none }
 `;
 

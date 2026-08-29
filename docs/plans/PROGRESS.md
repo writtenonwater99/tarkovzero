@@ -272,3 +272,34 @@ c77f2495de7b5895c4c9eea15078d173ed771348383db8b791e507402f36294d  public/data/cu
 `customs-3d.json` is byte-identical to its pre-pass baseline. `customs.json` changed from `314265546709fc77d3b827da1d15881bd173571482f6b4e4fe2f5ecd4cd5e1d6` to the hash above solely through the new `containers` array.
 
 No deploy, push, or commit was performed.
+
+## Fix pass 7 — relief-complete surfaces, limit wall, and brighter map theme
+
+### Changed
+
+- Relief placement now has one authority at render time: the current terrain build's exaggerated bicubic `H(x,z)`. A relief rebuild replaces that sampler, advances a height epoch, and reconstructs building bases/plinths, rigid scene assemblies, building detail parts, prop parts, fences, bridges/piers, water/shore, rocks, trees, markers/chips, extract names, place-name pings, player trails/drop-lines, and the underground overlays from it. Rigid footprints sample their centroid, vertices, and edge midpoints and sit on the highest result; their plinth fills the downhill side. Long wall/pipe props remain vertex-draped. No prop or structure base cached at 1× survives a relief change.
+- Extract/spawn badges and extract names sit `H + 0.7 m`; flat marker chips and loose-loot chips sit `H + 0.65 m`; place-name ping bases begin at `H + 0.65–0.7 m`; player trails sit at `H + 0.6 m`. This removes slope z-fighting at 3×. Extract-name decluttering projects against `H / relief`, and tree LOD reads camera zoom only, so relief cannot thin either population.
+- The segmented cliff boxes, random colours, top band, and textured/lit mesh skirt are gone. `src/terrain.js` builds one separate `SimpleMeshLayer` whose welded top vertices are the terrain mesh's exact exposed edge vertices and whose bottom vertices meet the shared void plane. It is unlit, non-shadowing, double-sided, and uniformly `[12,14,13]`; the void floor remains.
+- Pavement plus every at-grade paved road, highway, dirt road, wheel track, and railway is now painted into the terrain's one baked canvas in map metres. Paved roads retain casing/fill and highway dashes; dirt has its own casing/fill; tracks have twin dashed ruts; rail has sleepers and two rails. The former `pavement`, `rail`, `sleepers`, `road-edges`, `roads`, `tracks`, and `road-centre` deck layers were removed. Bridges, bridge rails/piers, fences, and power cables remain real 3D geometry.
+- The coordinated field palette is approximately 15–20% lighter: brighter sage/olive ground, lighter roads and pavement, brighter blue water, lighter warm concrete, warmer roofs, clearer rocks/trees/trunks, and lifted authored prop/building colours. The vector `Map` base uses the same paper/sage/mineral family while the application chrome stays dark; its geometry and feature inventory are unchanged.
+- Relief now defaults to 3× in the static control, persisted preference fallback, 3D view construction, terrain builder, and sampler fallback. `?relief=1|2|3` remains a non-mutating override. The map build playbook records the new default and flat limit skirt.
+
+### Verified
+
+- `npm run build` passes with only Vite's existing deck.gl chunk-size advisory. `node --check` passes for `src/terrain.js`, `src/map3d.js`, `src/trees.js`, `src/main.js`, and `src/roadmap.js`; `git diff --check` passes. A stale-layer grep finds none of the seven removed at-grade layer IDs and no `cliffStrips` implementation.
+- A clean browser profile with no `tz:relief` selects 3× without creating a stored value. With stored 3×, `?relief=1` selects 1× while leaving the stored value at 3; the next URL without `relief` returns to 3×.
+- A CDP inventory gate captured the same view at 1× and 3× and compared every source and rendered deck-layer count. All six requested pairs are exact. Customs keeps 71 buildings, 85 props, 76 fences, two bridges, 111 rocks, 2,348 trees, and 181 markers; its close views keep four bridge piers, while the wide view keeps the same deterministic 1,172-tree far LOD at both reliefs. Reserve keeps 56 / 44 / 28 / 68 / 112 / 81 buildings/props/fences/rocks/trees/markers. Woods keeps 121 / 44 / 33 / 335 / 2,166 / 191 and ten bridge piers.
+- Mesh topology is invariant across relief: Customs has 93,408 vertices / 105,354 triangles / 1,518 skirt edges, Reserve 50,640 / 54,318 / 892, and Woods 313,500 / 447,966 / 2,544. Only height changes: Customs `-7.44..15.60` to `-22.32..46.80 m`, Reserve `-6.94..21.41` to `-20.83..64.24 m`, and Woods `-20.88..27.71` to `-62.65..83.12 m`.
+- The final 1400×757 pairs are `scratch/fix-pass-7/customs-wide-relief-{1x,3x}.png`, `customs-powerline-relief-{1x,3x}.png`, `customs-warehouse-4-relief-{1x,3x}.png`, `customs-main-bridge-relief-{1x,3x}.png`, `reserve-dome-relief-{1x,3x}.png`, and `woods-sawmill-relief-{1x,3x}.png`. `relief-verification-contact-sheet.png` presents all twelve in one grid. The exact-view palette/edge comparison is `customs-wide-before-after.png` (Fix pass 5 versus Fix pass 7), and `customs-2d-map-theme-after.png` records the vector-base palette.
+- No generated map data changed. Final hashes remain:
+
+```text
+8027b339b3c99bdda988dd2ccfed813d89caeaa06211a41a35aa33d308fef393  public/data/customs.json
+c77f2495de7b5895c4c9eea15078d173ed771348383db8b791e507402f36294d  public/data/customs-3d.json
+1c9882595d7e74948f8238ea150f14b9f9c4716168976f739ca75ac6ba5ac597  public/data/reserve.json
+f46095b76d9cc97539669f63b2f25427bf22fead02d122de370d4121c7a40bcc  public/data/reserve-3d.json
+9e184a26860983f135273f7b705a6a2024626d279887e8795810982ec9e1a73b  public/data/woods.json
+bb38391bb7f06130cfa64391d460316da7dbd88974539cdc3bfa3522829f836a  public/data/woods-3d.json
+```
+
+No deploy, push, or commit was performed.
