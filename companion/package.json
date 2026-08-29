@@ -1,0 +1,8 @@
+{
+  "name": "tarkovzero-companion",
+  "private": true,
+  "type": "module",
+  "bin": { "tarkovzero-companion": "./companion.mjs" },
+  "scripts": { "start": "node companion.mjs" },
+  "dependencies": { "ws": "^8.18.0" }
+}

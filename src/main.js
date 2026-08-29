@@ -6,6 +6,7 @@ import { roadmapLayer } from './roadmap.js';
 import { placeLabelsLayer } from './placeLabels.js';
 import { CUSTOMS_LABELS } from './labels.js';
 import { KINDS, iconHtml } from './icons.js';
+import { createLive } from './live.js';
 
 const mapData = CUSTOMS;
 const map = L.map('map', {
@@ -145,3 +146,28 @@ async function loadMarkers(attempt = 0) {
   }
 }
 loadMarkers();
+
+// ---- Live positions (companion app -> relay -> here)
+const liveEl = document.getElementById('live');
+const ui = { render() {
+  const ps = [...live.players.values()];
+  liveEl.innerHTML = `<div class="group">Live position</div>
+    ${ps.map((p) => `<div class="player"><span class="sw" style="background:${p.color}"></span><b>${p.name}</b><span class="st">${p.status}</span><button class="small" data-rm="${p.code}">✕</button></div>`).join('')}
+    <input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX">
+    <button id="live-add">${ps.length ? 'Add another' : 'Connect'}</button>
+    <div class="err" id="live-err"></div>
+    <div class="opts"><label><input type="checkbox" id="live-follow" ${live.opts.follow ? 'checked' : ''}> follow</label><label><input type="checkbox" id="live-trail" ${live.opts.trail ? 'checked' : ''}> trail</label><button class="small" id="live-clear">clear trail</button></div>`;
+  const input = liveEl.querySelector('#live-code');
+  const tryAdd = () => { try { live.add(input.value); input.value = ''; ui.render(); } catch (e) { liveEl.querySelector('#live-err').textContent = e.message; } };
+  liveEl.querySelector('#live-add').onclick = tryAdd;
+  input.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
+  liveEl.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => live.remove(b.dataset.rm)));
+  liveEl.querySelector('#live-follow').onchange = (e) => (live.opts.follow = e.target.checked);
+  liveEl.querySelector('#live-trail').onchange = (e) => (live.opts.trail = e.target.checked);
+  liveEl.querySelector('#live-clear').onclick = () => live.clearTrails();
+} };
+const live = createLive(map, mapData, ui);
+ui.render();
+live.restore();
+for (const c of (new URLSearchParams(location.search).get('live') || '').split(',').filter(Boolean)) { try { live.add(c); } catch {} }
+ui.render();

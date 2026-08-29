@@ -3,3 +3,4 @@ dist
 .cache
 .vercel
 .env*
+companion/companion.json

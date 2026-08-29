@@ -28,3 +28,22 @@ That file can be produced two ways:
 - `npm run build-community-data` — SPT server database (spawns, bosses; exact game coords) + EFT Wiki
   interactive map (extracts, transits, locks, guns, levers; wiki pixels converted to game coords with a
   4-point calibration, ~2–7 m error). Calibration pairs live in `scripts/build-community-data.mjs`.
+
+## Live position (companion app)
+
+```
+game PC: companion  ──▶  relay (relay/, Fly.io)  ──▶  tarkovzero.com  (enter pairing code under "Live position")
+```
+
+On the game PC (Node 22+):
+
+```sh
+git clone https://github.com/writtenonwater99/tarkovzero && cd tarkovzero/companion && npm install
+node companion.mjs            # prints your pairing code; watches Documents\Escape from Tarkov\Screenshots
+node companion.mjs --simulate # test without the game
+```
+
+Press the in-game screenshot key (PrtScr by default) while moving; the game writes your position into the
+screenshot filename and the companion streams it. Options: `--dir`, `--relay`, `--keep`, `--auto <ms>`
+(auto-press the screenshot key — input automation, use at your own discretion), `--newcode`.
+Settings persist in `companion/companion.json`. Several codes can be added on the site (friends).
