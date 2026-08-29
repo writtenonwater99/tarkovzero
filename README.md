@@ -1,4 +1,6 @@
-# Tarkov Maps — Customs prototype
+# TarkovZero
+
+https://tarkovzero.com — Customs prototype
 
 Interactive (Google-Maps-style) Customs map built on Leaflet, using tarkov.dev tiles, SVG map and API.
 

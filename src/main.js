@@ -121,7 +121,7 @@ for (const kind of MARKER_KINDS) placeholders.innerHTML += `<label><input type="
 layersEl.appendChild(placeholders);
 
 // Markers come from the tarkov.dev API; retry until it answers, and cache the last good response.
-const CACHE_KEY = `tarkov-maps:${mapData.key}`;
+const CACHE_KEY = `tarkovzero:${mapData.key}`;
 function renderMarkers(data, source) {
   const groups = buildLayers(data);
   placeholders.remove();
