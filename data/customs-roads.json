@@ -1,0 +1,17 @@
+{
+  "_doc": "Hand-traced roads missing from the tarkov.dev SVG, in game coords [x, z]. kind: highway|main|small|track|dirt. fixed=true keeps the class (no auto-downgrade). Traced from the satellite render.",
+  "add": [
+    { "name": "Warehouse 7 – Depot lane", "kind": "small", "width": 4, "fixed": true, "path": [[505, -124.5], [506.3, -43.4]] },
+    { "name": "ZB-1012 curve", "kind": "small", "width": 4, "fixed": true, "path": [[507.6, -124.5], [455.2, -124.5], [439.5, -100.9], [431.7, -74.8], [429.1, -43.4]] },
+    { "name": "Warehouse 3 – Warehouse 4 connector", "kind": "small", "width": 4, "fixed": true, "path": [[439.5, -129.7], [350.5, -127.1]] },
+    { "name": "Tank farm internal road", "kind": "small", "width": 4, "fixed": true, "path": [[591.4, -132.4], [588.7, -48.6]] },
+    { "name": "Boiler south service road", "kind": "small", "width": 4, "fixed": true, "path": [[165.7, -27.6], [42.7, -27.6]] },
+    { "name": "Big Red west road", "kind": "small", "width": 5, "fixed": true, "path": [[-176, -212], [-176, -42]] },
+    { "name": "Big Red east lane", "kind": "small", "width": 4, "fixed": true, "path": [[-242, -198], [-242, -42]] },
+    { "name": "Storage aisle 1", "kind": "track", "width": 2.5, "fixed": true, "path": [[-262.8, -177.6], [-262.8, -83.4]] },
+    { "name": "Storage aisle 2", "kind": "track", "width": 2.5, "fixed": true, "path": [[-286.4, -177.6], [-286.4, -83.4]] },
+    { "name": "Storage aisle 3", "kind": "track", "width": 2.5, "fixed": true, "path": [[-307.3, -177.6], [-307.3, -83.4]] },
+    { "name": "SW diagonal to New Gas", "kind": "dirt", "width": 4, "fixed": true, "path": [[454.4, 224.7], [394.2, 114.8], [352.4, 75.5], [323.6, 36.2], [310.5, 17.9]] },
+    { "name": "Bus Station – Dorms track", "kind": "track", "width": 2.5, "fixed": true, "path": [[237.2, 67.6], [226.7, 99], [216.2, 130.5]] }
+  ]
+}
