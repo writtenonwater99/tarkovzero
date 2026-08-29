@@ -28,20 +28,22 @@ function flatten(d) {
   let x = 0, y = 0, sx = 0, sy = 0, cmd = '', i = 0, px = 0, py = 0;
   const num = () => +toks[i++];
   const start = () => { poly = []; polys.push(poly); };
-  const cubic = (x1, y1, x2, y2, x3, y3) => { for (let t = 0.2; t <= 1.001; t += 0.2) { const u = 1 - t; poly.push([u*u*u*x + 3*u*u*t*x1 + 3*u*t*t*x2 + t*t*t*x3, u*u*u*y + 3*u*u*t*y1 + 3*u*t*t*y2 + t*t*t*y3]); } px = x2; py = y2; x = x3; y = y3; };
+  let lastCurve = false;
+  const cubic = (x1, y1, x2, y2, x3, y3) => { lastCurve = true; for (let t = 0.2; t <= 1.001; t += 0.2) { const u = 1 - t; poly.push([u*u*u*x + 3*u*u*t*x1 + 3*u*t*t*x2 + t*t*t*x3, u*u*u*y + 3*u*u*t*y1 + 3*u*t*t*y2 + t*t*t*y3]); } px = x2; py = y2; x = x3; y = y3; };
   while (i < toks.length) {
     if (/[a-zA-Z]/.test(toks[i])) cmd = toks[i++];
     const rel = cmd === cmd.toLowerCase();
+    if (!/[csqCSQ]/.test(cmd)) lastCurve = false;
     switch (cmd.toUpperCase()) {
-      case 'M': { const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; start(); poly.push([x, y]); sx = x; sy = y; cmd = rel ? 'l' : 'L'; break; }
-      case 'L': { const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; poly.push([x, y]); break; }
-      case 'H': { const nx = num(); x = rel ? x + nx : nx; poly.push([x, y]); break; }
-      case 'V': { const ny = num(); y = rel ? y + ny : ny; poly.push([x, y]); break; }
+      case 'M': { const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; start(); poly.push([x, y]); sx = x; sy = y; px = x; py = y; cmd = rel ? 'l' : 'L'; break; }
+      case 'L': { const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; poly.push([x, y]); px = x; py = y; break; }
+      case 'H': { const nx = num(); x = rel ? x + nx : nx; poly.push([x, y]); px = x; py = y; break; }
+      case 'V': { const ny = num(); y = rel ? y + ny : ny; poly.push([x, y]); px = x; py = y; break; }
       case 'C': { let a = [num(), num(), num(), num(), num(), num()]; if (rel) a = [a[0]+x, a[1]+y, a[2]+x, a[3]+y, a[4]+x, a[5]+y]; cubic(...a); break; }
-      case 'S': { let a = [num(), num(), num(), num()]; if (rel) a = [a[0]+x, a[1]+y, a[2]+x, a[3]+y]; cubic(2*x - px, 2*y - py, ...a); break; }
+      case 'S': { let a = [num(), num(), num(), num()]; if (rel) a = [a[0]+x, a[1]+y, a[2]+x, a[3]+y]; const wasCurve = lastCurve; cubic(wasCurve ? 2*x - px : x, wasCurve ? 2*y - py : y, ...a); break; }
       case 'Q': { let a = [num(), num(), num(), num()]; if (rel) a = [a[0]+x, a[1]+y, a[2]+x, a[3]+y]; cubic(x + 2/3*(a[0]-x), y + 2/3*(a[1]-y), a[2] + 2/3*(a[0]-a[2]), a[3] + 2/3*(a[1]-a[3]), a[2], a[3]); break; }
       case 'A': { num(); num(); num(); num(); num(); const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; poly.push([x, y]); break; }
-      case 'Z': { x = sx; y = sy; poly = null; if (i < toks.length && !/[a-zA-Z]/.test(toks[i])) { start(); poly.push([x, y]); } break; }
+      case 'Z': { x = sx; y = sy; px = x; py = y; poly = null; if (i < toks.length && !/[a-zA-Z]/.test(toks[i])) { start(); poly.push([x, y]); } break; }
       default: i++;
     }
     if (poly === null && i < toks.length && /[a-zA-Z]/.test(toks[i]) === false) { start(); poly.push([x, y]); }
