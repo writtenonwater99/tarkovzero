@@ -18,7 +18,7 @@ export function createLive(map, mapData, ui) {
 
   const arrowIcon = (color) => L.divIcon({
     className: '',
-    html: `<div class="player-arrow" style="--c:${color}"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2 20 21l-8-4-8 4z"/></svg></div>`,
+    html: `<div class="player-arrow" style="--c:${color}"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2 20 21l-8-4-8 4z"/></svg></div><div class="player-fig"><svg viewBox="0 0 24 24" width="26" height="26"><g fill="${color}"><path d='M12 1.5a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8zM9.2 6.6h5.6l1.4 1.2 3.9-1.6.7 1.6-4 2.3-.8 5.4h-1.1l.3 7.5h-2.2l-.6-6h-.8l-.6 6H9.8l.3-7.5H9l-.8-5.2-3.3-1 .4-1.7 3.2.6z'/></g></svg></div>`,
     iconSize: [30, 30], iconAnchor: [15, 15],
   });
 
