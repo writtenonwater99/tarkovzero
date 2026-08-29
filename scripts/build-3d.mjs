@@ -2,6 +2,7 @@
 // Everything is emitted in GAME coordinates (x, z) so the 3D view shares data with the 2D map.
 import { readFile, writeFile } from 'node:fs/promises';
 import { LABELS } from '../src/labels.js';
+import { carveWaterHeightfield, pointInWater, waterRings } from '../src/water.js';
 
 const CUSTOMS_COLORS = { 'Big Red': [142, 58, 50], 'Crackhouse': [139, 110, 90], 'Dorms 2-Story': [185, 169, 143], 'Dorms 3-Story': [185, 169, 143], 'New Gas': [196, 191, 180], 'Old Gas': [150, 146, 134], 'Fortress': [162, 158, 148], 'Skeleton': [162, 158, 148], 'Repair Shop': [138, 140, 136], 'Warehouse 3': [138, 140, 136], 'Warehouse 4': [138, 140, 136], 'Warehouse 7': [138, 140, 136], 'Warehouse 17': [138, 140, 136], 'Depot': [146, 142, 132], 'Boiler': [150, 130, 118], 'Oil Rig': [146, 138, 124], 'Streamer House': [139, 110, 90], 'Bus Station': [176, 172, 160], 'Storage': [144, 146, 142], 'Powerline Tower': [126, 126, 122], 'Water Pump': [140, 148, 152], 'Military Checkpoint': [160, 156, 146] };
 const CUSTOMS_ROOFS = { 'Warehouse 3': [92, 102, 106], 'Warehouse 4': [92, 102, 106], 'Warehouse 7': [92, 102, 106], 'Warehouse 17': [92, 102, 106], 'Depot': [98, 100, 102], 'Storage': [96, 99, 100], 'Crackhouse': [126, 76, 52], 'Streamer House': [126, 76, 52], 'Repair Shop': [92, 102, 106], 'Boiler': [104, 96, 88] };
@@ -12,6 +13,7 @@ const CONFIG = {
     props: 'data/customs-props.json', roads: 'data/customs-roads.json', spt: 'scripts/spt-bigmap-base.json',
     bounds: { xMax: 698, xMin: -372, zMin: -307, zMax: 237 }, base: 'Ground_Level',
     groups: { land: 'Ground', limit: 'Ground', water: 'River', pavement: 'Pavement', trees: 'Trees', rocks: 'Rocks', railway: 'Railway', fence: 'Fence', powerlines: 'Powerlines' },
+    waterProfile: { kind: 'river', depth: 1.2, bank: 5, flowAxis: [0, 1], maxSlope: 0.004 },
     roadGroups: [['High_Roads', 12, 'highway'], ['Main_Roads', 8, 'main'], ['Roads', 5, 'small'], ['Dirt_Roads', 5, 'dirt']],
     buildingHeights: { 'Garages-2': 4, 'Big_Buildings-2': 9, 'Small_Buildings-2': 3.5, 'Powerline_Towers': 22 },
     underground: /Underground/i, colors: CUSTOMS_COLORS, roofs: CUSTOMS_ROOFS, styles: CUSTOMS_STYLES, autoSmallTracks: true,
@@ -47,6 +49,7 @@ const CONFIG = {
     props: 'data/woods-props.json', roads: 'data/woods-roads.json', yards: 'data/woods-yards.json', spt: 'scripts/data/woods/spt-base.json',
     bounds: { xMax: 646, xMin: -761, zMin: -914, zMax: 442 }, base: 'Ground_Level',
     groups: { land: 'Base_Terrain', limit: 'Base_Terrain', water: 'Water', pavement: null, trees: null, rocks: 'Rocks', railway: 'Railroad', fence: 'Fences', powerlines: 'Power_Line', plane: 'Plane', pier: 'Pier', minefield: 'Minefield' },
+    waterProfile: { kind: 'lake', depth: 2.5, bank: 5.5 },
     roadGroups: [['Roads', 6, 'main'], ['Small Roads', 4, 'small'], ['Dirt_Roads', 3.5, 'dirt']],
     buildingHeights: { Buildings: 4 }, underground: /$a/,
     colors: { Sawmill: [132, 109, 78], 'Old Sawmill': [128, 112, 94], 'Scav Town': [154, 143, 124], 'Scav House': [156, 119, 83], 'USEC CAMP': [108, 116, 96], 'Military Camp': [146, 148, 136], 'Sunken Village / Abandoned Village': [126, 112, 91] },
@@ -200,9 +203,17 @@ for (const b of buildings) {
 }
 // ---- bridges: parts of roads/rail that run over water become elevated decks
 const inPoly = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
-const overWater = (pt) => out0.water.some((w) => inPoly(pt, w));
 const resample = (path, step) => { const r = [path[0]]; for (let i = 1; i < path.length; i++) { const [ax, az] = path[i - 1], [bx, bz] = path[i]; const L = Math.hypot(bx - ax, bz - az); for (let t = step; t < L; t += step) r.push([ax + ((bx - ax) * t) / L, az + ((bz - az) * t) / L]); r.push(path[i]); } return r; };
-const out0 = { water: cfg.groups.water ? polysIn(cfg.groups.water) : [] };
+// Compound SVG water paths use reversed nested rings for islands. Preserve those as holes so
+// neither the basin carve nor the water fill erases dry land in the middle of a river.
+const waterRaw = cfg.groups.water ? polysIn(cfg.groups.water) : [];
+const signedRingArea = (poly) => poly.reduce((sum, [x, z], i) => { const [nx, nz] = poly[(i + 1) % poly.length]; return sum + x * nz - nx * z; }, 0) / 2;
+const waterParents = waterRaw.map((ring, i) => waterRaw.map((outer, j) => ({
+  j, area: Math.abs(signedRingArea(outer)),
+  contains: i !== j && signedRingArea(ring) * signedRingArea(outer) < 0 && inPoly(centroid(ring), outer),
+})).filter((d) => d.contains).sort((a, b) => a.area - b.area)[0]?.j ?? -1);
+const out0 = { water: waterRaw.map((poly, i) => ({ poly, holes: waterRaw.filter((_, j) => waterParents[j] === i) })).filter((_, i) => waterParents[i] < 0) };
+const overWater = (pt) => out0.water.some((water) => pointInWater(pt, water));
 const bridges = [];
 for (const r of [...roads.map((r) => ({ ...r, cls: 'road' })), ...(cfg.groups.railway ? linesIn(cfg.groups.railway) : []).map((p) => ({ path: p, width: 3, kind: 'rail', cls: 'rail' }))]) {
   const pts = resample(r.path, 3); let run = [];
@@ -218,6 +229,7 @@ function clipPath(path, step = 3) { const out = []; let run = []; for (const q o
 const clipLines = (items) => items.flatMap((it) => clipPath(it.path).map((path) => ({ ...it, path })));
 // keep real crossings only: no dirt tracks (swamp), and merge overlapping road paths
 const mid = (b) => b.path[Math.floor(b.path.length / 2)];
+const detectedBridges = [...bridges];
 const kept = [];
 const PRI = { highway: 0, main: 1, small: 2, rail: 0 };
 for (const b of bridges.filter((b) => b.kind !== 'dirt').sort((a, c) => PRI[a.kind] - PRI[c.kind] || c.path.length - a.path.length)) {
@@ -229,7 +241,11 @@ if (key === 'customs') {
   // Confirmed Customs crossings: Main Bridge, the shallow river path, and Junk Bridge footbridge.
   const mainBridge = kept.find((b) => b.kind === 'highway');
   if (mainBridge) bridges.push({ ...mainBridge, name: 'Main Bridge' });
-  const ford = kept.find((b) => Math.hypot(mid(b)[0] + 84, mid(b)[1] + 74) < 25);
+  // The shallow northern ground path is a dirt crossing, so it is intentionally excluded from
+  // the elevated-deck de-duplication above. Some SVG revisions stop its track at the banks, so
+  // retain the audited crossing explicitly when automatic intersection detection cannot see it.
+  const ford = detectedBridges.find((b) => Math.hypot(mid(b)[0] + 84, mid(b)[1] + 74) < 25)
+    ?? { kind: 'dirt', path: resample([[-113, -74], [-50, -74]], 3), width: 3, height: 0.4 };
   if (ford) bridges.push({ ...ford, name: 'River path', ford: true, height: 0.4, width: 3 });
   bridges.push({ name: 'Junk Bridge', kind: 'foot', foot: true, path: resample([[-68.5, 39.4], [-90.7, 39.4]], 3), width: 3, height: 2.5 });
 }
@@ -343,6 +359,12 @@ const candidates = evidenceInput.filter((p) => {
   return true;
 });
 const median = (values) => { const a = [...values].sort((x, y) => x - y), m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+const percentile = (values, p) => {
+  const a = [...values].sort((x, y) => x - y);
+  if (!a.length) return null;
+  const at = (a.length - 1) * p, lo = Math.floor(at), hi = Math.ceil(at), mix = at - lo;
+  return a[lo] * (1 - mix) + a[hi] * mix;
+};
 function spatialIndex(points, size = 20) {
   const bins = new Map();
   for (const p of points) { const k = `${Math.floor(p.x / size)},${Math.floor(p.z / size)}`; if (!bins.has(k)) bins.set(k, []); bins.get(k).push(p); }
@@ -409,13 +431,79 @@ for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
 // One compact Gaussian pass (~5 m sigma) removes sample noise without erasing real hill crests.
 const heights = new Float32Array(cols * rows);
 for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let sum = 0, den = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = Math.max(0, Math.min(rows - 1, r + dr)), cc = Math.max(0, Math.min(cols - 1, c + dc)), w = (dr ? 1 : 2) * (dc ? 1 : 2); sum += raw[rr * cols + cc] * w; den += w; } heights[r * cols + c] = +(sum / den).toFixed(2); }
-const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights), evidence: { input: evidenceInput.length, accepted: groundPts.length, rejected: hardReject } };
 const terrainHeight = (x, z) => {
   const fx = Math.min(Math.max((x - x0) / STEP, 0), cols - 1.001), fz = Math.min(Math.max((z - z0) / STEP, 0), rows - 1.001);
   const c = Math.floor(fx), r = Math.floor(fz), tx = fx - c, tz = fz - r;
   const h00 = heights[r * cols + c], h10 = heights[r * cols + c + 1], h01 = heights[(r + 1) * cols + c], h11 = heights[(r + 1) * cols + c + 1];
   return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
 };
+
+// Infer water surfaces from the uncarved fitted field. Grid points inside a polygon and samples
+// along its outline feed a low percentile; an outline minimum is the sparse-polygon fallback.
+// Customs' separated SVG river reaches share one gently capped flow plane when their binned low
+// samples agree, preventing artificial waterfalls at the path breaks.
+const waterSampleSets = out0.water.map((water) => {
+  const [x1, z1, x2, z2] = bbox(water.poly), interior = [], outline = [];
+  const c1 = Math.max(0, Math.floor((x1 - x0) / STEP)), c2 = Math.min(cols - 1, Math.ceil((x2 - x0) / STEP));
+  const r1 = Math.max(0, Math.floor((z1 - z0) / STEP)), r2 = Math.min(rows - 1, Math.ceil((z2 - z0) / STEP));
+  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+    const x = x0 + c * STEP, z = z0 + r * STEP;
+    if (inside([x, z]) && pointInWater([x, z], water)) interior.push({ x, z, h: heights[r * cols + c] });
+  }
+  for (const ring of waterRings(water)) for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const count = Math.max(1, Math.ceil(length / 2.5));
+    for (let q = 0; q < count; q++) {
+      const u = q / count, x = a[0] + (b[0] - a[0]) * u, z = a[1] + (b[1] - a[1]) * u;
+      if (inside([x, z])) outline.push({ x, z, h: terrainHeight(x, z) });
+    }
+  }
+  const points = interior.length ? [...interior, ...outline] : outline;
+  const fallback = outline.length ? Math.min(...outline.map((p) => p.h)) : Math.min(...water.poly.map(([x, z]) => terrainHeight(x, z)));
+  return { water, points, low: interior.length ? percentile(points.map((p) => p.h), 0.1) : fallback };
+});
+
+const profile = cfg.waterProfile;
+if (profile && waterSampleSets.length) {
+  let flow = null;
+  if (profile.flowAxis) {
+    const length = Math.hypot(...profile.flowAxis) || 1, axis = profile.flowAxis.map((v) => v / length);
+    const points = waterSampleSets.flatMap((set) => set.points).map((p) => ({ ...p, u: p.x * axis[0] + p.z * axis[1] }));
+    const uMin = Math.min(...points.map((p) => p.u)), uMax = Math.max(...points.map((p) => p.u)), bins = Array.from({ length: 12 }, () => []);
+    for (const p of points) bins[Math.min(bins.length - 1, Math.floor(((p.u - uMin) / (uMax - uMin || 1)) * bins.length))].push(p);
+    const lows = bins.filter((bin) => bin.length >= 5).map((bin) => ({
+      u: bin.reduce((sum, p) => sum + p.u, 0) / bin.length,
+      h: percentile(bin.map((p) => p.h), 0.1),
+    }));
+    if (lows.length >= 5) {
+      const u0 = lows.reduce((sum, p) => sum + p.u, 0) / lows.length, h0 = lows.reduce((sum, p) => sum + p.h, 0) / lows.length;
+      const den = lows.reduce((sum, p) => sum + (p.u - u0) ** 2, 0);
+      const observed = den ? lows.reduce((sum, p) => sum + (p.u - u0) * (p.h - h0), 0) / den : 0;
+      const sst = lows.reduce((sum, p) => sum + (p.h - h0) ** 2, 0);
+      const sse = lows.reduce((sum, p) => sum + (p.h - (h0 + observed * (p.u - u0))) ** 2, 0);
+      const r2 = sst ? 1 - sse / sst : 0, observedDrop = observed * (uMax - uMin);
+      if (Math.abs(observedDrop) >= 0.25 && r2 >= 0.55) {
+        const slope = Math.max(-profile.maxSlope, Math.min(profile.maxSlope, observed));
+        flow = { axis, u0, h0, slope, observed, observedDrop, r2 };
+      }
+    }
+  }
+  for (const set of waterSampleSets) {
+    const c = centroid(set.water.poly), u = profile.flowAxis ? c[0] * (flow?.axis[0] ?? 0) + c[1] * (flow?.axis[1] ?? 0) : 0;
+    const level = flow ? flow.h0 + flow.slope * (u - flow.u0) : set.low;
+    set.water.level = +level.toFixed(2);
+    set.water.depth = profile.depth;
+    set.water.bank = profile.bank;
+    set.water.kind = profile.kind;
+    if (!set.water.holes.length) delete set.water.holes;
+    if (flow) set.water.gradient = { axis: flow.axis.map((v) => +v.toFixed(4)), origin: c.map((v) => +v.toFixed(2)), slope: +flow.slope.toFixed(6) };
+  }
+  const flowNote = flow ? `; flow ${(flow.slope * 100).toFixed(3)}% (observed ${(flow.observed * 100).toFixed(2)}%, R2 ${flow.r2.toFixed(2)})` : '';
+  console.log(`water levels ${out0.water.map((w) => w.level.toFixed(2)).join(', ')} m; ${profile.depth} m ${profile.kind} bed; ${profile.bank} m banks${flowNote}`);
+  const carved = carveWaterHeightfield(heights, { x0, z0, step: STEP, cols, rows }, out0.water);
+  for (let i = 0; i < heights.length; i++) heights[i] = +carved[i].toFixed(2);
+}
+const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights), evidence: { input: evidenceInput.length, accepted: groundPts.length, rejected: hardReject } };
 for (const b of buildings) if (b._topY != null) {
   const c = centroid(b.poly), fallback = b.kind === 'tank' ? 6 : defaultHeight[Object.keys(defaultHeight).find((k) => k.replace(/-2$/, '').toLowerCase() === b.kind)] ?? 4;
   b.height = +Math.max(fallback, b._topY - terrainHeight(c[0], c[1]) + 0.5).toFixed(1);
@@ -490,7 +578,7 @@ if (cfg.proceduralTrees) {
   // from mapped roads/water/buildings, instead of pretending to trace every satellite dot.
   const step = 55;
   for (let z = BOUNDS.zMin + 20, j = 0; z <= BOUNDS.zMax - 20; z += step, j++) for (let x = BOUNDS.xMin + 20, i = 0; x <= BOUNDS.xMax - 20; x += step, i++) {
-    if (hash2(i + 71, j + 113) < 0.62 || !inside([x, z]) || out0.water.some((w) => inPoly([x, z], w)) || buildings.some((b) => inPoly([x, z], b.poly))) continue;
+    if (hash2(i + 71, j + 113) < 0.62 || !inside([x, z]) || overWater([x, z]) || buildings.some((b) => inPoly([x, z], b.poly))) continue;
     if (roads.some((r) => r.path.some((q) => Math.hypot(q[0] - x, q[1] - z) < r.width / 2 + 9))) continue;
     const rx = 7 + hash2(i + 5, j + 19) * 8, rz = 7 + hash2(i + 29, j + 3) * 8;
     const poly = Array.from({ length: 12 }, (_, k) => { const a = (k / 12) * Math.PI * 2, wobble = 0.82 + hash2(i * 13 + k, j * 17 - k) * 0.32; return [+(x + Math.cos(a) * rx * wobble).toFixed(1), +(z + Math.sin(a) * rz * wobble).toFixed(1)]; });
@@ -516,7 +604,7 @@ for (let index = 0; index < treePolys.length; index++) {
   for (let attempt = 0; accepted < count && attempt < count * 80; attempt++) {
     const x = x1 + hash2(index * 100003 + attempt * 17, 211) * (x2 - x1);
     const z = z1 + hash2(index * 70001 + attempt * 29, 307) * (z2 - z1);
-    if (!inPoly([x, z], poly) || out0.water.some((w) => inPoly([x, z], w))) continue;
+    if (!inPoly([x, z], poly) || overWater([x, z])) continue;
     const edgeDepth = distToRing([x, z], poly);
     const coreScale = Math.max(3, Math.min(x2 - x1, z2 - z1) * 0.24);
     const coreWeight = 0.28 + 0.72 * Math.min(1, edgeDepth / coreScale);

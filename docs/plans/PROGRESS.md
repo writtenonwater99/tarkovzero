@@ -139,6 +139,33 @@ a6aadd836a978892f5b342c3412c9a00ed36463e695f9800b6502e3671f90d26  public/data/cu
 
 No deploy, push, or commit was performed.
 
+## Fix pass 8 — water done right at every relief
+
+### Changed
+
+- The failure was the water layer, not the relief transform: every water vertex was sampled through `ringG`, so the polygon copied the terrain's slope, climbed both banks, and intersected the ground more severely as relief increased. Generated water is now structured data with an outer ring, optional island holes, unexaggerated `level`, `depth`, bank width, and an optional linear flow gradient. `src/map3d.js` renders that plane directly at `level × relief`; the 0.5 m shoreline follows the same plane 4 cm above it instead of being separately draped.
+- The builder samples the fitted 5 m terrain inside and along each water body. Horizontal Woods lakes/ponds use the 10th-percentile sample height (outline-minimum fallback), a 2.5 m bed, and a 5.5 m soft outer bank. Customs' three SVG river reaches share one continuous north–south plane because their twelve binned low-percentile samples show a consistent trend (`R² 0.75`); the raw 1.63% terrain slope is capped to a gentle 0.4% flow grade. Stored reach-centre levels are `-0.10`, `0.39`, and `0.74 m`, with a 1.2 m bed and 5 m banks.
+- Reversed nested SVG rings are preserved as holes. The small Customs island inside the main river therefore remains dry, is not carved, and contributes its own shoreline ring.
+- `src/water.js` is the shared geometry/height authority. It carves the serialized field, reapplies the basin after runtime Gaussian conditioning, and uses indexed continuous caps so bicubic interpolation cannot overshoot through an exact shoreline. The cap never raises ground: water interiors are at most `level − depth`, while land transitions smoothly from the original height to the bank over the configured 4–6 m shoulder.
+- Bridge bases now use the higher of current terrain and current water level. Decks and piers therefore remain valid over a carved bed at 1×/2×/3×. The road-cut pass still leaves no at-grade point under a deck. The shallow Customs river path, which some SVG revisions stop at the banks, is retained explicitly at its existing 0.4 m ford height; Main Bridge and Junk Bridge retain their raised deck/rail/pier treatment.
+
+### Verified
+
+- Rebuilt Customs, Woods, and Reserve deterministically while preserving `builtAt`. All generated values are finite. Customs emits three river bodies/four shoreline rings (one island hole), three crossings, and four piers. Woods emits eleven horizontal water bodies/shorelines, three bridges, and ten piers. Reserve's authoritative SVG has no water, so it correctly emits zero water bodies, shores, bridges, or piers at every relief rather than inventing any.
+- A numerical runtime-equivalent gate applies Gaussian conditioning, the serialized carve, bicubic sampling, and the continuous shoreline cap. Every sampled Customs interior remains at least 1.2 m below its plane and every Woods interior at least 2.5 m below; no tested shoreline vertex protrudes above water. No output road point lies in water. Minimum Customs deck clearance is relief-invariant: Main Bridge `5.68 m`, Junk Bridge `1.52 m`, and the ford `0.34 m`.
+- A persistent software-GL/CDP browser captured Customs Main/Junk Bridge, the ford, and the river ends at 1×/2×/3×; the river stays in its carved banks and retains its island. The same matrix covers the Woods Sawmill lake and USEC/Ponds cluster; every lake/pond remains horizontal while the surrounding relief changes. Reserve wide captures at all three reliefs confirm zero water/shore layers. Source and rendered-layer counts are invariant across relief for every map.
+- `npm run build` passes with only Vite's existing deck.gl chunk-size advisory. `node --check` passes for the builder and edited runtime modules; a full Woods build now completes in about nine seconds on this host after indexed ring/edge acceleration. `git diff --check` passes.
+- Captures are in `scratch/fix-pass-8/`: `customs-{main-junk,ford,river-ends}-relief-{1,2,3}x.png`, `woods-{sawmill-lake,usec-ponds}-relief-{1,2,3}x.png`, `reserve-wide-relief-{1,2,3}x.png`, plus `customs-water-contact-sheet.png` and `woods-water-contact-sheet.png`.
+- Final generated 3D hashes are:
+
+```text
+a658ad62b731faec456407fabde3304f02c2d384668c2a8cdae6aaf38e3f1ed2  public/data/customs-3d.json
+f46095b76d9cc97539669f63b2f25427bf22fead02d122de370d4121c7a40bcc  public/data/reserve-3d.json
+d3d658decb230863a56d4e6eb49acf2ff292f56235c586a490591bd691b048d3  public/data/woods-3d.json
+```
+
+No deploy, push, or commit was performed.
+
 ## Fix pass 3 — terrain realism
 
 ### Changed

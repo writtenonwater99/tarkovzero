@@ -16,6 +16,7 @@
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
 import { COORDINATE_SYSTEM, LightingEffect, AmbientLight, DirectionalLight } from '@deck.gl/core';
+import { allWaterRings, carveWaterHeightfield, makeWaterHeightCapper } from './water.js';
 
 // ---------------------------------------------------------------- tunables
 const CELL = 2.5;          // mesh cell size in metres (10 m source grid subdivided 4x)
@@ -217,10 +218,15 @@ export function buildTerrain(data, relief = 3) {
   const t = data.terrain;
   const { x0, z0, step, cols, rows } = t;
   relief = [1, 2, 3].includes(Number(relief)) ? Number(relief) : 3;
-  const conditioned = gaussian5(t.heights, cols, rows, 1); // ~5 m sigma: smooth cell noise, retain surveyed crests
+  const smoothed = gaussian5(t.heights, cols, rows, 1); // ~5 m sigma: smooth cell noise, retain surveyed crests
+  // Re-assert the serialized basin after conditioning so blur cannot lift a bank or narrow pond
+  // through its water plane. This uses the same levels/depths/falloff as the builder.
+  const conditioned = carveWaterHeightfield(smoothed, t, data.water || []);
   // This is the sole relief transform. Everything below, including the exported H(), reads `grid`.
   const grid = Float32Array.from(conditioned, (h) => h * relief);
-  const H = makeBicubic(grid, cols, rows, x0, z0, step);
+  const bicubicH = makeBicubic(grid, cols, rows, x0, z0, step);
+  const capWater = makeWaterHeightCapper(data.water || [], relief);
+  const H = (x, z) => capWater(bicubicH(x, z), x, z);
   let hmin = Infinity, hmax = -Infinity;
   for (let i = 0; i < grid.length; i++) { if (grid[i] < hmin) hmin = grid[i]; if (grid[i] > hmax) hmax = grid[i]; }
   const hspan = Math.max(1, hmax - hmin);
@@ -265,7 +271,7 @@ export function buildTerrain(data, relief = 3) {
   const outsideMask = new Uint8Array(aw * ah);
   for (let i = 0; i < outsideMask.length; i++) outsideMask[i] = insideMask[i] ? 0 : 1;
   const dEdge = chamfer(outsideMask, aw, ah);                       // cells from the limit boundary, inwards
-  const waterMask = rasterRings(data.water || [], new Uint8Array(aw * ah), aw, ah, X0, Z0, AOC, AOC);
+  const waterMask = rasterRings(allWaterRings(data.water || []), new Uint8Array(aw * ah), aw, ah, X0, Z0, AOC, AOC);
   const dWater = chamfer(waterMask, aw, ah);
   const yardRings = (data.yards || []).map((d) => d.poly ?? d);
   // Woods-only compacted compounds are part of the terrain material, not flat
