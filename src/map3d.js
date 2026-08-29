@@ -24,7 +24,7 @@ const C = {
   bridge: [106, 102, 92], bridgeRail: [64, 61, 55], pier: [84, 80, 72],
   contour: [26, 42, 26, 90], contourMajor: [20, 32, 20, 150],
   void: [10, 13, 12], oob: [10, 13, 12], voidRing: [24, 28, 26],
-  cliff: [79, 76, 68], cliffShadow: [38, 41, 38], cliffTop: [124, 118, 105],
+  cliff: [83, 78, 64], cliffShadow: [58, 54, 45], cliffTop: [112, 104, 86],
   shade: [8, 14, 10, 62], shadeSoft: [8, 14, 10, 26], floorLine: [0, 0, 0, 70],
   underground: [46, 44, 40, 120], undergroundOn: [255, 176, 48, 190],
   cream: [230, 227, 215], creamDim: [198, 196, 182], ink: [14, 18, 15], amber: [255, 208, 92],
@@ -653,7 +653,7 @@ export async function createView3d(container, mapData, src) {
       // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
       ...[true, false].map((isMajor) => new TextLayer({ id: isMajor ? 'labels-major' : 'labels-minor',
         data: labels.filter((d) => major(d) === isMajor && (isMajor || viewState.zoom >= 0.8)).map((d) => ({ p: Pg(d.position, lift(d) + 1.5), t: isMajor ? d.text.toUpperCase() : d.text })),
-        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 7.2 : 5.4, sizeUnits: 'meters', sizeMinPixels: isMajor ? 11 : 9, sizeMaxPixels: isMajor ? 17 : 12,
+        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 6.2 : 4.6, sizeUnits: 'meters', sizeMinPixels: isMajor ? 10 : 8, sizeMaxPixels: isMajor ? 15 : 11,
         getColor: isMajor ? [...C.cream, 255] : [...C.creamDim, minorAlpha()], updateTriggers: { getColor: isMajor ? 0 : minorAlpha() },
         fontFamily: LABEL_FONT(), fontWeight: isMajor ? 700 : 600, fontSettings: LABEL_SDF,
         outlineWidth: isMajor ? 2.5 : 2, outlineColor: isMajor ? [...C.ink, 242] : [...C.ink, 230],

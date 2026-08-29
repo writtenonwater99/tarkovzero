@@ -228,7 +228,7 @@ export function buildTerrain(data) {
       const nx = SHADE_VE * dhdx, ny = SHADE_VE * dhdz;
       const nl = Math.sqrt(nx * nx + ny * ny + 1);
       const raw = (Math.max(0, nx * KEY[0] + ny * KEY[1] + KEY[2]) + 0.35 * Math.max(0, nx * FILL[0] + ny * FILL[1] + FILL[2])) / nl;
-      const shade = clamp(1 + (raw - flatRaw) * 1.55, 0.76, 1.18);
+      const shade = clamp(1 + (raw - flatRaw) * 1.55, 0.70, 1.26);
       r *= shade; g *= shade; b *= shade;
       // (d) mottle, two octaves
       const m = 1 + (vnoise(gx, gz, 28) - 0.5) * 0.085;
