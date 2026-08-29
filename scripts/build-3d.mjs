@@ -503,9 +503,11 @@ if (cfg.proceduralTrees) {
 // acceptance bias gathers more crowns in each canopy polygon's core. Crown extents (not merely
 // their centres) stay at least 3 m from every road edge and building footprint.
 const totalTreeArea = treePolys.reduce((sum, poly) => sum + area(poly), 0);
-const wantedTrees = Math.min(key === 'woods' ? 2600 : 1800, Math.round(totalTreeArea * (key === 'woods' ? 0.045 : 0.065)));
+const wantedTrees = key === 'customs'
+  ? Math.min(3200, Math.round(totalTreeArea * 0.115))
+  : Math.min(key === 'woods' ? 2600 : 1800, Math.round(totalTreeArea * (key === 'woods' ? 0.045 : 0.065)));
 const treeDensity = totalTreeArea ? wantedTrees / totalTreeArea : 0;
-const TREE_COLORS = [[43, 61, 43], [49, 68, 46], [57, 75, 50]];
+const TREE_COLORS = [[57, 80, 52], [68, 91, 58], [79, 103, 64]];
 const treeCrowns = [];
 for (let index = 0; index < treePolys.length; index++) {
   const poly = treePolys[index], [x1, z1, x2, z2] = bbox(poly);
@@ -519,14 +521,29 @@ for (let index = 0; index < treePolys.length; index++) {
     const coreScale = Math.max(3, Math.min(x2 - x1, z2 - z1) * 0.24);
     const coreWeight = 0.28 + 0.72 * Math.min(1, edgeDepth / coreScale);
     if (hash2(index * 17011 + attempt * 47, 353) > coreWeight) continue;
-    const radius = 1.4 + hash2(index * 313 + attempt, 401) * 1.8;
+    const coniferChance = key === 'woods' ? 0.64 : key === 'reserve' ? 0.42 : 0.5;
+    const type = hash2(index * 271 + attempt, 389) < coniferChance ? 'conifer' : 'broadleaf';
+    const radius = type === 'conifer'
+      ? 1.8 + hash2(index * 313 + attempt, 401) * 0.9
+      : 2 + hash2(index * 313 + attempt, 401) * 1.2;
     // Leave a small generation margin so one-decimal JSON rounding cannot eat into 3 m.
     const clearance = radius + 3.2;
     if (buildings.some((b) => inPoly([x, z], b.poly) || distToRing([x, z], b.poly) < clearance)) continue;
     if (roads.some((r) => distToPath([x, z], r.path) < r.width / 2 + clearance)) continue;
-    const height = 4.6 + hash2(index * 431 + attempt, 503) * 4.4;
+    const height = type === 'conifer'
+      ? 8 + hash2(index * 431 + attempt, 503) * 4
+      : 6 + hash2(index * 431 + attempt, 503) * 3;
     const color = TREE_COLORS[Math.floor(hash2(index * 541 + attempt, 601) * TREE_COLORS.length) % TREE_COLORS.length];
-    treeCrowns.push({ x: +x.toFixed(1), z: +z.toFixed(1), radius: +radius.toFixed(1), height: +height.toFixed(1), color });
+    treeCrowns.push({
+      x: +x.toFixed(1), z: +z.toFixed(1), type,
+      radius: +radius.toFixed(1), height: +height.toFixed(1),
+      trunkRadius: +(0.15 + hash2(index * 653 + attempt, 677) * 0.1).toFixed(2),
+      trunkHeight: +(2 + hash2(index * 691 + attempt, 709)).toFixed(1),
+      aspect: +(0.84 + hash2(index * 733 + attempt, 751) * 0.3).toFixed(2),
+      rotation: +Math.round(hash2(index * 773 + attempt, 797) * 359),
+      lodKeep: hash2(index * 811 + attempt, 829) >= 0.5,
+      color,
+    });
     accepted++;
   }
 }

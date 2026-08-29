@@ -6,6 +6,7 @@ import { PathStyleExtension, CollisionFilterExtension } from '@deck.gl/extension
 import { KINDS, iconDataUrl, arrowDataUrl, extractLetter } from './icons.js';
 import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
+import { prepareTrees, treeLayers } from './trees.js';
 
 const C = {
   // --- TRACK C palette: cold-green field, warm-grey concrete, no primary hues except the accents.
@@ -37,17 +38,17 @@ const P = ([x, z], y = 0) => [-x, -z, y];
 let H = () => 0; // terrain height at game (x, z); set once data is loaded
 const Pg = ([x, z], dy = 0) => P([x, z], H(x, z) + dy); // draped point
 const ringG = (poly, dy = 0) => poly.map((p) => Pg(p, dy));
-function makeSampler(t) {
+function makeSampler(t, relief = 1) {
   const { x0, z0, step, cols, rows, heights } = t;
   return (x, z) => {
     const fx = Math.min(Math.max((x - x0) / step, 0), cols - 1.001), fz = Math.min(Math.max((z - z0) / step, 0), rows - 1.001);
     const c = Math.floor(fx), r = Math.floor(fz), tx = fx - c, tz = fz - r;
     const h00 = heights[r * cols + c], h10 = heights[r * cols + c + 1], h01 = heights[(r + 1) * cols + c], h11 = heights[(r + 1) * cols + c + 1];
-    return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
+    return ((h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz) * relief;
   };
 }
 const inPolyXZ = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
-const VOID_Z = -14;
+let VOID_Z = -14;
 function voidRect(limit) { const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]); const m = 60; return [[Math.min(...xs) - m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.max(...zs) + m], [Math.min(...xs) - m, Math.max(...zs) + m]]; }
 // cliff skirt: a strip just outside each boundary segment, extruded from the void floor up to the ground height
 function cliffStrips(limit) {
@@ -469,26 +470,31 @@ export async function createView3d(container, mapData, src) {
   // One surface, one sampler: the mesh below and every draped feature (roads, fences, props,
   // trees, shade rings, building bases, player drop-lines) must sample the SAME bicubic field,
   // or they float/sink by up to ~0.3 m and z-fight against the mesh.
+  let relief = [1, 2, 3].includes(Number(src.relief)) ? Number(src.relief) : 2;
   let terrain = null;
-  if (data.terrain) { data.terrain.limit = data.limit; try { terrain = buildTerrain(data); H = terrain.H; } catch (e) { console.warn('terrain mesh failed, falling back to quads', e); H = makeSampler(data.terrain); } }
+  const rebuildGround = () => {
+    terrain = null;
+    if (!data.terrain) { H = () => 0; VOID_Z = -14; return; }
+    data.terrain.limit = data.limit;
+    try { terrain = buildTerrain(data, relief); H = terrain.H; VOID_Z = terrain.voidZ; }
+    catch (e) { console.warn('terrain mesh failed, falling back to quads', e); H = makeSampler(data.terrain, relief); VOID_Z = Math.min(-14, Math.floor((Math.min(...data.terrain.heights) * relief - 10) / 2) * 2); }
+  };
+  rebuildGround();
   // --- end TRACK B ------------------------------------------------------------------------
   const inLimit = (x, z) => !data.limit || inPolyXZ([x, z], data.limit);
   const centroidOf = (poly) => poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]);
-  for (const b of data.buildings) {
-    const c = centroidOf(b.poly);
-    const footprintSamples = [c, ...b.poly, ...b.poly.map((p, i) => [(p[0] + b.poly[(i + 1) % b.poly.length][0]) / 2, (p[1] + b.poly[(i + 1) % b.poly.length][1]) / 2])];
-    const ground = footprintSamples.map((p) => H(p[0], p[1]));
-    b.base = H(c[0], c[1]);
-    b.plinthBase = Math.min(...ground) - 0.18;
-    b.plinthHeight = Math.max(0.75, Math.max(...ground) - b.plinthBase + 0.24);
-  }
-  for (const tree of data.trees || []) {
-    if (!Number.isFinite(tree.x) || !Number.isFinite(tree.z)) continue;
-    const turn = hash1(tree.x, tree.z) * Math.PI * 2, sides = 10;
-    tree.poly = Array.from({ length: sides }, (_, i) => [tree.x + tree.radius * Math.cos(turn + (i / sides) * Math.PI * 2), tree.z + tree.radius * Math.sin(turn + (i / sides) * Math.PI * 2)]);
-    tree.base = H(tree.x, tree.z) + tree.height * 0.42;
-    tree.depth = tree.height * 0.58;
-  }
+  const placeBuildings = () => {
+    for (const b of data.buildings) {
+      const c = centroidOf(b.poly);
+      const footprintSamples = [c, ...b.poly, ...b.poly.map((p, i) => [(p[0] + b.poly[(i + 1) % b.poly.length][0]) / 2, (p[1] + b.poly[(i + 1) % b.poly.length][1]) / 2])];
+      const ground = footprintSamples.map((p) => H(p[0], p[1]));
+      b.base = H(c[0], c[1]);
+      b.plinthBase = Math.min(...ground) - 0.18;
+      b.plinthHeight = Math.max(0.75, Math.max(...ground) - b.plinthBase + 0.24);
+    }
+  };
+  placeBuildings();
+  const treeSet = prepareTrees(data.trees, mapData.key);
   // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
   async function buildAtlas(entries, cell) {
     const canvas = document.createElement('canvas'); canvas.width = Math.max(1, cell * entries.length); canvas.height = cell;
@@ -520,10 +526,11 @@ export async function createView3d(container, mapData, src) {
 
   // TRACK B: lighting comes from terrain.js so the sun azimuth matches the baked hillshade exactly
   // (two shading systems lit from different sides fight each other and flatten the relief).
-  const lighting = terrain ? terrain.lighting : new LightingEffect({
+  const sceneLighting = () => terrain ? terrain.lighting : new LightingEffect({
     ambient: new AmbientLight({ color: [255, 255, 255], intensity: 0.85 }),
     sun: new DirectionalLight({ color: [255, 250, 240], intensity: 0.9, direction: [-0.6, -0.4, -1] }),
   });
+  let lighting = sceneLighting();
 
   const staticLayers = () => [
     // TRACK B: contours are baked into the ground texture (smooth at any zoom, no z-fighting, zero layers)
@@ -545,10 +552,10 @@ export async function createView3d(container, mapData, src) {
     new PathLayer({ id: 'road-centre', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'highway'), getPath: (d) => ringG(d.path, 0.14), getColor: C.roadMarking, getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [6, 6], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => catenary(d.path, 19), getColor: [96, 96, 92, 170], getWidth: 0.2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d.poly ?? d, 0), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: (d) => d.color ?? C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5, shininess: 4 } }),
-    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.depth, getFillColor: (d) => d.color ?? C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.88, diffuse: 0.26, shininess: 0 } }),
   ];
-  const floorLines = data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
-  const propData = propParts(data.props || []);
+  const makeFloorLines = () => data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
+  let floorLines = makeFloorLines();
+  let propData = propParts(data.props || []);
   const fenceStrips = (data.fences || []).map((f) => ({ poly: strip(f.path, 0.12), base: 0 }));
   const extraLayers = () => [
     new SolidPolygonLayer({ id: 'props', data: propData, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.55 } }),
@@ -572,9 +579,9 @@ export async function createView3d(container, mapData, src) {
   const scenes = src.markers().filter((m) => SCENES[(m.name || '').trim()]).map((m) => ({
     type: SCENES[m.name.trim()], pos: [m.position.x, m.position.z], tower: m.name.trim() === 'Military Base CP',
     rot: Math.atan2(mid[1] - m.position.z, mid[0] - m.position.x) }));
-  const details = detailParts(data.buildings, scenes);
+  let details = detailParts(data.buildings, scenes);
   const showLvl = (d) => floor === 'all' || floor === 'U' || d.lvl <= (Number(floor) + 1) * 3.3;
-  const parts = buildingParts(data.buildings);
+  let parts = buildingParts(data.buildings);
   const undergroundLayers = () => floor !== 'U' ? [] : [
     new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: data.underground || [], getPolygon: (d) => ringG(d.poly, 0.22), getFillColor: C.undergroundOn, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true, parameters: OVERLAY }),
     new PathLayer({ id: 'underground-outline', shadowEnabled: false, data: data.underground || [], getPath: (d) => ringG([...d.poly, d.poly[0]], 0.24), getColor: [255, 220, 150, 235], getWidth: 2, widthUnits: 'pixels', coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, parameters: OVERLAY }),
@@ -688,9 +695,9 @@ export async function createView3d(container, mapData, src) {
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
       ...extractNameLayers(markers),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.3)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z) + 0.2)), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new IconLayer({ id: 'players', data: players, getPosition: (p) => P([p.last.x, p.last.z], (p.last.y ?? 0) + 0.2), iconAtlas: arrowAtlas.canvas, iconMapping: arrowAtlas.mapping, getIcon: (p) => p.color, getSize: 12, sizeUnits: 'meters', sizeMinPixels: 22, sizeMaxPixels: 44, billboard: false, getAngle: (p) => -((p.last.yaw ?? 0) + (mapData.coordinateRotation ?? 0)), pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last), getAngle: players.map((p) => p.last) } }),
-      ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max((p.last.y ?? 0) + 0.2, H(p.last.x, p.last.z) + 0.3)), getText: (p) => p.name, getPixelOffset: [22, 0], getTextAnchor: 'start', getSize: 14, getColor: C.cream, outlineWidth: 4, outlineColor: [14, 18, 15, 240], fontFamily: LABEL_FONT(), fontSettings: { sdf: true }, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })]),
+      new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.2), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'players', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.2), iconAtlas: arrowAtlas.canvas, iconMapping: arrowAtlas.mapping, getIcon: (p) => p.color, getSize: 12, sizeUnits: 'meters', sizeMinPixels: 22, sizeMaxPixels: 44, billboard: false, getAngle: (p) => -((p.last.yaw ?? 0) + (mapData.coordinateRotation ?? 0)), pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: [players.map((p) => p.last), relief], getAngle: players.map((p) => p.last) } }),
+      ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.3), getText: (p) => p.name, getPixelOffset: [22, 0], getTextAnchor: 'start', getSize: 14, getColor: C.cream, outlineWidth: 4, outlineColor: [14, 18, 15, 240], fontFamily: LABEL_FONT(), fontSettings: { sdf: true }, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: relief } })]),
     ];
   };
   const hex = (h, a = 255) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
@@ -708,16 +715,33 @@ export async function createView3d(container, mapData, src) {
       if (layer.id === 'props') return { html: `<b>${esc(object.p.name ?? object.p.type)}</b>`, className: 'deck-tooltip' };
       if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
       if (layer.id === 'markers-extract' || layer.id === 'markers-chips') return { html: object.html, className: 'deck-tooltip' };
-      if (layer.id === 'players') { const y = object.last.y ?? 0, g = H(object.last.x, object.last.z), rel = y - g; const fl = rel < -1.5 ? 'underground' : rel < 2.6 ? 'ground' : `floor ${Math.floor(rel / 3.3) + 1}`; return { html: `<b>${esc(object.name)}</b><br>${fl} · x ${object.last.x} z ${object.last.z} y ${y}`, className: 'deck-tooltip' }; }
+      if (layer.id === 'players') { const y = object.last.y ?? 0, g = H(object.last.x, object.last.z) / relief, rel = y - g; const fl = rel < -1.5 ? 'underground' : rel < 2.6 ? 'ground' : `floor ${Math.floor(rel / 3.3) + 1}`; const note = relief === 1 ? '' : `<br>Relief ${relief}× · ground height visually exaggerated`; return { html: `<b>${esc(object.name)}</b><br>${fl} · x ${object.last.x} z ${object.last.z} y ${y}${note}`, className: 'deck-tooltip' }; }
       return null;
     },
   });
-  const base = staticLayers();
-  const extras = extraLayers();
+  let base = staticLayers();
+  let extras = extraLayers();
   initialised = true;
   function render() {
-    const visibleBase = base.filter((layer) => (nature.trees || !['understory', 'trees'].includes(layer.id)) && (nature.rocks || layer.id !== 'rocks'));
-    deck.setProps({ layers: [...visibleBase, extras[0], ...buildingLayer(), ...extras.slice(1), ...dynamicLayers()] });
+    const visibleBase = base.filter((layer) => (nature.trees || layer.id !== 'understory') && (nature.rocks || layer.id !== 'rocks'));
+    const vegetation = nature.trees ? treeLayers({ treeSet, H, zoom: viewState.zoom ?? 0, relief }) : [];
+    deck.setProps({ layers: [...visibleBase, ...vegetation, extras[0], ...buildingLayer(), ...extras.slice(1), ...dynamicLayers()] });
+  }
+  function setRelief(next) {
+    next = [1, 2, 3].includes(Number(next)) ? Number(next) : 2;
+    if (next === relief) return;
+    relief = next;
+    rebuildGround();
+    placeBuildings();
+    floorLines = makeFloorLines();
+    propData = propParts(data.props || []);
+    details = detailParts(data.buildings, scenes);
+    parts = buildingParts(data.buildings);
+    lighting = sceneLighting();
+    base = staticLayers();
+    extras = extraLayers();
+    deck.setProps({ effects: [lighting] });
+    render();
   }
   render();
   // Under software GL (and on a cold cache) the baked ground texture can finish uploading after
@@ -728,6 +752,7 @@ export async function createView3d(container, mapData, src) {
     refresh: render,
     setFloor: (f) => { floor = f; render(); },
     setNature: (next) => { nature = { ...nature, ...next }; render(); },
+    setRelief,
     // sidebar hover/click can pin an extract's name in 3D (name+kind key, or null to clear)
     focusExtract: (name, kind) => { pinnedExtract = name ? (name + '|' + (kind ?? 'extract-pmc')) : null; render(); },
     setView: ({ target, zoom }) => { viewState = { ...viewState, target, zoom }; deck.setProps({ viewState }); },

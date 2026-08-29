@@ -126,9 +126,34 @@ for (const kind of ['trees', 'rocks']) {
 setNature('trees', treesShown, false);
 setNature('rocks', rocksShown, false);
 
+// Terrain relief is a 3D-only display preference. Query values override (without rewriting) the
+// persisted choice, matching the Trees/Rocks behavior above.
+const reliefChoices = new Set([1, 2, 3]);
+const reliefQuery = Number(new URLSearchParams(location.search).get('relief'));
+let relief = reliefChoices.has(reliefQuery) ? reliefQuery : Number(store.get('relief', 2));
+if (!reliefChoices.has(relief)) relief = 2;
+function setRelief(next, persist = true) {
+  next = Number(next);
+  if (!reliefChoices.has(next)) next = 2;
+  relief = next;
+  $$('#relief-toggle .seg-cell').forEach((b) => {
+    const active = Number(b.dataset.relief) === relief;
+    b.classList.toggle('on', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+  if (persist) store.set('relief', relief);
+  view3d?.setRelief(relief);
+}
+$$('#relief-toggle .seg-cell').forEach((b) => (b.onclick = () => setRelief(b.dataset.relief)));
+setRelief(relief, false);
+
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
 const fit = () => map.fitBounds(bounds, { padding: [0, 0], animate: false });
 const hash = location.hash.slice(1).split('/').map(Number);
+const starts3d = new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d';
+let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
+  ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - 2.06 }
+  : null;
 let autoFit = true; // refit on window resize only until the user navigates (or arrived via a permalink)
 if (hash.length === 3 && hash.every(Number.isFinite)) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
 else fit();
@@ -140,8 +165,8 @@ window.addEventListener('resize', () => { if (autoFit) fit(); rememberFit(); upd
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
 map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
 map.on('moveend', () => {
-  const c = map.getCenter();
-  history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`);
+  if (is3d()) history.replaceState(null, '', `#${((v3.zoom ?? 0) + 2.06).toFixed(2)}/${(-v3.target[0]).toFixed(1)}/${(-v3.target[1]).toFixed(1)}`);
+  else { const c = map.getCenter(); history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`); }
 });
 map.on('move zoom', updateHud);
 
@@ -542,6 +567,7 @@ async function setView(mode) {
     if (!view3d) {
       const { createView3d } = await import('./map3d.js');
       view3d = await createView3d($('#map3d'), mapData, {
+        relief,
         markers: () => markerPoints.filter((m) => visibleKinds().has(m.kind)),
         labels: labelSet,
         players: () => [...live.players.values()],
@@ -555,8 +581,8 @@ async function setView(mode) {
       view3d.setNature({ trees: treesShown, rocks: rocksShown });
       try { view3d.deck?.setProps({ onHover: (i) => { const c = i?.coordinate; Array.isArray(c) ? showCoords(-c[0], -c[1]) : idleCoords(); } }); } catch {}
     }
-    const c = map.getCenter();
-    set3d({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - 2.06 });
+    if (initial3dHash) { const direct = initial3dHash; initial3dHash = null; set3d(direct); }
+    else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - 2.06 }); }
     view3d.refresh();
   } else {
     // #map was display:none while 3D drove it — remeasure before Leaflet draws again.
@@ -658,7 +684,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 updateHud();
-if (new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d') setView('3d');
+if (starts3d) setView('3d');
 
 // ?debug=roads — draw the 3D road/track network over the 2D map to check it against the satellite
 if (new URLSearchParams(location.search).get('debug') === 'roads') {

@@ -204,3 +204,31 @@ f48e2bfc11daaf52e59d0368e6e98e09967ae0d577a0a5c5136efa73bdf74ed1  public/data/wo
 ```
 
 No deploy, push, or commit was performed.
+
+## Fix pass 5 — readable relief and volumetric trees
+
+### Changed
+
+- The 3D View now has a `Relief` 1× / 2× / 3× segmented control. It defaults to 2×, persists as `tz:relief`, and accepts a non-mutating `?relief=1|2|3` query override. A direct 3D hash is handed to OrbitView before Leaflet can clamp a wide zoom, and the 3D camera now writes its own `#zoom/x/z` permalink values.
+- `buildTerrain(data, relief)` applies the selected factor exactly once: to the conditioned grid that becomes the exported bicubic `H(x,z)`. The fine height raster, baked hillshade/contours, mesh vertices/normals, mesh skirt, map cliff top, and adaptive void depth all derive from that scaled field. Rebuilding relief also recomputes building bases/plinths, props, structure details, floors, roads, fences, bridges, water, rocks, labels, markers, player drop-lines, and every other draped layer through the same `H`/`Pg` path. Object heights are unchanged.
+- Live player arrows, names, and drop-line tops now use `max(realY, H)` so an exaggerated surface cannot cover them. Player floor classification still compares the real game Y with `H / relief`; at 2× or 3× its tooltip explicitly says the ground height is visually exaggerated.
+- The old extruded ten-sided crown prisms are gone. `src/trees.js` builds three reusable luma `Geometry` meshes and renders them with instanced `SimpleMeshLayer`s: dark 0.3–0.5 m trunks, stacked double-cone conifers, and faceted ellipsoid broadleaf crowns. The shared scene light now reveals volume; three muted green tones plus deterministic type, scale/aspect, rotation, trunk size, and LOD selection prevent cloned silhouettes.
+- Generated conifers are 8–12 m tall and broadleaf trees are 6–9 m tall. Customs density rises from 1,327 to 2,348 trees; Reserve has 112 and Woods 2,166. At far zoom the deterministic LOD keeps 1,172 Customs trees (49.9%); closer views draw the full population. The existing Trees control hides the understory, trunks, and both canopy meshes together.
+
+### Verified
+
+- `node scripts/build-3d.mjs customs`, `reserve`, and `woods` pass and preserve `builtAt`. `npm run build` passes with only the existing deck.gl chunk-size advisory; `node --check` passes for every edited JavaScript module and builder; `git diff --check` passes.
+- A post-rounding audit found zero invalid tree dimensions/types and exactly three opaque tones per map. Minimum crown-edge clearance is 3.19 m from roads / 3.20 m from buildings on Customs, 3.81 / 3.27 m on Reserve, and 3.93 / 3.15 m on Woods. Customs contains 1,169 conifers and 1,179 broadleaf trees.
+- Chromium verified the live relief rebuild on all three maps. With a saved 3× preference, `?relief=1` selected 1× while leaving `tz:relief` at 3; reloading without the query restored 3×. Clicking Trees Off set `tz:trees=false` and visibly removed the understory plus every instanced trunk/canopy; the control was returned to On afterward.
+- Eighteen 1400×900 captures in `scratch/fix-pass-5/` compare 1×, 2×, and 3× for Customs wide (`#1.3/160/-30`), Powerline Tower (`#2.6/497/110`), Sniper Hill (`#2.6/110/85`), Dorms (`#3/200/150`), Reserve Dome (`#2.6/-8/183`), and Woods sawmill (`#2.6/10/-3`). The corrected wide frame reports a 200 m scale, confirming the unclamped 1.3 camera. The comparisons show 2× as the balanced default: Powerline, Sniper Ridge, the west rise, and Dome read as geometry; 3× remains usable, and Woods' tall rock forms remain fixed-height rather than being tripled.
+- `scratch/fix-pass-5/customs-powerline-trees-off.png` is the separate nature-toggle proof. All comparison images have distinct hashes; no relief level is a duplicate frame.
+
+Deterministic data hashes:
+
+```text
+c77f2495de7b5895c4c9eea15078d173ed771348383db8b791e507402f36294d  public/data/customs-3d.json
+f46095b76d9cc97539669f63b2f25427bf22fead02d122de370d4121c7a40bcc  public/data/reserve-3d.json
+bb38391bb7f06130cfa64391d460316da7dbd88974539cdc3bfa3522829f836a  public/data/woods-3d.json
+```
+
+No deploy, push, or commit was performed.
