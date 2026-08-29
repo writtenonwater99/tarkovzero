@@ -26,16 +26,32 @@ export function createLive(map, mapData, ui) {
     if (el) el.style.transform = `rotate(${(yaw ?? 0) + (mapData.coordinateRotation ?? 0)}deg)`;
   }
 
+  const TELEPORT_UNITS = 300; // a trail jump longer than this (game units) is a teleport / stale replay, not movement
+
   function onPos(p, m) {
-    if (m.map && m.map !== mapData.key) { p.status = `on ${m.map}`; ui.render(); return; }
+    // Username sent by the companion wins over the code; a name typed on the site is a fallback/override.
+    if (typeof m.name === 'string' && m.name.trim() && m.name.trim() !== p.name && !p.nameOverride) {
+      p.name = m.name.trim().slice(0, 24);
+      p.marker?.setTooltipContent(p.name);
+      persist();
+    }
+    if (m.map && m.map !== mapData.key) { p.map = m.map; p.status = `on ${m.map} (not ${mapData.key})`; ui.render(); return; }
+    p.map = m.map ?? mapData.key;
     const ll = pos(m);
-    p.last = m;
     if (!p.marker) {
       p.marker = L.marker(ll, { icon: arrowIcon(p.color), pane, interactive: true }).addTo(map).bindTooltip(p.name, { permanent: true, direction: 'right', offset: [14, 0], className: 'player-tip' });
       p.trail = L.polyline([], { color: p.color, weight: 3, opacity: 0.8, pane }).addTo(map);
     } else p.marker.setLatLng(ll);
     setHeading(p, m.yaw);
-    if (opts.trail) p.trail.addLatLng(ll); else p.trail.setLatLngs([]);
+    // First message after (re)connect is the relay's replay of the last known point: place the marker, don't
+    // extend the trail from it. Likewise skip a segment that jumps further than a player can move.
+    const prev = p.last;
+    const jumped = prev && Math.hypot(m.x - prev.x, m.z - prev.z) > TELEPORT_UNITS;
+    if (!opts.trail) p.trail.setLatLngs([]);
+    else if (p.resume || jumped) p.trail.setLatLngs([ll]);
+    else p.trail.addLatLng(ll);
+    p.resume = false;
+    p.last = m;
     if (opts.follow && [...players.values()].indexOf(p) === 0) map.panTo(ll, { animate: true, duration: 0.4 });
     p.status = `x ${m.x.toFixed(0)} z ${m.z.toFixed(0)}`;
     ui.render();
@@ -43,7 +59,7 @@ export function createLive(map, mapData, ui) {
 
   function connect(p) {
     const ws = new WebSocket(`${RELAY}/sub/${p.code}`);
-    p.ws = ws; p.status = 'connecting…'; ui.render();
+    p.ws = ws; p.status = 'connecting…'; p.resume = true; ui.render();
     ws.onopen = () => { p.status = 'waiting for companion'; ui.render(); };
     ws.onmessage = (ev) => {
       const m = JSON.parse(ev.data);
@@ -53,20 +69,31 @@ export function createLive(map, mapData, ui) {
     ws.onclose = () => { if (players.has(p.code)) { p.status = 'reconnecting…'; ui.render(); setTimeout(() => connect(p), 2000); } };
   }
 
-  function add(codeRaw, name) {
+  function add(codeRaw, name, { override = false } = {}) {
     const code = normCode(codeRaw);
     if (!CODE_RE.test(code)) throw new Error('Code must be 6 letters/numbers, e.g. K7P3QX');
     if (players.has(code)) return;
-    const p = { code, name: name || code, color: COLORS[players.size % COLORS.length], status: '', last: null };
+    const p = { code, name: (name || '').trim().slice(0, 24) || code, nameOverride: override && !!name, color: COLORS[players.size % COLORS.length], status: '', last: null, map: null };
     players.set(code, p); connect(p); persist();
+  }
+  function rename(code, name) {
+    const p = players.get(code); if (!p) return;
+    p.name = (name || '').trim().slice(0, 24) || p.code; p.nameOverride = !!name.trim();
+    p.marker?.setTooltipContent(p.name); persist(); ui.render();
   }
   function remove(code) {
     const p = players.get(code); if (!p) return;
     players.delete(code); p.ws?.close(); p.marker?.remove(); p.trail?.remove(); persist(); ui.render();
   }
-  function persist() { try { localStorage.setItem('tarkovzero:live', JSON.stringify([...players.keys()])); } catch {} }
-  function restore() { try { for (const c of JSON.parse(localStorage.getItem('tarkovzero:live') || '[]')) add(c); } catch {} }
+  function persist() { try { localStorage.setItem('tarkovzero:live', JSON.stringify([...players.values()].map((p) => ({ code: p.code, name: p.name, override: p.nameOverride })))); } catch {} }
+  function restore() {
+    try {
+      for (const e of JSON.parse(localStorage.getItem('tarkovzero:live') || '[]')) {
+        if (typeof e === 'string') add(e); else add(e.code, e.name !== e.code ? e.name : '', { override: !!e.override });
+      }
+    } catch {}
+  }
   function clearTrails() { for (const p of players.values()) p.trail?.setLatLngs([]); }
 
-  return { players, opts, add, remove, restore, clearTrails, relay: RELAY };
+  return { players, opts, add, remove, rename, restore, clearTrails, relay: RELAY };
 }

@@ -152,7 +152,7 @@ const liveEl = document.getElementById('live');
 const ui = { render() {
   const ps = [...live.players.values()];
   liveEl.innerHTML = `<div class="group">Live position</div>
-    ${ps.map((p) => `<div class="player"><span class="sw" style="background:${p.color}"></span><b>${p.name}</b><span class="st">${p.status}</span><button class="small" data-rm="${p.code}">✕</button></div>`).join('')}
+    ${ps.map((p) => `<div class="player"><span class="sw" style="background:${p.color}"></span><b title="double-click to rename" data-rn="${p.code}">${p.name}</b>${p.name !== p.code ? `<span class="code">${p.code}</span>` : ''}<span class="st">${p.status}</span><button class="small" data-rm="${p.code}">✕</button></div>`).join('')}
     <input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX">
     <button id="live-add">${ps.length ? 'Add another' : 'Connect'}</button>
     <div class="err" id="live-err"></div>
@@ -162,6 +162,7 @@ const ui = { render() {
   liveEl.querySelector('#live-add').onclick = tryAdd;
   input.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
   liveEl.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => live.remove(b.dataset.rm)));
+  liveEl.querySelectorAll('[data-rn]').forEach((b) => (b.ondblclick = () => { const n = prompt('Name for this player (empty = use companion name / code)', b.textContent); if (n !== null) live.rename(b.dataset.rn, n); }));
   liveEl.querySelector('#live-follow').onchange = (e) => (live.opts.follow = e.target.checked);
   liveEl.querySelector('#live-trail').onchange = (e) => (live.opts.trail = e.target.checked);
   liveEl.querySelector('#live-clear').onclick = () => live.clearTrails();
