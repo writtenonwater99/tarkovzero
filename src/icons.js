@@ -42,3 +42,14 @@ export function iconHtml(kind, size = 24) {
   const k = KINDS[kind];
   return `<div class="mk ${k.shape}" style="--c:${k.color};width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${size * 0.66}" height="${size * 0.66}">${GLYPH[k.glyph]}</svg></div>`;
 }
+
+/** Standalone SVG (data URL) of a marker icon, for canvas/WebGL renderers. */
+export function iconDataUrl(kind, size = 48) {
+  const k = KINDS[kind];
+  const badge = k.shape === 'ci' ? `<circle cx="12" cy="12" r="11" fill="${k.color}" stroke="#fff" stroke-width="1.3"/>`
+    : k.shape === 'sq' ? `<rect x="1" y="1" width="22" height="22" rx="6" fill="${k.color}" stroke="#fff" stroke-width="1.3"/>`
+    : `<rect x="3.2" y="3.2" width="17.6" height="17.6" rx="4" transform="rotate(45 12 12)" fill="${k.color}" stroke="#fff" stroke-width="1.3"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badge}<g transform="translate(4 4) scale(.667)">${GLYPH[k.glyph]}</g></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace(/currentColor/g, '#fff'));
+}
+export const arrowDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M12 2 20 21l-8-4-8 4z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`);

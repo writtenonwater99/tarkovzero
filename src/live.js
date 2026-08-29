@@ -4,7 +4,7 @@ import { pos } from './crs.js';
 // Live player positions from the relay. One subscription per pairing code; each code gets its own
 // coloured arrow + trail. Designed for several codes at once (you + friends) even though v1 UI is solo.
 const RELAY = import.meta.env.VITE_RELAY_URL || (import.meta.env.DEV ? 'ws://localhost:8787' : 'wss://tarkovzero-relay.fly.dev');
-const COLORS = ['#ff3d3d', '#3d9bff', '#3dff7a', '#ffd23d', '#d63dff', '#3dfff0'];
+export const COLORS = ['#ff3d3d', '#3d9bff', '#3dff7a', '#ffd23d', '#d63dff', '#3dfff0'];
 const CODE_RE = /^[A-Z0-9]{6}$/;
 export const normCode = (c) => (c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 // Names/status can come from anyone publishing to a code — always escape before rendering as HTML.

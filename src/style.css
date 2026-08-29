@@ -1,7 +1,13 @@
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
 body { font: 14px system-ui, sans-serif; background: #111; color: #ddd; }
-#app { display: flex; }
+#app { display: flex; position: relative; }
+#map3d { display: none; flex: 1; position: relative; background: #e8eaed; }
+body.view-3d #map { display: none; }
+body.view-3d #map3d { display: block; }
+.view-toggle { float: right; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; font: 700 12px system-ui; cursor: pointer; }
+body.view-3d .view-toggle { background: #2a6; border-color: #2a6; }
+.deck-tooltip { background: rgba(20,20,20,.9) !important; color: #eee !important; font: 13px system-ui !important; padding: 6px 8px !important; border-radius: 4px; }
 #sidebar { width: 240px; -webkit-overflow-scrolling: touch; padding: 12px; background: #1b1b1b; border-right: 1px solid #333; overflow: auto; flex-shrink: 0; }
 #sidebar .brand { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #9ab; margin-bottom: 2px; }
 #sidebar h1 { margin: 0 0 8px; font-size: 20px; }
