@@ -25,16 +25,39 @@ export async function fetchMapData(normalizedName) {
   return map;
 }
 
-/** Live API first, falls back to the snapshot in public/data (see scripts/fetch-data.mjs). */
+async function fetchSnapshot(normalizedName) {
+  const res = await fetch(`/data/${normalizedName}.json`);
+  if (!res.ok || !res.headers.get('content-type')?.includes('json')) throw new Error(`no local snapshot for ${normalizedName}`);
+  return res.json();
+}
+
+// The public API does not carry Wiki panel/floor metadata. Merge the generated
+// community levels (and switches, which are community-only) onto live objects by
+// stable human name so production and the offline snapshot render identically.
+function mergeCommunityMeta(live, community) {
+  const extractMeta = new Map((community.extracts || []).map((e) => [`${e.name}|${e.faction}`, e]));
+  const extractByName = new Map((community.extracts || []).map((e) => [e.name, e]));
+  const lockMeta = new Map((community.locks || []).map((l) => [l.key?.name, l]));
+  return {
+    ...live,
+    extracts: (live.extracts || []).map((e) => {
+      const meta = extractMeta.get(`${e.name}|${e.faction}`) ?? extractByName.get(e.name);
+      return meta ? { ...e, level: meta.level, note: meta.note ?? e.note } : { ...e, level: 'surface' };
+    }),
+    locks: (live.locks || []).map((l) => ({ ...l, level: lockMeta.get(l.key?.name)?.level ?? 'surface' })),
+    switches: community.switches ?? live.switches ?? [],
+  };
+}
+
+/** Live API first, enriched/fallback from the reproducible community snapshot. */
 export async function loadMapData(normalizedName) {
+  const snapshot = await fetchSnapshot(normalizedName).catch(() => null);
   try {
-    return { data: await fetchMapData(normalizedName), source: 'live' };
+    const live = await fetchMapData(normalizedName);
+    return { data: snapshot ? mergeCommunityMeta(live, snapshot) : live, source: snapshot ? 'live + community levels' : 'live' };
   } catch (e) {
     console.warn('tarkov.dev API failed, using snapshot:', e.message);
-    const res = await fetch(`/data/${normalizedName}.json`);
-    if (!res.ok || !res.headers.get('content-type')?.includes('json'))
-      throw new Error(`tarkov.dev API unavailable and no local snapshot (run: npm run fetch-data)`);
-    const data = await res.json();
-    return { data, source: data.source ?? 'snapshot' };
+    if (!snapshot) throw new Error(`tarkov.dev API unavailable and no local snapshot (run: npm run fetch-data)`);
+    return { data: snapshot, source: snapshot.source ?? 'snapshot' };
   }
 }

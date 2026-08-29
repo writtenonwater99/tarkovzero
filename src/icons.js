@@ -38,7 +38,7 @@ export const extractLetter = (name) => EXTRACT_LETTER[(name || '').trim()] ?? nu
 
 // badge key line + cream inner rule; both come straight from the TRACK C palette (ink / cream)
 const KEY = '#0E1211', CREAM = '#E6E3D7';
-function badgeSvg(k, letter) {
+function badgeSvg(k, letter, level = 'surface') {
   const shape = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='${k.color}'/>`
     : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='${k.color}'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='${k.color}'/>`;
@@ -48,15 +48,20 @@ function badgeSvg(k, letter) {
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='none' stroke='${KEY}' stroke-width='1.6'/>`;
   const ring = k.ring ? `<circle cx='12' cy='12' r='11.6' fill='none' stroke='${CREAM}' stroke-width='0.8'/>` : '';
   const inner = letter ? `<text x='12' y='16.6' text-anchor='middle' font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${letter.length > 2 ? 9 : letter.length > 1 ? 11 : 13}' fill='${CREAM}'>${letter}</text>` : `<g transform='translate(4.6 4.6) scale(.62)'>${GLYPH[k.glyph]}</g>`;
-  return `${shape}${split}${key}${ring}${inner}`;
+  // An underground badge must remain recognisable even when its colour is muted by
+  // the marker-opacity setting: dashed extract outline + a universal down/stairs cue.
+  const underground = level === 'underground'
+    ? `${k.shape === 'sq' ? `<rect x='2.8' y='2.8' width='18.4' height='18.4' rx='4.2' fill='none' stroke='#FFD28A' stroke-width='1.2' stroke-dasharray='2.3 1.7'/>` : ''}<g><rect x='14.1' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='#FFD28A' stroke-width='.7'/><path d='M18.2 15.8v4.5m-1.7-1.7 1.7 1.7 1.7-1.7' fill='none' stroke='#FFD28A' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/></g>`
+    : '';
+  return `${shape}${split}${key}${ring}${inner}${underground}`;
 }
-export function iconHtml(kind, size = 24, letter = null) {
+export function iconHtml(kind, size = 24, letter = null, level = 'surface') {
   const k = KINDS[kind];
-  return `<div class="mk ${k.shape}" style="width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter)}</svg></div>`;
+  return `<div class="mk ${k.shape} level-${level}" style="width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level)}</svg></div>`;
 }
-export function iconDataUrl(kind, size = 48, letter = null) {
+export function iconDataUrl(kind, size = 48, letter = null, level = 'surface') {
   const k = KINDS[kind];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter)}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level)}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 export const arrowDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M12 2 20 21l-8-4-8 4z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`);

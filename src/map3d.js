@@ -77,6 +77,12 @@ const subText = (m) => EXTRACT_SUB[(m.name || '').trim()] ?? SUB_BY_KIND[m.kind]
 // short form = full name minus any parenthetical: "Smugglers' Bunker (ZB-1012)" -> "SMUGGLERS' BUNKER"
 const shortName = (n) => (n || '').replace(/\s*\([^)]*\)\s*/g, ' ').trim().toUpperCase();
 const EXTRACT_ACCENT = { 'extract-pmc': C.accentExtract, 'extract-scav': C.accentExtractScav, 'extract-transit': C.accentExtractTransit, 'extract-shared': C.accentExtractNeutral };
+const markerLevel = (m) => ['surface', 'underground', 'rooftop', 'upper'].includes(m?.level) ? m.level : 'surface';
+const levelSuffix = (m) => markerLevel(m) === 'surface' ? '' : ` · ${markerLevel(m).toUpperCase()}`;
+const markerIconKey = (m) => {
+  const letter = m.kind.startsWith('extract') ? extractLetter(m.name) : null;
+  return `${m.kind}${letter ? `:${letter}` : ''}${markerLevel(m) === 'surface' ? '' : `:${markerLevel(m)}`}`;
+};
 
 // icons/labels always on top of geometry
 const ring = (poly) => poly.map((p) => P(p));
@@ -479,11 +485,10 @@ export async function createView3d(container, mapData, src) {
     })));
     return { canvas, mapping };
   }
-  const iconAtlas = await buildAtlas(Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), 64);
-  const letters = [...new Set(src.markers().filter((m) => m.kind.startsWith('extract')).map((m) => extractLetter(m.name)).filter(Boolean))];
-  const letterAtlas = await buildAtlas(src.markers().filter((m) => m.kind.startsWith('extract') && extractLetter(m.name)).map((m) => [m.kind + ':' + extractLetter(m.name), iconDataUrl(m.kind, 64, extractLetter(m.name))]).filter((e, i, a) => a.findIndex((x) => x[0] === e[0]) === i), 64);
-  Object.assign(iconAtlas.mapping, Object.fromEntries(Object.entries(letterAtlas.mapping).map(([k, m]) => [k, { ...m, x: m.x + iconAtlas.canvas.width }])));
-  if (Object.keys(letterAtlas.mapping).length) { const merged = document.createElement('canvas'); merged.width = iconAtlas.canvas.width + letterAtlas.canvas.width; merged.height = 64; const cx2 = merged.getContext('2d'); cx2.drawImage(iconAtlas.canvas, 0, 0); cx2.drawImage(letterAtlas.canvas, iconAtlas.canvas.width, 0); iconAtlas.canvas = merged; }
+  const markerEntries = src.markers().filter((m) => KINDS[m.kind]).map((m) => [markerIconKey(m), iconDataUrl(m.kind, 64, m.kind.startsWith('extract') ? extractLetter(m.name) : null, markerLevel(m))]);
+  const atlasEntries = [...Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), ...markerEntries]
+    .filter((e, i, all) => all.findIndex((x) => x[0] === e[0]) === i);
+  const iconAtlas = await buildAtlas(atlasEntries, 64);
   const arrowAtlas = await buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
   const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
@@ -604,7 +609,7 @@ export async function createView3d(container, mapData, src) {
     const full = z >= 0.6;
     let cand = markers.filter((m) => m.kind.startsWith('extract') && m.name).map((m) => {
       const k = eKey(m), lit = pinnedExtract === k || hoverExtract === k;
-      return { m, k, lit, text: full || lit ? (m.name || '').toUpperCase() : shortName(m.name),
+      return { m, k, lit, text: (full || lit ? (m.name || '').toUpperCase() : shortName(m.name)) + levelSuffix(m),
         sub: full || lit ? subText(m) : '', size: lit ? 13.5 : 12, pos: Pg([m.position.x, m.position.z], 0.5) };
     }).filter((d) => d.lit || z >= -0.6);
     if (!cand.length) return [];
@@ -634,7 +639,7 @@ export async function createView3d(container, mapData, src) {
       fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF,
       outlineWidth: chip ? 3 : 2.5, outlineColor: [...C.ink, 240],
       background: chip, getBackgroundColor: [10, 14, 12, 190], backgroundPadding: [5, 2, 5, 2],
-      getBorderColor: (d) => EXTRACT_ACCENT[d.m.kind] ?? C.accentExtractNeutral, getBorderWidth: chip ? 1 : 0,
+      getBorderColor: (d) => markerLevel(d.m) === 'underground' ? [255, 176, 48] : EXTRACT_ACCENT[d.m.kind] ?? C.accentExtractNeutral, getBorderWidth: chip ? 1 : 0,
       billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       updateTriggers: { getText: trig, getSize: trig, getPixelOffset: trig },
     });
@@ -644,18 +649,18 @@ export async function createView3d(container, mapData, src) {
     ];
   }
   const dynamicLayers = () => {
-    const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z));
+    const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z) && (floor !== 'U' || markerLevel(m) === 'underground'));
     const labels = src.labels().filter((d) => inLimit(d.position[0], d.position[1])
       && (floor === 'U' ? d.floor === 'U' || d.floor === 'both' : d.floor !== 'U'));
     const players = src.players().filter((p) => p.last);
     return [
-      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind === 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => (d.kind.startsWith('extract') && extractLetter(d.name) ? d.kind + ':' + extractLetter(d.name) : d.kind), getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind === 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPixelOffset: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? [0, -4] : [0, 0]),
         updateTriggers: { getSize: [hoverExtract, pinnedExtract], getPixelOffset: [hoverExtract, pinnedExtract] },
         onHover: (i) => { const k = i.object && i.object.kind.startsWith('extract') ? eKey(i.object) : null; if (k !== hoverExtract) { hoverExtract = k; render(); } },
         onClick: (i) => { if (!i.object || !i.object.kind.startsWith('extract')) return false; const k = eKey(i.object); pinnedExtract = pinnedExtract === k ? null : k; render(); return true; } }),
       // everything else lies flat on the ground like chips on a table
-      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && d.kind !== 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: (d) => d.kind, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && d.kind !== 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: markerIconKey, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       ...pingLayers(labels),
       // TRACK C typography: majors are UPPERCASE/700, minors Title Case/600 — case, not a second grey,
       // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
@@ -687,7 +692,7 @@ export async function createView3d(container, mapData, src) {
       if (layer.id === 'roofs') return { html: `<b>${esc(object.b.place ?? object.b.name ?? object.b.kind)}</b><br>${object.b.floors} floor${object.b.floors > 1 ? 's' : ''} · ${object.b.height} m`, className: 'deck-tooltip' };
       if (layer.id === 'props') return { html: `<b>${esc(object.p.name ?? object.p.type)}</b>`, className: 'deck-tooltip' };
       if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
-      if (layer.id === 'markers') return { html: object.html, className: 'deck-tooltip' };
+      if (layer.id === 'markers-extract' || layer.id === 'markers-chips') return { html: object.html, className: 'deck-tooltip' };
       if (layer.id === 'players') { const y = object.last.y ?? 0, g = H(object.last.x, object.last.z), rel = y - g; const fl = rel < -1.5 ? 'underground' : rel < 2.6 ? 'ground' : `floor ${Math.floor(rel / 3.3) + 1}`; return { html: `<b>${esc(object.name)}</b><br>${fl} · x ${object.last.x} z ${object.last.z} y ${y}`, className: 'deck-tooltip' }; }
       return null;
     },

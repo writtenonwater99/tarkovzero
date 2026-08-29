@@ -44,13 +44,13 @@ const CONFIG = {
   },
   woods: {
     svgName: 'Woods', svgUrl: 'https://assets.tarkov.dev/maps/svg/Woods.svg', maps: 'scripts/data/woods/maps-entry.json',
-    props: 'data/woods-props.json', roads: 'data/woods-roads.json', spt: 'scripts/data/woods/spt-base.json',
+    props: 'data/woods-props.json', roads: 'data/woods-roads.json', yards: 'data/woods-yards.json', spt: 'scripts/data/woods/spt-base.json',
     bounds: { xMax: 646, xMin: -761, zMin: -914, zMax: 442 }, base: 'Ground_Level',
     groups: { land: 'Base_Terrain', limit: 'Base_Terrain', water: 'Water', pavement: null, trees: null, rocks: 'Rocks', railway: 'Railroad', fence: 'Fences', powerlines: 'Power_Line', plane: 'Plane', pier: 'Pier', minefield: 'Minefield' },
     roadGroups: [['Roads', 6, 'main'], ['Small Roads', 4, 'small'], ['Dirt_Roads', 3.5, 'dirt']],
     buildingHeights: { Buildings: 4 }, underground: /$a/,
-    colors: { Sawmill: [144, 139, 124], 'Old Sawmill': [128, 112, 94], 'Scav Town': [154, 143, 124], 'Scav House': [156, 119, 83], 'USEC CAMP': [108, 116, 96], 'Military Camp': [146, 148, 136], 'Sunken Village / Abandoned Village': [126, 112, 91] },
-    roofs: { Sawmill: [88, 94, 92], 'Old Sawmill': [104, 82, 66], 'Scav Town': [110, 84, 66], 'Scav House': [132, 74, 57] },
+    colors: { Sawmill: [132, 109, 78], 'Old Sawmill': [128, 112, 94], 'Scav Town': [154, 143, 124], 'Scav House': [156, 119, 83], 'USEC CAMP': [108, 116, 96], 'Military Camp': [146, 148, 136], 'Sunken Village / Abandoned Village': [126, 112, 91] },
+    roofs: { Sawmill: [91, 78, 61], 'Old Sawmill': [104, 82, 66], 'Scav Town': [110, 84, 66], 'Scav House': [132, 74, 57] },
     styles: { Sawmill: 'gable', 'Old Sawmill': 'gable', 'Scav Town': 'gable', 'Scav House': 'gable', 'Sunken Village / Abandoned Village': 'gable', 'USEC CAMP': 'gable', 'Military Camp': 'gable', Shack: 'gable', "Jaeger's Camp": 'gable' }, autoSmallTracks: true,
     labelRadius: 80,
     extraBuildings: [
@@ -81,6 +81,7 @@ try { svg = await readFile(`.cache/maps/svg/${cfg.svgName}.svg`, 'utf8'); } catc
 const maps = JSON.parse(await readFile(cfg.maps, 'utf8'));
 const props = JSON.parse(await readFile(cfg.props, 'utf8')).props;
 const roadEdits = JSON.parse(await readFile(cfg.roads, 'utf8'));
+const yards = cfg.yards ? JSON.parse(await readFile(cfg.yards, 'utf8')).yards : [];
 const extraRoads = roadEdits.add;
 const mapFamily = Array.isArray(maps) ? maps.find((m) => m.normalizedName === key) : maps;
 const mapEntry = mapFamily.maps.find((m) => m.key === key);
@@ -262,6 +263,26 @@ for (const r of roads) {
   const hits = r.path.filter(nearPaved).length;
   if (hits / r.path.length < 0.35) { r.kind = 'track'; r.width = 2.2; }
 }
+// Some SVG roads are long compound paths crossing multiple surface types. Split
+// at an audited spatial boundary so a northern dirt run does not turn the paved
+// southern approach into dirt with it.
+for (const zone of roadEdits.reclassifyZones || []) {
+  const [[x1, z1], [x2, z2]] = zone.bounds;
+  const inZone = ([x, z]) => x >= Math.min(x1, x2) && x <= Math.max(x1, x2) && z >= Math.min(z1, z2) && z <= Math.max(z1, z2);
+  const split = [];
+  for (const road of roads) {
+    if (zone.from?.length && !zone.from.includes(road.kind)) { split.push(road); continue; }
+    let kind = inZone(road.path[0]) ? zone.to : road.kind, run = [road.path[0]];
+    const flush = () => { if (run.length >= 2) split.push({ ...road, kind, width: kind === 'dirt' ? 3.5 : kind === 'track' ? 2.2 : road.width, fixed: true, path: run }); };
+    for (let i = 1; i < road.path.length; i++) {
+      const nextKind = inZone(road.path[i]) ? zone.to : road.kind;
+      if (nextKind !== kind) { run.push(road.path[i]); flush(); run = [road.path[i - 1], road.path[i]]; kind = nextKind; }
+      else run.push(road.path[i]);
+    }
+    flush();
+  }
+  roads.length = 0; roads.push(...split);
+}
 // audited edits: reclassify / remove roads by nearest midpoint (from data/customs-roads.json)
 const midOf = (path) => path[Math.floor(path.length / 2)];
 const nearestRoad = (pt) => roads.reduce((best, r) => { const m = midOf(r.path); const d = Math.hypot(m[0] - pt[0], m[1] - pt[1]); return d < best.d ? { d, r } : best; }, { d: Infinity, r: null });
@@ -350,6 +371,7 @@ const edgeDist = (pt) => { let best = Infinity; for (let i = 0; i < LIMIT.length
 // towers hugging the boundary are outside the real playable area (the SVG limit is slightly generous)
 const keepB = buildings.filter((b) => insideC(b.poly) && !(b.kind === 'powerline_towers' && edgeDist(centroid(b.poly)) < 10)); buildings.length = 0; buildings.push(...keepB);
 const propsIn = [...props, ...svgProps].filter((p) => p.poly ? insideC(p.poly) : (p.path ? inside(p.path[0]) : inside([p.x, p.z])));
+if (key === 'woods') for (const p of propsIn) if (/^Sawmill log stack/i.test(p.name || '')) p.color = [116, 88, 58];
 const undergroundIn = underground.filter((u) => insideC(u.poly));
 const rockPolys = (cfg.groups.rocks ? polysIn(cfg.groups.rocks) : []).filter(insideC);
 const rockMasses = key === 'customs' ? rockPolys : rockPolys.map((poly) => {
@@ -418,6 +440,7 @@ const out = {
   roads, railway: clipLines((cfg.groups.railway ? linesIn(cfg.groups.railway) : []).map((p) => ({ path: p }))), fences: fencesCut, powerlines: clipLines((cfg.groups.powerlines ? linesIn(cfg.groups.powerlines) : []).map((p) => ({ path: p }))),
   buildings, underground: undergroundIn, floorBoxes,
 };
+if (yards.length) out.yards = yards;
 if (cfg.groups.minefield) out.minefields = polysIn(cfg.groups.minefield).filter(insideC);
 await writeFile(output, JSON.stringify(out));
 const multi = buildings.filter((b) => b.floors > 1);
