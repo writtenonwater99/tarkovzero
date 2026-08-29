@@ -31,7 +31,8 @@ const FILL_DIR = [0.5, 0.35, -0.79];
 
 // Bright field palette: still olive/green and desaturated, but no longer loses its middle values
 // under the baked hillshade and the scene light.
-const GRASS = [[57, 82, 58], [68, 96, 62], [81, 108, 67], [101, 121, 73], [123, 137, 84]];
+const vib = (rgb, k = 1.3) => { const l = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]; return rgb.map((v) => Math.max(0, Math.min(255, l + (v - l) * k))); };
+const GRASS = [[57, 82, 58], [68, 96, 62], [81, 108, 67], [101, 121, 73], [123, 137, 84]].map((c) => vib(c));
 const GRASS_DRY = [132, 126, 99];
 const GRASS_ROCK = [145, 138, 120];
 const YARD_EARTH = [133, 101, 68];
