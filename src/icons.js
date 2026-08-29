@@ -23,7 +23,7 @@ export const KINDS = {
   'extract-scav':    { label: 'Scav extracts',      glyph: 'exitScav',  color: '#E0872B', shape: 'sq'  },
   'extract-shared':  { label: 'Shared extracts',    glyph: 'exit',      color: '#2DBE6C', color2: '#E0872B', shape: 'sq' },
   'extract-transit': { label: 'Transits',           glyph: 'transit',   color: '#3A96BA', shape: 'sq'  },
-  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'soldier',   color: '#5C7A9E', shape: 'ci'  },
+  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'soldier',   color: '#688487', shape: 'ci'  },
   'spawn-scav':      { label: 'Scav spawns',        glyph: 'hood',      color: '#B89A3C', shape: 'ci'  },
   'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'crosshair', color: '#C66834', shape: 'ci'  },
   'spawn-boss':      { label: 'Boss spawns',        glyph: 'skull',     color: '#BE2E30', shape: 'ci', ring: true },

@@ -38,7 +38,7 @@ body{background:var(--bg-app);color:var(--text);font:400 var(--fs-body)/1.45 var
 #map3d{display:none}
 body.view-3d #map{display:none}
 body.view-3d #map3d{display:block}
-.leaflet-container{background:var(--bg-void);font-family:var(--f-body)}
+.leaflet-container{background: rgb(10,16,14);font-family:var(--f-body)}
 #map.base-roadmap,.leaflet-container.base-roadmap{background:#DCDFD8}
 :where(button,input,summary,a,[role=button]):focus-visible{outline:2px solid var(--focus);outline-offset:1px;border-radius:var(--r-sm)}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
