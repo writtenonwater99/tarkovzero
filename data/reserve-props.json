@@ -1,11 +1,15 @@
 {
- "_doc": "Hand-traced Reserve props in game coords (x, z), audited against tarkov.dev satellite zoom 5. Plane, service vehicles, rail stock, containers, and the radar are deliberately low-chroma overview landmarks.",
+ "_doc": "Hand-traced Reserve props in game coords (x, z), audited against tarkov.dev satellite zoom 5 and the source SVG Chopper silhouette. Helicopter/helipad, service vehicles, rail stock, containers, and the radar are deliberately low-chroma overview landmarks.",
  "props": [
-  { "type": "vehicle", "name": "Tarmac transport plane fuselage", "x": -126.8, "z": 40.1, "w": 4.4, "l": 38, "h": 3.8, "rot": 82, "color": [72, 88, 86] },
-  { "type": "vehicle", "name": "Tarmac transport plane wings", "x": -127.5, "z": 39.3, "w": 3.0, "l": 42, "h": 0.9, "rot": 145, "dz": 1.8, "color": [82, 96, 94] },
-  { "type": "vehicle", "name": "Tarmac transport plane tailplane", "x": -125.4, "z": 55.0, "w": 2.4, "l": 15, "h": 0.8, "rot": 145, "dz": 2.2, "color": [82, 96, 94] },
-  { "type": "vehicle", "name": "Plane port engine", "x": -113.8, "z": 30.5, "w": 3.1, "l": 5.8, "h": 2.2, "rot": 82, "dz": 0.8, "color": [70, 78, 76] },
-  { "type": "vehicle", "name": "Plane starboard engine", "x": -140.4, "z": 47.8, "w": 3.1, "l": 5.8, "h": 2.2, "rot": 82, "dz": 0.8, "color": [70, 78, 76] },
+  { "type": "tank", "name": "Helipad", "x": -127.0, "z": 39.5, "r": 23.5, "h": 0.14, "color": [86, 91, 88] },
+  { "type": "vehicle", "name": "Helipad H marking", "x": -132.5, "z": 39.0, "w": 1.0, "l": 12.0, "h": 0.06, "rot": 82, "dz": 0.15, "color": [210, 207, 190] },
+  { "type": "vehicle", "name": "Helipad H marking", "x": -121.5, "z": 40.5, "w": 1.0, "l": 12.0, "h": 0.06, "rot": 82, "dz": 0.15, "color": [210, 207, 190] },
+  { "type": "vehicle", "name": "Helipad H marking", "x": -127.0, "z": 39.8, "w": 1.0, "l": 11.0, "h": 0.06, "rot": 172, "dz": 0.15, "color": [210, 207, 190] },
+  { "type": "vehicle", "name": "Helicopter fuselage", "x": -127.4, "z": 38.5, "w": 4.6, "l": 15.0, "h": 3.4, "rot": 82, "dz": 0.45, "color": [70, 82, 75] },
+  { "type": "vehicle", "name": "Helicopter tail boom", "x": -125.3, "z": 51.0, "w": 1.5, "l": 16.0, "h": 1.35, "rot": 82, "dz": 1.65, "color": [66, 78, 71] },
+  { "type": "vehicle", "name": "Helicopter main rotor", "x": -127.4, "z": 38.5, "w": 0.55, "l": 38.0, "h": 0.12, "rot": 145, "dz": 4.15, "color": [42, 48, 44] },
+  { "type": "vehicle", "name": "Helicopter main rotor", "x": -127.4, "z": 38.5, "w": 0.55, "l": 38.0, "h": 0.12, "rot": 55, "dz": 4.15, "color": [42, 48, 44] },
+  { "type": "vehicle", "name": "Helicopter tail rotor", "x": -123.8, "z": 59.2, "w": 0.4, "l": 7.0, "h": 0.1, "rot": 170, "dz": 3.0, "color": [48, 54, 49] },
   { "type": "vehicle", "name": "Orange tarmac truck", "x": -111.7, "z": 23.7, "w": 2.5, "l": 6.2, "h": 2.6, "rot": 136, "color": [150, 82, 47] },
   { "type": "vehicle", "name": "Yellow tarmac loader", "x": -117.3, "z": 24.6, "w": 2.8, "l": 5.2, "h": 2.4, "rot": 145, "color": [176, 142, 61] },
   { "type": "vehicle", "name": "Orange tarmac truck", "x": -106.0, "z": 38.5, "w": 2.5, "l": 6.6, "h": 2.6, "rot": 136, "color": [150, 82, 47] },
@@ -39,8 +43,10 @@
   { "type": "container", "name": "Shipping yard container", "x": -38.0, "z": -163.0, "w": 2.5, "l": 10.0, "h": 2.7, "rot": 4, "color": [81, 101, 86] },
   { "type": "vehicle", "name": "Shipping yard truck", "x": -42.0, "z": -151.0, "w": 2.6, "l": 7.0, "h": 2.8, "rot": 95, "color": [102, 108, 104] },
 
-  { "type": "tank", "name": "Dome radar pedestal", "x": -8.0, "z": 181.5, "r": 5.0, "h": 3.8, "dz": 16.5, "color": [174, 174, 166] },
+  { "type": "tank", "name": "Dome radar pedestal", "x": -8.0, "z": 181.5, "r": 5.4, "h": 4.4, "dz": 16.5, "color": [188, 188, 180] },
   { "type": "vehicle", "name": "Dome radar support", "x": -8.0, "z": 181.5, "w": 7.5, "l": 7.5, "h": 1.2, "rot": 0, "dz": 15.5, "color": [114, 116, 112] },
+  { "type": "tank", "name": "Dome radar cap", "x": -8.0, "z": 181.5, "r": 7.2, "h": 0.8, "dz": 20.9, "color": [204, 204, 196] },
+  { "type": "tank", "name": "Dome radar mast", "x": -8.0, "z": 181.5, "r": 0.7, "h": 5.8, "dz": 21.4, "color": [150, 152, 148] },
   { "type": "vehicle", "name": "Dome service truck", "x": -35.5, "z": 174.5, "w": 2.5, "l": 6.0, "h": 2.5, "rot": 90, "color": [100, 108, 102] },
   { "type": "container", "name": "Dome service container", "x": -21.0, "z": 171.0, "w": 2.5, "l": 7.0, "h": 2.7, "rot": 90, "color": [78, 98, 101] }
  ]

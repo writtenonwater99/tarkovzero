@@ -161,14 +161,15 @@ const countOf = new Map();  // kind -> n
 /* ------------------------------------------------------------- labels ---- */
 // Two panes so major/minor place names can be styled apart in 2D, and the same
 // split feeds the 3D TextLayer through src.labels().
-const MAJOR = mapLabels.filter((l) => (l.size ?? 100) >= 100);
-const MINOR = mapLabels.filter((l) => (l.size ?? 100) < 100);
+const SURFACE_LABELS = mapLabels.filter((l) => l.floor !== 'U');
+const MAJOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) >= 100);
+const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
 const labelLayers = { major: placeLabelsLayer(map, MAJOR), minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor' }) };
 let density = store.get('density', 'all');
 let labelsShown = store.get('labels', true);
 function labelSet() {
   if (!labelsShown || density === 'off') return [];
-  return density === 'key' ? MAJOR : mapLabels;
+  return density === 'key' ? mapLabels.filter((l) => (l.size ?? 100) >= 100) : mapLabels;
 }
 function applyLabels() {
   const wantMajor = labelsShown && density !== 'off';
@@ -493,6 +494,7 @@ async function setView(mode) {
           updateHud();
         },
       });
+      view3d.setFloor(floor === 'all' || floor === 'U' ? floor : Number(floor));
       try { view3d.deck?.setProps({ onHover: (i) => { const c = i?.coordinate; Array.isArray(c) ? showCoords(-c[0], -c[1]) : idleCoords(); } }); } catch {}
     }
     const c = map.getCenter();
@@ -510,7 +512,7 @@ viewBtns.forEach((b) => (b.onclick = () => setView(b.dataset.view)));
 // Floors
 const allowedFloors = new Set(mapData.floors.map(String));
 $$('#floors .seg-cell').forEach((b) => { b.hidden = !allowedFloors.has(b.dataset.floor); });
-let floor = String(store.get('floor', 'all'));
+let floor = String(new URLSearchParams(location.search).get('floor') ?? store.get('floor', 'all'));
 if (!allowedFloors.has(floor)) floor = 'all';
 const floorBtns = $$('#floors .seg-cell:not([hidden])');
 function setFloor(f) {
