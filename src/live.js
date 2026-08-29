@@ -7,6 +7,8 @@ const RELAY = import.meta.env.VITE_RELAY_URL || (import.meta.env.DEV ? 'ws://loc
 const COLORS = ['#ff3d3d', '#3d9bff', '#3dff7a', '#ffd23d', '#d63dff', '#3dfff0'];
 const CODE_RE = /^[A-Z0-9]{6}$/;
 export const normCode = (c) => (c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+// Names/status can come from anyone publishing to a code — always escape before rendering as HTML.
+export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function createLive(map, mapData, ui) {
   const players = new Map();
@@ -32,14 +34,14 @@ export function createLive(map, mapData, ui) {
     // Username sent by the companion wins over the code; a name typed on the site is a fallback/override.
     if (typeof m.name === 'string' && m.name.trim() && m.name.trim() !== p.name && !p.nameOverride) {
       p.name = m.name.trim().slice(0, 24);
-      p.marker?.setTooltipContent(p.name);
+      p.marker?.setTooltipContent(esc(p.name));
       persist();
     }
-    if (m.map && m.map !== mapData.key) { p.map = m.map; p.status = `on ${m.map} (not ${mapData.key})`; ui.render(); return; }
+    if (m.map && m.map !== mapData.key) { p.map = m.map; p.status = `on ${String(m.map).slice(0, 32)} (not ${mapData.key})`; ui.render(); return; }
     p.map = m.map ?? mapData.key;
     const ll = pos(m);
     if (!p.marker) {
-      p.marker = L.marker(ll, { icon: arrowIcon(p.color), pane, interactive: true }).addTo(map).bindTooltip(p.name, { permanent: true, direction: 'right', offset: [14, 0], className: 'player-tip' });
+      p.marker = L.marker(ll, { icon: arrowIcon(p.color), pane, interactive: true }).addTo(map).bindTooltip(esc(p.name), { permanent: true, direction: 'right', offset: [14, 0], className: 'player-tip' });
       p.trail = L.polyline([], { color: p.color, weight: 3, opacity: 0.8, pane }).addTo(map);
     } else p.marker.setLatLng(ll);
     setHeading(p, m.yaw);
@@ -79,7 +81,7 @@ export function createLive(map, mapData, ui) {
   function rename(code, name) {
     const p = players.get(code); if (!p) return;
     p.name = (name || '').trim().slice(0, 24) || p.code; p.nameOverride = !!name.trim();
-    p.marker?.setTooltipContent(p.name); persist(); ui.render();
+    p.marker?.setTooltipContent(esc(p.name)); persist(); ui.render();
   }
   function remove(code) {
     const p = players.get(code); if (!p) return;
