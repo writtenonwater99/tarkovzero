@@ -1,0 +1,147 @@
+import L from 'leaflet';
+import { CUSTOMS } from './mapdata.js';
+import { getCRS, pos, toLatLngBounds } from './crs.js';
+import { loadMapData } from './api.js';
+import { roadmapLayer } from './roadmap.js';
+import { placeLabelsLayer } from './placeLabels.js';
+import { CUSTOMS_LABELS } from './labels.js';
+import { KINDS, iconHtml } from './icons.js';
+
+const mapData = CUSTOMS;
+const map = L.map('map', {
+  crs: getCRS(mapData),
+  minZoom: mapData.minZoom,
+  maxZoom: mapData.maxZoom + 1,
+  zoomSnap: 0,        // allow fractional zoom so the map can fit the window exactly
+  zoomDelta: 0.5,
+  wheelPxPerZoomLevel: 120,
+  maxBounds: toLatLngBounds(mapData.bounds).pad(0.5),
+  attributionControl: false,
+});
+const bounds = toLatLngBounds(mapData.bounds);
+
+// Base layer: satellite tiles.
+const tiles = L.tileLayer(mapData.tilePath, {
+  tileSize: mapData.tileSize,
+  maxNativeZoom: mapData.maxZoom,
+  keepBuffer: 4,          // keep more off-screen tiles so panning/zooming doesn't blank
+  updateWhenZooming: false,
+}).addTo(map);
+// Retry tiles that fail to load (transient CDN errors otherwise stay blank).
+tiles.on('tileerror', (e) => {
+  const tries = (e.tile._retries = (e.tile._retries ?? 0) + 1);
+  if (tries <= 3) setTimeout(() => { e.tile.src = e.tile.src.split('?')[0] + '?r=' + tries; }, 500 * tries);
+});
+
+// Base layer 2: Google-Maps-style vector map from the same geometry.
+const roadmap = roadmapLayer(mapData.svgPath, mapData.svgLayer, bounds);
+L.control.layers({ Satellite: tiles, Map: roadmap }, {}, { position: 'topright' }).addTo(map);
+// ?base=map selects the vector map; the choice is remembered.
+const base = new URLSearchParams(location.search).get('base') ?? localStorage.getItem('base');
+if (base === 'map') { map.removeLayer(tiles); roadmap.addTo(map); }
+const setBaseClass = (isMap) => map.getContainer().classList.toggle('base-roadmap', isMap);
+setBaseClass(base === 'map');
+map.on('baselayerchange', (e) => { const isMap = e.layer === roadmap; setBaseClass(isMap); localStorage.setItem('base', isMap ? 'map' : 'satellite'); });
+
+// View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
+const fit = () => map.fitBounds(bounds, { padding: [0, 0], animate: false });
+const hash = location.hash.slice(1).split('/').map(Number);
+let autoFit = true; // refit on window resize only until the user navigates (or arrived via a permalink)
+if (hash.length === 3 && hash.every(Number.isFinite)) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
+else fit();
+window.addEventListener('resize', () => { if (autoFit) fit(); });
+for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
+map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
+map.on('moveend', () => {
+  const c = map.getCenter();
+  history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`);
+});
+
+// Live cursor coords in game space, handy for verifying alignment.
+const coordsEl = document.getElementById('coords');
+map.on('mousemove', (e) => {
+  coordsEl.textContent = `x ${e.latlng.lng.toFixed(1)}  z ${e.latlng.lat.toFixed(1)}`;
+});
+
+const icons = {};
+const iconFor = (kind) => (icons[kind] ??= L.divIcon({ className: '', html: iconHtml(kind), iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -10] }));
+const marker = (p, kind, html) => L.marker(pos(p), { icon: iconFor(kind) }).bindPopup(html);
+
+function buildLayers(d) {
+  const groups = {};
+  const add = (kind, m) => {
+    (groups[kind] ??= { ...KINDS[kind], layer: L.layerGroup(), n: 0 });
+    groups[kind].layer.addLayer(m); groups[kind].n++;
+  };
+
+  for (const e of d.extracts) {
+    const f = ['pmc', 'scav', 'transit'].includes(e.faction) ? e.faction : 'shared';
+    add('extract-' + f, marker(e.position, 'extract-' + f, `<b>${e.name}</b><br>Extract · ${f}${e.note ? `<br><i>${e.note}</i>` : ''}`));
+  }
+  for (const s of d.spawns) {
+    const isBoss = s.categories.includes('boss');
+    const isPmc = s.sides.includes('pmc') || s.sides.includes('all');
+    const isSniper = s.categories.includes('sniper');
+    const isScav = s.categories.includes('scav');
+    const info = `${s.zoneName ?? ''}<br>sides: ${s.sides.join(', ')}<br>cat: ${s.categories.join(', ')}`;
+    if (isBoss) add('spawn-boss', marker(s.position, 'spawn-boss', `<b>Boss spawn</b><br>${info}`));
+    else if (isPmc && s.categories.includes('player')) add('spawn-pmc', marker(s.position, 'spawn-pmc', `<b>PMC spawn</b><br>${info}`));
+    else if (isSniper) add('spawn-sniper', marker(s.position, 'spawn-sniper', `<b>Sniper scav spawn</b><br>${info}`));
+    else if (isScav) add('spawn-scav', marker(s.position, 'spawn-scav', `<b>Scav spawn</b><br>${info}`));
+  }
+  for (const h of d.hazards) add('hazard', marker(h.position, 'hazard', `<b>${h.name}</b>`));
+  for (const w of d.stationaryWeapons) add('weapon', marker(w.position, 'weapon', `<b>${w.stationaryWeapon.name}</b>`));
+  for (const sw of d.switches ?? []) add('switch', marker(sw.position, 'switch', `<b>${sw.name}</b>`));
+  for (const l of d.locks) add('lock', marker(l.position, 'lock', `<b>${l.key?.name ?? 'Lock'}</b><br>${l.lockType}`));
+  return groups;
+}
+
+const layersEl = document.getElementById('layers');
+const statusEl = document.getElementById('status');
+const defaultOn = new Set(['extract-pmc', 'spawn-pmc']);
+
+function addToggle(label, kind, layer, count, on) {
+  if (on) layer.addTo(map);
+  const el = document.createElement('label');
+  el.innerHTML = `<input type="checkbox" ${on ? 'checked' : ''}> ${kind ? iconHtml(kind, 18) : ''} ${label} ${count != null ? `<span class="count">${count}</span>` : ''}`;
+  el.querySelector('input').onchange = (ev) => (ev.target.checked ? layer.addTo(map) : map.removeLayer(layer));
+  layersEl.appendChild(el);
+}
+const section = (title) => { const h = document.createElement('div'); h.className = 'group'; h.textContent = title; layersEl.appendChild(h); };
+
+section('Labels');
+addToggle('Place names', null, placeLabelsLayer(map, CUSTOMS_LABELS), CUSTOMS_LABELS.length, true);
+section('Markers');
+// Placeholder toggles until the tarkov.dev API answers; replaced by real ones in renderMarkers().
+const MARKER_KINDS = Object.keys(KINDS);
+const placeholders = document.createElement('div');
+placeholders.className = 'pending';
+placeholders.title = 'Waiting for tarkov.dev API';
+for (const kind of MARKER_KINDS) placeholders.innerHTML += `<label><input type="checkbox" disabled> ${iconHtml(kind, 18)} ${KINDS[kind].label} <span class="count">…</span></label>`;
+layersEl.appendChild(placeholders);
+
+// Markers come from the tarkov.dev API; retry until it answers, and cache the last good response.
+const CACHE_KEY = `tarkov-maps:${mapData.key}`;
+function renderMarkers(data, source) {
+  const groups = buildLayers(data);
+  placeholders.remove();
+  const bosses = data.bosses.map((b) => `${b.name} (${Math.round(b.spawnChance * 100)}%)`).join(', ');
+  statusEl.innerHTML = `Data: ${source}${bosses ? `<br>Bosses: ${bosses}` : ''}`;
+  for (const kind of MARKER_KINDS) {
+    const g = groups[kind];
+    if (g) addToggle(g.label, kind, g.layer, g.n, defaultOn.has(kind));
+  }
+}
+async function loadMarkers(attempt = 0) {
+  try {
+    const { data, source } = await loadMapData(mapData.key);
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch {}
+    renderMarkers(data, source);
+  } catch (e) {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached && attempt === 0) return renderMarkers(JSON.parse(cached), 'browser cache');
+    statusEl.textContent = `Markers: tarkov.dev API unavailable, retrying every 60s… (${attempt + 1})`;
+    setTimeout(() => loadMarkers(attempt + 1), 60_000);
+  }
+}
+loadMarkers();

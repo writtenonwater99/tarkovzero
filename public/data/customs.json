@@ -1,0 +1,4892 @@
+{
+ "name": "Customs",
+ "normalizedName": "customs",
+ "source": "community (SPT database + EFT Wiki)",
+ "builtAt": "2026-08-29T02:02:07.079Z",
+ "extracts": [
+  {
+   "id": "wiki-50",
+   "name": "Trailer Park",
+   "faction": "pmc",
+   "note": "",
+   "position": {
+    "x": -269.7,
+    "y": 0,
+    "z": -217.2
+   }
+  },
+  {
+   "id": "wiki-51",
+   "name": "Smugglers' Boat",
+   "faction": "shared",
+   "note": "Requires Note with code word Voron",
+   "position": {
+    "x": -16.2,
+    "y": 0,
+    "z": 126.8
+   }
+  },
+  {
+   "id": "wiki-52",
+   "name": "Dorms V-Ex",
+   "faction": "pmc",
+   "note": "Requires ~20,000 Roubles",
+   "position": {
+    "x": 193.1,
+    "y": 0,
+    "z": 228.4
+   }
+  },
+  {
+   "id": "wiki-53",
+   "name": "ZB-1011",
+   "faction": "pmc",
+   "note": "",
+   "position": {
+    "x": 627.3,
+    "y": 0,
+    "z": -132.3
+   }
+  },
+  {
+   "id": "wiki-54",
+   "name": "Smugglers' Bunker (ZB-1012)",
+   "faction": "shared",
+   "note": "Requires Note with code word Voron",
+   "position": {
+    "x": 466.4,
+    "y": 0,
+    "z": -115.5
+   }
+  },
+  {
+   "id": "wiki-55",
+   "name": "Old Gas Station",
+   "faction": "pmc",
+   "note": "Green flare = Open",
+   "position": {
+    "x": 318,
+    "y": 0,
+    "z": -178.1
+   }
+  },
+  {
+   "id": "wiki-56",
+   "name": "ZB-013",
+   "faction": "pmc",
+   "note": "Requires lever activation in warehouse #4 and Factory emergency exit key",
+   "position": {
+    "x": 201.7,
+    "y": 0,
+    "z": -147
+   }
+  },
+  {
+   "id": "wiki-57",
+   "name": "RUAF Roadblock",
+   "faction": "shared",
+   "note": "PvE only",
+   "position": {
+    "x": 9.8,
+    "y": 0,
+    "z": -153.8
+   }
+  },
+  {
+   "id": "wiki-58",
+   "name": "Crossroads",
+   "faction": "shared",
+   "note": "",
+   "position": {
+    "x": -294.7,
+    "y": 0,
+    "z": -83.1
+   }
+  },
+  {
+   "id": "wiki-59",
+   "name": "Trailer Park Workers' Shack",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": -216.9,
+    "y": 0,
+    "z": -225.5
+   }
+  },
+  {
+   "id": "wiki-60",
+   "name": "Railroad to Tarkov",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": -137.4,
+    "y": 0,
+    "z": -217.7
+   }
+  },
+  {
+   "id": "wiki-61",
+   "name": "Railroad to Port",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": -115.9,
+    "y": 0,
+    "z": 58.1
+   }
+  },
+  {
+   "id": "wiki-62",
+   "name": "Sniper Roadblock",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 34.4,
+    "y": 0,
+    "z": 138.8
+   }
+  },
+  {
+   "id": "wiki-63",
+   "name": "Old Road Gate",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 197.3,
+    "y": 0,
+    "z": 228
+   }
+  },
+  {
+   "id": "wiki-64",
+   "name": "Railroad to Military Base",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 483.6,
+    "y": 0,
+    "z": 222.7
+   }
+  },
+  {
+   "id": "wiki-65",
+   "name": "Passage Between Rocks",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 525.6,
+    "y": 0,
+    "z": 209.1
+   }
+  },
+  {
+   "id": "wiki-66",
+   "name": "Military Base CP",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 635.2,
+    "y": 0,
+    "z": 170.4
+   }
+  },
+  {
+   "id": "wiki-67",
+   "name": "Scav Checkpoint",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 642.1,
+    "y": 0,
+    "z": -19.6
+   }
+  },
+  {
+   "id": "wiki-68",
+   "name": "Administration Gate",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 659.7,
+    "y": 0,
+    "z": -46.5
+   }
+  },
+  {
+   "id": "wiki-69",
+   "name": "Factory Far Corner",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 642.7,
+    "y": 0,
+    "z": -158.6
+   }
+  },
+  {
+   "id": "wiki-70",
+   "name": "Warehouse 4",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 344.1,
+    "y": 0,
+    "z": -18.1
+   }
+  },
+  {
+   "id": "wiki-71",
+   "name": "Factory Shacks",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 219.4,
+    "y": 0,
+    "z": 12.9
+   }
+  },
+  {
+   "id": "wiki-72",
+   "name": "Old Gas Station Gate",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 307.1,
+    "y": 0,
+    "z": -198
+   }
+  },
+  {
+   "id": "wiki-73",
+   "name": "Warehouse 17",
+   "faction": "scav",
+   "note": "",
+   "position": {
+    "x": 68,
+    "y": 0,
+    "z": -68.9
+   }
+  },
+  {
+   "id": "wiki-555",
+   "name": "Transit to Factory",
+   "faction": "transit",
+   "note": "Only available 1 min after raid start",
+   "position": {
+    "x": 355.9,
+    "y": 0,
+    "z": -188.5
+   }
+  },
+  {
+   "id": "wiki-558",
+   "name": "Transit to Reserve",
+   "faction": "transit",
+   "note": "Only available 1 min after raid start",
+   "position": {
+    "x": 642.4,
+    "y": 0,
+    "z": 168.9
+   }
+  },
+  {
+   "id": "wiki-559",
+   "name": "Transit to Interchange",
+   "faction": "transit",
+   "note": "Only available 1 min after raid start",
+   "position": {
+    "x": -297.8,
+    "y": 0,
+    "z": -204.2
+   }
+  },
+  {
+   "id": "wiki-563",
+   "name": "Boiler Room Basement (Co-op)",
+   "faction": "shared",
+   "note": "Requires PMC + Scav",
+   "position": {
+    "x": 126.6,
+    "y": 0,
+    "z": -49.2
+   }
+  },
+  {
+   "id": "wiki-565",
+   "name": "Railroad Passage (Flare)",
+   "faction": "pmc",
+   "note": "Requires a green flare to be shot into the sky while inside the signal flare area.",
+   "position": {
+    "x": 196.6,
+    "y": 0,
+    "z": -267.1
+   }
+  },
+  {
+   "id": "wiki-569",
+   "name": "Transit to Shoreline",
+   "faction": "transit",
+   "note": "Only available 1 min after raid start",
+   "position": {
+    "x": 38.4,
+    "y": 0,
+    "z": 141
+   }
+  }
+ ],
+ "spawns": [
+  {
+   "position": {
+    "x": 73.6,
+    "y": 1.1,
+    "z": -63.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 213.6,
+    "y": 1.2,
+    "z": 1.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCrossRoad"
+  },
+  {
+   "position": {
+    "x": 571.4,
+    "y": 1.5,
+    "z": -53.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -161.6,
+    "y": 3.2,
+    "z": -126.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 68.8,
+    "y": 1.2,
+    "z": -65.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 122.2,
+    "y": 1.4,
+    "z": -44.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 584.1,
+    "y": 9.7,
+    "z": 146.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -273.5,
+    "y": 1,
+    "z": -72.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": -220.2,
+    "y": 1.1,
+    "z": -141.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 581.8,
+    "y": 3.1,
+    "z": 0.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "sniper"
+   ],
+   "zoneName": "ZoneBlockPostSniper"
+  },
+  {
+   "position": {
+    "x": 288.1,
+    "y": 1.7,
+    "z": -201.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 447.4,
+    "y": 7.6,
+    "z": 111.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 531.9,
+    "y": 9.5,
+    "z": 195.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 546.9,
+    "y": 2.2,
+    "z": 45.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 574,
+    "y": 1.5,
+    "z": -114.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 101.8,
+    "y": 1.2,
+    "z": 11.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 269.2,
+    "y": 1.5,
+    "z": -55.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 569.2,
+    "y": -0.3,
+    "z": -8.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -196,
+    "y": 1.5,
+    "z": -234.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 654.8,
+    "y": 1.1,
+    "z": -164.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 113,
+    "y": 1.3,
+    "z": -58.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 356.5,
+    "y": 1.2,
+    "z": -24.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": 587.9,
+    "y": 8.9,
+    "z": 141.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -223.2,
+    "y": 1.1,
+    "z": -147.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 100.2,
+    "y": 1.2,
+    "z": 12
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 62.2,
+    "y": 9,
+    "z": -60.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 570.1,
+    "y": 1.5,
+    "z": -55
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 569.3,
+    "y": -0.3,
+    "z": -10.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 172.6,
+    "y": 2.8,
+    "z": 157.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": -132.9,
+    "y": -1.7,
+    "z": 39.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -133.8,
+    "y": 0.7,
+    "z": 14.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 658,
+    "y": 1.1,
+    "z": -59.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": -151.8,
+    "y": 1.3,
+    "z": -129.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 363.2,
+    "y": 12.7,
+    "z": 155.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -130.7,
+    "y": -2.1,
+    "z": 38.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 100.6,
+    "y": 1.2,
+    "z": -110.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 69.7,
+    "y": 7.8,
+    "z": -66.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 569.1,
+    "y": 1.5,
+    "z": -54.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 568.9,
+    "y": -1.5,
+    "z": -25.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneBlockPost"
+  },
+  {
+   "position": {
+    "x": -131.3,
+    "y": -2.1,
+    "z": 42.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 525.6,
+    "y": 8.9,
+    "z": 199
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 317.3,
+    "y": 1.1,
+    "z": -78.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 107.1,
+    "y": 16.2,
+    "z": -47.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "sniper"
+   ],
+   "zoneName": "ZoneSnipeBrige"
+  },
+  {
+   "position": {
+    "x": 569.5,
+    "y": -0.3,
+    "z": -13
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -247.5,
+    "y": -0.2,
+    "z": -14.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": -309.9,
+    "y": 1,
+    "z": -94.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 603.5,
+    "y": 1.1,
+    "z": -139.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 267.6,
+    "y": 1.5,
+    "z": -75.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 510.9,
+    "y": 3.4,
+    "z": 46.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBlockPost"
+  },
+  {
+   "position": {
+    "x": 339.3,
+    "y": 1.2,
+    "z": -190.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneOldAZS"
+  },
+  {
+   "position": {
+    "x": -147.9,
+    "y": 1.7,
+    "z": -135.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -183.6,
+    "y": 1.6,
+    "z": -190.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 100.7,
+    "y": 1.2,
+    "z": 16.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 125.2,
+    "y": 1.3,
+    "z": -146.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -216.6,
+    "y": -1.5,
+    "z": -2.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -329.4,
+    "y": 1,
+    "z": -211.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 13.1,
+    "y": 1.2,
+    "z": -125.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 518.3,
+    "y": 8.3,
+    "z": 187.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 478,
+    "y": 2.7,
+    "z": -83.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -133.6,
+    "y": 0.7,
+    "z": 8.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 19.4,
+    "y": 1.1,
+    "z": -66.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 253.8,
+    "y": 52,
+    "z": -19.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "sniper"
+   ],
+   "zoneName": "ZoneSnipeTower"
+  },
+  {
+   "position": {
+    "x": 430.8,
+    "y": 1.9,
+    "z": 54.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 64.6,
+    "y": 1.2,
+    "z": -45.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 410.9,
+    "y": 1.4,
+    "z": -112
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": 539.7,
+    "y": 2.9,
+    "z": 48
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 569.8,
+    "y": 1.5,
+    "z": -52.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 582.3,
+    "y": 9.8,
+    "z": 147.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 286.3,
+    "y": 1.5,
+    "z": -52.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 570.5,
+    "y": 1.5,
+    "z": -111.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 96.1,
+    "y": 1.2,
+    "z": 13.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -221.7,
+    "y": -0.7,
+    "z": -3.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -286.3,
+    "y": 0.2,
+    "z": -232.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 385.7,
+    "y": 1.1,
+    "z": -116.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 605,
+    "y": 1.2,
+    "z": -119.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 195.3,
+    "y": 1.8,
+    "z": -126.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -154.4,
+    "y": 1,
+    "z": -128.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -313.9,
+    "y": 0.9,
+    "z": -88.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 119.7,
+    "y": 1.1,
+    "z": -34.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -191,
+    "y": 1.5,
+    "z": -236.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -218.7,
+    "y": 1.1,
+    "z": -148.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 503.2,
+    "y": 1.2,
+    "z": -59.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 585.7,
+    "y": 9.5,
+    "z": 145.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 103.2,
+    "y": 1.4,
+    "z": -70.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 185.4,
+    "y": 2.8,
+    "z": 182.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": 226.4,
+    "y": -0.9,
+    "z": 121.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneCrossRoad"
+  },
+  {
+   "position": {
+    "x": -163,
+    "y": 3.2,
+    "z": -168.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 588,
+    "y": 1.1,
+    "z": -64.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 548.1,
+    "y": 2.8,
+    "z": 47.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 529.6,
+    "y": 2.5,
+    "z": 43.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBlockPost"
+  },
+  {
+   "position": {
+    "x": -14.4,
+    "y": -7.7,
+    "z": 126.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 19.3,
+    "y": 1.3,
+    "z": -109.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 422.3,
+    "y": 4.2,
+    "z": 97.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 142,
+    "y": 1.1,
+    "z": -15
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 315.8,
+    "y": 1.1,
+    "z": -82.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 645.3,
+    "y": 1.5,
+    "z": 46.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 478.9,
+    "y": 2.7,
+    "z": -79.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 614.4,
+    "y": -0.3,
+    "z": -102.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -133.7,
+    "y": 0.7,
+    "z": 12.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 101.4,
+    "y": 1.2,
+    "z": 17.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 101.6,
+    "y": 1.2,
+    "z": 19
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 503.8,
+    "y": 1.2,
+    "z": -55.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 291.7,
+    "y": 1.5,
+    "z": -197.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -197.2,
+    "y": 1.5,
+    "z": -233.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 454.8,
+    "y": 2.1,
+    "z": 61.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 391.6,
+    "y": 1.3,
+    "z": -117.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -217.6,
+    "y": 1.1,
+    "z": -144.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 5.9,
+    "y": 1.4,
+    "z": -90.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneWade"
+  },
+  {
+   "position": {
+    "x": 641.5,
+    "y": 1.3,
+    "z": 43.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 255.5,
+    "y": 1.2,
+    "z": -108.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -1.9,
+    "y": -5,
+    "z": 127
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 133.8,
+    "y": 1.7,
+    "z": -82
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 294.3,
+    "y": 1.4,
+    "z": -195.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 77.8,
+    "y": 1.4,
+    "z": -108.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 454.3,
+    "y": 2.7,
+    "z": -81.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": 101.4,
+    "y": 1.2,
+    "z": 22.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -311.9,
+    "y": 1,
+    "z": -125
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 480.6,
+    "y": 2.7,
+    "z": -81.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 314.1,
+    "y": 1.2,
+    "z": -90.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 34.2,
+    "y": 1.1,
+    "z": -49.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 71.5,
+    "y": 7.8,
+    "z": -66.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 102.5,
+    "y": 1.4,
+    "z": -41.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 620.1,
+    "y": -0.3,
+    "z": -97
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 96,
+    "y": 1.2,
+    "z": 11.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 219.3,
+    "y": -0.6,
+    "z": 196.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneCrossRoad"
+  },
+  {
+   "position": {
+    "x": -300.6,
+    "y": 0,
+    "z": -44.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 89.1,
+    "y": 1.3,
+    "z": -47.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 190.7,
+    "y": -0.1,
+    "z": 175.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": 569.4,
+    "y": -0.5,
+    "z": -7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 348.4,
+    "y": 8.9,
+    "z": 152.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -323.9,
+    "y": 1.2,
+    "z": -225.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 104.2,
+    "y": 1.2,
+    "z": 18.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 188.1,
+    "y": 1.3,
+    "z": -1.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCrossRoad"
+  },
+  {
+   "position": {
+    "x": 54.1,
+    "y": 7.7,
+    "z": -67.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 121.7,
+    "y": 1.4,
+    "z": -42.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 569.9,
+    "y": 1.5,
+    "z": -50.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 27.5,
+    "y": -1.1,
+    "z": 127.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 569.4,
+    "y": -0.3,
+    "z": -11.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 16,
+    "y": 1.3,
+    "z": -126.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 418.8,
+    "y": 1.1,
+    "z": 56.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 227.9,
+    "y": 1.3,
+    "z": -86.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -170.2,
+    "y": 1.1,
+    "z": -46.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 467.4,
+    "y": 1.6,
+    "z": 60.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 480.2,
+    "y": 2.7,
+    "z": -84.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 377.7,
+    "y": 1.4,
+    "z": -93.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 569.6,
+    "y": -0.3,
+    "z": -14.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 6.5,
+    "y": 1.3,
+    "z": -95.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneWade"
+  },
+  {
+   "position": {
+    "x": 647.5,
+    "y": 1.9,
+    "z": 48.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 365.1,
+    "y": 1.3,
+    "z": -108.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": -133.5,
+    "y": 0.9,
+    "z": 6.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -134.2,
+    "y": -1.4,
+    "z": 38.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 26.8,
+    "y": 4.5,
+    "z": -60
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -206.3,
+    "y": -1.3,
+    "z": 2.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 471.2,
+    "y": 2.7,
+    "z": -54.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": 375.1,
+    "y": 1.4,
+    "z": -88.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 519.8,
+    "y": 7.8,
+    "z": 204.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 98.1,
+    "y": 1.1,
+    "z": -107.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -148.3,
+    "y": 1.6,
+    "z": -143.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -236.4,
+    "y": 1.5,
+    "z": -235.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 544.7,
+    "y": 2.9,
+    "z": 48.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -333.8,
+    "y": -0.4,
+    "z": -84.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 97.2,
+    "y": 1.4,
+    "z": -42.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 236.3,
+    "y": 1.2,
+    "z": -95.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -133.7,
+    "y": 0.7,
+    "z": 9.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 394.9,
+    "y": 1.4,
+    "z": -84
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 174.7,
+    "y": -0.1,
+    "z": 152.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": 208.2,
+    "y": 1.8,
+    "z": -116.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 617.5,
+    "y": -0.3,
+    "z": -103.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 323.3,
+    "y": 1.6,
+    "z": -98.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": 642.1,
+    "y": 1.4,
+    "z": 45.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 568.1,
+    "y": 1.5,
+    "z": -111.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 46.8,
+    "y": -3.9,
+    "z": 126.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 105.5,
+    "y": 1.2,
+    "z": 17.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 172.5,
+    "y": 1.2,
+    "z": -6.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 569,
+    "y": 1.5,
+    "z": -117.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 355.8,
+    "y": 10,
+    "z": 152.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -152,
+    "y": 1.3,
+    "z": -137.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -17.2,
+    "y": 0,
+    "z": -141
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneWade"
+  },
+  {
+   "position": {
+    "x": 379,
+    "y": 1.2,
+    "z": -116.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 8.7,
+    "y": 1.3,
+    "z": -127.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 175.3,
+    "y": 1.2,
+    "z": -5.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCrossRoad"
+  },
+  {
+   "position": {
+    "x": -160.8,
+    "y": 3.1,
+    "z": -101.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 423.8,
+    "y": 1.1,
+    "z": 42.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 368.4,
+    "y": 1.4,
+    "z": -90.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 122,
+    "y": 0.3,
+    "z": 129.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": -133.6,
+    "y": 0.7,
+    "z": 11.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 294.9,
+    "y": 2.1,
+    "z": -160.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneOldAZS"
+  },
+  {
+   "position": {
+    "x": -309.9,
+    "y": 1,
+    "z": -97
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -14.7,
+    "y": -7.7,
+    "z": 121.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 99.2,
+    "y": 1.2,
+    "z": 18.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 62.6,
+    "y": 7.8,
+    "z": -66.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 569.5,
+    "y": -0.3,
+    "z": -19.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 571.2,
+    "y": 1.5,
+    "z": -51.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 61.1,
+    "y": 9,
+    "z": -60.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 569.5,
+    "y": -0.5,
+    "z": -5.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 90.1,
+    "y": 1.4,
+    "z": -102
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 388.4,
+    "y": 1.1,
+    "z": -114.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 545,
+    "y": 3.2,
+    "z": 51
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 388.9,
+    "y": 1.4,
+    "z": -97.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 536.9,
+    "y": 1.4,
+    "z": -114.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 104.6,
+    "y": 1.2,
+    "z": 14.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -9.7,
+    "y": -6.9,
+    "z": 127.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 569.6,
+    "y": -0.3,
+    "z": -16.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 502.3,
+    "y": 1.2,
+    "z": -64.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -157.7,
+    "y": 1.6,
+    "z": -190.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": -194.3,
+    "y": 1.6,
+    "z": -232.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 648.8,
+    "y": 1.8,
+    "z": 50.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 178.6,
+    "y": -0.1,
+    "z": 181.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": -189.1,
+    "y": 1.5,
+    "z": -235.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 580,
+    "y": -0.6,
+    "z": 33.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBlockPost"
+  },
+  {
+   "position": {
+    "x": 96.6,
+    "y": 1.3,
+    "z": -106.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 663.3,
+    "y": 1.2,
+    "z": -99.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 394.9,
+    "y": 2.2,
+    "z": -120.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 102.2,
+    "y": 1.2,
+    "z": 19.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 99.7,
+    "y": 1.2,
+    "z": 14.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 629.7,
+    "y": 1.4,
+    "z": -135.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 19.3,
+    "y": -0.9,
+    "z": 36.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": -217.4,
+    "y": 1.2,
+    "z": -137
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 87,
+    "y": 1,
+    "z": -59.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -320.6,
+    "y": 0.9,
+    "z": -223.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 291.5,
+    "y": 2.4,
+    "z": -169.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneOldAZS"
+  },
+  {
+   "position": {
+    "x": 481.1,
+    "y": 2.7,
+    "z": -79.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -132.9,
+    "y": -1.8,
+    "z": 44
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -21.3,
+    "y": -8.5,
+    "z": 115.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 313.8,
+    "y": 1.2,
+    "z": -191.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneOldAZS"
+  },
+  {
+   "position": {
+    "x": 18.8,
+    "y": 1.4,
+    "z": -127.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 537.5,
+    "y": 1.1,
+    "z": -130.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 102.3,
+    "y": 1.2,
+    "z": 16.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 571.6,
+    "y": 11.4,
+    "z": 145.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 21,
+    "y": 1.3,
+    "z": -109.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneWade"
+  },
+  {
+   "position": {
+    "x": 60.7,
+    "y": 4.4,
+    "z": -67.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 617.7,
+    "y": -0.3,
+    "z": -96.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 41.7,
+    "y": 1.2,
+    "z": -143.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 522.4,
+    "y": 10.1,
+    "z": 179.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -323.9,
+    "y": 1.1,
+    "z": -222.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 57.7,
+    "y": 1.2,
+    "z": -37.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 296.6,
+    "y": 1.9,
+    "z": -200.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 98.1,
+    "y": 1.2,
+    "z": 12
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 29.8,
+    "y": 1.1,
+    "z": -29.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 576.4,
+    "y": 1.5,
+    "z": -115.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -321,
+    "y": 1,
+    "z": -220.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 513.7,
+    "y": 1.2,
+    "z": -55.3
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 103.3,
+    "y": 1.2,
+    "z": 15.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 571.7,
+    "y": -0.9,
+    "z": 6.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBlockPost"
+  },
+  {
+   "position": {
+    "x": 391.9,
+    "y": 1.4,
+    "z": -86.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": 502.7,
+    "y": 1.2,
+    "z": -62.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 52.4,
+    "y": 7.7,
+    "z": -59.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -209.1,
+    "y": -1.4,
+    "z": 0.7
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -131.7,
+    "y": 0.7,
+    "z": 7.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 503.4,
+    "y": 1.2,
+    "z": -57.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -132,
+    "y": 0.7,
+    "z": 12.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 260.3,
+    "y": 1.2,
+    "z": -91.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 315.8,
+    "y": 1.1,
+    "z": -79.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 310.7,
+    "y": 1.3,
+    "z": -157
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneOldAZS"
+  },
+  {
+   "position": {
+    "x": 283.5,
+    "y": 1.5,
+    "z": -70
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -19.8,
+    "y": -8.5,
+    "z": 113.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 476.1,
+    "y": 14.8,
+    "z": -71.9
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "sniper"
+   ],
+   "zoneName": "ZoneSnipeFactory"
+  },
+  {
+   "position": {
+    "x": 289,
+    "y": 1.4,
+    "z": -196.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 252.2,
+    "y": 1.2,
+    "z": -108.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 657.8,
+    "y": 1.1,
+    "z": -134.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactorySide"
+  },
+  {
+   "position": {
+    "x": 20.1,
+    "y": 1.1,
+    "z": -115.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneWade"
+  },
+  {
+   "position": {
+    "x": 411.6,
+    "y": 1,
+    "z": 0.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 615.6,
+    "y": -0.3,
+    "z": -96.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 276.5,
+    "y": 1.5,
+    "z": -57.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": 191.5,
+    "y": 1.2,
+    "z": -2.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCrossRoad"
+  },
+  {
+   "position": {
+    "x": 171.9,
+    "y": 2.8,
+    "z": 172.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": 420.5,
+    "y": 1.1,
+    "z": 22.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneGasStation"
+  },
+  {
+   "position": {
+    "x": 96.6,
+    "y": 1.2,
+    "z": 17.2
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 365.5,
+    "y": 11.5,
+    "z": 149.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 66.1,
+    "y": 1.2,
+    "z": -44.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -306.1,
+    "y": 1,
+    "z": -89.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 104.5,
+    "y": 1.2,
+    "z": 16.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 463.8,
+    "y": 1.2,
+    "z": -117.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneFactoryCenter"
+  },
+  {
+   "position": {
+    "x": -134,
+    "y": 0.7,
+    "z": 16
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -179.4,
+    "y": 1.4,
+    "z": -235
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  },
+  {
+   "position": {
+    "x": 5.8,
+    "y": 1.2,
+    "z": -103.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneWade"
+  },
+  {
+   "position": {
+    "x": 569.5,
+    "y": -0.3,
+    "z": -17.6
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 487.6,
+    "y": 1.7,
+    "z": 41.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBlockPost"
+  },
+  {
+   "position": {
+    "x": 91.3,
+    "y": 1.2,
+    "z": -104.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 20.4,
+    "y": 1.2,
+    "z": -124.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 112.6,
+    "y": 1.3,
+    "z": -56.4
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 99.5,
+    "y": 1.4,
+    "z": -66.6
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -131.8,
+    "y": 0.7,
+    "z": 9.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -214.6,
+    "y": -1.2,
+    "z": -0.4
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 52.6,
+    "y": 4.5,
+    "z": -52.8
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": 360,
+    "y": 11.5,
+    "z": 154.3
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 103.7,
+    "y": 1.2,
+    "z": 11.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 181.1,
+    "y": -0.1,
+    "z": 178.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneDormitory"
+  },
+  {
+   "position": {
+    "x": 226,
+    "y": 1.1,
+    "z": -80.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -303.4,
+    "y": 1,
+    "z": -89.5
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 314.9,
+    "y": 1.2,
+    "z": -93.1
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 195.1,
+    "y": 1.5,
+    "z": -170.1
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "boss"
+   ],
+   "zoneName": "ZoneScavBase"
+  },
+  {
+   "position": {
+    "x": -31,
+    "y": -12.1,
+    "z": 126.2
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneBrige"
+  },
+  {
+   "position": {
+    "x": 66.1,
+    "y": 7.8,
+    "z": -67.5
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneTankSquare"
+  },
+  {
+   "position": {
+    "x": -320.6,
+    "y": 0.9,
+    "z": -227.8
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [
+    "player"
+   ],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": 97.4,
+    "y": 1.2,
+    "z": 13.9
+   },
+   "sides": [
+    "pmc"
+   ],
+   "categories": [],
+   "zoneName": null
+  },
+  {
+   "position": {
+    "x": -335.6,
+    "y": 0.3,
+    "z": -159.7
+   },
+   "sides": [
+    "scav"
+   ],
+   "categories": [
+    "scav"
+   ],
+   "zoneName": "ZoneCustoms"
+  }
+ ],
+ "bosses": [
+  {
+   "name": "Partisan",
+   "spawnChance": 0.3,
+   "spawnLocations": []
+  },
+  {
+   "name": "Knight",
+   "spawnChance": 0.3,
+   "spawnLocations": [
+    {
+     "name": "ZoneScavBase",
+     "chance": 1
+    }
+   ]
+  },
+  {
+   "name": "Reshala",
+   "spawnChance": 0.3,
+   "spawnLocations": [
+    {
+     "name": "ZoneDormitory",
+     "chance": 1
+    },
+    {
+     "name": "ZoneGasStation",
+     "chance": 1
+    },
+    {
+     "name": "ZoneScavBase",
+     "chance": 1
+    }
+   ]
+  },
+  {
+   "name": "Cultist Priest",
+   "spawnChance": 0.15,
+   "spawnLocations": [
+    {
+     "name": "ZoneScavBase",
+     "chance": 1
+    }
+   ]
+  }
+ ],
+ "hazards": [],
+ "stationaryWeapons": [
+  {
+   "stationaryWeapon": {
+    "name": "AGS-30 automatic grenade launcher"
+   },
+   "position": {
+    "x": 136.5,
+    "y": 0,
+    "z": -194.3
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": 127.1,
+    "y": 0,
+    "z": -235.5
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": 127,
+    "y": 0,
+    "z": -208
+   }
+  },
+  {
+   "stationaryWeapon": {
+    "name": "NSV \"Utyos\" heavy machine gun"
+   },
+   "position": {
+    "x": 85,
+    "y": 0,
+    "z": 0.6
+   }
+  }
+ ],
+ "locks": [
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Cabin"
+   },
+   "position": {
+    "x": 374.1,
+    "y": 0,
+    "z": -42.8
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Guard Building"
+   },
+   "position": {
+    "x": 361.9,
+    "y": 0,
+    "z": 0.4
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Guard Building"
+   },
+   "position": {
+    "x": 360.8,
+    "y": 0,
+    "z": -6.9
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Gas Station Storage Room"
+   },
+   "position": {
+    "x": 336.8,
+    "y": 0,
+    "z": 241.2
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Gas Station Office"
+   },
+   "position": {
+    "x": 336.8,
+    "y": 0,
+    "z": 247.4
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Military Checkpoint Building"
+   },
+   "position": {
+    "x": 571.1,
+    "y": 0,
+    "z": 15.4
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "USEC Stash"
+   },
+   "position": {
+    "x": 388.2,
+    "y": 0,
+    "z": -159.2
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Bunkhouse"
+   },
+   "position": {
+    "x": 213.3,
+    "y": 0,
+    "z": 22.2
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Trailer Park Cabin"
+   },
+   "position": {
+    "x": -165.3,
+    "y": 0,
+    "z": -204.6
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Portable Cabin"
+   },
+   "position": {
+    "x": -223.1,
+    "y": 0,
+    "z": -215.3
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Tarcone Director's Office"
+   },
+   "position": {
+    "x": -234.3,
+    "y": 0,
+    "z": 62
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 206"
+   },
+   "position": {
+    "x": 47.6,
+    "y": 0,
+    "z": 190.7
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 110"
+   },
+   "position": {
+    "x": -12.9,
+    "y": 0,
+    "z": 253.5
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 114"
+   },
+   "position": {
+    "x": -4.6,
+    "y": 0,
+    "z": 253.5
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Guard Desk"
+   },
+   "position": {
+    "x": -17,
+    "y": 0,
+    "z": 188.2
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 105"
+   },
+   "position": {
+    "x": -12.9,
+    "y": 0,
+    "z": 181.6
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 104"
+   },
+   "position": {
+    "x": -4.6,
+    "y": 0,
+    "z": 181.6
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 108"
+   },
+   "position": {
+    "x": -284.5,
+    "y": 0,
+    "z": 246.7
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 118"
+   },
+   "position": {
+    "x": -238.8,
+    "y": 0,
+    "z": 242.5
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 103"
+   },
+   "position": {
+    "x": -276.3,
+    "y": 0,
+    "z": 166.2
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 220"
+   },
+   "position": {
+    "x": -159.1,
+    "y": 0,
+    "z": 242.5
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 218"
+   },
+   "position": {
+    "x": -167.4,
+    "y": 0,
+    "z": 242.5
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 214"
+   },
+   "position": {
+    "x": -204.8,
+    "y": 0,
+    "z": 264.7
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 203"
+   },
+   "position": {
+    "x": -196.4,
+    "y": 0,
+    "z": 166.2
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 204"
+   },
+   "position": {
+    "x": -204.7,
+    "y": 0,
+    "z": 166.2
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 303"
+   },
+   "position": {
+    "x": -117.2,
+    "y": 0,
+    "z": 166.4
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 306"
+   },
+   "position": {
+    "x": -125.6,
+    "y": 0,
+    "z": 184
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 315"
+   },
+   "position": {
+    "x": -117.2,
+    "y": 0,
+    "z": 238.1
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Room 308"
+   },
+   "position": {
+    "x": -125.6,
+    "y": 0,
+    "z": 247
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Marked Dorm Room 314"
+   },
+   "position": {
+    "x": -117.2,
+    "y": 0,
+    "z": 264.8
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Tanker Truck"
+   },
+   "position": {
+    "x": 114.6,
+    "y": 0,
+    "z": 5.9
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Dorm Overseer Room"
+   },
+   "position": {
+    "x": -196.4,
+    "y": 0,
+    "z": 213.1
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Company Director's Room"
+   },
+   "position": {
+    "x": 114,
+    "y": 0,
+    "z": -55.4
+   }
+  },
+  {
+   "lockType": "door",
+   "key": {
+    "name": "Reshala's Bunkhouse"
+   },
+   "position": {
+    "x": 103.1,
+    "y": 0,
+    "z": -105.3
+   }
+  }
+ ],
+ "switches": [
+  {
+   "name": "ZB-013 power lever",
+   "position": {
+    "x": 356.8,
+    "y": 0,
+    "z": -31.2
+   }
+  }
+ ]
+}

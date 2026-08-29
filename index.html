@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tarkov Maps — Customs</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <h1>Customs</h1>
+        <div id="status" class="muted">Loading data…</div>
+        <div id="layers"></div>
+        <div id="coords" class="muted mono"></div>
+        <p class="credit">Tiles &amp; data: <a href="https://tarkov.dev" target="_blank">tarkov.dev</a></p>
+      </aside>
+      <div id="map"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
