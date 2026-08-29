@@ -1,5 +1,6 @@
 {
   "name": "tarkovzero-companion",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "bin": { "tarkovzero-companion": "./companion.mjs" },
