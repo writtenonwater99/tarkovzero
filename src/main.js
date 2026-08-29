@@ -200,6 +200,20 @@ function updateHud() {
 const icons = {};
 const safeLevel = (level) => ['surface', 'underground', 'rooftop', 'upper'].includes(level) ? level : 'surface';
 const levelSuffix = (level) => safeLevel(level) === 'surface' ? '' : ` · ${safeLevel(level).toUpperCase()}`;
+const CONTAINER_KIND = {
+  container_stash: 'stash',
+  container_weapon: 'loot-weapon',
+  container_crate: 'loot-crate', container_greencrate: 'loot-crate', container_duffle: 'loot-crate', container_jacket: 'loot-crate', container_supply: 'loot-crate',
+  container_safe: 'loot-cash', container_cash: 'loot-cash', container_pc: 'loot-cash', container_drawer: 'loot-cash',
+  container_medcase: 'loot-med', container_medical: 'loot-med', container_ammo: 'loot-med', container_grenade: 'loot-med', container_tool: 'loot-med',
+  loot_key: 'loot-key', container_dead: 'loot-dead', loot_loose: 'loot-loose', loot_spt: 'loot-loose',
+};
+const CONTAINER_TYPE = {
+  container_stash: 'Hidden stash', container_weapon: 'Weapon box', container_crate: 'Supply crate', container_greencrate: 'Wooden crate',
+  container_duffle: 'Bag', container_jacket: 'Jacket', container_supply: 'Supply container', container_safe: 'Safe', container_cash: 'Cash register',
+  container_pc: 'PC', container_drawer: 'Drawer', container_tool: 'Tool container', container_medcase: 'Medcase', container_medical: 'Medical bag',
+  container_ammo: 'Ammo box', container_grenade: 'Grenade box', container_dead: 'Dead body', loot_key: 'Key spawn', loot_loose: 'Marked loose loot', loot_spt: 'SPT loose-loot point',
+};
 const iconFor = (kind, letter = null, level = 'surface') => {
   const key = `${kind}:${letter ?? ''}:${safeLevel(level)}`;
   return (icons[key] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter, safeLevel(level)), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
@@ -233,6 +247,13 @@ export function classify(d) {
   for (const w of d.stationaryWeapons) add('weapon', w.position, `<b>${w.stationaryWeapon.name}</b>`);
   for (const sw of d.switches ?? []) { const level = safeLevel(sw.level); add('switch', sw.position, `<b>${sw.name}${levelSuffix(level)}</b>Switch · ${level}`, sw.name, level); }
   for (const l of d.locks) { const level = safeLevel(l.level); add('lock', l.position, `<b>${l.key?.name ?? 'Lock'}${levelSuffix(level)}</b>${l.lockType} · ${level}`, l.key?.name, level); }
+  for (const c of d.containers ?? []) {
+    const kind = CONTAINER_KIND[c.type];
+    if (!kind) continue;
+    const level = safeLevel(c.level), name = c.name || CONTAINER_TYPE[c.type] || 'Loot container';
+    const note = c.note ? `<br><i>${esc(c.note).replace(/\n/g, '<br>')}</i>` : '';
+    add(kind, c.position, `<b>${esc(name)}${levelSuffix(level)}</b>${esc(CONTAINER_TYPE[c.type] || c.type)} · ${level}${note}`, name, level);
+  }
   return out;
 }
 
@@ -267,11 +288,11 @@ $$('#label-density .seg-cell').forEach((b) => (b.onclick = () => { density = b.d
 const GROUPS = [
   { id: 'extracts', title: 'Extracts', cat: 'extract', kinds: ['extract-pmc', 'extract-scav', 'extract-shared', 'extract-transit'] },
   { id: 'contacts', title: 'Contacts', cat: 'contact', kinds: ['spawn-pmc', 'spawn-scav', 'spawn-sniper', 'spawn-boss'] },
-  { id: 'objects', title: 'Objects', cat: 'object', kinds: ['weapon', 'switch', 'lock', 'hazard'] },
+  { id: 'objects', title: 'Objects', cat: 'object', always: true, kinds: ['stash', 'loot-weapon', 'loot-crate', 'loot-cash', 'loot-med', 'loot-key', 'loot-dead', 'loot-loose', 'weapon', 'switch', 'lock', 'hazard'] },
 ];
 const MARKER_KINDS = GROUPS.flatMap((g) => g.kinds).filter((k) => KINDS[k]);
 const CAT_OF = Object.fromEntries(GROUPS.flatMap((g) => g.kinds.map((k) => [k, g.cat])));
-const defaultOn = ['extract-pmc', 'spawn-pmc'];
+const defaultOn = ['extract-pmc', 'spawn-pmc', 'stash'];
 let onKinds = new Set(store.get('kinds', defaultOn));
 const layersEl = $('#layers');
 
@@ -302,7 +323,7 @@ function syncGroupCounts() {
   for (const g of GROUPS) {
     const btn = layersEl.querySelector(`#gc-${g.id}`);
     if (!btn) continue;
-    const kinds = g.kinds.filter((k) => layerOf.has(k));
+    const kinds = g.always ? g.kinds : g.kinds.filter((k) => layerOf.has(k));
     const n = kinds.filter((k) => onKinds.has(k)).length;
     btn.textContent = `${n}/${kinds.length || g.kinds.length}`;
     btn.classList.toggle('full', kinds.length > 0 && n === kinds.length);
@@ -328,7 +349,7 @@ function buildFilterUI() {
     const gc = d.querySelector('.gcount');
     gc.onclick = (e) => {
       e.preventDefault(); e.stopPropagation();
-      const kinds = g.kinds.filter((k) => layerOf.has(k));
+      const kinds = g.always ? g.kinds : g.kinds.filter((k) => layerOf.has(k));
       const allOn = kinds.length && kinds.every((k) => onKinds.has(k));
       for (const k of kinds) setKind(k, !allOn, { refresh: false });
       store.set('kinds', [...onKinds]); syncGroupCounts(); view3d?.refresh();
@@ -347,14 +368,14 @@ function fillRows() {
     if (!rows) continue;
     rows.innerHTML = '';
     for (const kind of g.kinds) {
-      if (!layerOf.has(kind)) continue;
+      if (!g.always && !layerOf.has(kind)) continue;
       const on = onKinds.has(kind);
       const el = rowEl({ kind, cat: g.cat, label: KINDS[kind].label, count: countOf.get(kind) ?? 0, on, icon: iconHtml(kind, 17) });
       el.querySelector('input').onchange = (e) => setKind(kind, e.target.checked);
       el.addEventListener('click', (e) => {   // shift-click solos inside the group
         if (!e.shiftKey) return;
         e.preventDefault();
-        for (const k of g.kinds.filter((k) => layerOf.has(k))) setKind(k, k === kind, { refresh: false });
+        for (const k of (g.always ? g.kinds : g.kinds.filter((k) => layerOf.has(k)))) setKind(k, k === kind, { refresh: false });
         store.set('kinds', [...onKinds]); syncGroupCounts(); view3d?.refresh();
       });
       rows.appendChild(el);
@@ -449,6 +470,10 @@ function buildSearchIndex() {
     if (index.some((i) => i.kind === 'extract' && i.label === m.name)) continue;
     index.push({ kind: 'extract', label: m.name, sub: `${m.kind.replace('extract-', '')} · ${safeLevel(m.level)}`, level: safeLevel(m.level), x: m.position.x, z: m.position.z, badge: extractLetter(m.name) ?? '', mk: m.kind });
   }
+  for (const m of markerPoints) {
+    if (m.kind !== 'stash' || !m.name) continue;
+    index.push({ kind: 'marker', label: m.name, sub: `stash · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
+  }
   for (const l of mapLabels) index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] });
   for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'filter', mk: k });
 }
@@ -457,7 +482,7 @@ function renderResults() {
   if (!results.length) { resEl.hidden = !findEl.value; resEl.innerHTML = '<div class="res-empty">No match</div>'; return; }
   resEl.hidden = false;
   resEl.innerHTML = results.map((r, i) => {
-    const chip = r.kind === 'layer' ? iconHtml(r.mk, 17)
+    const chip = r.kind === 'layer' || r.kind === 'marker' ? iconHtml(r.mk, 17)
       : r.kind === 'extract' ? `<span class="badge">${esc(r.badge || '·')}</span>`
       : `<span class="badge">${esc((r.label[0] || '·').toUpperCase())}</span>`;
     return `<div class="res${i === active ? ' act' : ''}" data-i="${i}" role="option">${chip}<span class="rn">${esc(r.label)}</span><span class="rk">${esc(r.sub)}</span></div>`;
@@ -478,7 +503,10 @@ function search(q) {
 function choose(i) {
   const r = results[i]; if (!r) return;
   if (r.kind === 'layer') setKind(r.mk, true);
-  else flyTo(r.x, r.z);
+  else {
+    if (r.kind === 'marker') setKind(r.mk, true);
+    flyTo(r.x, r.z);
+  }
   findEl.blur(); resEl.hidden = true; findEl.value = ''; results = [];
 }
 findEl.oninput = () => search(findEl.value);

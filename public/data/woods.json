@@ -5006,5 +5006,6211 @@
    "level": "surface"
   }
  ],
- "switches": []
+ "switches": [],
+ "containers": [
+  {
+   "type": "loot_key",
+   "name": "RB-MP12 Key",
+   "position": {
+    "x": 69.8,
+    "y": 0,
+    "z": -40
+   },
+   "level": "surface",
+   "note": "RB-MP12 key\nIn a blue locker"
+  },
+  {
+   "type": "loot_key",
+   "name": "Health Resort East Wing Room 314 Key",
+   "position": {
+    "x": 238.7,
+    "y": 0,
+    "z": -72.2
+   },
+   "level": "surface",
+   "note": "Health Resort east wing room 314 key\nOn a wooden stool"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 237.8,
+    "y": 0,
+    "z": 299.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 198.6,
+    "y": 0,
+    "z": 252.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 195.4,
+    "y": 0,
+    "z": 250.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 247.4,
+    "y": 0,
+    "z": 127.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 241.3,
+    "y": 0,
+    "z": 107.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 137.1,
+    "y": 0,
+    "z": 95.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 239,
+    "y": 0,
+    "z": 60.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 202.3,
+    "y": 0,
+    "z": 53.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 185.9,
+    "y": 0,
+    "z": -6.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 241.5,
+    "y": 0,
+    "z": -72.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_drawer",
+   "name": "Drawer",
+   "position": {
+    "x": 238.5,
+    "y": 0,
+    "z": -72
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": 235.3,
+    "y": 0,
+    "z": -73.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_medical",
+   "name": "Medbag",
+   "position": {
+    "x": 233,
+    "y": 0,
+    "z": -73.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 354.1,
+    "y": 0,
+    "z": -90.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 357.3,
+    "y": 0,
+    "z": -86.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 500.3,
+    "y": 0,
+    "z": -35
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 499.2,
+    "y": 0,
+    "z": -81.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 486.7,
+    "y": 0,
+    "z": -151.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": 144.2,
+    "y": 0,
+    "z": -143.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 120.9,
+    "y": 0,
+    "z": 11.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_ammo",
+   "name": "Ammo Box",
+   "position": {
+    "x": 115.9,
+    "y": 0,
+    "z": 7.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 21.4,
+    "y": 0,
+    "z": 95.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": 55.2,
+    "y": 0,
+    "z": 59.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 1.4,
+    "y": 0,
+    "z": 40.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 0.6,
+    "y": 0,
+    "z": 41.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_ammo",
+   "name": "Ammo Box",
+   "position": {
+    "x": -1.1,
+    "y": 0,
+    "z": 44.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": -25.1,
+    "y": 0,
+    "z": 41.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": -23,
+    "y": 0,
+    "z": 44.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": -23,
+    "y": 0,
+    "z": 43.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -28.3,
+    "y": 0,
+    "z": 44
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_drawer",
+   "name": "Drawer",
+   "position": {
+    "x": -27.8,
+    "y": 0,
+    "z": 46.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 50.9,
+    "y": 0,
+    "z": -10.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 47.5,
+    "y": 0,
+    "z": -10.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (6x3)",
+   "position": {
+    "x": 76.1,
+    "y": 0,
+    "z": -49.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": 78,
+    "y": 0,
+    "z": -49.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 55.8,
+    "y": 0,
+    "z": -51
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -1,
+    "y": 0,
+    "z": -58.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 0.9,
+    "y": 0,
+    "z": -69.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 0.5,
+    "y": 0,
+    "z": -69.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -4,
+    "y": 0,
+    "z": -71.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -6.8,
+    "y": 0,
+    "z": -70.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": -4,
+    "y": 0,
+    "z": -74.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_safe",
+   "name": "Safe",
+   "position": {
+    "x": -6.8,
+    "y": 0,
+    "z": -75.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade Box",
+   "position": {
+    "x": -6.9,
+    "y": 0,
+    "z": -75.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 1.2,
+    "y": 0,
+    "z": -80.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 0.8,
+    "y": 0,
+    "z": -80.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 1,
+    "y": 0,
+    "z": -81.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -137.7,
+    "y": 0,
+    "z": 414.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -135.9,
+    "y": 0,
+    "z": 409.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -117.8,
+    "y": 0,
+    "z": 394.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x5)",
+   "position": {
+    "x": -119.6,
+    "y": 0,
+    "z": 395.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -232.2,
+    "y": 0,
+    "z": 354.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -314.7,
+    "y": 0,
+    "z": 363.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": -404,
+    "y": 0,
+    "z": 308.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -505.6,
+    "y": 0,
+    "z": 239
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -357,
+    "y": 0,
+    "z": 142.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -321.1,
+    "y": 0,
+    "z": 136.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -288,
+    "y": 0,
+    "z": 236.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -185.9,
+    "y": 0,
+    "z": 267.1
+   },
+   "level": "upper",
+   "note": "On the tower"
+  },
+  {
+   "type": "container_medical",
+   "name": "Medbag",
+   "position": {
+    "x": -180,
+    "y": 0,
+    "z": 263.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": -179.4,
+    "y": 0,
+    "z": 251.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Medical Supply Crate",
+   "position": {
+    "x": -179.2,
+    "y": 0,
+    "z": 240.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -170.1,
+    "y": 0,
+    "z": 249.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -211.5,
+    "y": 0,
+    "z": 226.8
+   },
+   "level": "upper",
+   "note": "On the tower"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -209.7,
+    "y": 0,
+    "z": 228.5
+   },
+   "level": "upper",
+   "note": "On the tower"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -203.8,
+    "y": 0,
+    "z": 215.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -208,
+    "y": 0,
+    "z": 213.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_medical",
+   "name": "Medbag",
+   "position": {
+    "x": -207.1,
+    "y": 0,
+    "z": 204.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -213.4,
+    "y": 0,
+    "z": 206.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_medical",
+   "name": "Medbag",
+   "position": {
+    "x": -212.3,
+    "y": 0,
+    "z": 204.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Medical Supply Crate",
+   "position": {
+    "x": -210,
+    "y": 0,
+    "z": 198.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -207.8,
+    "y": 0,
+    "z": 201.1
+   },
+   "level": "surface",
+   "note": "In the container"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": -201.8,
+    "y": 0,
+    "z": 200.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -179.4,
+    "y": 0,
+    "z": 204.3
+   },
+   "level": "surface",
+   "note": "In the container"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -193.3,
+    "y": 0,
+    "z": 199.6
+   },
+   "level": "surface",
+   "note": "In the container"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -210.7,
+    "y": 0,
+    "z": 186.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -203.8,
+    "y": 0,
+    "z": 182.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -478.4,
+    "y": 0,
+    "z": 42.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -322.5,
+    "y": 0,
+    "z": 17.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -305.1,
+    "y": 0,
+    "z": -58.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -698.7,
+    "y": 0,
+    "z": -18
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -689.9,
+    "y": 0,
+    "z": -18.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -691.1,
+    "y": 0,
+    "z": -21.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -694,
+    "y": 0,
+    "z": -38.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -460.8,
+    "y": 0,
+    "z": -87.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -568.5,
+    "y": 0,
+    "z": -81.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -562.1,
+    "y": 0,
+    "z": -78.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -567,
+    "y": 0,
+    "z": -76.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -487.8,
+    "y": 0,
+    "z": -151.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -473,
+    "y": 0,
+    "z": -179
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (6x3)",
+   "position": {
+    "x": -513.9,
+    "y": 0,
+    "z": -175.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -511,
+    "y": 0,
+    "z": -180.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -515.7,
+    "y": 0,
+    "z": -211.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -487.7,
+    "y": 0,
+    "z": -233.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -533.1,
+    "y": 0,
+    "z": -243.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -597,
+    "y": 0,
+    "z": -247.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -562,
+    "y": 0,
+    "z": -215.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -533.5,
+    "y": 0,
+    "z": -206.3
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -538.9,
+    "y": 0,
+    "z": -206.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": -544.5,
+    "y": 0,
+    "z": -201.2
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (6x3)",
+   "position": {
+    "x": -550.1,
+    "y": 0,
+    "z": -207.6
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -459.6,
+    "y": 0,
+    "z": -331.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -459,
+    "y": 0,
+    "z": -344.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -449.8,
+    "y": 0,
+    "z": -359.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -460.5,
+    "y": 0,
+    "z": -365.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -507.5,
+    "y": 0,
+    "z": -373.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -509.7,
+    "y": 0,
+    "z": -387.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -511.7,
+    "y": 0,
+    "z": -391.5
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_tool",
+   "name": "Wooden Toolbox",
+   "position": {
+    "x": -496.8,
+    "y": 0,
+    "z": -397.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -500,
+    "y": 0,
+    "z": -404.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -455.6,
+    "y": 0,
+    "z": -387.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -453.5,
+    "y": 0,
+    "z": -392.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade Box",
+   "position": {
+    "x": -450.4,
+    "y": 0,
+    "z": -389.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -442.2,
+    "y": 0,
+    "z": -411.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -467.4,
+    "y": 0,
+    "z": -418.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -526.8,
+    "y": 0,
+    "z": -463.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -418.3,
+    "y": 0,
+    "z": -507.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -331.5,
+    "y": 0,
+    "z": -423.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -175.7,
+    "y": 0,
+    "z": -411.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -39.7,
+    "y": 0,
+    "z": -342.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -190.5,
+    "y": 0,
+    "z": -360.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -269.2,
+    "y": 0,
+    "z": -354
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -148.6,
+    "y": 0,
+    "z": -277.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -262.1,
+    "y": 0,
+    "z": -263.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -210.4,
+    "y": 0,
+    "z": -277.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -213.6,
+    "y": 0,
+    "z": -268.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -236.6,
+    "y": 0,
+    "z": -235.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -228.9,
+    "y": 0,
+    "z": -234.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -204.9,
+    "y": 0,
+    "z": -211.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -257.5,
+    "y": 0,
+    "z": -565.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": 100.4,
+    "y": 0,
+    "z": -363.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": 116.4,
+    "y": 0,
+    "z": -295.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": 331.3,
+    "y": 0,
+    "z": -294.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 392.2,
+    "y": 0,
+    "z": -412.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 272.2,
+    "y": 0,
+    "z": -442.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (6x3)",
+   "position": {
+    "x": 281,
+    "y": 0,
+    "z": -430.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": 283.3,
+    "y": 0,
+    "z": -432.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": 297.3,
+    "y": 0,
+    "z": -438.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Medical Supply Crate",
+   "position": {
+    "x": 307.4,
+    "y": 0,
+    "z": -456.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 309.8,
+    "y": 0,
+    "z": -461.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 318.9,
+    "y": 0,
+    "z": -488.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 318.5,
+    "y": 0,
+    "z": -502.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (6x3)",
+   "position": {
+    "x": 273.3,
+    "y": 0,
+    "z": -508.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": 290.3,
+    "y": 0,
+    "z": -508.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 297.7,
+    "y": 0,
+    "z": -505.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": 283.2,
+    "y": 0,
+    "z": -502
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": 342.8,
+    "y": 0,
+    "z": -625.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 201,
+    "y": 0,
+    "z": -595
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": 193.7,
+    "y": 0,
+    "z": -582.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 158.4,
+    "y": 0,
+    "z": -569
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 79.7,
+    "y": 0,
+    "z": -474.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -60.1,
+    "y": 0,
+    "z": -428.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -90.3,
+    "y": 0,
+    "z": -550.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -145.7,
+    "y": 0,
+    "z": -574.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -46.5,
+    "y": 0,
+    "z": -595.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -88.6,
+    "y": 0,
+    "z": -614.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -124.9,
+    "y": 0,
+    "z": -707.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -13.5,
+    "y": 0,
+    "z": -743.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -22.6,
+    "y": 0,
+    "z": -678.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 299.7,
+    "y": 0,
+    "z": -746.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 340.5,
+    "y": 0,
+    "z": -798.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 368,
+    "y": 0,
+    "z": -793.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": 188.8,
+    "y": 0,
+    "z": -791.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 108.7,
+    "y": 0,
+    "z": -846.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 143.3,
+    "y": 0,
+    "z": -721.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": 142.3,
+    "y": 0,
+    "z": -726.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 127.3,
+    "y": 0,
+    "z": -734.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 137.1,
+    "y": 0,
+    "z": -753.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade Box",
+   "position": {
+    "x": 134.5,
+    "y": 0,
+    "z": -755.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 235.4,
+    "y": 0,
+    "z": -694.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade Box",
+   "position": {
+    "x": 234,
+    "y": 0,
+    "z": -698.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 227.7,
+    "y": 0,
+    "z": -703.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 233.3,
+    "y": 0,
+    "z": -695.5
+   },
+   "level": "underground",
+   "note": "On the stairs to the bunker"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": 372.5,
+    "y": 0,
+    "z": -841.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 380.9,
+    "y": 0,
+    "z": -872.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 359.4,
+    "y": 0,
+    "z": -887.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade box",
+   "position": {
+    "x": -464,
+    "y": 0,
+    "z": -394.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": 5.8,
+    "y": 0,
+    "z": -580.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_key",
+   "name": "Health Resort East Wing Room 316 Key",
+   "position": {
+    "x": -97.2,
+    "y": 0,
+    "z": 221.3
+   },
+   "level": "surface",
+   "note": "Health Resort east wing room 316 key\nIn the open suitcase behind minivan"
+  },
+  {
+   "type": "loot_key",
+   "name": "Health Resort East Wing Room 308 Key",
+   "position": {
+    "x": -4.3,
+    "y": 0,
+    "z": -71.7
+   },
+   "level": "surface",
+   "note": "Health Resort east wing room 308 key\nOn a nightstand"
+  },
+  {
+   "type": "loot_key",
+   "name": "Health Resort East Wing Room 306 Key",
+   "position": {
+    "x": -4.2,
+    "y": 0,
+    "z": -76.5
+   },
+   "level": "surface",
+   "note": "Health Resort east wing room 306 key\nOn the nightstand"
+  },
+  {
+   "type": "loot_key",
+   "name": "RB-ORB2 Key",
+   "position": {
+    "x": -182.6,
+    "y": 0,
+    "z": 380.7
+   },
+   "level": "surface",
+   "note": "RB-ORB2 key\nOn the wall used as a table"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -522.7,
+    "y": 0,
+    "z": 41.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -4.9,
+    "y": 0,
+    "z": -590.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -488.9,
+    "y": 0,
+    "z": -121.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Ground Cache",
+   "position": {
+    "x": -214.9,
+    "y": 0,
+    "z": -398.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_drawer",
+   "name": "Drawer",
+   "position": {
+    "x": 238.3,
+    "y": 0,
+    "z": -71.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 86.1,
+    "y": 0,
+    "z": -159.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 114.8,
+    "y": 0,
+    "z": 8.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_drawer",
+   "name": "Drawer",
+   "position": {
+    "x": -28.8,
+    "y": 0,
+    "z": 46.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -21.7,
+    "y": 0,
+    "z": 42.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_ammo",
+   "name": "Ammo Box",
+   "position": {
+    "x": -28.4,
+    "y": 0,
+    "z": 37.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": 71.2,
+    "y": 0,
+    "z": 48.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -28.4,
+    "y": 0,
+    "z": 13.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 55.1,
+    "y": 0,
+    "z": -10.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 80.1,
+    "y": 0,
+    "z": -39.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": 89.4,
+    "y": 0,
+    "z": -46.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (6x3)",
+   "position": {
+    "x": 55.8,
+    "y": 0,
+    "z": -53.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 40.9,
+    "y": 0,
+    "z": -72.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade Box",
+   "position": {
+    "x": -6.8,
+    "y": 0,
+    "z": -84.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_ammo",
+   "name": "Ammo Box",
+   "position": {
+    "x": -22.9,
+    "y": 0,
+    "z": -11.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -22.3,
+    "y": 0,
+    "z": -9.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -10.3,
+    "y": 0,
+    "z": -29.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -31.1,
+    "y": 0,
+    "z": -30.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": -237.7,
+    "y": 0,
+    "z": 353.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -248.4,
+    "y": 0,
+    "z": 372.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -406.5,
+    "y": 0,
+    "z": 306.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -408.6,
+    "y": 0,
+    "z": 308.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -430.3,
+    "y": 0,
+    "z": 205
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -431.1,
+    "y": 0,
+    "z": 204
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -343.2,
+    "y": 0,
+    "z": 156.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -197.4,
+    "y": 0,
+    "z": 194.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -173.4,
+    "y": 0,
+    "z": 219.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -204.3,
+    "y": 0,
+    "z": 233.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -178.3,
+    "y": 0,
+    "z": 208.3
+   },
+   "level": "surface",
+   "note": "On the container"
+  },
+  {
+   "type": "container_crate",
+   "name": "Medical Supply Crate",
+   "position": {
+    "x": -205.4,
+    "y": 0,
+    "z": 202.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -204.2,
+    "y": 0,
+    "z": 211.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_medical",
+   "name": "Medbag",
+   "position": {
+    "x": -207.7,
+    "y": 0,
+    "z": 218.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -179.5,
+    "y": 0,
+    "z": 223
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_medical",
+   "name": "Medbag",
+   "position": {
+    "x": -181.6,
+    "y": 0,
+    "z": 216.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -188.4,
+    "y": 0,
+    "z": 219.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": -179.6,
+    "y": 0,
+    "z": 229.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -187.3,
+    "y": 0,
+    "z": 235.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_medical",
+   "name": "Medbag",
+   "position": {
+    "x": -178.9,
+    "y": 0,
+    "z": 237.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -167.7,
+    "y": 0,
+    "z": 238.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -164,
+    "y": 0,
+    "z": 246.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Medical Supply Crate",
+   "position": {
+    "x": -193.9,
+    "y": 0,
+    "z": 251.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -171.3,
+    "y": 0,
+    "z": 254.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -173,
+    "y": 0,
+    "z": 253.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": -194.3,
+    "y": 0,
+    "z": 218.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -253.2,
+    "y": 0,
+    "z": 14.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -587.9,
+    "y": 0,
+    "z": -152.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -498.6,
+    "y": 0,
+    "z": -172.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -469.3,
+    "y": 0,
+    "z": -230.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -539.1,
+    "y": 0,
+    "z": -240.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -637.9,
+    "y": 0,
+    "z": -263.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -634.7,
+    "y": 0,
+    "z": -261.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -563.5,
+    "y": 0,
+    "z": -215.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": -550.6,
+    "y": 0,
+    "z": -205.5
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -555,
+    "y": 0,
+    "z": -201.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -550.4,
+    "y": 0,
+    "z": -209.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": -549.7,
+    "y": 0,
+    "z": -198.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -459.2,
+    "y": 0,
+    "z": -357.6
+   },
+   "level": "surface",
+   "note": "In the porch"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -458.7,
+    "y": 0,
+    "z": -365.6
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -461.9,
+    "y": 0,
+    "z": -363.6
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -512.1,
+    "y": 0,
+    "z": -370
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -503.7,
+    "y": 0,
+    "z": -388.2
+   },
+   "level": "upper",
+   "note": "On the second floor"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -466.4,
+    "y": 0,
+    "z": -428.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -494.1,
+    "y": 0,
+    "z": -433.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -518.7,
+    "y": 0,
+    "z": -471.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -453.9,
+    "y": 0,
+    "z": -406.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -458.3,
+    "y": 0,
+    "z": -397.2
+   },
+   "level": "surface",
+   "note": "In the porch"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": -116.3,
+    "y": 0,
+    "z": -459.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -292.2,
+    "y": 0,
+    "z": -236
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -203.9,
+    "y": 0,
+    "z": -226.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -199.2,
+    "y": 0,
+    "z": -213.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -167.9,
+    "y": 0,
+    "z": -234.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -168.2,
+    "y": 0,
+    "z": -233.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -167.7,
+    "y": 0,
+    "z": -230.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": 225.4,
+    "y": 0,
+    "z": -316.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 240.2,
+    "y": 0,
+    "z": -302.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 42.1,
+    "y": 0,
+    "z": -316.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 81.9,
+    "y": 0,
+    "z": -409.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -23.4,
+    "y": 0,
+    "z": -686.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -27,
+    "y": 0,
+    "z": -739.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -56.9,
+    "y": 0,
+    "z": -752.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -172.6,
+    "y": 0,
+    "z": -686
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -95.4,
+    "y": 0,
+    "z": -612.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 197,
+    "y": 0,
+    "z": -578.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": 196,
+    "y": 0,
+    "z": -587
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": 178,
+    "y": 0,
+    "z": -611.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 276.4,
+    "y": 0,
+    "z": -427.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": 277.3,
+    "y": 0,
+    "z": -443.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Ration Supply Crate",
+   "position": {
+    "x": 311.8,
+    "y": 0,
+    "z": -455.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": 314.9,
+    "y": 0,
+    "z": -463.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": 278.8,
+    "y": 0,
+    "z": -520.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (5x2)",
+   "position": {
+    "x": 273.2,
+    "y": 0,
+    "z": -501.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Medical Supply Crate",
+   "position": {
+    "x": 296.5,
+    "y": 0,
+    "z": -500
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 232.4,
+    "y": 0,
+    "z": -695
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 232.3,
+    "y": 0,
+    "z": -699.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade Box",
+   "position": {
+    "x": 225.8,
+    "y": 0,
+    "z": -703.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": 127.4,
+    "y": 0,
+    "z": -747.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": 126.1,
+    "y": 0,
+    "z": -744.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": 133.1,
+    "y": 0,
+    "z": -729.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_jacket",
+   "name": "Jacket",
+   "position": {
+    "x": 142.4,
+    "y": 0,
+    "z": -729
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Dead Scav",
+   "position": {
+    "x": -452.3,
+    "y": 0,
+    "z": -649
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -442.3,
+    "y": 0,
+    "z": -632.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -426.7,
+    "y": 0,
+    "z": -681.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -404.9,
+    "y": 0,
+    "z": -680.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_drawer",
+   "name": "Drawer",
+   "position": {
+    "x": -402.4,
+    "y": 0,
+    "z": -662.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_drawer",
+   "name": "Drawer",
+   "position": {
+    "x": -402.4,
+    "y": 0,
+    "z": -664.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -390.2,
+    "y": 0,
+    "z": -692.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -397.5,
+    "y": 0,
+    "z": -678.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -381.1,
+    "y": 0,
+    "z": -672.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_crate",
+   "name": "Technical Supply Crate",
+   "position": {
+    "x": -384.7,
+    "y": 0,
+    "z": -659.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -383,
+    "y": 0,
+    "z": -630.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "PMC Body",
+   "position": {
+    "x": -401.3,
+    "y": 0,
+    "z": -625.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_ammo",
+   "name": "Ammo Box",
+   "position": {
+    "x": -407.2,
+    "y": 0,
+    "z": -625.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_duffle",
+   "name": "Sports Bag",
+   "position": {
+    "x": -415.5,
+    "y": 0,
+    "z": -629.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_greencrate",
+   "name": "Wooden Crate",
+   "position": {
+    "x": -417.8,
+    "y": 0,
+    "z": -658.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_weapon",
+   "name": "Weapon Box (4x4)",
+   "position": {
+    "x": -415.4,
+    "y": 0,
+    "z": -634
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_tool",
+   "name": "Toolbox",
+   "position": {
+    "x": -394.8,
+    "y": 0,
+    "z": -634.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_grenade",
+   "name": "Grenade Box",
+   "position": {
+    "x": -405,
+    "y": 0,
+    "z": -641.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Civilian Body",
+   "position": {
+    "x": -202.3,
+    "y": 0,
+    "z": 228.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_dead",
+   "name": "Civilian Body",
+   "position": {
+    "x": -206.3,
+    "y": 0,
+    "z": 218.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -705.8,
+    "y": 0,
+    "z": 96.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -648.3,
+    "y": 0,
+    "z": 155.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -677.3,
+    "y": 0,
+    "z": 129.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "container_stash",
+   "name": "Barrel Cache",
+   "position": {
+    "x": -663.8,
+    "y": 0,
+    "z": 166.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -714.2,
+    "y": 9.9,
+    "z": 141.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -706,
+    "y": 9,
+    "z": 98.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -703.9,
+    "y": 9,
+    "z": 134.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -699.4,
+    "y": 9.8,
+    "z": 104.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -697.4,
+    "y": 9.4,
+    "z": 98
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -694.3,
+    "y": 9,
+    "z": 132.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -693.3,
+    "y": 8.6,
+    "z": 103
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -688.1,
+    "y": 10.5,
+    "z": 136
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -687.7,
+    "y": 9.5,
+    "z": 99.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -686.7,
+    "y": 9.2,
+    "z": 106.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -686.6,
+    "y": 9.9,
+    "z": 142.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -679.5,
+    "y": 9.4,
+    "z": 101.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -677.6,
+    "y": 9.3,
+    "z": 141.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -677.2,
+    "y": 9.5,
+    "z": 110
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -675.8,
+    "y": 10.7,
+    "z": 132.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -672.5,
+    "y": 9.8,
+    "z": 103.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -672.5,
+    "y": 9.3,
+    "z": 149.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -671.6,
+    "y": 10.5,
+    "z": 138.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -664.1,
+    "y": 8.9,
+    "z": 154.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -662.5,
+    "y": 9.3,
+    "z": 114.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -661.8,
+    "y": 10.5,
+    "z": 138.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -661.1,
+    "y": 9.9,
+    "z": 163.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -658.9,
+    "y": 8.6,
+    "z": 175
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -658.7,
+    "y": 8.5,
+    "z": 184.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -657.2,
+    "y": 8.9,
+    "z": 151.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -655.6,
+    "y": 9.4,
+    "z": 189.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -655.4,
+    "y": 9.5,
+    "z": 165.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -653.7,
+    "y": 9.1,
+    "z": 178.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -649,
+    "y": 12,
+    "z": 117.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -647.6,
+    "y": 7.6,
+    "z": 184.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -646.6,
+    "y": 9.8,
+    "z": 154.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -640.5,
+    "y": 9.3,
+    "z": 137
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -637.6,
+    "y": 13.2,
+    "z": 120.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -629.8,
+    "y": 8.9,
+    "z": 170.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -629,
+    "y": 13.5,
+    "z": 122.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -625.6,
+    "y": 9.5,
+    "z": 155.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -623.7,
+    "y": 9.6,
+    "z": 149
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -619.2,
+    "y": 8.5,
+    "z": 127.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -619.2,
+    "y": 9.5,
+    "z": 155.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -615.2,
+    "y": 9.4,
+    "z": 135.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -613.4,
+    "y": 9.5,
+    "z": 159.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -610.8,
+    "y": 9.5,
+    "z": 169.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -610.7,
+    "y": 14,
+    "z": 129
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -609.9,
+    "y": 8.6,
+    "z": 138.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -607.6,
+    "y": 9.7,
+    "z": 155.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -604.4,
+    "y": 9.5,
+    "z": 127.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -593,
+    "y": 11.1,
+    "z": 149.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -572.3,
+    "y": 16.5,
+    "z": -185.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -565.8,
+    "y": 22.4,
+    "z": -216.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -554.6,
+    "y": 16.9,
+    "z": -201.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -550.6,
+    "y": 15.6,
+    "z": -206.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -547.7,
+    "y": 15.7,
+    "z": -198.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -547.1,
+    "y": 14.4,
+    "z": -379.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -544.4,
+    "y": 19.2,
+    "z": -204
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -538.9,
+    "y": 21.6,
+    "z": -242
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -538.4,
+    "y": 16.1,
+    "z": -203.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -535.9,
+    "y": 15.7,
+    "z": -212.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -534.4,
+    "y": -0.6,
+    "z": 277.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -534.1,
+    "y": 15.1,
+    "z": -372
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -531.4,
+    "y": 10.4,
+    "z": -464.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -517.8,
+    "y": 15.5,
+    "z": -371.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -515.9,
+    "y": 16.1,
+    "z": -390.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -515.5,
+    "y": 15.6,
+    "z": -210.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -515.3,
+    "y": 11.6,
+    "z": -475.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -513.2,
+    "y": 16.2,
+    "z": -176.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -512.3,
+    "y": 16.2,
+    "z": -368.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -511,
+    "y": 15.6,
+    "z": -394.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -509.7,
+    "y": 17.3,
+    "z": -385.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -507.1,
+    "y": 16,
+    "z": -372.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -506.8,
+    "y": 16.2,
+    "z": -175
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -503.6,
+    "y": 15.6,
+    "z": -385.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -501.3,
+    "y": 17.2,
+    "z": -411.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -500.6,
+    "y": 16.3,
+    "z": -401.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -500.2,
+    "y": 16.2,
+    "z": -174.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -492.8,
+    "y": 15.5,
+    "z": -451.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -492.1,
+    "y": 22.1,
+    "z": -244.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -490,
+    "y": 15,
+    "z": -154.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -483.5,
+    "y": 15,
+    "z": -155.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -482.7,
+    "y": 22.5,
+    "z": -232.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -478.9,
+    "y": 22,
+    "z": -226.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -475.3,
+    "y": 14.9,
+    "z": -178.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -471.5,
+    "y": 22,
+    "z": -225.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -469.4,
+    "y": 16.5,
+    "z": -459.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -469.1,
+    "y": 15.5,
+    "z": -419.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -468.7,
+    "y": 15.5,
+    "z": -332.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -465.2,
+    "y": 15.2,
+    "z": -396.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -465.2,
+    "y": 15.7,
+    "z": -367
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -464.9,
+    "y": 15.7,
+    "z": -436.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -464.6,
+    "y": 16.4,
+    "z": -360.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -463.7,
+    "y": 15.4,
+    "z": -378.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -463.2,
+    "y": 16.4,
+    "z": -386.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -461.3,
+    "y": 15.3,
+    "z": -345.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -459.2,
+    "y": 16,
+    "z": -395.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -459.2,
+    "y": 18.8,
+    "z": -366.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -457.2,
+    "y": 16,
+    "z": -387
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -456.8,
+    "y": 15.2,
+    "z": -359.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -456.8,
+    "y": 15,
+    "z": -181.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -452.7,
+    "y": 16,
+    "z": -392.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -452,
+    "y": 16.3,
+    "z": -363.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -451.6,
+    "y": 15.8,
+    "z": -384.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -451.5,
+    "y": 15.7,
+    "z": -400.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -449.5,
+    "y": 15.6,
+    "z": -331.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -448.3,
+    "y": 15.3,
+    "z": -346
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -445.2,
+    "y": 16.5,
+    "z": -405.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -444.1,
+    "y": 16.3,
+    "z": -413.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -417.8,
+    "y": -0.7,
+    "z": 309.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -407.7,
+    "y": -0.7,
+    "z": 311.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -391.9,
+    "y": 4.8,
+    "z": 14.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -391,
+    "y": 3.5,
+    "z": 23.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -368.9,
+    "y": 0.8,
+    "z": 332.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -345.6,
+    "y": 0.6,
+    "z": 158.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -325.3,
+    "y": 14.6,
+    "z": 22.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -301.4,
+    "y": 11.3,
+    "z": -62.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -301.1,
+    "y": 11.6,
+    "z": -80.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -299.1,
+    "y": 14.5,
+    "z": -70.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -293.7,
+    "y": 14.5,
+    "z": -67.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -290.1,
+    "y": 12,
+    "z": -54.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -287.9,
+    "y": 12.9,
+    "z": -61.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -279.4,
+    "y": 8.3,
+    "z": -407.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -278.6,
+    "y": 12.9,
+    "z": -61.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -278.6,
+    "y": 12.9,
+    "z": -50.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -278.2,
+    "y": 8.6,
+    "z": -416.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -275.6,
+    "y": -0.3,
+    "z": 350
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -274.3,
+    "y": 8.5,
+    "z": -410.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -272.9,
+    "y": 11.8,
+    "z": -45.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -271.5,
+    "y": 9,
+    "z": -417.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -270,
+    "y": 12.9,
+    "z": -50.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -268.3,
+    "y": 8.2,
+    "z": -409.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -266.4,
+    "y": 12.5,
+    "z": -45.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -262.3,
+    "y": 10.4,
+    "z": -39.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -261.2,
+    "y": 8.6,
+    "z": 5.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -259,
+    "y": 16.5,
+    "z": -655.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -255.2,
+    "y": 10.7,
+    "z": -28.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -249.9,
+    "y": 12.5,
+    "z": -24.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -247.4,
+    "y": 1.6,
+    "z": 391.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -230.8,
+    "y": 68.1,
+    "z": -229.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -220.8,
+    "y": 24.9,
+    "z": -116.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -212.8,
+    "y": -0.7,
+    "z": 203.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -211.5,
+    "y": -0.9,
+    "z": 195.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -210.9,
+    "y": 77.5,
+    "z": -269.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -210.5,
+    "y": -0.7,
+    "z": 215.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -210.4,
+    "y": 76.3,
+    "z": -279
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -209.7,
+    "y": 3,
+    "z": 230.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -207.6,
+    "y": -0.5,
+    "z": 209.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -205.2,
+    "y": -1.2,
+    "z": 203.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -204.4,
+    "y": 30.7,
+    "z": -210.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -203.6,
+    "y": -0.7,
+    "z": 238.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -202.9,
+    "y": -1.6,
+    "z": 223.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -202.8,
+    "y": 45,
+    "z": -228.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -196.1,
+    "y": 2,
+    "z": 201.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -196.1,
+    "y": -1.1,
+    "z": 230.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -195.4,
+    "y": -1,
+    "z": 222.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -192.1,
+    "y": -1,
+    "z": 253.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -190,
+    "y": 1.6,
+    "z": 202.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -188.6,
+    "y": -1.4,
+    "z": 264.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -187.8,
+    "y": -0.6,
+    "z": 218.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -185.1,
+    "y": 1.3,
+    "z": 199
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -183,
+    "y": -0.3,
+    "z": 243.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -183,
+    "y": -0.9,
+    "z": 259.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -182.3,
+    "y": -1.6,
+    "z": 266.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -181.2,
+    "y": 0.9,
+    "z": 215.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -180.7,
+    "y": 0.6,
+    "z": 383.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -176.3,
+    "y": -0.9,
+    "z": 260.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -174,
+    "y": 13.6,
+    "z": -692.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -172.1,
+    "y": -1.6,
+    "z": 255.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -170.6,
+    "y": 12.8,
+    "z": -686.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -167.5,
+    "y": -1.6,
+    "z": 238.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -165.9,
+    "y": 51.1,
+    "z": -231.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -162.3,
+    "y": 12.3,
+    "z": -685.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -160.5,
+    "y": 46.3,
+    "z": -234.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -159.1,
+    "y": 52,
+    "z": -275.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -156.2,
+    "y": 12.3,
+    "z": -688.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -156,
+    "y": 11.5,
+    "z": -677.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -137.6,
+    "y": -1,
+    "z": 414.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -135.7,
+    "y": 11.5,
+    "z": -690.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -134.2,
+    "y": 10.7,
+    "z": -682.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -128.8,
+    "y": 10.7,
+    "z": -689.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -116.3,
+    "y": 22.5,
+    "z": -462.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -103.7,
+    "y": 8.9,
+    "z": -620.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -102.5,
+    "y": 9,
+    "z": -667.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -98.6,
+    "y": 8.5,
+    "z": -616.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -97.9,
+    "y": 8.3,
+    "z": -646.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -97.8,
+    "y": 12.8,
+    "z": -543.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -97,
+    "y": -15.3,
+    "z": 216.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -94.2,
+    "y": 8.1,
+    "z": -621.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -90.9,
+    "y": 13.2,
+    "z": -718.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -69.3,
+    "y": 12.3,
+    "z": -723.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -63.7,
+    "y": 12.3,
+    "z": -726.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -61.5,
+    "y": 10.9,
+    "z": -651
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -59.9,
+    "y": 8.9,
+    "z": -491.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -58.4,
+    "y": 10.1,
+    "z": -500.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -57.9,
+    "y": 11.1,
+    "z": -739.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -57.3,
+    "y": 7.5,
+    "z": -635.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -55.1,
+    "y": 8.3,
+    "z": -756.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -54.4,
+    "y": 10.4,
+    "z": -494.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -51.3,
+    "y": 9.2,
+    "z": -500.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -48.2,
+    "y": 9.1,
+    "z": -601
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -47.2,
+    "y": 6.6,
+    "z": -7.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -40.5,
+    "y": 6,
+    "z": -9.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -37.8,
+    "y": -5.5,
+    "z": 20.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -35.4,
+    "y": 11,
+    "z": -741.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -28.6,
+    "y": 8.5,
+    "z": -110.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -27.5,
+    "y": -2.2,
+    "z": 44.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -27.1,
+    "y": 10.9,
+    "z": -740.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -26.7,
+    "y": 8.2,
+    "z": -686.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -23.2,
+    "y": 8.5,
+    "z": -87.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -22.6,
+    "y": 7.2,
+    "z": -78
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -19.7,
+    "y": 6,
+    "z": -59.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -16,
+    "y": 9.4,
+    "z": -604.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -8.4,
+    "y": 8.5,
+    "z": -113.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -5,
+    "y": -0.4,
+    "z": -75.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -4.9,
+    "y": 13,
+    "z": -754.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -4.1,
+    "y": -0.7,
+    "z": -63.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -3.4,
+    "y": -0.1,
+    "z": -82
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -2,
+    "y": 22.9,
+    "z": 191
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -1.9,
+    "y": -0.4,
+    "z": -70.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": -1.3,
+    "y": -1,
+    "z": -91.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 3.7,
+    "y": -3.1,
+    "z": 49.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 11.5,
+    "y": -3,
+    "z": 30.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 13.2,
+    "y": -3,
+    "z": 23.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 17.1,
+    "y": -3,
+    "z": 33.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 18.3,
+    "y": -3,
+    "z": 12.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 21.7,
+    "y": -2.6,
+    "z": 21
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 25.7,
+    "y": -3.3,
+    "z": 6.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 26.2,
+    "y": -3,
+    "z": 16.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 52,
+    "y": -2.3,
+    "z": -8.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 52.9,
+    "y": -2,
+    "z": -45.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 56.7,
+    "y": -1.8,
+    "z": -50.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 65.9,
+    "y": -0.6,
+    "z": -47
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 67.7,
+    "y": -0.6,
+    "z": -38.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 80.5,
+    "y": -1.1,
+    "z": -38.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 89.2,
+    "y": -1.1,
+    "z": -43.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 90.7,
+    "y": 18.1,
+    "z": -842.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 95.5,
+    "y": 17.2,
+    "z": -849
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 101.2,
+    "y": 18.1,
+    "z": -851.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 105.4,
+    "y": 18,
+    "z": -836.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 109.7,
+    "y": 17.9,
+    "z": -841.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 115.2,
+    "y": -2.7,
+    "z": 9.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 119.4,
+    "y": 7.9,
+    "z": -605.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 123.8,
+    "y": 24.7,
+    "z": -749.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 125.9,
+    "y": 24.7,
+    "z": -742.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 129.8,
+    "y": 23.5,
+    "z": -733.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 130.1,
+    "y": -3.6,
+    "z": 101.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 131.8,
+    "y": 25.5,
+    "z": -739.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 132.2,
+    "y": 24.6,
+    "z": -760.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 137.9,
+    "y": 27.8,
+    "z": -728.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 140.2,
+    "y": -10.4,
+    "z": 35.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 190.4,
+    "y": 11,
+    "z": -581.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 193.9,
+    "y": 11.4,
+    "z": -599.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 194.1,
+    "y": -14.4,
+    "z": 260.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 195.8,
+    "y": 0.7,
+    "z": -7.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 197.3,
+    "y": 12,
+    "z": -606.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 219.5,
+    "y": 19,
+    "z": -708.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 219.9,
+    "y": 24.4,
+    "z": -700.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 221.7,
+    "y": -1.3,
+    "z": -63.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 221.8,
+    "y": 24.4,
+    "z": -718.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 224.5,
+    "y": 21.2,
+    "z": -704.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 226.3,
+    "y": 25.1,
+    "z": -696.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 226.4,
+    "y": -1.3,
+    "z": -75.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 228,
+    "y": 20.3,
+    "z": -710.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 232.3,
+    "y": -1.7,
+    "z": -72.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 233.4,
+    "y": 20.8,
+    "z": -707.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 237.1,
+    "y": -1.3,
+    "z": -61.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 238.6,
+    "y": -1.3,
+    "z": -71.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 241.1,
+    "y": -1.4,
+    "z": -80.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 242.5,
+    "y": -7.5,
+    "z": 121.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 243.4,
+    "y": -3.5,
+    "z": -59.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 245,
+    "y": -0.6,
+    "z": -70.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 245.4,
+    "y": -9.9,
+    "z": 291.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 246.2,
+    "y": -8.1,
+    "z": 129.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 257.7,
+    "y": 29.8,
+    "z": -434.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 265.7,
+    "y": 23.1,
+    "z": -519.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 268.8,
+    "y": 23.3,
+    "z": -513.4
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 269.1,
+    "y": 21.8,
+    "z": -443
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 271.5,
+    "y": 23,
+    "z": -436.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 274.5,
+    "y": 23.5,
+    "z": -502.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 275.5,
+    "y": 23.7,
+    "z": -511
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 276.9,
+    "y": 24,
+    "z": -432.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 280.6,
+    "y": 23.5,
+    "z": -505.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 281.1,
+    "y": 23.9,
+    "z": -438.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 283.4,
+    "y": 23.1,
+    "z": -511.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 285.8,
+    "y": 23.8,
+    "z": -517.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 290.6,
+    "y": 23.8,
+    "z": -511.5
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 290.6,
+    "y": 23.9,
+    "z": -502.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 294.2,
+    "y": 22.8,
+    "z": -442.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 295.7,
+    "y": 23.3,
+    "z": -506.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 300,
+    "y": 23.1,
+    "z": -444.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 304.5,
+    "y": 24,
+    "z": -461.2
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 306.6,
+    "y": 24.1,
+    "z": -454.9
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 310.2,
+    "y": 23.2,
+    "z": -464.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 316.3,
+    "y": 22.9,
+    "z": -464.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 340.4,
+    "y": -11.7,
+    "z": 233.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 358.5,
+    "y": -12.1,
+    "z": 246.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 360.6,
+    "y": -13.4,
+    "z": 202.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 363.6,
+    "y": -11.7,
+    "z": 235.6
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 368.4,
+    "y": -14.8,
+    "z": 251.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 373.8,
+    "y": -13.4,
+    "z": 204.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 403.6,
+    "y": -11.7,
+    "z": 233.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 409,
+    "y": -13.2,
+    "z": 241.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 410,
+    "y": 12.6,
+    "z": -608.7
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 410.1,
+    "y": -13.1,
+    "z": 233.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 414.6,
+    "y": -12.4,
+    "z": 238.1
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 423.9,
+    "y": -4.3,
+    "z": -24
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 431.7,
+    "y": -4.6,
+    "z": -24.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 443.6,
+    "y": -13,
+    "z": 61.8
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 443.9,
+    "y": -13.1,
+    "z": 68.3
+   },
+   "level": "surface"
+  },
+  {
+   "type": "loot_spt",
+   "name": "Loose loot (SPT)",
+   "position": {
+    "x": 482.5,
+    "y": -4.4,
+    "z": -50.3
+   },
+   "level": "surface"
+  }
+ ]
 }

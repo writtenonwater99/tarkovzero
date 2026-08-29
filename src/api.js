@@ -32,8 +32,8 @@ async function fetchSnapshot(normalizedName) {
 }
 
 // The public API does not carry Wiki panel/floor metadata. Merge the generated
-// community levels (and switches, which are community-only) onto live objects by
-// stable human name so production and the offline snapshot render identically.
+// community levels plus community-only switches and loot containers onto live
+// objects by stable human name so production and the offline snapshot render identically.
 function mergeCommunityMeta(live, community) {
   const extractMeta = new Map((community.extracts || []).map((e) => [`${e.name}|${e.faction}`, e]));
   const extractByName = new Map((community.extracts || []).map((e) => [e.name, e]));
@@ -46,6 +46,7 @@ function mergeCommunityMeta(live, community) {
     }),
     locks: (live.locks || []).map((l) => ({ ...l, level: lockMeta.get(l.key?.name)?.level ?? 'surface' })),
     switches: community.switches ?? live.switches ?? [],
+    containers: community.containers ?? live.containers ?? [],
   };
 }
 
