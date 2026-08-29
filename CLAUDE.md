@@ -37,7 +37,24 @@ first real test should confirm the arrow direction.
 ## Screenshot filename (what the companion parses)
 `2026-08-28[21-14]_-136.1, 1.9, 92.3_0.0, -0.4, 0.0, 0.9_11.83 (0).png` → x, y, z then quaternion x, y, z, w.
 If the real game's format differs, fix `RE`/`parseScreenshot` in `companion/companion.mjs` and note the real
-format here.
+format here. **Real-game confirmation pending** (companion prints every filename with `--verbose`; unparseable
+names are always printed).
+
+## Game laptop facts (observed 2026-08-28, EFT 1.1.0.1.46911, Steam build)
+- EFT is the **Steam** version: `C:\Program Files (x86)\Steam\steamapps\common\Escape from Tarkov\build\`.
+  Logs are at `build\Logs\log_<date>_<ver>\<ver> {application,backend,output,push-notifications,...}_000.log`
+  — **not** `%LOCALAPPDATA%\Battlestate Games\EFT\Logs` (that only holds the BSG launcher on a Steam install).
+  Unity `Player.log` lives in `%LOCALAPPDATA%Low\Battlestate Games\EscapeFromTarkov\`.
+- Documents is not OneDrive-redirected on this machine; screenshots go to
+  `C:\Users\REDACTED\Documents\Escape from Tarkov\Screenshots` (folder is created by EFT on the first screenshot).
+- Screenshot key binding is in the application log's settings dump: `"keyName":"MakeScreenshot","variants":[{"keyCode":["SysReq"]}` = PrintScreen. Companion reads it for `--auto`.
+- Map detection: `application_*.log` never names the map (only `MatchingCompleted / LocationLoaded / GameStarted`).
+  `push-notifications_*.log` carries `"location": "bigmap"` etc. inside `groupMatchRaidSettings` — group raids
+  only. Solo/offline raid map source still unknown; companion takes the last `"location": "<id>"` seen across the
+  newest session's logs and falls back to `customs`. Raw ids: `bigmap`=customs, `factory4_day/night`, `Woods`,
+  `Shoreline`, `Interchange`, `RezervBase`, `Lighthouse`, `TarkovStreets`, `laboratory`, `Sandbox(_high)`.
+- Run the companion with Windows node (`node.exe companion.mjs` from WSL works); it polls the folder (250 ms)
+  because `fs.watch` never fires on `/mnt/c`.
 
 ## Credits / constraints
 Tiles, SVG, labels, coordinate transform: tarkov.dev (the-hideout) — keep the credit in the UI.
