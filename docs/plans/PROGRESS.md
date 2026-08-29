@@ -108,3 +108,33 @@ Selected captures:
 1. SwiftShader still intermittently renders the heavier Reserve surface scene black; native headless GL does the same on this host. The successful Reserve U and Woods rock captures are extremely over-zoomed/blurry as warned in the playbook, so a real-GPU pass remains the final silhouette/antialias gate for the helicopter, Dome cap/mast, and ridge transitions.
 2. Icons are screen-sized, and the new per-map hierarchy removes the reviewed worst label collisions, but count-based marker clustering and general automatic 2D place-label collision/edge avoidance remain separate lower-priority UI work.
 3. The Reserve underground shape/labels are authoritative map geometry and terminology, but the detached Wiki-panel controls and D-2/Hermetic endpoints still warrant the in-game position trace already requested above.
+
+## Fix pass 2
+
+### Changed
+
+- Marker levels: the community builder now emits a validated `level` (`surface`, `underground`, `rooftop`, or `upper`) for every extract/transit, lock, and switch. It combines audited Wiki-panel/name overrides with the named negative-Y underground extents in maps.json. Customs' affine is frozen to the checked-in calibration because the live Wiki image width shifted slightly; rebuilding therefore preserves every prior Customs coordinate.
+- Reserve: D-2, Bunker Hermetic Door, and Depot Hermetic Door are `underground`; Cliff Descent and all other extracts/transits are `surface`. The D-2 power lever and sliding-door button are underground, while the Bunker Hermetic Door power lever remains correctly surface-level in its shack. RB-KPRL is marked `upper`. Woods has no underground extracts; its ZB markers remain surface entrances, matching the reviewed instruction.
+- Marker rendering: the live tarkov.dev response is enriched with the generated community levels so production and snapshot fallback agree. Non-surface levels are appended to 2D popups/tooltips and 3D extract chips; find results list the level. Underground badges carry a dashed inner rule, amber down/stairs corner mark, and stronger highlight. U floor mode filters to underground markers, so Reserve's underground exits and controls remain available over the bunker network.
+- Woods roads: a data-driven spatial reclassification splits the long SVG paths at `z=-250`; current-game northern and Scav Town runs are dirt while southern paved approaches remain paved. The road builder now supports auditable reclassification zones without changing bridge detection, and all three whitelisted bridge decks remain intact.
+- Woods terrain/identity: two zoom-5 satellite traces add the Sawmill sawdust/log yard and Military Camp hardstand as Woods-only bare-earth polygons baked into the terrain texture, retaining normal terrain hillshade and mottle. Scav House was audited and intentionally omitted because its visible compound is grass. Sawmill walls/roofs and 14 log-stack props now use weathered timber tones.
+- Map picker: the invisible native select is replaced by an obvious title button with chevron, pointer, hover/focus treatment, and a visible Customs / Reserve / Woods menu. The current map is checked and exposed through `menuitemradio` state. Arrow keys, Home/End, Enter/Space, Escape, Tab, outside click, and focus return are supported; `#map-switcher` and the existing title hooks remain stable.
+
+### Verified
+
+- `npm run build` passes; Vite reports only the existing deck.gl chunk-size advisory. All six community/3D builder runs pass deterministically, all generated JSON numbers are finite, every generated extract/lock/switch has a valid level, and `git diff --check` passes.
+- Reserve's exact underground extract set is `D-2`, `Bunker Hermetic Door`, and `Depot Hermetic Door`; Woods' non-surface extract set is empty. The Woods output has two yard polygons, 12 dirt road runs, and no `main` road point north of the audited transition (apart from the shared 3 m split sample at the boundary).
+- Customs semantic gate: deleting only `level` from the new extracts, locks, and switches produces a structure identical to the pre-pass `public/data/customs.json`. The old JSON hash `7fa80f4f896998b0537c18d4da3cf6af8e19cb3be7127e0c1520f08547d9ebdf` becomes:
+
+```text
+314265546709fc77d3b827da1d15881bd173571482f6b4e4fe2f5ecd4cd5e1d6  public/data/customs.json
+a6aadd836a978892f5b342c3412c9a00ed36463e695f9800b6502e3671f90d26  public/data/customs-3d.json
+```
+
+  `customs-3d.json` is byte-identical to the pre-pass baseline.
+- Browser keyboard verification opened the picker from `#map-switcher` with ArrowDown, moved focus from Reserve to Woods with the next ArrowDown, closed it with Escape, returned focus to the trigger, and retained Reserve as the checked menu item.
+- SwiftShader rendered the focused 3D scenes successfully on this pass. Screenshots cover both 2D and 3D behavior:
+  - Underground/UI: `scratch/fix-pass-2/reserve-2d-level-popup-find.png`, `reserve-3d-underground.png`, `reserve-3d-underground-all-extracts.png`, `map-picker-2d.png`, and `map-picker-3d.png`.
+  - Woods: `scratch/fix-pass-2/woods-roads.png`, `woods-3d-sawmill.png`, `woods-3d-scav-town-dirt.png`, and `woods-3d-military-yard.png`.
+
+No deploy, push, or commit was performed.

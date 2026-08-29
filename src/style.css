@@ -73,10 +73,27 @@ body.view-3d .hud-btn.only-3d{display:grid}
   background:var(--panel);border-bottom:1px solid var(--line-soft)}
 .head-id{position:relative;min-width:0;flex:1}
 .wordmark{font:500 10px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--text-ghost)}
-.map-title{margin:3px 0 0;font:600 var(--fs-title)/1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
-.map-picker{position:absolute;left:0;top:13px;width:122px;height:25px;z-index:1}
-.map-picker select{width:100%;height:100%;opacity:0;cursor:pointer}
-.head-id:focus-within .map-title{outline:1px solid var(--mint);outline-offset:2px}
+.map-title{margin:1px 0 0;font:inherit}
+#map-switcher{display:inline-flex;align-items:center;gap:5px;max-width:100%;margin:0 -5px;padding:2px 5px 3px;appearance:none;
+  background:transparent;border:1px solid transparent;border-radius:var(--r-sm);color:var(--text);cursor:pointer;
+  font:600 var(--fs-title)/1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;text-align:left;
+  transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast)}
+#map-switcher:hover,#map-switcher[aria-expanded=true]{background:var(--panel-hi);border-color:var(--line);color:var(--cream)}
+#map-switcher:hover .map-title-text{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
+#map-switcher:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.map-title-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map-chev{flex:none;color:var(--text-mute);transition:transform var(--t-fast),color var(--t-fast)}
+#map-switcher:hover .map-chev,#map-switcher[aria-expanded=true] .map-chev{color:var(--text);transform:translateY(1px)}
+.map-menu{position:absolute;z-index:30;top:39px;left:-5px;width:176px;padding:4px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:var(--r-md);box-shadow:var(--shadow-hud)}
+.map-menu[hidden]{display:none}
+.map-option{display:grid;grid-template-columns:14px 1fr;align-items:center;gap:7px;width:100%;height:32px;padding:0 7px;
+  appearance:none;background:transparent;border:0;border-radius:var(--r-sm);color:var(--text-dim);cursor:pointer;text-align:left;
+  font:600 13px/1 var(--f-display);letter-spacing:.055em;text-transform:uppercase}
+.map-option:hover,.map-option:focus-visible{background:var(--panel-hi);color:var(--text);outline:0}
+.map-option[aria-checked=true]{color:var(--cream)}
+.map-option .map-check{color:transparent;font:700 12px/1 var(--f-mono)}
+.map-option[aria-checked=true] .map-check{color:var(--acc)}
 .sheet-badge{display:none}
 
 /* segmented control */
@@ -310,6 +327,8 @@ body.view-3d .hud-btn.only-3d{display:grid}
 .extract-name.extract-scav{border-color:#E0872B}
 .extract-name.extract-transit{border-color:#3A96BA}
 .extract-name.extract-shared{border-color:#8CA06E}
+.extract-name.level-underground{border-style:dashed;border-color:#FFB030}
+.extract-name.level-underground::after{content:'↧';margin-left:4px;color:#FFCB72;font:700 10px/1 var(--f-mono)}
 .leaflet-tooltip.extract-name::before,.extract-name::before{display:none}
 
 /* marker icons */
@@ -317,6 +336,7 @@ body.view-3d .hud-btn.only-3d{display:grid}
 .mk{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;vertical-align:middle;
   opacity:var(--marker-opacity);transition:opacity .15s,transform .15s;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
 .mk svg{display:block}
+.mk.level-underground{filter:drop-shadow(0 0 2px rgba(255,176,48,.7)) drop-shadow(0 1px 2px rgba(0,0,0,.7))}
 .leaflet-marker-icon:hover .mk{opacity:1;transform:scale(1.15)}
 #layers .mk,.res .mk{opacity:1}
 /* search ping */

@@ -8,6 +8,7 @@
    "id": "wiki-47",
    "name": "Bridge V-Ex",
    "faction": "pmc",
+   "level": "surface",
    "note": "Requires ~20,000 Roubles",
    "position": {
     "x": -486.2,
@@ -19,6 +20,7 @@
    "id": "wiki-48",
    "name": "Northern UN Roadblock",
    "faction": "pmc",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -555.1,
@@ -30,6 +32,7 @@
    "id": "wiki-49",
    "name": "ZB-016",
    "faction": "pmc",
+   "level": "surface",
    "note": "Green flares = Open",
    "position": {
     "x": -393.7,
@@ -41,6 +44,7 @@
    "id": "wiki-50",
    "name": "RUAF Gate",
    "faction": "pmc",
+   "level": "surface",
    "note": "Green flare = Open",
    "position": {
     "x": -144.3,
@@ -52,6 +56,7 @@
    "id": "wiki-51",
    "name": "Scav House",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 412.1,
@@ -63,6 +68,7 @@
    "id": "wiki-52",
    "name": "Boat",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 181.6,
@@ -74,6 +80,7 @@
    "id": "wiki-53",
    "name": "Dead Man's Place",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 186.7,
@@ -85,6 +92,7 @@
    "id": "wiki-54",
    "name": "RUAF Roadblock",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -140.5,
@@ -96,6 +104,7 @@
    "id": "wiki-55",
    "name": "Mountain Stash",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -206.3,
@@ -107,6 +116,7 @@
    "id": "wiki-56",
    "name": "Scav Bunker",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 227.8,
@@ -118,6 +128,7 @@
    "id": "wiki-58",
    "name": "Friendship Bridge (Co-Op)",
    "faction": "shared",
+   "level": "surface",
    "note": "Requires PMC + Scav",
    "position": {
     "x": 100.7,
@@ -129,6 +140,7 @@
    "id": "wiki-59",
    "name": "UN Roadblock",
    "faction": "shared",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -534.9,
@@ -140,6 +152,7 @@
    "id": "wiki-60",
    "name": "Outskirts",
    "faction": "shared",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 348.6,
@@ -151,6 +164,7 @@
    "id": "wiki-61",
    "name": "ZB-014",
    "faction": "pmc",
+   "level": "surface",
    "note": "Green flares = Open<br/>Requires ZB-014 key",
    "position": {
     "x": 435.2,
@@ -162,6 +176,7 @@
    "id": "wiki-350",
    "name": "Old Railway Depot",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -517,
@@ -173,6 +188,7 @@
    "id": "wiki-351",
    "name": "Eastern Rocks",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -506.7,
@@ -184,6 +200,7 @@
    "id": "wiki-484",
    "name": "Transit to Reserve",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": 241.1,
@@ -195,6 +212,7 @@
    "id": "wiki-488",
    "name": "Transit to Factory",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": -362.2,
@@ -206,6 +224,7 @@
    "id": "wiki-489",
    "name": "Transit to Lighthouse",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": 497.5,
@@ -217,6 +236,7 @@
    "id": "wiki-491",
    "name": "Power Line Passage (Flare)",
    "faction": "pmc",
+   "level": "surface",
    "note": "Requires a green flare to be shot into the sky while inside the signal flare area.",
    "position": {
     "x": 569.3,
@@ -228,6 +248,7 @@
    "id": "wiki-515",
    "name": "Railway Bridge to Tarkov",
    "faction": "shared",
+   "level": "surface",
    "note": "Requires Minefield map (Woods)",
    "position": {
     "x": -729.9,
@@ -239,6 +260,7 @@
    "id": "wiki-517",
    "name": "Transit to Customs",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": -154.2,
@@ -4932,7 +4954,8 @@
     "x": 27.5,
     "y": 0,
     "z": -30.6
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4943,7 +4966,8 @@
     "x": -1.6,
     "y": 0,
     "z": -64.6
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4954,7 +4978,8 @@
     "x": -510.8,
     "y": 0,
     "z": -386.7
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4965,7 +4990,8 @@
     "x": -656.6,
     "y": 0,
     "z": 179.5
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4976,7 +5002,8 @@
     "x": -659.2,
     "y": 0,
     "z": 182.3
-   }
+   },
+   "level": "surface"
   }
  ],
  "switches": []

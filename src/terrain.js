@@ -34,6 +34,7 @@ const FILL_DIR = [0.5, 0.35, -0.79];
 
 const GRASS = [[40, 62, 42], [50, 76, 45], [62, 88, 49], [80, 100, 54], [102, 114, 62]];
 const GRASS_DRY = [110, 106, 84];
+const YARD_EARTH = [112, 86, 57];
 const BAND_TOP = [66, 62, 54], BAND_BOT = [24, 27, 25];
 
 // ---------------------------------------------------------------- small maths helpers
@@ -188,6 +189,12 @@ export function buildTerrain(data) {
   const dEdge = chamfer(outsideMask, aw, ah);                       // cells from the limit boundary, inwards
   const waterMask = rasterRings(data.water || [], new Uint8Array(aw * ah), aw, ah, X0, Z0, AOC, AOC);
   const dWater = chamfer(waterMask, aw, ah);
+  const yardRings = (data.yards || []).map((d) => d.poly ?? d);
+  // Woods-only compacted compounds are part of the terrain material, not flat
+  // overlays, so the same hillshade/mottle and mesh silhouette continue through them.
+  const yardMask = yardRings.length
+    ? rasterRings(yardRings, new Uint8Array(TEX_W * TH_T), TEX_W, TH_T, X0, Z0, mx, mz)
+    : null;
   const sampleAO = (raster, px, py) => {
     const i = clamp(Math.floor(((px + 0.5) * mx) / AOC), 0, aw - 1);
     const j = clamp(Math.floor(((py + 0.5) * mz) / AOC), 0, ah - 1);
@@ -224,6 +231,12 @@ export function buildTerrain(data) {
       // (c) slope tint toward dry khaki — an independent relief cue
       const slope = Math.hypot(dhdx, dhdz), dry = Math.min(0.5, slope * 3.2);
       r += (GRASS_DRY[0] - r) * dry; g += (GRASS_DRY[1] - g) * dry; b += (GRASS_DRY[2] - b) * dry;
+      if (yardMask?.[o + px]) {
+        const earth = 0.82 + (vnoise(gx - 43, gz + 17, 11) - 0.5) * 0.12;
+        r += (YARD_EARTH[0] * earth - r) * 0.88;
+        g += (YARD_EARTH[1] * earth - g) * 0.88;
+        b += (YARD_EARTH[2] * earth - b) * 0.88;
+      }
       // (b) two-light hillshade in deck space (Nx = +VE*dh/dx because deck X = -gameX)
       const nx = SHADE_VE * dhdx, ny = SHADE_VE * dhdz;
       const nl = Math.sqrt(nx * nx + ny * ny + 1);

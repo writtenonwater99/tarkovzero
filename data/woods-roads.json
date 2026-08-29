@@ -1,6 +1,14 @@
 {
- "_doc": "Woods road additions and audited edits in game coordinates.",
+ "_doc": "Woods road additions and audited edits in game coordinates. Spatial zones split long SVG paths before reclassifying only the in-zone run.",
  "add": [],
+ "reclassifyZones": [
+  {
+   "name": "current-game northern and Scav Town dirt network",
+   "bounds": [[-761, -914], [646, -250]],
+   "from": ["main"],
+   "to": "dirt"
+  }
+ ],
  "reclassify": [],
  "remove": []
 }

@@ -18,8 +18,13 @@
         <header class="rail-head">
           <div class="head-id">
             <div class="wordmark">TarkovZero</div>
-            <h1 class="map-title">Customs</h1>
-            <label class="map-picker"><span class="vh">Map</span><select id="map-switcher" aria-label="Map"></select></label>
+            <h1 class="map-title">
+              <button type="button" id="map-switcher" aria-label="Choose map" aria-haspopup="menu" aria-expanded="false" aria-controls="map-menu">
+                <span class="map-title-text">Customs</span>
+                <svg class="map-chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 4.25 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </h1>
+            <div id="map-menu" class="map-menu" role="menu" aria-label="Maps" hidden></div>
           </div>
           <div id="view-toggle" class="seg" role="group" aria-label="2D or 3D view">
             <button type="button" class="seg-cell on" data-view="2d" aria-pressed="true">2D</button>

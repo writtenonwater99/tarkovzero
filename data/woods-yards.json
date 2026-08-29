@@ -1,0 +1,13 @@
+{
+ "_doc": "Bare-earth compounds traced from the tarkov.dev Woods satellite at zoom 5. Scav House remains omitted because its visible clearing is grass, not a compacted yard.",
+ "yards": [
+  {
+   "name": "Sawmill sawdust and log yard",
+   "poly": [[-70, -91], [12, -104], [69, -83], [88, -49], [84, -7], [69, 22], [78, 58], [49, 84], [-5, 91], [-48, 76], [-64, 42], [-76, 4], [-67, -37]]
+  },
+  {
+   "name": "Military Camp compacted hardstand",
+   "poly": [[-226, 194], [-190, 186], [-155, 194], [-139, 216], [-145, 250], [-166, 276], [-207, 270], [-226, 247]]
+  }
+ ]
+}

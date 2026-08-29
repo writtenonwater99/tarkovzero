@@ -25,16 +25,40 @@ const mapData = selectMap(requestedMap);
 const mapLabels = LABELS[mapData.key] ?? [];
 const RAID = mapData.raid;
 document.title = `TarkovZero — ${mapData.name}`;
-$('.map-title').textContent = mapData.name;
+$('.map-title-text').textContent = mapData.name;
 const mapSwitcher = $('#map-switcher');
-mapSwitcher.innerHTML = Object.values(MAPS).map((m) => `<option value="${m.key}">${m.name}</option>`).join('');
+const mapMenu = $('#map-menu');
 mapSwitcher.value = mapData.key;
-mapSwitcher.onchange = () => {
+mapMenu.innerHTML = Object.values(MAPS).map((m) => `<button type="button" class="map-option" role="menuitemradio" aria-checked="${m.key === mapData.key}" data-map="${m.key}"><span class="map-check" aria-hidden="true">✓</span><span>${m.name}</span></button>`).join('');
+const mapOptions = $$('.map-option', mapMenu);
+const goMap = (key) => {
   const url = new URL(location.href);
-  url.searchParams.set('map', mapSwitcher.value);
+  url.searchParams.set('map', key);
   url.hash = '';
   location.assign(url);
 };
+function setMapMenu(open, focus = false) {
+  mapMenu.hidden = !open;
+  mapSwitcher.setAttribute('aria-expanded', String(open));
+  if (open && focus) (mapOptions.find((b) => b.dataset.map === mapData.key) ?? mapOptions[0])?.focus();
+}
+mapSwitcher.onclick = (e) => { e.stopPropagation(); setMapMenu(mapMenu.hidden); };
+mapSwitcher.onkeydown = (e) => {
+  if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); setMapMenu(true, true); }
+};
+mapOptions.forEach((b) => { b.onclick = () => goMap(b.dataset.map); });
+mapMenu.onkeydown = (e) => {
+  const i = mapOptions.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const d = e.key === 'ArrowDown' ? 1 : -1;
+    mapOptions[(i + d + mapOptions.length) % mapOptions.length]?.focus(); e.preventDefault();
+  } else if (e.key === 'Home' || e.key === 'End') {
+    mapOptions[e.key === 'Home' ? 0 : mapOptions.length - 1]?.focus(); e.preventDefault();
+  } else if (e.key === 'Escape') {
+    setMapMenu(false); mapSwitcher.focus(); e.preventDefault(); e.stopPropagation();
+  } else if (e.key === 'Tab') setMapMenu(false);
+};
+document.addEventListener('click', (e) => { if (!e.target.closest('.head-id')) setMapMenu(false); });
 const map = L.map('map', {
   crs: getCRS(mapData),
   minZoom: mapData.minZoom,
@@ -122,21 +146,27 @@ function updateHud() {
 
 /* ------------------------------------------------------------ markers ---- */
 const icons = {};
-const iconFor = (kind, letter = null) => (icons[kind + ':' + letter] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
-function marker(p, kind, html, name = null) {
-  const m = L.marker(pos(p), { icon: iconFor(kind, kind.startsWith('extract') ? extractLetter(name) : null) }).bindPopup(html);
+const safeLevel = (level) => ['surface', 'underground', 'rooftop', 'upper'].includes(level) ? level : 'surface';
+const levelSuffix = (level) => safeLevel(level) === 'surface' ? '' : ` · ${safeLevel(level).toUpperCase()}`;
+const iconFor = (kind, letter = null, level = 'surface') => {
+  const key = `${kind}:${letter ?? ''}:${safeLevel(level)}`;
+  return (icons[key] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter, safeLevel(level)), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
+};
+function marker(p, kind, html, name = null, level = 'surface') {
+  const m = L.marker(pos(p), { icon: iconFor(kind, kind.startsWith('extract') ? extractLetter(name) : null, level) }).bindPopup(html);
   // Extracts carry their full name on hover — the badge letter alone is a riddle.
-  if (kind.startsWith('extract') && name) m.bindTooltip(esc(name), { direction: 'top', offset: [0, -13], className: 'extract-name ' + kind, opacity: 1 });
+  if (kind.startsWith('extract') && name) m.bindTooltip(esc(name + levelSuffix(level)), { direction: 'top', offset: [0, -13], className: `extract-name ${kind} level-${safeLevel(level)}`, opacity: 1 });
   return m;
 }
 
 /** Classify raw map data into marker points: [{kind, position, html}] — shared by the 2D and 3D views. */
 export function classify(d) {
   const out = [];
-  const add = (kind, position, html, name = null) => out.push({ kind, position, html, name });
+  const add = (kind, position, html, name = null, level = 'surface') => out.push({ kind, position, html, name, level: safeLevel(level) });
   for (const e of d.extracts) {
     const f = ['pmc', 'scav', 'transit'].includes(e.faction) ? e.faction : 'shared';
-    add('extract-' + f, e.position, `<b>${e.name}</b>Extract · ${f}${e.note ? `<br><i>${e.note}</i>` : ''}`, e.name);
+    const level = safeLevel(e.level);
+    add('extract-' + f, e.position, `<b>${e.name}${levelSuffix(level)}</b>Extract · ${f} · ${level}${e.note ? `<br><i>${e.note}</i>` : ''}`, e.name, level);
   }
   for (const s of d.spawns) {
     const isBoss = s.categories.includes('boss');
@@ -149,8 +179,8 @@ export function classify(d) {
   }
   for (const h of d.hazards) add('hazard', h.position, `<b>${h.name}</b>`);
   for (const w of d.stationaryWeapons) add('weapon', w.position, `<b>${w.stationaryWeapon.name}</b>`);
-  for (const sw of d.switches ?? []) add('switch', sw.position, `<b>${sw.name}</b>`);
-  for (const l of d.locks) add('lock', l.position, `<b>${l.key?.name ?? 'Lock'}</b>${l.lockType}`);
+  for (const sw of d.switches ?? []) { const level = safeLevel(sw.level); add('switch', sw.position, `<b>${sw.name}${levelSuffix(level)}</b>Switch · ${level}`, sw.name, level); }
+  for (const l of d.locks) { const level = safeLevel(l.level); add('lock', l.position, `<b>${l.key?.name ?? 'Lock'}${levelSuffix(level)}</b>${l.lockType} · ${level}`, l.key?.name, level); }
   return out;
 }
 
@@ -325,7 +355,7 @@ function renderMarkers(data, source) {
   for (const m of markerPoints) {
     if (!KINDS[m.kind]) continue;
     if (!layerOf.has(m.kind)) layerOf.set(m.kind, L.layerGroup());
-    layerOf.get(m.kind).addLayer(marker(m.position, m.kind, m.html, m.name));
+    layerOf.get(m.kind).addLayer(marker(m.position, m.kind, m.html, m.name, m.level));
     countOf.set(m.kind, (countOf.get(m.kind) ?? 0) + 1);
   }
   fillRows();
@@ -365,7 +395,7 @@ function buildSearchIndex() {
   for (const m of markerPoints) {
     if (!m.kind.startsWith('extract') || !m.name) continue;
     if (index.some((i) => i.kind === 'extract' && i.label === m.name)) continue;
-    index.push({ kind: 'extract', label: m.name, sub: m.kind.replace('extract-', ''), x: m.position.x, z: m.position.z, badge: extractLetter(m.name) ?? '', mk: m.kind });
+    index.push({ kind: 'extract', label: m.name, sub: `${m.kind.replace('extract-', '')} · ${safeLevel(m.level)}`, level: safeLevel(m.level), x: m.position.x, z: m.position.z, badge: extractLetter(m.name) ?? '', mk: m.kind });
   }
   for (const l of mapLabels) index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] });
   for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'filter', mk: k });
@@ -556,6 +586,7 @@ function togglePop(pop, trigger) {
 }
 function closePops() {
   for (const p of $$('.pop')) p.hidden = true;
+  setMapMenu(false);
   statusEl.setAttribute('aria-expanded', 'false');
   $('#help-btn').setAttribute('aria-expanded', 'false');
 }

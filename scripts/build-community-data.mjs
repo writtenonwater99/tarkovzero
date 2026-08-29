@@ -14,6 +14,7 @@ const CONFIG = {
   customs: {
     name: 'Customs',
     spt: 'scripts/spt-bigmap-base.json',
+    maps: 'scripts/tarkov-dev-maps.json',
     // Customs has no checked-in raw wiki response yet; retain the online fallback used by the original builder.
     wikiUrl: 'https://escapefromtarkov.fandom.com/api.php?action=query&prop=revisions&titles=Map:Customs&rvslots=main&rvprop=content&format=json',
     calibration: [
@@ -23,9 +24,30 @@ const CONFIG = {
       { title: 'Old Gas Station', game: [311, -178] },
     ],
     axisAligned: true,
+    // Frozen against the checked-in Customs snapshot. The live Wiki image width
+    // shifted slightly after the original calibration; keeping this affine makes
+    // the regression gate change only through the newly emitted level fields.
+    affine: { x: [-0.24374729, 0, 674.1179914778126], z: [0, -0.2611668507, 282.5499042] },
+    // Underground extents in maps.json identify the bunker/basement panels. These
+    // names cover entrances whose calibrated Wiki point sits just outside the box.
+    levelOverrides: {
+      extract: {
+        'ZB-1011': 'underground', "Smugglers' Bunker (ZB-1012)": 'underground',
+        'ZB-013': 'underground', 'Old Gas Station': 'underground',
+        'Boiler Room Basement (Co-op)': 'underground',
+      },
+      lock: {
+        "Tarcone Director's Office": 'upper', 'Dorm Room 206': 'upper',
+        'Dorm Room 220': 'upper', 'Dorm Room 218': 'upper', 'Dorm Room 214': 'upper',
+        'Dorm Room 203': 'upper', 'Dorm Room 204': 'upper', 'Dorm Room 303': 'upper',
+        'Dorm Room 306': 'upper', 'Dorm Room 315': 'upper', 'Dorm Room 308': 'upper',
+        'Marked Dorm Room 314': 'upper', "Company Director's Room": 'upper',
+      },
+      switch: { 'ZB-013 power lever': 'upper' },
+    },
   },
   reserve: {
-    name: 'Reserve', spt: 'scripts/data/reserve/spt-base.json', wiki: 'scripts/data/reserve/wiki-map.json',
+    name: 'Reserve', spt: 'scripts/data/reserve/spt-base.json', wiki: 'scripts/data/reserve/wiki-map.json', maps: 'scripts/data/reserve/maps-entry.json',
     // Surface-sheet PMC symbols matched to the corresponding SPT Player-spawn clusters.
     // The wiki image is rotated/skewed and also contains separate building/bunker inset panels,
     // so this full affine is deliberately fitted only from the authoritative surface panel.
@@ -53,9 +75,17 @@ const CONFIG = {
     },
     include: (m) => !(['locked', 'loot_key'].includes(m.categoryId)
       && !(m.position[0] >= 374 && m.position[0] <= 3100 && m.position[1] >= 350 && m.position[1] <= 2420)),
+    // D-2 and both Hermetic exits fall inside authoritative negative-Y Bunkers
+    // extents. The Hermetic power lever is the explicit surface exception: it is
+    // in the shack west of White Pawn even though its X/Z overlaps the tunnels.
+    levelOverrides: {
+      extract: { 'D-2': 'underground', 'Bunker Hermetic Door': 'underground', 'Depot Hermetic Door': 'underground', 'Cliff Descent': 'surface' },
+      switch: { 'Bunker Hermetic Door power lever': 'surface', 'D-2 power lever': 'underground', 'D-2 sliding door button': 'underground' },
+      lock: { 'RB-KPRL': 'upper' },
+    },
   },
   woods: {
-    name: 'Woods', spt: 'scripts/data/woods/spt-base.json', wiki: 'scripts/data/woods/wiki-map.json',
+    name: 'Woods', spt: 'scripts/data/woods/spt-base.json', wiki: 'scripts/data/woods/wiki-map.json', maps: 'scripts/data/woods/maps-entry.json',
     // Mutual-nearest matches between current wiki PMC markers and current SPT Player points.
     calibration: [
       { id: '4', game: [487.358643, 328.52] },
@@ -76,6 +106,9 @@ const stamp = process.argv.includes('--stamp');
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 
 const spt = JSON.parse(await readFile(cfg.spt, 'utf8'));
+const mapFamily = JSON.parse(await readFile(cfg.maps, 'utf8'));
+const mapEntry = (Array.isArray(mapFamily) ? mapFamily.find((m) => m.normalizedName === key) : mapFamily)?.maps?.find((m) => m.key === key);
+if (!mapEntry) throw new Error(`missing maps.json entry for ${key}`);
 let wiki;
 if (cfg.wiki) wiki = JSON.parse(await readFile(cfg.wiki, 'utf8'));
 else {
@@ -109,9 +142,9 @@ function fitAffine(ps, gi) { // least squares game = a*wx + b*wy + c
   const atb = Array.from({ length: 3 }, (_, i) => A.reduce((s, r, k) => s + r[i] * ps[k].game[gi], 0));
   return solve3(ata, atb);
 }
-const fx = cfg.axisAligned ? [...fit1d(pairs, 0, 0), 0] : fitAffine(pairs, 0);
-const fz = cfg.axisAligned ? [0, ...fit1d(pairs, 1, 1)] : fitAffine(pairs, 1);
-if (cfg.axisAligned) { // normalize to [wx, wy, constant]
+const fx = cfg.affine?.x ? [...cfg.affine.x] : cfg.axisAligned ? [...fit1d(pairs, 0, 0), 0] : fitAffine(pairs, 0);
+const fz = cfg.affine?.z ? [...cfg.affine.z] : cfg.axisAligned ? [0, ...fit1d(pairs, 1, 1)] : fitAffine(pairs, 1);
+if (cfg.axisAligned && !cfg.affine) { // normalize to [wx, wy, constant]
   fx.splice(1, 0, 0); fx.length = 3;
   const [, a, b] = fz; fz[0] = 0; fz[1] = a; fz[2] = b;
 }
@@ -120,6 +153,30 @@ const toGame = (m) => {
   const override = cfg.overrides?.[titleOf(m)];
   const p = override ? { x: override[0], y: 0, z: override[1] } : affine(m.position);
   return { x: +p.x.toFixed(1), y: 0, z: +p.z.toFixed(1) };
+};
+const VALID_LEVELS = new Set(['surface', 'underground', 'rooftop', 'upper']);
+const floorExtents = (mapEntry.layers || []).flatMap((layer) => (layer.extents || []).flatMap((ext) => (ext.bounds || []).map((bounds) => ({
+  layer: layer.name, height: ext.height, bounds,
+}))));
+const inExtent = (p, ext) => {
+  const [a, b] = ext.bounds;
+  return p.x >= Math.min(a[0], b[0]) && p.x <= Math.max(a[0], b[0])
+    && p.z >= Math.min(a[1], b[1]) && p.z <= Math.max(a[1], b[1]);
+};
+function levelFor(m, type, position) {
+  const title = titleOf(m);
+  const override = cfg.levelOverrides?.[type]?.[title];
+  if (override) return override;
+  // The named underground/Bunkers layers carry negative-Y extents. Check the
+  // panel name as well as height so above-ground Reserve buildings whose absolute
+  // floors happen to be below Y=0 are never mistaken for tunnels.
+  if (type !== 'extract' && floorExtents.some((ext) => /underground|bunkers/i.test(ext.layer) && ext.height?.[1] <= 18 && inExtent(position, ext))) return 'underground';
+  return 'surface';
+}
+const withLevel = (m, type) => {
+  const position = toGame(m), level = levelFor(m, type, position);
+  if (!VALID_LEVELS.has(level)) throw new Error(`${key}: invalid ${type} level ${level} for ${titleOf(m)}`);
+  return { position, level };
 };
 for (const p of pairs) {
   const q = affine(p.marker.position), err = Math.hypot(q.x - p.game[0], q.z - p.game[1]);
@@ -134,9 +191,13 @@ for (const m of markers) {
   const faction = { exfil_pmc: 'pmc', exfil_scav: 'scav', exfil_transit: 'transit' }[m.categoryId];
   const name = titleOf(m);
   const note = (m.popup.description || '').replace(/\[\[File:[^\]]*\]\]/g, '').replace(/\[\[([^\]|]*)(\|[^\]]*)?\]\]/g, '$1').trim();
+  const located = withLevel(m, 'extract');
   const same = extracts.find((e) => e.name === name && e.faction !== faction && e.faction !== 'transit' && faction !== 'transit');
-  if (same) { same.faction = 'shared'; continue; }
-  extracts.push({ id: `wiki-${m.id}`, name, faction, note, position: toGame(m) });
+  if (same) {
+    if (same.level !== located.level) throw new Error(`${key}: conflicting levels for merged extract ${name}`);
+    same.faction = 'shared'; continue;
+  }
+  extracts.push({ id: `wiki-${m.id}`, name, faction, level: located.level, note, position: located.position });
 }
 
 const spawns = spt.SpawnPointParams.map((s) => {
@@ -156,10 +217,10 @@ const bosses = Object.values(spt.BossLocationSpawn.reduce((acc, b) => {
   return acc;
 }, {}));
 
-const locks = markers.filter((m) => m.categoryId === 'locked').map((m) => ({ lockType: 'door', key: { name: titleOf(m) }, position: toGame(m) }));
+const locks = markers.filter((m) => m.categoryId === 'locked').map((m) => ({ lockType: 'door', key: { name: titleOf(m) }, ...withLevel(m, 'lock') }));
 const stationaryWeapons = markers.filter((m) => m.categoryId === 'stationarygun').map((m) => ({ stationaryWeapon: { name: titleOf(m) }, position: toGame(m) }));
 const hazards = [];
-const switches = markers.filter((m) => m.categoryId === 'lever').map((m) => ({ name: titleOf(m), position: toGame(m) }));
+const switches = markers.filter((m) => m.categoryId === 'lever').map((m) => ({ name: titleOf(m), ...withLevel(m, 'switch') }));
 
 const output = `public/data/${key}.json`;
 let builtAt = new Date().toISOString();

@@ -8,6 +8,7 @@
    "id": "wiki-50",
    "name": "Trailer Park",
    "faction": "pmc",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -269.7,
@@ -19,6 +20,7 @@
    "id": "wiki-51",
    "name": "Smugglers' Boat",
    "faction": "shared",
+   "level": "surface",
    "note": "Requires Note with code word Voron",
    "position": {
     "x": -16.2,
@@ -30,6 +32,7 @@
    "id": "wiki-52",
    "name": "Dorms V-Ex",
    "faction": "pmc",
+   "level": "surface",
    "note": "Requires ~20,000 Roubles",
    "position": {
     "x": 193.1,
@@ -41,6 +44,7 @@
    "id": "wiki-53",
    "name": "ZB-1011",
    "faction": "pmc",
+   "level": "underground",
    "note": "",
    "position": {
     "x": 627.3,
@@ -52,6 +56,7 @@
    "id": "wiki-54",
    "name": "Smugglers' Bunker (ZB-1012)",
    "faction": "shared",
+   "level": "underground",
    "note": "Requires Note with code word Voron",
    "position": {
     "x": 466.4,
@@ -63,6 +68,7 @@
    "id": "wiki-55",
    "name": "Old Gas Station",
    "faction": "pmc",
+   "level": "underground",
    "note": "Green flare = Open",
    "position": {
     "x": 318,
@@ -74,6 +80,7 @@
    "id": "wiki-56",
    "name": "ZB-013",
    "faction": "pmc",
+   "level": "underground",
    "note": "Requires lever activation in warehouse #4 and Factory emergency exit key",
    "position": {
     "x": 201.7,
@@ -85,6 +92,7 @@
    "id": "wiki-57",
    "name": "RUAF Roadblock",
    "faction": "shared",
+   "level": "surface",
    "note": "PvE only",
    "position": {
     "x": 9.8,
@@ -96,6 +104,7 @@
    "id": "wiki-58",
    "name": "Crossroads",
    "faction": "shared",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -294.7,
@@ -107,6 +116,7 @@
    "id": "wiki-59",
    "name": "Trailer Park Workers' Shack",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -216.9,
@@ -118,6 +128,7 @@
    "id": "wiki-60",
    "name": "Railroad to Tarkov",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -137.4,
@@ -129,6 +140,7 @@
    "id": "wiki-61",
    "name": "Railroad to Port",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": -115.9,
@@ -140,6 +152,7 @@
    "id": "wiki-62",
    "name": "Sniper Roadblock",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 34.4,
@@ -151,6 +164,7 @@
    "id": "wiki-63",
    "name": "Old Road Gate",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 197.3,
@@ -162,6 +176,7 @@
    "id": "wiki-64",
    "name": "Railroad to Military Base",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 483.6,
@@ -173,6 +188,7 @@
    "id": "wiki-65",
    "name": "Passage Between Rocks",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 525.6,
@@ -184,6 +200,7 @@
    "id": "wiki-66",
    "name": "Military Base CP",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 635.2,
@@ -195,6 +212,7 @@
    "id": "wiki-67",
    "name": "Scav Checkpoint",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 642.1,
@@ -206,6 +224,7 @@
    "id": "wiki-68",
    "name": "Administration Gate",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 659.7,
@@ -217,6 +236,7 @@
    "id": "wiki-69",
    "name": "Factory Far Corner",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 642.7,
@@ -228,6 +248,7 @@
    "id": "wiki-70",
    "name": "Warehouse 4",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 344.1,
@@ -239,6 +260,7 @@
    "id": "wiki-71",
    "name": "Factory Shacks",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 219.4,
@@ -250,6 +272,7 @@
    "id": "wiki-72",
    "name": "Old Gas Station Gate",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 307.1,
@@ -261,6 +284,7 @@
    "id": "wiki-73",
    "name": "Warehouse 17",
    "faction": "scav",
+   "level": "surface",
    "note": "",
    "position": {
     "x": 68,
@@ -272,6 +296,7 @@
    "id": "wiki-555",
    "name": "Transit to Factory",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": 355.9,
@@ -283,6 +308,7 @@
    "id": "wiki-558",
    "name": "Transit to Reserve",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": 642.4,
@@ -294,6 +320,7 @@
    "id": "wiki-559",
    "name": "Transit to Interchange",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": -297.8,
@@ -305,6 +332,7 @@
    "id": "wiki-563",
    "name": "Boiler Room Basement (Co-op)",
    "faction": "shared",
+   "level": "underground",
    "note": "Requires PMC + Scav",
    "position": {
     "x": 126.6,
@@ -316,6 +344,7 @@
    "id": "wiki-565",
    "name": "Railroad Passage (Flare)",
    "faction": "pmc",
+   "level": "surface",
    "note": "Requires a green flare to be shot into the sky while inside the signal flare area.",
    "position": {
     "x": 196.6,
@@ -327,6 +356,7 @@
    "id": "wiki-569",
    "name": "Transit to Shoreline",
    "faction": "transit",
+   "level": "surface",
    "note": "Only available 1 min after raid start",
    "position": {
     "x": 38.4,
@@ -4513,7 +4543,8 @@
     "x": 374.1,
     "y": 0,
     "z": -42.8
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4524,7 +4555,8 @@
     "x": 361.9,
     "y": 0,
     "z": 0.4
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4535,7 +4567,8 @@
     "x": 360.8,
     "y": 0,
     "z": -6.9
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4546,7 +4579,8 @@
     "x": 336.8,
     "y": 0,
     "z": 241.2
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4557,7 +4591,8 @@
     "x": 336.8,
     "y": 0,
     "z": 247.4
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4568,7 +4603,8 @@
     "x": 571.1,
     "y": 0,
     "z": 15.4
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4579,7 +4615,8 @@
     "x": 388.2,
     "y": 0,
     "z": -159.2
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4590,7 +4627,8 @@
     "x": 213.3,
     "y": 0,
     "z": 22.2
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4601,7 +4639,8 @@
     "x": -165.3,
     "y": 0,
     "z": -204.6
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4612,7 +4651,8 @@
     "x": -223.1,
     "y": 0,
     "z": -215.3
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4623,7 +4663,8 @@
     "x": -234.3,
     "y": 0,
     "z": 62
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4634,7 +4675,8 @@
     "x": 47.6,
     "y": 0,
     "z": 190.7
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4645,7 +4687,8 @@
     "x": -12.9,
     "y": 0,
     "z": 253.5
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4656,7 +4699,8 @@
     "x": -4.6,
     "y": 0,
     "z": 253.5
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4667,7 +4711,8 @@
     "x": -17,
     "y": 0,
     "z": 188.2
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4678,7 +4723,8 @@
     "x": -12.9,
     "y": 0,
     "z": 181.6
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4689,7 +4735,8 @@
     "x": -4.6,
     "y": 0,
     "z": 181.6
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4700,7 +4747,8 @@
     "x": -284.5,
     "y": 0,
     "z": 246.7
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4711,7 +4759,8 @@
     "x": -238.8,
     "y": 0,
     "z": 242.5
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4722,7 +4771,8 @@
     "x": -276.3,
     "y": 0,
     "z": 166.2
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4733,7 +4783,8 @@
     "x": -159.1,
     "y": 0,
     "z": 242.5
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4744,7 +4795,8 @@
     "x": -167.4,
     "y": 0,
     "z": 242.5
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4755,7 +4807,8 @@
     "x": -204.8,
     "y": 0,
     "z": 264.7
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4766,7 +4819,8 @@
     "x": -196.4,
     "y": 0,
     "z": 166.2
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4777,7 +4831,8 @@
     "x": -204.7,
     "y": 0,
     "z": 166.2
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4788,7 +4843,8 @@
     "x": -117.2,
     "y": 0,
     "z": 166.4
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4799,7 +4855,8 @@
     "x": -125.6,
     "y": 0,
     "z": 184
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4810,7 +4867,8 @@
     "x": -117.2,
     "y": 0,
     "z": 238.1
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4821,7 +4879,8 @@
     "x": -125.6,
     "y": 0,
     "z": 247
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4832,7 +4891,8 @@
     "x": -117.2,
     "y": 0,
     "z": 264.8
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4843,7 +4903,8 @@
     "x": 114.6,
     "y": 0,
     "z": 5.9
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4854,7 +4915,8 @@
     "x": -196.4,
     "y": 0,
     "z": 213.1
-   }
+   },
+   "level": "surface"
   },
   {
    "lockType": "door",
@@ -4865,7 +4927,8 @@
     "x": 114,
     "y": 0,
     "z": -55.4
-   }
+   },
+   "level": "upper"
   },
   {
    "lockType": "door",
@@ -4876,7 +4939,8 @@
     "x": 103.1,
     "y": 0,
     "z": -105.3
-   }
+   },
+   "level": "surface"
   }
  ],
  "switches": [
@@ -4886,7 +4950,8 @@
     "x": 356.8,
     "y": 0,
     "z": -31.2
-   }
+   },
+   "level": "upper"
   }
  ]
 }
