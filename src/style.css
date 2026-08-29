@@ -71,9 +71,12 @@ body.view-3d .hud-btn.only-3d{display:grid}
 /* header */
 .rail-head{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;height:52px;padding:0 var(--gutter);
   background:var(--panel);border-bottom:1px solid var(--line-soft)}
-.head-id{min-width:0;flex:1}
+.head-id{position:relative;min-width:0;flex:1}
 .wordmark{font:500 10px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--text-ghost)}
 .map-title{margin:3px 0 0;font:600 var(--fs-title)/1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+.map-picker{position:absolute;left:0;top:13px;width:122px;height:25px;z-index:1}
+.map-picker select{width:100%;height:100%;opacity:0;cursor:pointer}
+.head-id:focus-within .map-title{outline:1px solid var(--mint);outline-offset:2px}
 .sheet-badge{display:none}
 
 /* segmented control */

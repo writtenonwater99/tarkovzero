@@ -445,18 +445,20 @@ const hash1 = (a, b) => { const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5
 const CONTAINER_TINTS = [[146, 74, 58], [96, 104, 100], [122, 116, 102], [110, 88, 70]];
 function propParts(props) { // -> extruded footprints with base at terrain
   return props.map((p) => {
-    const base = H(p.x ?? p.path?.[0]?.[0] ?? 0, p.z ?? p.path?.[0]?.[1] ?? 0);
+    const pc = p.poly ? p.poly.reduce((a, q) => [a[0] + q[0] / p.poly.length, a[1] + q[1] / p.poly.length], [0, 0]) : null;
+    const base = H(p.x ?? p.path?.[0]?.[0] ?? pc?.[0] ?? 0, p.z ?? p.path?.[0]?.[1] ?? pc?.[1] ?? 0);
     let color = p.color ?? PROP_COLORS[p.type] ?? [150, 148, 142];
     if (!p.color && p.type === 'container') color = CONTAINER_TINTS[Math.floor(hash1(p.x ?? 0, p.z ?? 0) * CONTAINER_TINTS.length) % CONTAINER_TINTS.length];
+    if (p.poly) return { poly: p.poly, h: p.h ?? 1, base: base + (p.dz ?? 0), color, p };
     if (p.type === 'wall' || p.type === 'pipe') return { poly: strip(p.path, (p.w ?? 0.4) / 2), h: p.h ?? 2.5, base, color, p };
-    if (p.type === 'tank') return { poly: circle(p.x, p.z, p.r), h: p.h ?? 6, base, color, p };
+    if (p.type === 'tank') return { poly: circle(p.x, p.z, p.r), h: p.h ?? 6, base: base + (p.dz ?? 0), color, p };
     return { poly: rbox(p.x, p.z, p.w ?? 2.4, p.l ?? 6, p.rot ?? 0), h: p.h ?? 2.6, base: base + (p.dz ?? 0), color, p };
   });
 }
 const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x + w / 2, y + w / 2], [x - w / 2, y + w / 2]];
 
 export async function createView3d(container, mapData, src) {
-  const data = await (await fetch('/data/customs-3d.json')).json();
+  const data = await (await fetch(`/data/${mapData.key}-3d.json`)).json();
   // --- TRACK B (terrain.js) --------------------------------------------------------------
   // One surface, one sampler: the mesh below and every draped feature (roads, fences, props,
   // trees, shade rings, building bases, player drop-lines) must sample the SAME bicubic field,
@@ -469,7 +471,7 @@ export async function createView3d(container, mapData, src) {
   for (const b of data.buildings) { const c = centroidOf(b.poly); b.base = H(c[0], c[1]); }
   // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
   async function buildAtlas(entries, cell) {
-    const canvas = document.createElement('canvas'); canvas.width = cell * entries.length; canvas.height = cell;
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, cell * entries.length); canvas.height = cell;
     const ctx = canvas.getContext('2d'); const mapping = {};
     await Promise.all(entries.map(([name, url], i) => new Promise((res) => {
       const img = new Image(); img.onload = () => { ctx.drawImage(img, i * cell, 0, cell, cell); res(); }; img.onerror = res; img.src = url;
@@ -481,7 +483,7 @@ export async function createView3d(container, mapData, src) {
   const letters = [...new Set(src.markers().filter((m) => m.kind.startsWith('extract')).map((m) => extractLetter(m.name)).filter(Boolean))];
   const letterAtlas = await buildAtlas(src.markers().filter((m) => m.kind.startsWith('extract') && extractLetter(m.name)).map((m) => [m.kind + ':' + extractLetter(m.name), iconDataUrl(m.kind, 64, extractLetter(m.name))]).filter((e, i, a) => a.findIndex((x) => x[0] === e[0]) === i), 64);
   Object.assign(iconAtlas.mapping, Object.fromEntries(Object.entries(letterAtlas.mapping).map(([k, m]) => [k, { ...m, x: m.x + iconAtlas.canvas.width }])));
-  { const merged = document.createElement('canvas'); merged.width = iconAtlas.canvas.width + letterAtlas.canvas.width; merged.height = 64; const cx2 = merged.getContext('2d'); cx2.drawImage(iconAtlas.canvas, 0, 0); cx2.drawImage(letterAtlas.canvas, iconAtlas.canvas.width, 0); iconAtlas.canvas = merged; }
+  if (Object.keys(letterAtlas.mapping).length) { const merged = document.createElement('canvas'); merged.width = iconAtlas.canvas.width + letterAtlas.canvas.width; merged.height = 64; const cx2 = merged.getContext('2d'); cx2.drawImage(iconAtlas.canvas, 0, 0); cx2.drawImage(letterAtlas.canvas, iconAtlas.canvas.width, 0); iconAtlas.canvas = merged; }
   const arrowAtlas = await buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
   const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
@@ -512,6 +514,7 @@ export async function createView3d(container, mapData, src) {
     ...(terrain ? terrain.layers() : [new SolidPolygonLayer({ id: 'land', shadowEnabled: false, data: data.land, getPolygon: ring, getFillColor: C.land, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })]), // TRACK B: one SimpleMeshLayer, smooth normals + baked texture
     new SolidPolygonLayer({ id: 'pavement', shadowEnabled: false, data: data.pavement, getPolygon: (d) => ringG(d, 0.08), getFillColor: C.pavement, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water, getPolygon: (d) => ringG(d, -0.2), getFillColor: C.water, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'minefields', shadowEnabled: false, data: data.minefields || [], getPolygon: (d) => ringG(d, 0.06), getFillColor: [122, 74, 45, 55], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'shore', shadowEnabled: false, data: data.water, getPath: (d) => ringG([...d, d[0]], 0.05), getColor: C.shore, getWidth: 0.4, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: data.underground, getPolygon: (d) => ringG(d.poly, 0.1), getFillColor: () => (floor === 'U' ? C.undergroundOn : C.underground), updateTriggers: { getFillColor: floor }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true }),
     new PathLayer({ id: 'rail', shadowEnabled: false, data: data.railway, getPath: (d) => ringG(d.path, 0.1), getColor: C.rail, getWidth: 0.9, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
@@ -521,7 +524,7 @@ export async function createView3d(container, mapData, src) {
     new PathLayer({ id: 'tracks', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'track' || d.kind === 'dirt'), getPath: (d) => ringG(d.path, 0.12), getColor: C.track, getWidth: (d) => (d.kind === 'dirt' ? 2.6 : 1.8), widthUnits: 'meters', widthMinPixels: 1, capRounded: true, jointRounded: true, getDashArray: [5, 3], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'road-centre', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'highway'), getPath: (d) => ringG(d.path, 0.14), getColor: C.roadMarking, getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [6, 6], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => catenary(d.path, 19), getColor: [96, 96, 92, 170], getWidth: 0.2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 1.2, getFillColor: C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5, shininess: 4 } }),
+    new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d.poly ?? d, 0), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5, shininess: 4 } }),
     new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 3.4, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
   ];
   const floorLines = data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));

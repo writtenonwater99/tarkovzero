@@ -1,10 +1,10 @@
 import L from 'leaflet';
-import { CUSTOMS } from './mapdata.js';
+import { MAPS, selectMap } from './mapdata.js';
 import { getCRS, pos, toLatLngBounds } from './crs.js';
 import { loadMapData } from './api.js';
 import { roadmapLayer } from './roadmap.js';
 import { placeLabelsLayer } from './placeLabels.js';
-import { CUSTOMS_LABELS } from './labels.js';
+import { LABELS } from './labels.js';
 import { KINDS, iconHtml, extractLetter } from './icons.js';
 import { createLive, esc } from './live.js';
 
@@ -16,14 +16,25 @@ const store = {
 };
 const num = (n, p = 1) => n.toFixed(p).replace('-', '−');
 function is3d() { return document.body.classList.contains('view-3d'); }
-// Static raid facts for Customs (not exposed by the tarkov.dev map query).
-const RAID = { minutes: 40, pmc: '10–12' };
-
 // Declared up here: rail helpers below run during module init and poke at both.
 let view3d = null;
 let v3 = { target: [0, 0, 0], zoom: 0, rotationX: 50, rotationOrbit: 0, minZoom: -3, maxZoom: 8 };
 
-const mapData = CUSTOMS;
+const requestedMap = new URLSearchParams(location.search).get('map');
+const mapData = selectMap(requestedMap);
+const mapLabels = LABELS[mapData.key] ?? [];
+const RAID = mapData.raid;
+document.title = `TarkovZero — ${mapData.name}`;
+$('.map-title').textContent = mapData.name;
+const mapSwitcher = $('#map-switcher');
+mapSwitcher.innerHTML = Object.values(MAPS).map((m) => `<option value="${m.key}">${m.name}</option>`).join('');
+mapSwitcher.value = mapData.key;
+mapSwitcher.onchange = () => {
+  const url = new URL(location.href);
+  url.searchParams.set('map', mapSwitcher.value);
+  url.hash = '';
+  location.assign(url);
+};
 const map = L.map('map', {
   crs: getCRS(mapData),
   minZoom: mapData.minZoom,
@@ -51,7 +62,7 @@ tiles.on('tileerror', (e) => {
 });
 
 // Base layer 2: vector map built from the same geometry. Chosen from the rail, not a Leaflet control.
-const roadmap = roadmapLayer(mapData.svgPath, mapData.svgLayer, bounds);
+const roadmap = roadmapLayer(mapData.svgPath, mapData.svgLayer, toLatLngBounds(mapData.svgBounds ?? mapData.bounds));
 const baseSeg = $('#base-toggle');
 function setBase(kind, persist = true) {
   const isMap = kind === 'map';
@@ -150,14 +161,14 @@ const countOf = new Map();  // kind -> n
 /* ------------------------------------------------------------- labels ---- */
 // Two panes so major/minor place names can be styled apart in 2D, and the same
 // split feeds the 3D TextLayer through src.labels().
-const MAJOR = CUSTOMS_LABELS.filter((l) => (l.size ?? 100) >= 100);
-const MINOR = CUSTOMS_LABELS.filter((l) => (l.size ?? 100) < 100);
+const MAJOR = mapLabels.filter((l) => (l.size ?? 100) >= 100);
+const MINOR = mapLabels.filter((l) => (l.size ?? 100) < 100);
 const labelLayers = { major: placeLabelsLayer(map, MAJOR), minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor' }) };
 let density = store.get('density', 'all');
 let labelsShown = store.get('labels', true);
 function labelSet() {
   if (!labelsShown || density === 'off') return [];
-  return density === 'key' ? MAJOR : CUSTOMS_LABELS;
+  return density === 'key' ? MAJOR : mapLabels;
 }
 function applyLabels() {
   const wantMajor = labelsShown && density !== 'off';
@@ -220,7 +231,7 @@ function syncGroupCounts() {
 // Structure first (place-names row + three groups with skeletons); real rows land when the API answers.
 function buildFilterUI() {
   layersEl.innerHTML = '';
-  const pin = rowEl({ kind: null, cat: 'label', label: 'Place names', count: CUSTOMS_LABELS.length, on: labelsShown, icon: labelIcon() });
+  const pin = rowEl({ kind: null, cat: 'label', label: 'Place names', count: mapLabels.length, on: labelsShown, icon: labelIcon() });
   pin.classList.add('pin-row');
   layersEl.appendChild(pin);
   pin.querySelector('input').onchange = (e) => setLabels(e.target.checked);
@@ -355,7 +366,7 @@ function buildSearchIndex() {
     if (index.some((i) => i.kind === 'extract' && i.label === m.name)) continue;
     index.push({ kind: 'extract', label: m.name, sub: m.kind.replace('extract-', ''), x: m.position.x, z: m.position.z, badge: extractLetter(m.name) ?? '', mk: m.kind });
   }
-  for (const l of CUSTOMS_LABELS) index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] });
+  for (const l of mapLabels) index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] });
   for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'filter', mk: k });
 }
 buildSearchIndex();
@@ -497,8 +508,11 @@ async function setView(mode) {
 viewBtns.forEach((b) => (b.onclick = () => setView(b.dataset.view)));
 
 // Floors
-let floor = store.get('floor', 'all');
-const floorBtns = $$('#floors .seg-cell');
+const allowedFloors = new Set(mapData.floors.map(String));
+$$('#floors .seg-cell').forEach((b) => { b.hidden = !allowedFloors.has(b.dataset.floor); });
+let floor = String(store.get('floor', 'all'));
+if (!allowedFloors.has(floor)) floor = 'all';
+const floorBtns = $$('#floors .seg-cell:not([hidden])');
 function setFloor(f) {
   floor = f; store.set('floor', f);
   floorBtns.forEach((b) => b.classList.toggle('on', b.dataset.floor === String(f)));
@@ -587,11 +601,10 @@ if (new URLSearchParams(location.search).get('view') === '3d' || localStorage.ge
 
 // ?debug=roads — draw the 3D road/track network over the 2D map to check it against the satellite
 if (new URLSearchParams(location.search).get('debug') === 'roads') {
-  fetch('/data/customs-3d.json').then((r) => r.json()).then((d) => {
+  fetch(`/data/${mapData.key}-3d.json`).then((r) => r.json()).then((d) => {
     const col = { highway: '#ffdd00', main: '#ff3030', small: '#ff30ff', track: '#ff8c00', dirt: '#b06000' };
     for (const r of d.roads) L.polyline(r.path.map(([x, z]) => [z, x]), { color: col[r.kind] || '#fff', weight: r.kind === 'track' || r.kind === 'dirt' ? 2 : 3, opacity: 0.9, dashArray: r.kind === 'track' || r.kind === 'dirt' ? '6 4' : null }).addTo(map).bindTooltip(r.kind);
     for (const b of d.bridges) L.polyline(b.path.map(([x, z]) => [z, x]), { color: '#00e5ff', weight: 5, opacity: 0.9 }).addTo(map);
     L.polyline([...d.limit, d.limit[0]].map(([x, z]) => [z, x]), { color: '#ff0000', weight: 2, dashArray: '8 6' }).addTo(map);
   });
 }
-

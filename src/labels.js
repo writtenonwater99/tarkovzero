@@ -248,3 +248,59 @@ export const CUSTOMS_LABELS = [
     "size": 85
   }
 ];
+
+// Base sets mirrored from tarkov.dev maps.json. Detail labels are added during each map pass.
+export const RESERVE_LABELS = [
+  { position: [28, -102], text: 'K Buildings', bottom: -6 },
+  { position: [-25, 180], text: 'White Queen', rotation: -15, bottom: -6 },
+  { position: [-104, 93], text: 'White Pawn', rotation: 14, bottom: -6 },
+  { position: [-140, -14.5], text: 'Black Bishop', rotation: 14, bottom: -6 },
+  { position: [-67, -30], text: 'White Bishop', rotation: 14, bottom: -6 },
+  { position: [-49.5, 15.5], text: 'White King', rotation: 14, bottom: -6 },
+  { position: [14.5, -10.8], text: 'Black Knight', bottom: -6 },
+  { position: [82.2, -30.2], text: 'White Knight', bottom: -6 },
+  { position: [149, -124], text: 'White Rook', bottom: -6 },
+  { position: [161, -149], text: 'Train Station', rotation: 14, size: 80, bottom: -6 },
+  { position: [-165, 57], text: 'Black Pawn', rotation: -75, bottom: -6 },
+  { position: [167, -222], text: 'Barracks', bottom: -6 },
+  { position: [-220, -13], text: 'E1 Bunkers', bottom: -6 },
+  { position: [173, -3], text: 'E2 Bunkers', bottom: -6 },
+  { position: [80, -167], text: 'д - Warehouse Bunkers', rotation: 14, bottom: -6 },
+  { position: [96, 30], text: 'Garage', rotation: -75, size: 80, bottom: -6 },
+  { position: [55.5, 60.6], text: 'Mechanic', size: 80, bottom: -6 },
+  { position: [29.7, 29.5], text: 'Gas Station', rotation: 14, size: 80, bottom: -6 },
+  { position: [-31, -150], text: 'Shipping Yard', rotation: 14, size: 80, bottom: -6 },
+  { position: [-1, -71], text: 'K1', rotation: 14, size: 80, bottom: -6 },
+  { position: [66, -90], text: 'K2', rotation: 14, size: 80, bottom: -6 },
+  { position: [-5.5, -94], text: 'K3', rotation: 14, size: 80, bottom: -6 },
+  { position: [60, -112], text: 'K4', rotation: 14, size: 80, bottom: -6 },
+  { position: [-10.5, -115], text: 'K5', rotation: 14, size: 80, bottom: -6 },
+  { position: [54, -132], text: 'K6', rotation: 14, size: 80, bottom: -6 },
+  { position: [-8.5, 175], text: 'Dome', size: 80, bottom: -6 },
+  { position: [-120, 37], text: 'Tarmac', rotation: 14, size: 80, bottom: -6 },
+];
+
+export const WOODS_LABELS = [
+  { position: [10, -3], text: 'Sawmill' },
+  { position: [-485, -390], text: 'Scav Town' },
+  { position: [-517, -210], text: 'Old Sawmill' },
+  { position: [-80, -680], text: 'Cultist Village' },
+  { position: [290, -475], text: 'USEC Camp' },
+  { position: [-188, 235], text: 'Military Camp' },
+  { position: [-5, -515], text: 'Ponds', size: 80 },
+  { position: [-252, -37], text: 'Crash Site', size: 80 },
+  { position: [239, -65], text: 'Checkpoint', size: 70 },
+  { position: [244, 125], text: 'Shack', size: 70 },
+  { position: [-16, -122], text: 'Lumber', size: 70 },
+  { position: [-3, -74], text: 'Cabins', size: 70 },
+  { position: [-234, 357], text: 'Bus Stop', size: 70 },
+  { position: [-327, 19], text: "Jaeger's Camp", size: 70 },
+  { position: [85, -147], text: 'Sniper Rock', size: 70 },
+  { position: [200, -606], text: 'Convoy', size: 70 },
+];
+
+export const LABELS = {
+  customs: CUSTOMS_LABELS,
+  reserve: RESERVE_LABELS,
+  woods: WOODS_LABELS,
+};
