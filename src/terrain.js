@@ -11,8 +11,8 @@
 // The source grid is a robust 5 m fit over survey, loose-loot and SPT spawn samples. One compact
 // Gaussian pass conditions quantisation without smearing a real crest into its surroundings.
 //
-// TRUE SCALE: geometry is never exaggerated. Relief is
-// made legible by steepening the *normals* (NORMAL_VE) and the *baked hillshade* (SHADE_VE) only.
+// Relief is applied once, to the conditioned height field that becomes H(x,z). The mesh, skirt,
+// contours and every map3d layer therefore consume the same vertically-exaggerated ground.
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
 import { COORDINATE_SYSTEM, LightingEffect, AmbientLight, DirectionalLight } from '@deck.gl/core';
@@ -22,10 +22,8 @@ const CELL = 2.5;          // mesh cell size in metres (10 m source grid subdivi
 const PAD = 8;             // metres of mesh built outside the limit bbox (hidden, gives the skirt room)
 const TEX_W = 2048;        // baked ground texture width
 const BAND_PX = 12;        // dark rows at the bottom of the texture, used by the skirt only
-const NORMAL_VE = 9;       // exaggeration applied to the mesh NORMALS only (geometry stays true scale)
-const SHADE_VE = 14;       // exaggeration used by the baked hillshade; both are high because the
-                           // conditioning Gaussian below deliberately flattens the raw gradients
-const VOID_Z = -14;        // skirt bottom (matches map3d.js)
+const SHADE_GAIN = 2.6;    // mild cartographic boost on top of the displayed surface's real normals
+const DEFAULT_VOID_Z = -14;
 
 // Light directions in DECK space (X=-gameX, Y=-gameZ, Z=up). `SUN_DIR` is the travel direction of
 // the sun; the bake's key light is exactly its negation, so the two shading systems agree.
@@ -141,14 +139,19 @@ function chamfer(mask, gw, gh) {
 }
 
 // ---------------------------------------------------------------- main
-export function buildTerrain(data) {
+export function buildTerrain(data, relief = 2) {
   const t = data.terrain;
   const { x0, z0, step, cols, rows } = t;
-  const grid = gaussian5(t.heights, cols, rows, 1); // ~5 m sigma: smooth cell noise, retain surveyed crests
+  relief = [1, 2, 3].includes(Number(relief)) ? Number(relief) : 2;
+  const conditioned = gaussian5(t.heights, cols, rows, 1); // ~5 m sigma: smooth cell noise, retain surveyed crests
+  // This is the sole relief transform. Everything below, including the exported H(), reads `grid`.
+  const grid = Float32Array.from(conditioned, (h) => h * relief);
   const H = makeBicubic(grid, cols, rows, x0, z0, step);
   let hmin = Infinity, hmax = -Infinity;
   for (let i = 0; i < grid.length; i++) { if (grid[i] < hmin) hmin = grid[i]; if (grid[i] > hmax) hmax = grid[i]; }
   const hspan = Math.max(1, hmax - hmin);
+  // Keep the void below the lowest exaggerated ground (important on Woods at 3x).
+  const voidZ = Math.min(DEFAULT_VOID_Z, Math.floor((hmin - 10) / 2) * 2);
 
   // ---- bbox of the built surface (limit bbox + padding)
   const limit = data.limit;
@@ -241,7 +244,7 @@ export function buildTerrain(data) {
         b += (YARD_EARTH[2] * earth - b) * 0.88;
       }
       // (b) two-light hillshade in deck space (Nx = +VE*dh/dx because deck X = -gameX)
-      const nx = SHADE_VE * dhdx, ny = SHADE_VE * dhdz;
+      const nx = SHADE_GAIN * dhdx, ny = SHADE_GAIN * dhdz;
       const nl = Math.sqrt(nx * nx + ny * ny + 1);
       const horizontalFacing = (nx * KEY[0] + ny * KEY[1]) / nl;
       const raw = (Math.max(0, nx * KEY[0] + ny * KEY[1] + KEY[2]) + 0.28 * Math.max(0, nx * FILL[0] + ny * FILL[1] + FILL[2])) / nl;
@@ -300,7 +303,7 @@ export function buildTerrain(data) {
       const dhdx = (H(gx + E, gz) - H(gx - E, gz)) / (2 * E);
       const dhdz = (H(gx, gz + E) - H(gx, gz - E)) / (2 * E);
       // deck X = -gameX and deck Y = -gameZ, so the normal keeps the *positive* derivative
-      const nx = NORMAL_VE * dhdx, ny = NORMAL_VE * dhdz, nl = Math.sqrt(nx * nx + ny * ny + 1);
+      const nx = dhdx, ny = dhdz, nl = Math.sqrt(nx * nx + ny * ny + 1);
       nrm[k * 3] = nx / nl; nrm[k * 3 + 1] = ny / nl; nrm[k * 3 + 2] = 1 / nl;
       uv[k * 2] = clamp((gx - X0) / W, 0, 1);
       uv[k * 2 + 1] = clamp((gz - Z0) / D, 0, 1) * vTop;
@@ -322,7 +325,7 @@ export function buildTerrain(data) {
     const base = NV + sPos.length / 3;
     const ax = pos[ka * 3], ay = pos[ka * 3 + 1], az = pos[ka * 3 + 2];
     const bx = pos[kb * 3], by = pos[kb * 3 + 1], bz = pos[kb * 3 + 2];
-    sPos.push(ax, ay, az, bx, by, bz, bx, by, VOID_Z, ax, ay, VOID_Z);
+    sPos.push(ax, ay, az, bx, by, bz, bx, by, voidZ, ax, ay, voidZ);
     for (let n = 0; n < 4; n++) sNrm.push(nx, ny, 0.12);
     sUv.push(uv[ka * 2], vBandTop, uv[kb * 2], vBandTop, uv[kb * 2], vBandBot, uv[ka * 2], vBandBot);
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -376,12 +379,12 @@ export function buildTerrain(data) {
   });
   // NOTE on cast shadows (`_shadow: true` on the sun): they render correctly under OrbitView, but
   // deck gates casting AND receiving on the same `shadowEnabled` prop, so a ground surface that
-  // receives building shadows also shadow-maps itself. Over a 1 km, 11 m-relief surface lit at ~40
+  // receives building shadows also shadow-maps itself. Over a kilometre-scale relief surface lit at ~40
   // degrees, the depth16 shadow map has nowhere near the precision for that and the whole map goes
-  // into acne. Verified in headless. Relief therefore comes from the baked two-light hillshade plus
-  // the steepened normals, which need no extra pass.
+  // into acne. Verified in headless. Relief therefore comes from the mesh normals plus the baked
+  // two-light hillshade, which need no extra pass.
 
-  return { H, layers: () => [layer()], lighting, stats: { verts: TOT, tris: indices.length / 3, tex: [TEX_W, TH] } };
+  return { H, voidZ, layers: () => [layer()], lighting, stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, tex: [TEX_W, TH] } };
 }
 
 // ---------------------------------------------------------------- contours (baked, not a layer)
