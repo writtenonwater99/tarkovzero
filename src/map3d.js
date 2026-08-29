@@ -20,7 +20,7 @@ const C = {
   glass: [26, 34, 36, 220], roofWarehouse: [92, 102, 106], roofHouse: [122, 78, 62], roofFlat: [98, 96, 90], roofRib: [0, 0, 0, 46],
   skylight: [168, 178, 174, 230], parapet: [116, 111, 101], dockDoor: [42, 37, 34],
   tank: [154, 158, 158], tankBand: [0, 0, 0, 60], tower: [122, 124, 118],
-  tree: [26, 44, 30], treeTop: [44, 68, 42], treeShadow: [16, 26, 20, 120], rock: [124, 120, 106],
+  understory: [18, 34, 22, 72], tree: [38, 64, 37], treeShadow: [16, 26, 20, 120], rock: [124, 120, 106],
   bridge: [106, 102, 92], bridgeRail: [64, 61, 55], pier: [84, 80, 72],
   contour: [26, 42, 26, 90], contourMajor: [20, 32, 20, 150],
   void: [10, 13, 12], oob: [10, 13, 12], voidRing: [24, 28, 26],
@@ -221,7 +221,7 @@ function detailParts(bs, scenes = []) {
     const roof = b.roof ?? ROOF_BY_PLACE[place] ?? b.roofTint ?? C.roofFlat;
 
     // --- 1. plinth: every building meets the ground instead of being pasted onto it
-    if (st !== 'canopy') B(expand(b.poly, 0.25), base, 0.75, mul(wall, 0.7), 0);
+    if (st !== 'canopy') B(expand(b.poly, 0.25), b.plinthBase ?? base, b.plinthHeight ?? 0.75, mul(wall, 0.7), 0);
 
     // --- 2. window bands: one dashed ring per floor. Dashes read as glass, gaps as piers.
     const banded = st === 'box' && A >= 40 && !['Fortress', 'Big Red'].includes(place) && b.kind !== 'tank';
@@ -474,7 +474,21 @@ export async function createView3d(container, mapData, src) {
   // --- end TRACK B ------------------------------------------------------------------------
   const inLimit = (x, z) => !data.limit || inPolyXZ([x, z], data.limit);
   const centroidOf = (poly) => poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]);
-  for (const b of data.buildings) { const c = centroidOf(b.poly); b.base = H(c[0], c[1]); }
+  for (const b of data.buildings) {
+    const c = centroidOf(b.poly);
+    const footprintSamples = [c, ...b.poly, ...b.poly.map((p, i) => [(p[0] + b.poly[(i + 1) % b.poly.length][0]) / 2, (p[1] + b.poly[(i + 1) % b.poly.length][1]) / 2])];
+    const ground = footprintSamples.map((p) => H(p[0], p[1]));
+    b.base = H(c[0], c[1]);
+    b.plinthBase = Math.min(...ground) - 0.18;
+    b.plinthHeight = Math.max(0.75, Math.max(...ground) - b.plinthBase + 0.24);
+  }
+  for (const tree of data.trees || []) {
+    if (!Number.isFinite(tree.x) || !Number.isFinite(tree.z)) continue;
+    const turn = hash1(tree.x, tree.z) * Math.PI * 2, sides = 6;
+    tree.poly = Array.from({ length: sides }, (_, i) => [tree.x + tree.radius * Math.cos(turn + (i / sides) * Math.PI * 2), tree.z + tree.radius * Math.sin(turn + (i / sides) * Math.PI * 2)]);
+    tree.base = H(tree.x, tree.z) + tree.height * 0.42;
+    tree.depth = tree.height * 0.58;
+  }
   // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
   async function buildAtlas(entries, cell) {
     const canvas = document.createElement('canvas'); canvas.width = Math.max(1, cell * entries.length); canvas.height = cell;
@@ -520,6 +534,7 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'pavement', shadowEnabled: false, data: data.pavement, getPolygon: (d) => ringG(d, 0.08), getFillColor: C.pavement, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water, getPolygon: (d) => ringG(d, -0.2), getFillColor: C.water, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'minefields', shadowEnabled: false, data: data.minefields || [], getPolygon: (d) => ringG(d, 0.06), getFillColor: [122, 74, 45, 55], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'understory', shadowEnabled: false, data: data.understory || [], getPolygon: (d) => ringG(d, 0.035), getFillColor: C.understory, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'shore', shadowEnabled: false, data: data.water, getPath: (d) => ringG([...d, d[0]], 0.05), getColor: C.shore, getWidth: 0.4, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'rail', shadowEnabled: false, data: data.railway, getPath: (d) => ringG(d.path, 0.1), getColor: C.rail, getWidth: 0.9, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'sleepers', shadowEnabled: false, data: data.railway, getPath: (d) => ringG(d.path, 0.12), getColor: C.sleeper, getWidth: 2.2, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [1.2, 1.2], extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
@@ -528,8 +543,8 @@ export async function createView3d(container, mapData, src) {
     new PathLayer({ id: 'tracks', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'track' || d.kind === 'dirt'), getPath: (d) => ringG(d.path, 0.12), getColor: C.track, getWidth: (d) => (d.kind === 'dirt' ? 2.6 : 1.8), widthUnits: 'meters', widthMinPixels: 1, capRounded: true, jointRounded: true, getDashArray: [5, 3], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'road-centre', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'highway'), getPath: (d) => ringG(d.path, 0.14), getColor: C.roadMarking, getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [6, 6], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => catenary(d.path, 19), getColor: [96, 96, 92, 170], getWidth: 0.2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d.poly ?? d, 0), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5, shininess: 4 } }),
-    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 3.4, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
+    new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d.poly ?? d, 0), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: (d) => d.color ?? C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5, shininess: 4 } }),
+    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.depth, getFillColor: (d) => d.color ?? C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.72, diffuse: 0.58, shininess: 2 } }),
   ];
   const floorLines = data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
   const propData = propParts(data.props || []);
@@ -541,7 +556,6 @@ export async function createView3d(container, mapData, src) {
     // two rings instead of one: reads as a blurred contact shadow at every zoom
     new SolidPolygonLayer({ id: 'shade-soft', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 3.2), 0.04), getFillColor: C.shadeSoft, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'shade', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 1.1), 0.05), getFillColor: C.shade, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'tree-tops', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(expand(d, -0.5), 3.44), getFillColor: C.treeTop, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'piers', data: (data.bridges || []).flatMap(piers), getPolygon: (d) => box(d.pos, d.w).map(([x, y]) => [x, y, d.pos[2] - d.h]), extruded: true, getElevation: (d) => d.h, getFillColor: C.pier, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5 } }),
     new PathLayer({ id: 'bridge-edges', shadowEnabled: false, data: (data.bridges || []).filter((b) => !b.ford), getPath: (d) => bridgePath(d).map((q) => [q[0], q[1], q[2] - 0.15]), getColor: [128, 124, 114], getWidth: (d) => d.width + 1.2, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'bridges', shadowEnabled: false, data: data.bridges || [], getPath: bridgePath, getColor: (d) => (d.foot ? [128, 108, 82] : d.ford ? [150, 143, 126] : C.bridge), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),

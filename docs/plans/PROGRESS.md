@@ -138,3 +138,41 @@ a6aadd836a978892f5b342c3412c9a00ed36463e695f9800b6502e3671f90d26  public/data/cu
   - Woods: `scratch/fix-pass-2/woods-roads.png`, `woods-3d-sawmill.png`, `woods-3d-scav-town-dirt.png`, and `woods-3d-military-yard.png`.
 
 No deploy, push, or commit was performed.
+
+## Fix pass 3 — terrain realism
+
+### Changed
+
+- Tree masks no longer render as raised green slabs with a lighter inset top. The original SVG/procedural polygons are now a low-alpha understory tint, while deterministic points inside them produce one crown layer of varied 6–12 m high, 1.5–4 m radius hex crowns in three green tones. Output counts are Customs 4,082 crowns / 37 understory masks, Reserve 412 / 11, and Woods 6,001 / 138. Customs' reviewed “green puzzle pieces” are gone.
+- Rocks remain mapped geometry but now have deterministic height and four-colour variation. Customs' 111 previously uniform 1.2 m forms now range 0.8–4.0 m; Reserve and Woods retain their evidence/area-derived mass heights and gain tonal variation.
+- Real elevation evidence was recovered from the official SPT 4.1.2 (40743) release archive (`https://spt-releases.modd.in/SPT-4.1.2-40743-cf04a11.7z`). Compact checked-in loot positions total 1,820 Customs, 4,148 Reserve, and 1,720 Woods. GitHub raw and jsDelivr still return only the Git LFS pointer, GitHub's media URL returns 404, and the former SPT Gitea endpoint is retired/redirected.
+- `scripts/ingest-elevation.mjs <map> <file...>` merges those compact points, each map's SPT ground spawns, and companion survey JSONL. It validates the map, prefers survey over spawn over loot, takes a median within each 2 m cell, and emits deterministic `scripts/data/<map>/elevation-samples.json` files.
+- `companion/companion.mjs` now appends every parsed screenshot position as `{map,x,y,z,t}` even when the relay is offline. Logging defaults to `elevation-<map>.jsonl` next to `companion.json`; `--elevation-log <file>` overrides it and `--elevation-log off` disables it. No relay code or other companion file was changed.
+- Terrain is now a true-scale 5 m grid. Loose loot inside mapped buildings/rocks/underground is discarded; remaining rooftop and below-surface evidence more than ±2.5 m from its local robust median is rejected. A source-weighted local/broad IDW fit carries dense real evidence, with authored terrain features blended only where confidence is low. The runtime now applies only one ~5 m conditioning pass rather than blurring the source by ~22 m.
+- Customs validates the data path: at the requested Powerline view the surface changes 4.85→15.65 m, and at the actual 22 m pylon base it changes 4.45→15.25 m. The dense 15–17 m loose-loot cluster therefore carries the tower on its real hill. Sniper Hill remains 8.36 m through sparse-data fallback pending a survey trace.
+- Relief uses a stronger two-light bake, dry/rocky slope tint, directional lee-side darkening, and quieter 2 m / 10 m contours without changing geometry scale. Roads and paths continue to sample the same terrain surface. Buildings sample their centroid, vertices, and edge midpoints; a variable-depth plinth spans the local min/max ground so small slopes no longer leave a floating corner.
+
+### Elevation datasets
+
+After 2 m ingest dedupe, the source files contain 1,227 Customs, 1,903 Reserve, and 1,215 Woods cells. The robust builder retains 470 / 407 / 798 ground cells respectively. Full source provenance, filtering, and the survey workflow are in `docs/plans/ELEVATION.md`.
+
+For the requested Customs survey run: bind EFT Make Screenshot to F11, then from `companion/` run `node companion.mjs --map customs --auto 1000`; walk ordinary ground across the base and crest of Powerline Tower, Sniper Hill, and the west/Crossroads rise. Stop with Ctrl+C, then merge with `node scripts/ingest-elevation.mjs customs companion/elevation-customs.jsonl` and rebuild. Avoid roofs, stairs, rocks, jumps, and underground routes.
+
+### Verified
+
+- `npm run build` passes; Vite reports only the existing deck.gl chunk-size advisory. `node --check` passes for the companion and ingestion script.
+- All three 3D builders pass from the checked-in elevation inputs. Generated numbers are finite; every map has a 5 m grid, crown-schema trees, understory masks, and coloured positive-height rocks.
+- A synthetic survey test merged two Customs frames into one y=15.8 survey cell, let survey priority win, rejected a Reserve-tagged frame, then restored the no-survey checked-in dataset and regenerated Customs.
+- New deterministic data hashes:
+
+```text
+17a26028c1f8c09118a6cadf257284fb3a0b625d67daf167a73c56b30698ed0e  public/data/customs-3d.json
+6a6d7107b9409fe0b91d09f596b66aecf9c43cea9aac6c04bc7226c8ed009411  public/data/reserve-3d.json
+0223dda4aadd01f300113b14b1bbda5903c60fc0c992e8657d1b6f6f72043398  public/data/woods-3d.json
+314265546709fc77d3b827da1d15881bd173571482f6b4e4fe2f5ecd4cd5e1d6  public/data/customs.json
+```
+
+- Required rendered captures are in `scratch/fix-pass-3/`: `customs-powerline.png` (`#2.6/497/110`), `customs-sniper-hill.png` (`#2.6/110/85`), `customs-west-hill.png` (`#2.2/-320/-80`), plus `customs-wide.png`, `reserve-wide.png`, and `woods-wide.png`.
+- The prior Customs baseline is a black SwiftShader frame; the new CDP captures rendered successfully and can be compared structurally against the checked-in pre-pass data (10 m→5 m grid, 37 raised masks→4,082 crowns, Powerline pylon base 4.45→15.25 m). Software GL remains over-zoomed/blurry—especially the Woods wide fit—so the user's real GPU remains the sharpness/density gate.
+
+No deploy, push, or commit was performed.
