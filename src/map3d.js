@@ -66,16 +66,24 @@ function obb(poly) {
   const long = mx[0] - mn[0] >= mx[1] - mn[1];
   return { corners: [toXZ(mn[0], mn[1]), toXZ(mx[0], mn[1]), toXZ(mx[0], mx[1]), toXZ(mn[0], mx[1])], long, toXZ, mn, mx };
 }
-function gableRoof(b) { // two sloped quads from eaves to a ridge along the long axis
+const polyArea = (poly) => Math.abs(poly.reduce((a, [x, z], i) => { const [nx, nz] = poly[(i + 1) % poly.length]; return a + x * nz - nx * z; }, 0)) / 2;
+// hip roof: four slopes from the eaves up to a ridge along the long axis (no open gable ends)
+function hipRoof(b) {
   const o = obb(b.poly), eave = b.height * 0.72, ridge = b.height + 0.4, { mn, mx, toXZ } = o;
-  const [u0, u1, v0, v1] = [mn[0], mx[0], mn[1], mx[1]];
-  if (o.long) { const vm = (v0 + v1) / 2; return [
-    [[...toXZ(u0, v0), eave], [...toXZ(u1, v0), eave], [...toXZ(u1, vm), ridge], [...toXZ(u0, vm), ridge]],
-    [[...toXZ(u0, vm), ridge], [...toXZ(u1, vm), ridge], [...toXZ(u1, v1), eave], [...toXZ(u0, v1), eave]] ]; }
-  const um = (u0 + u1) / 2; return [
-    [[...toXZ(u0, v0), eave], [...toXZ(um, v0), ridge], [...toXZ(um, v1), ridge], [...toXZ(u0, v1), eave]],
-    [[...toXZ(um, v0), ridge], [...toXZ(u1, v0), eave], [...toXZ(u1, v1), eave], [...toXZ(um, v1), ridge]] ];
+  let [u0, u1, v0, v1] = [mn[0], mx[0], mn[1], mx[1]];
+  if (!o.long) [u0, u1, v0, v1] = [mn[1], mx[1], mn[0], mx[0]];
+  const T = o.long ? toXZ : (u, v) => toXZ(v, u);
+  const w = v1 - v0, vm = (v0 + v1) / 2, r0 = u0 + w / 2, r1 = u1 - w / 2; // ridge inset by half width
+  const E = (u, v) => [...T(u, v), eave], R = (u) => [...T(u, vm), ridge];
+  return [
+    [E(u0, v0), E(u1, v0), R(r1), R(r0)],
+    [R(r0), R(r1), E(u1, v1), E(u0, v1)],
+    [E(u0, v0), R(r0), E(u0, v1)],
+    [E(u1, v0), E(u1, v1), R(r1)],
+  ];
 }
+// only near-rectangular footprints get a pitched roof; L-shapes etc. stay flat so walls always sit under the roof
+function isRectangular(poly) { const o = obb(poly); const a = (o.mx[0] - o.mn[0]) * (o.mx[1] - o.mn[1]); return polyArea(poly) / a > 0.85; }
 function columns(poly, spacing = 6) { const out = []; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const n = Math.max(1, Math.round(L / spacing)); for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); } return out; }
 function buildingParts(bs) {
   const walls = [], roofs = [], slabs = [], posts = [], edges = [];
@@ -83,7 +91,12 @@ function buildingParts(bs) {
     const st = b.style || 'box';
     if (st === 'box' || st === 'tank') walls.push({ ...b, h: b.height });
     if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [215, 220, 226], base: b.base });
-    if (st === 'gable') { walls.push({ ...b, h: b.height * 0.72 }); const [r1, r2] = gableRoof(b); roofs.push({ pts: r1, color: b.roof ?? [150, 140, 130], b }, { pts: r2, color: (b.roof ?? [150, 140, 130]).map((c) => c * 0.82), b }); }
+    if (st === 'gable') {
+      if (!isRectangular(b.poly)) { walls.push({ ...b, h: b.height }); slabs.push({ poly: b.poly, z: b.height + 0.02, color: b.roof ?? [150, 140, 130], base: b.base }); continue; }
+      walls.push({ ...b, h: b.height * 0.72 });
+      const rc = b.roof ?? [150, 140, 130], shade = (k) => rc.map((c) => Math.min(255, c * k));
+      hipRoof(b).forEach((pts, i) => roofs.push({ pts, color: shade([1, 0.82, 0.9, 0.9][i]), b }));
+    }
     if (st === 'frame') { for (let k = 1; k <= b.floors; k++) { const z = k * 3.3; slabs.push({ poly: b.poly, z, color: [190, 190, 188, 205], base: b.base }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]], base: b.base }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: b.floors * 3.3, w: 0.7, color: [175, 175, 172], base: b.base }); }
     if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? [235, 235, 235], base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: [200, 200, 200], base: b.base }); }
   }
