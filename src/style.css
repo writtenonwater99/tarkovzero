@@ -2,7 +2,7 @@
 html, body, #app { height: 100%; margin: 0; }
 body { font: 14px system-ui, sans-serif; background: #111; color: #ddd; }
 #app { display: flex; position: relative; }
-#map3d { display: none; flex: 1; position: relative; background: #e8eaed; }
+#map3d { display: none; flex: 1; position: relative; background: linear-gradient(180deg, #d7dde6 0%, #e8eaed 35%, #e8eaed 100%); }
 body.view-3d #map { display: none; }
 body.view-3d #map3d { display: block; }
 .view-toggle { float: right; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; font: 700 12px system-ui; cursor: pointer; }

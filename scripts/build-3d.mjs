@@ -94,7 +94,40 @@ const roads = [
   ...linesIn('Roads').map((p) => ({ path: p, width: 5, kind: 'small' })),
   ...linesIn('Dirt_Roads').map((p) => ({ path: p, width: 5, kind: 'dirt' })),
 ];
+// ---- tag buildings with the nearest place label (for colours / tooltips)
+const labels = JSON.parse(await readFile('src/labels.js', 'utf8').then((t) => t.slice(t.indexOf('['), t.lastIndexOf(']') + 1)));
+const centroid = (poly) => poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]);
+for (const b of buildings) {
+  const c = centroid(b.poly);
+  let best = null, bd = 45;
+  for (const l of labels) { const d = Math.hypot(l.position[0] - c[0], l.position[1] - c[1]); if (d < bd) { bd = d; best = l.text; } }
+  if (best) b.place = best;
+}
+// ---- bridges: parts of roads/rail that run over water become elevated decks
+const inPoly = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
+const overWater = (pt) => out0.water.some((w) => inPoly(pt, w));
+const resample = (path, step) => { const r = [path[0]]; for (let i = 1; i < path.length; i++) { const [ax, az] = path[i - 1], [bx, bz] = path[i]; const L = Math.hypot(bx - ax, bz - az); for (let t = step; t < L; t += step) r.push([ax + ((bx - ax) * t) / L, az + ((bz - az) * t) / L]); r.push(path[i]); } return r; };
+const out0 = { water: polysIn('River') };
+const bridges = [];
+for (const r of [...roads.map((r) => ({ ...r, cls: 'road' })), ...linesIn('Railway').map((p) => ({ path: p, width: 3, kind: 'rail', cls: 'rail' }))]) {
+  const pts = resample(r.path, 3); let run = [];
+  const flush = () => { if (run.length >= 3) { const i0 = pts.indexOf(run[0]), i1 = pts.indexOf(run[run.length - 1]); const span = pts.slice(Math.max(0, i0 - 5), Math.min(pts.length, i1 + 6)); bridges.push({ path: span, width: r.width, kind: r.kind, height: r.kind === 'rail' ? 8 : 6.5 }); } run = []; };
+  for (const p of pts) { if (overWater(p)) run.push(p); else flush(); }
+  flush();
+}
+// keep real crossings only: no dirt tracks (swamp), and merge overlapping road paths
+const mid = (b) => b.path[Math.floor(b.path.length / 2)];
+const kept = [];
+const PRI = { highway: 0, main: 1, small: 2, rail: 0 };
+for (const b of bridges.filter((b) => b.kind !== 'dirt').sort((a, c) => PRI[a.kind] - PRI[c.kind] || c.path.length - a.path.length)) {
+  const m = mid(b);
+  if (!kept.some((k) => Math.hypot(mid(k)[0] - m[0], mid(k)[1] - m[1]) < 20)) kept.push(b);
+}
+bridges.length = 0; bridges.push(...kept);
+const PLACE_COLORS = { 'Big Red': [200, 60, 55], 'Crackhouse': [120, 88, 66], 'Dorms 2-Story': [214, 190, 160], 'Dorms 3-Story': [214, 190, 160], 'New Gas': [235, 235, 235], 'Old Gas': [190, 190, 185], 'Fortress': [180, 180, 178], 'Skeleton': [176, 176, 176], 'Repair Shop': [140, 160, 185], 'Warehouse 3': [150, 165, 185], 'Warehouse 4': [150, 165, 185], 'Warehouse 7': [150, 165, 185], 'Warehouse 17': [150, 165, 185], 'Depot': [165, 170, 178], 'Boiler': [170, 110, 90], 'Oil Rig': [160, 120, 95], 'Streamer House': [120, 95, 70], 'Bus Station': [235, 235, 232], 'Storage': [170, 175, 180], 'Powerline Tower': [150, 150, 150], 'Water Pump': [160, 170, 180], 'Military Checkpoint': [175, 180, 170] };
+for (const b of buildings) if (b.place && PLACE_COLORS[b.place]) b.color = PLACE_COLORS[b.place];
 const out = {
+  bridges,
   map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
   land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement'), trees: polysIn('Trees'), rocks: polysIn('Rocks'),
   roads, railway: linesIn('Railway').map((p) => ({ path: p })), fences: linesIn('Fence').map((p) => ({ path: p })), powerlines: linesIn('Powerlines').map((p) => ({ path: p })),
@@ -102,4 +135,5 @@ const out = {
 };
 await writeFile('public/data/customs-3d.json', JSON.stringify(out));
 const multi = buildings.filter((b) => b.floors > 1);
+console.log(`bridges ${bridges.length} (${bridges.map((b) => b.kind + ':' + b.path.length).join(', ')}), named ${buildings.filter((b) => b.place).length}, coloured ${buildings.filter((b) => b.color).length}`);
 console.log(`buildings ${buildings.length} (multi-floor ${multi.length}: ${multi.map((b) => `${b.name}×${b.floors}`).join(', ')}), trees ${out.trees.length}, rocks ${out.rocks.length}, roads ${roads.length}, water ${out.water.length}, land ${out.land.length} → public/data/customs-3d.json (${(JSON.stringify(out).length / 1024).toFixed(0)} KB)`);
