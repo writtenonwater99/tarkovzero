@@ -37,8 +37,11 @@ first real test should confirm the arrow direction.
 ## Screenshot filename (what the companion parses)
 `2026-08-28[21-14]_-136.1, 1.9, 92.3_0.0, -0.4, 0.0, 0.9_11.83 (0).png` → x, y, z then quaternion x, y, z, w.
 If the real game's format differs, fix `RE`/`parseScreenshot` in `companion/companion.mjs` and note the real
-format here. **Real-game confirmation pending** (companion prints every filename with `--verbose`; unparseable
-names are always printed).
+format here. **Confirmed in-game 2026-08-28** (EFT 1.1.0.1.46911, Customs practice raid):
+`2026-08-28[20-58]_651.96, 2.01, 117.51_0.00547, -0.97442, 0.02387, 0.22339_6.83 (0).png` — same layout, 2 decimals
+for position, 5 for the quaternion. Position landed correctly; heading is correct with
+`yaw = atan2(2(xz+wy), 1-2(x²+y²))` in the companion and the site's `yaw + 180` untouched.
+Measured: file write → companion detect 92–180 ms (relay adds a few ms).
 
 ## Game laptop facts (observed 2026-08-28, EFT 1.1.0.1.46911, Steam build)
 - EFT is the **Steam** version: `C:\Program Files (x86)\Steam\steamapps\common\Escape from Tarkov\build\`.
@@ -47,12 +50,17 @@ names are always printed).
   Unity `Player.log` lives in `%LOCALAPPDATA%Low\Battlestate Games\EscapeFromTarkov\`.
 - Documents is not OneDrive-redirected on this machine; screenshots go to
   `C:\Users\zeque\Documents\Escape from Tarkov\Screenshots` (folder is created by EFT on the first screenshot).
-- Screenshot key binding is in the application log's settings dump: `"keyName":"MakeScreenshot","variants":[{"keyCode":["SysReq"]}` = PrintScreen. Companion reads it for `--auto`.
-- Map detection: `application_*.log` never names the map (only `MatchingCompleted / LocationLoaded / GameStarted`).
-  `push-notifications_*.log` carries `"location": "bigmap"` etc. inside `groupMatchRaidSettings` — group raids
-  only. Solo/offline raid map source still unknown; companion takes the last `"location": "<id>"` seen across the
-  newest session's logs and falls back to `customs`. Raw ids: `bigmap`=customs, `factory4_day/night`, `Woods`,
-  `Shoreline`, `Interchange`, `RezervBase`, `Lighthouse`, `TarkovStreets`, `laboratory`, `Sandbox(_high)`.
+- Screenshot key binding is in the application log's settings dump: `"keyName":"MakeScreenshot","variants":[{"keyCode":["SysReq"]}`. Companion reads it for `--auto`.
+  **Gotcha:** on Windows 11 PrintScreen is eaten by Snipping Tool / the desktop capture before EFT sees it, even
+  with `PrintScreenKeyForSnippingEnabled=0` — EFT writes nothing. Fix: rebind EFT Settings → Controls → Screenshot
+  to **F11** (F12 is Steam's). The user's game is now bound to F11.
+- Map detection: every raid load logs `scene preset path:maps/customs_preset.bundle rcid:bigmap.scenespreset.asset`
+  (and `[Transit] ... Locations:bigmap -> ...`) in `application_*.log` — works for solo/practice raids; companion
+  takes the last `rcid:<id>.scenespreset`. Fallback: `"location": "<id>"` in `push-notifications_*.log`
+  (`groupMatchRaidSettings`, group raids only), then `customs`. Raw ids: `bigmap`=customs, `factory4_day/night`,
+  `Woods`, `Shoreline`, `Interchange`, `RezervBase`, `Lighthouse`, `TarkovStreets`, `laboratory`, `Sandbox(_high)`.
+- Relay caches the last position per code for late joiners: a stale/simulated position sent under a code earlier
+  shows up as the trail's first point when the site connects. Not a site bug; "Clear trails" removes it.
 - Run the companion with Windows node (`node.exe companion.mjs` from WSL works); it polls the folder (250 ms)
   because `fs.watch` never fires on `/mnt/c`.
 

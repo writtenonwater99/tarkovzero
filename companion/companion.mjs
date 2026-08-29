@@ -149,12 +149,16 @@ function pollLogs() {
   const session = newestLogSession(); if (!session) return;
   let files; try { files = fs.readdirSync(session); } catch { return; }
   if (session !== lastSession) { lastSession = session; detectedKey = null; if (verbose) console.log('log session:', session); }
-  // Map: the game names the raid location in push-notifications (groupMatchRaidSettings) and,
-  // for some raid types, in output/backend; take the last "location": "<id>" we can find.
+  // Map: every raid load (solo, practice, group) logs "scene preset path:maps/customs_preset.bundle
+  // rcid:bigmap.scenespreset.asset" in application_*.log — that's authoritative. Fallback: the last
+  // "location": "<id>" (groupMatchRaidSettings in push-notifications).
   let found = null;
-  for (const f of files.filter((f) => /push-notifications|output|backend|application/.test(f))) {
-    const text = tail(path.join(session, f));
-    const ms = [...text.matchAll(/"location":\s*"([A-Za-z0-9_]+)"/g)];
+  for (const f of files.filter((f) => /application/.test(f))) {
+    const ms = [...tail(path.join(session, f)).matchAll(/rcid:([A-Za-z0-9_]+)\.scenespreset/g)];
+    if (ms.length) found = ms[ms.length - 1][1];
+  }
+  if (!found) for (const f of files.filter((f) => /push-notifications/.test(f))) {
+    const ms = [...tail(path.join(session, f)).matchAll(/"location":\s*"([A-Za-z0-9_]+)"/g)];
     if (ms.length) found = ms[ms.length - 1][1];
   }
   if (found && normalizeMap(found) !== detectedMap) { detectedMap = normalizeMap(found); console.log(`map from logs: ${found} → ${detectedMap}`); }
