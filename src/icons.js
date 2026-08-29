@@ -5,6 +5,7 @@ import { ART } from './icon-art.js';
 const A = (k) => `<g transform='scale(0.046875)'><path d='${ART[k]}'/></g>`; // 512 -> 24
 const GLYPH = {
   gi_exit: A('exit'), gi_transit: A('transit'), gi_gasmask: A('gasmask'), gi_hood: A('hood'), gi_crosshair: A('crosshair'), gi_crownskull: A('crownskull'), gi_radioactive: A('radioactive'), gi_sentry: A('sentry'), gi_lever: A('lever'), gi_padlock: A('padlock'), gi_stairs: A('stairs'),
+  gi_flagobjective: A('flagobjective'), gi_checklist: A('checklist'),
   gi_lockedchest: A('lockedchest'), gi_ammobox: A('ammobox'), gi_cargocrate: A('cargocrate'), gi_strongbox: A('strongbox'),
   gi_medicalpack: A('medicalpack'), gi_lootkey: A('lootkey'), gi_deathskull: A('deathskull'), gi_twocoins: A('twocoins'),
   // toy-soldier silhouettes (one colour, no badge). 24x24, feet at y=23.
@@ -49,6 +50,9 @@ export const KINDS = {
   'weapon':          { label: 'Stationary weapons', glyph: 'gi_sentry',    color: '#6E6860', shape: 'dia' },
   'switch':          { label: 'Switches / levers',  glyph: 'gi_lever',     color: '#D6B236', shape: 'dia' },
   'lock':            { label: 'Locks',              glyph: 'gi_padlock',      color: '#808682', shape: 'dia' },
+  // Quest objectives are their own class: a hexagon nobody else uses, so a quest pin never reads
+  // as an extract or a loot chip. Colour is overridden per selected quest (see `tint`).
+  'quest-objective': { label: 'Quest objectives',   glyph: 'gi_flagobjective', color: '#D8A32B', shape: 'hex' },
 };
 // Letter codes for extracts (re3mr-style badges); null -> draw the glyph
 export const EXTRACT_LETTER = { 'Dorms V-Ex': 'D', 'Crossroads': 'C', 'Trailer Park': 'TP', 'Old Gas Station': 'OG', 'RUAF Roadblock': 'R', "Smugglers' Boat": 'SB', 'ZB-1011': '11', 'Smugglers\' Bunker (ZB-1012)': '12', 'ZB-013': '13', 'Railroad to Tarkov': 'R2', 'Railroad to Port': 'R1', 'Railroad to Military Base': 'R3', 'Sniper Roadblock': 'N', 'Old Road Gate': 'O', 'Passage Between Rocks': 'P', 'Military Base CP': 'M', 'Scav Checkpoint': 'S', 'Administration Gate': 'A', 'Factory Far Corner': 'F', 'Warehouse 4': '4', 'Factory Shacks': 'Y', 'Old Gas Station Gate': 'L', 'Warehouse 17': '17', "Trailer Park Workers' Shack": 'I', 'Boiler Room Basement (Co-op)': 'Z', 'Railroad Passage (Flare)': 'W', 'Transit to Factory': 'H', 'Transit to Reserve': 'V', 'Transit to Interchange': 'G', 'Transit to Shoreline': 'E' };
@@ -56,13 +60,17 @@ export const extractLetter = (name) => EXTRACT_LETTER[(name || '').trim()] ?? nu
 
 // badge key line + cream inner rule; both come straight from the TRACK C palette (ink / cream)
 const KEY = '#0E1211', CREAM = '#E6E3D7';
-function badgeSvg(k, letter, level = 'surface') {
+const HEX = 'M12 1.6 21.1 6.8v10.4L12 22.4 2.9 17.2V6.8z', HEX_IN = 'M12 3.4 19.6 7.8v8.4L12 20.6 4.4 16.2V7.8z';
+function badgeSvg(k0, letter, level = 'surface', tint = null) {
+  const k = tint ? { ...k0, color: tint, color2: null } : k0;
   if (k.shape === 'fig') return `<circle cx='12' cy='12' r='11' fill='#0a0e0c' fill-opacity='.45'/><g fill='${k.color}' transform='translate(2.6 2.6) scale(.78)'>${GLYPH[k.glyph]}</g>`; // one-colour art glyph on a faint disc
   const shape = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='${k.color}'/>`
     : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='${k.color}'/>`
+    : k.shape === 'hex' ? `<path d='${HEX}' fill='${k.color}'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='${k.color}'/>`;
   const split = k.color2 ? `<clipPath id='c'><rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5'/></clipPath><path d='M1.8 22.2 22.2 1.8v20.4z' fill='${k.color2}' clip-path='url(#c)'/>` : '';
   const key = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='none' stroke='${KEY}' stroke-width='1.6'/><circle cx='12' cy='12' r='9.5' fill='none' stroke='${CREAM}' stroke-width='1'/>`
+    : k.shape === 'hex' ? `<path d='${HEX}' fill='none' stroke='${KEY}' stroke-width='1.6'/><path d='${HEX_IN}' fill='none' stroke='${CREAM}' stroke-width='1'/>`
     : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='none' stroke='${KEY}' stroke-width='1.6'/><rect x='2.8' y='2.8' width='18.4' height='18.4' rx='4.2' fill='none' stroke='${CREAM}' stroke-width='1'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='none' stroke='${KEY}' stroke-width='1.6'/>`;
   const ring = k.ring ? `<circle cx='12' cy='12' r='11.6' fill='none' stroke='${CREAM}' stroke-width='0.8'/>` : '';
@@ -74,13 +82,13 @@ function badgeSvg(k, letter, level = 'surface') {
     : '';
   return `${shape}${split}${key}${ring}${inner}${underground}`;
 }
-export function iconHtml(kind, size = 24, letter = null, level = 'surface') {
+export function iconHtml(kind, size = 24, letter = null, level = 'surface', tint = null) {
   const k = KINDS[kind];
-  return `<div class="mk ${k.shape} level-${level}" style="width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level)}</svg></div>`;
+  return `<div class="mk ${k.shape} level-${level}" style="width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level, tint)}</svg></div>`;
 }
-export function iconDataUrl(kind, size = 48, letter = null, level = 'surface') {
+export function iconDataUrl(kind, size = 48, letter = null, level = 'surface', tint = null) {
   const k = KINDS[kind];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level)}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level, tint)}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 export const soldierDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><circle cx="12" cy="12" r="11.5" fill="#0a0e0c" fill-opacity=".55"/><g fill="${color}" transform="translate(2.6 2.6) scale(.78)">${GLYPH.gi_gasmask}</g></svg>`);

@@ -537,7 +537,11 @@ export async function createView3d(container, mapData, src) {
     return { canvas, mapping };
   }
   const markerEntries = src.markers().filter((m) => KINDS[m.kind]).map((m) => [markerIconKey(m), iconDataUrl(m.kind, 64, m.kind.startsWith('extract') ? extractLetter(m.name) : null, markerLevel(m))]);
-  const atlasEntries = [...Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), ...markerEntries]
+  // Quest pins carry their sequence number inside the hexagon (1..12 covers every quest in the
+  // data; anything beyond falls back to the plain flag).
+  const QUEST_BADGES = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const questEntries = QUEST_BADGES.map((b) => [`quest-objective:${b}`, iconDataUrl('quest-objective', 64, b)]);
+  const atlasEntries = [...Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), ...markerEntries, ...questEntries]
     .filter((e, i, all) => all.findIndex((x) => x[0] === e[0]) === i);
   const iconAtlas = await buildAtlas(atlasEntries, 64);
   const arrowAtlas = await buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64);
@@ -699,6 +703,25 @@ export async function createView3d(container, mapData, src) {
       text('extract-sub', cand.filter((d) => d.sub), (d) => d.sub, () => 10, [...C.creamDim, 255], [0, 24], false),
     ];
   }
+  // --- quest layer -----------------------------------------------------------------------
+  // Fed by src/quests.js: objective points (numbered) and their zone outlines, in game coords.
+  // Everything draws with OVERLAY parameters so a pin inside a warehouse is still findable.
+  function questLayers() {
+    const q = src.quests?.() ?? null;
+    if (!q || (!q.points?.length && !q.zones?.length)) return [];
+    const zones = (q.zones ?? []).filter((d) => d.outline?.length >= 3);
+    const pts = (q.points ?? []).filter((d) => inLimit(d.position.x, d.position.z));
+    const iconKey = (d) => (iconAtlas.mapping[`quest-objective:${d.badge}`] ? `quest-objective:${d.badge}` : 'quest-objective');
+    return [
+      new SolidPolygonLayer({ id: 'quest-zone-fill', shadowEnabled: false, data: zones, getPolygon: (d) => ringG(d.outline, 0.5), getFillColor: (d) => [...d.color, d.level === 'underground' ? 45 : 70], parameters: OVERLAY, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new PathLayer({ id: 'quest-zone-line', shadowEnabled: false, data: zones, getPath: (d) => ringG([...d.outline, d.outline[0]], 0.55), getColor: (d) => [...d.color, 235], getWidth: 2, widthUnits: 'pixels', getDashArray: [5, 4], dashJustified: false, extensions: [new PathStyleExtension({ dash: true })], parameters: OVERLAY, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      // the per-quest colour lives on a ground ring, so the hexagon badge can stay one readable gold
+      new ScatterplotLayer({ id: 'quest-ring', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.62), getRadius: 3.4, radiusUnits: 'meters', radiusMinPixels: 10, radiusMaxPixels: 26, stroked: true, filled: true, getFillColor: (d) => [...d.color, 40], getLineColor: (d) => [...d.color, d.done ? 110 : 235], lineWidthMinPixels: 2, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getLineColor: pts.map((d) => d.done) }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'quest-markers', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: iconKey, getSize: 30, sizeUnits: 'pixels', sizeMinPixels: 22, sizeMaxPixels: 40, billboard: true, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getIcon: pts.map((d) => d.badge) }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+        onClick: (i) => { if (!i.object) return false; src.onQuestClick?.(i.object); return true; } }),
+    ];
+  }
+
   const dynamicLayers = () => {
     const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z) && (floor !== 'U' || markerLevel(m) === 'underground'));
     const labels = src.labels().filter((d) => inLimit(d.position[0], d.position[1])
@@ -723,6 +746,7 @@ export async function createView3d(container, mapData, src) {
         outlineWidth: isMajor ? 2.5 : 2, outlineColor: isMajor ? [...C.ink, 242] : [...C.ink, 230],
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
       ...extractNameLayers(markers),
+      ...questLayers(),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.6)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       // live player: field-of-view cone on the ground (direction = the cone) + beacon
       new SolidPolygonLayer({ id: 'player-cone', data: players, getPolygon: (p) => viewCone(p.last, 32, 60).map((q) => Pg(q, 0.7)), getFillColor: (p) => hex(p.color, 70), pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPolygon: players.map((p) => p.last) } }),
@@ -751,6 +775,7 @@ export async function createView3d(container, mapData, src) {
       if (layer.id === 'props') return { html: `<b>${esc(object.p.name ?? object.p.type)}</b>`, className: 'deck-tooltip' };
       if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
       if (layer.id === 'markers-extract' || layer.id === 'markers-chips') return { html: object.html, className: 'deck-tooltip' };
+      if (layer.id === 'quest-markers') return { html: object.html, className: 'deck-tooltip' };
       if (layer.id === 'players' || layer.id === 'player-ring' || layer.id === 'player-piece') { if (layer.id === 'player-piece') object = object.p; const y = object.last.y ?? 0, g = H(object.last.x, object.last.z) / relief, rel = y - g; const fl = rel < -1.5 ? 'underground' : rel < 2.6 ? 'ground' : `floor ${Math.floor(rel / 3.3) + 1}`; const note = relief === 1 ? '' : `<br>Relief ${relief}× · ground height visually exaggerated`; return { html: `<b>${esc(object.name)}</b><br>${fl} · x ${object.last.x} z ${object.last.z} y ${y}${note}`, className: 'deck-tooltip' }; }
       return null;
     },
@@ -808,6 +833,8 @@ export async function createView3d(container, mapData, src) {
     // sidebar hover/click can pin an extract's name in 3D (name+kind key, or null to clear)
     focusExtract: (name, kind) => { pinnedExtract = name ? (name + '|' + (kind ?? 'extract-pmc')) : null; render(); },
     setView: ({ target, zoom }) => { viewState = { ...viewState, target, zoom }; deck.setProps({ viewState }); },
+    // game coords -> screen pixels, so main.js can pin an HTML card to a 3D point
+    project: (x, z, dy = 0.7) => { try { const vp = deck.getViewports?.()[0]; return vp ? vp.project(Pg([x, z], dy)) : null; } catch { return null; } },
     deck,
   };
   // Non-enumerable test hook: CDP verification can compare the same layer inventory at 1x/3x

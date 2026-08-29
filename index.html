@@ -56,6 +56,26 @@
           <div id="layers"></div>
         </div>
 
+        <section class="block block-quests" id="quest-block">
+          <button type="button" class="block-head quest-head" id="quest-toggle" aria-expanded="false" aria-controls="quests">
+            <svg class="quest-ico" width="14" height="14" viewBox="0 0 512 512" aria-hidden="true"><path fill="currentColor" d="M122.31 84.615l-2.85 8.54-11.394 34.185-5.703-5.703L96 115.27 83.27 128l6.367 6.363 26.297 26.297 20.605-61.814 2.845-8.537-17.076-5.695zM151 119v18h242v-18H151zm0 64v18h242v-18H151zm0 64v18h242v-18H151zm-28.69 29.615l-2.85 8.54-11.394 34.185-5.703-5.703L96 307.27 83.27 320l6.367 6.363 26.297 26.297 20.605-61.814 2.845-8.537-17.076-5.695zM151 311v18h242v-18H151zm0 64v18h242v-18H151z"/></svg>
+            <span class="block-title">Quests</span>
+            <span class="quest-sum" id="quest-sum">Loading…</span>
+            <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div id="quests" hidden>
+            <div class="find find-quest">
+              <input id="quest-find" type="text" placeholder="Search quests or traders" autocomplete="off" spellcheck="false" aria-label="Search quests" />
+            </div>
+            <div id="quest-results" class="results" hidden role="listbox" aria-label="Quest search results"></div>
+            <label class="row quest-row" id="quest-vis" data-cat="quest" hidden>
+              <input type="checkbox" class="vh" checked>
+              <span class="row-ico" id="quest-vis-ico"></span><span class="row-lab">Quest objectives</span><span class="row-n mono" id="quest-vis-n">0</span>
+            </label>
+            <div id="quest-selected" class="qsel"></div>
+          </div>
+        </section>
+
         <div class="block block-view">
           <div class="block-head"><span class="block-title">View</span></div>
           <div class="line only-2d">
@@ -120,7 +140,7 @@
         </section>
 
         <footer class="rail-foot">
-          <span class="credit">Icons <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> · Tiles &amp; data <a href="https://tarkov.dev" target="_blank" rel="noopener">tarkov.dev</a></span>
+          <span class="credit">Icons <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC BY) · Tiles &amp; data <a href="https://tarkov.dev" target="_blank" rel="noopener">tarkov.dev</a> · Quest shots <a href="https://escapefromtarkov.fandom.com" target="_blank" rel="noopener">EFT Wiki</a></span>
           <button type="button" class="ghost help" id="help-btn" aria-expanded="false" aria-controls="hint3d" aria-label="Controls and shortcuts">?</button>
           <div id="hint3d" class="pop pop-help" hidden>
             <div class="pop-title">Controls</div>
@@ -134,6 +154,7 @@
               <dt><b>F</b></dt><dd>Fit map</dd>
               <dt><b>N</b></dt><dd>Reset north (3D)</dd>
               <dt><b>[</b> <b>]</b></dt><dd>Step floors (3D)</dd>
+              <dt><b>Q</b></dt><dd>Quests</dd>
               <dt><b>/</b></dt><dd>Find</dd>
               <dt><b>Esc</b></dt><dd>Close</dd>
             </dl>
@@ -144,6 +165,8 @@
       <div id="stage">
         <div id="map"></div>
         <div id="map3d"></div>
+
+        <div id="quest-card" class="qcard" hidden></div>
 
         <div class="hud hud-tr">
           <div class="hud-group">
