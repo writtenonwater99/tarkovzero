@@ -1,7 +1,10 @@
 // Marker icons: white stroke glyphs on a coloured badge. Badge shape encodes the category —
 // extracts = rounded square, spawns = circle, utilities (weapons/switches/locks/hazards) = diamond.
 const S = 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"';
+import { ART } from './icon-art.js';
+const A = (k) => `<g transform='scale(0.046875)'><path d='${ART[k]}'/></g>`; // 512 -> 24
 const GLYPH = {
+  gi_exit: A('exit'), gi_transit: A('transit'), gi_gasmask: A('gasmask'), gi_hood: A('hood'), gi_crosshair: A('crosshair'), gi_crownskull: A('crownskull'), gi_radioactive: A('radioactive'), gi_sentry: A('sentry'), gi_lever: A('lever'), gi_padlock: A('padlock'), gi_stairs: A('stairs'),
   // toy-soldier silhouettes (one colour, no badge). 24x24, feet at y=23.
   armyman: `<path d='M12 1.5a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8zM9.2 6.6h5.6l1.4 1.2 3.9-1.6.7 1.6-4 2.3-.8 5.4h-1.1l.3 7.5h-2.2l-.6-6h-.8l-.6 6H9.8l.3-7.5H9l-.8-5.2-3.3-1 .4-1.7 3.2.6z'/><path d='M4 23h16v.8H4z' opacity='.9'/>`,
   hoodman: `<path d='M12 1.2c-2.2 0-3.3 1.8-3.3 3.6v1.7h6.6V4.8c0-1.8-1.1-3.6-3.3-3.6zM9.3 7.1h5.4l1.1 1 3.5 3.6-1.2 1.2-2.4-2.1-.3 5h-1l.4 7.5h-2.1l-.5-6h-.8l-.5 6H9.1l.4-7.5h-1l-.3-5-2.4 2.1-1.2-1.2 3.5-3.6z'/><path d='M4 23h16v.8H4z' opacity='.9'/>`,
@@ -24,18 +27,18 @@ const GLYPH = {
 // neutrals = utilities. The four extract hues are re-used by the 3D name chips' borders and by
 // the sidebar rows, so toggling 'Scav extracts' visibly removes exactly the orange-bordered chips.
 export const KINDS = {
-  'extract-pmc':     { label: 'PMC extracts',       glyph: 'exit',      color: '#2DBE6C', shape: 'sq'  },
-  'extract-scav':    { label: 'Scav extracts',      glyph: 'exitScav',  color: '#E0872B', shape: 'sq'  },
-  'extract-shared':  { label: 'Shared extracts',    glyph: 'exit',      color: '#2DBE6C', color2: '#E0872B', shape: 'sq' },
-  'extract-transit': { label: 'Transits',           glyph: 'transit',   color: '#3A96BA', shape: 'sq'  },
-  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'armyman',   color: '#5f7d8c', shape: 'fig' },
-  'spawn-scav':      { label: 'Scav spawns',        glyph: 'hoodman',   color: '#b08f5a', shape: 'fig' },
-  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'prone',     color: '#d0693a', shape: 'fig' },
-  'spawn-boss':      { label: 'Boss spawns',        glyph: 'bossman',   color: '#b8323a', shape: 'fig' },
-  'hazard':          { label: 'Hazards',            glyph: 'trefoil',   color: '#8258A6', shape: 'dia' },
-  'weapon':          { label: 'Stationary weapons', glyph: 'turret',    color: '#6E6860', shape: 'dia' },
-  'switch':          { label: 'Switches / levers',  glyph: 'lever',     color: '#D6B236', shape: 'dia' },
-  'lock':            { label: 'Locks',              glyph: 'lock',      color: '#808682', shape: 'dia' },
+  'extract-pmc':     { label: 'PMC extracts',       glyph: 'gi_exit',      color: '#2DBE6C', shape: 'sq'  },
+  'extract-scav':    { label: 'Scav extracts',      glyph: 'gi_exit',  color: '#E0872B', shape: 'sq'  },
+  'extract-shared':  { label: 'Shared extracts',    glyph: 'gi_exit',      color: '#2DBE6C', color2: '#E0872B', shape: 'sq' },
+  'extract-transit': { label: 'Transits',           glyph: 'gi_transit',   color: '#3A96BA', shape: 'sq'  },
+  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'gi_gasmask',   color: '#7fa0b4', shape: 'fig' },
+  'spawn-scav':      { label: 'Scav spawns',        glyph: 'gi_hood',   color: '#c9a463', shape: 'fig' },
+  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'gi_crosshair',     color: '#e2793f', shape: 'fig' },
+  'spawn-boss':      { label: 'Boss spawns',        glyph: 'gi_crownskull',   color: '#d24a4a', shape: 'fig' },
+  'hazard':          { label: 'Hazards',            glyph: 'gi_radioactive',   color: '#8258A6', shape: 'dia' },
+  'weapon':          { label: 'Stationary weapons', glyph: 'gi_sentry',    color: '#6E6860', shape: 'dia' },
+  'switch':          { label: 'Switches / levers',  glyph: 'gi_lever',     color: '#D6B236', shape: 'dia' },
+  'lock':            { label: 'Locks',              glyph: 'gi_padlock',      color: '#808682', shape: 'dia' },
 };
 // Letter codes for extracts (re3mr-style badges); null -> draw the glyph
 export const EXTRACT_LETTER = { 'Dorms V-Ex': 'D', 'Crossroads': 'C', 'Trailer Park': 'TP', 'Old Gas Station': 'OG', 'RUAF Roadblock': 'R', "Smugglers' Boat": 'SB', 'ZB-1011': '11', 'Smugglers\' Bunker (ZB-1012)': '12', 'ZB-013': '13', 'Railroad to Tarkov': 'R2', 'Railroad to Port': 'R1', 'Railroad to Military Base': 'R3', 'Sniper Roadblock': 'N', 'Old Road Gate': 'O', 'Passage Between Rocks': 'P', 'Military Base CP': 'M', 'Scav Checkpoint': 'S', 'Administration Gate': 'A', 'Factory Far Corner': 'F', 'Warehouse 4': '4', 'Factory Shacks': 'Y', 'Old Gas Station Gate': 'L', 'Warehouse 17': '17', "Trailer Park Workers' Shack": 'I', 'Boiler Room Basement (Co-op)': 'Z', 'Railroad Passage (Flare)': 'W', 'Transit to Factory': 'H', 'Transit to Reserve': 'V', 'Transit to Interchange': 'G', 'Transit to Shoreline': 'E' };
@@ -44,7 +47,7 @@ export const extractLetter = (name) => EXTRACT_LETTER[(name || '').trim()] ?? nu
 // badge key line + cream inner rule; both come straight from the TRACK C palette (ink / cream)
 const KEY = '#0E1211', CREAM = '#E6E3D7';
 function badgeSvg(k, letter, level = 'surface') {
-  if (k.shape === 'fig') return `<g fill='${k.color}'>${GLYPH[k.glyph]}</g>`; // toy-soldier silhouettes: one colour, no badge
+  if (k.shape === 'fig') return `<circle cx='12' cy='12' r='11' fill='#0a0e0c' fill-opacity='.45'/><g fill='${k.color}' transform='translate(2.6 2.6) scale(.78)'>${GLYPH[k.glyph]}</g>`; // one-colour art glyph on a faint disc
   const shape = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='${k.color}'/>`
     : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='${k.color}'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='${k.color}'/>`;
@@ -53,7 +56,7 @@ function badgeSvg(k, letter, level = 'surface') {
     : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='none' stroke='${KEY}' stroke-width='1.6'/><rect x='2.8' y='2.8' width='18.4' height='18.4' rx='4.2' fill='none' stroke='${CREAM}' stroke-width='1'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='none' stroke='${KEY}' stroke-width='1.6'/>`;
   const ring = k.ring ? `<circle cx='12' cy='12' r='11.6' fill='none' stroke='${CREAM}' stroke-width='0.8'/>` : '';
-  const inner = letter ? `<text x='12' y='16.6' text-anchor='middle' font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${letter.length > 2 ? 9 : letter.length > 1 ? 11 : 13}' fill='${CREAM}'>${letter}</text>` : `<g transform='translate(4.6 4.6) scale(.62)'>${GLYPH[k.glyph]}</g>`;
+  const inner = letter ? `<text x='12' y='16.6' text-anchor='middle' font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${letter.length > 2 ? 9 : letter.length > 1 ? 11 : 13}' fill='${CREAM}'>${letter}</text>` : `<g fill='#fff' transform='translate(4.6 4.6) scale(.62)'>${GLYPH[k.glyph]}</g>`;
   // An underground badge must remain recognisable even when its colour is muted by
   // the marker-opacity setting: dashed extract outline + a universal down/stairs cue.
   const underground = level === 'underground'
@@ -70,5 +73,5 @@ export function iconDataUrl(kind, size = 48, letter = null, level = 'surface') {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level)}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
-export const soldierDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><g fill="${color}">${GLYPH.armyman}</g></svg>`);
+export const soldierDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><circle cx="12" cy="12" r="11.5" fill="#0a0e0c" fill-opacity=".55"/><g fill="${color}" transform="translate(2.6 2.6) scale(.78)">${GLYPH.gi_gasmask}</g></svg>`);
 export const arrowDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M12 2 20 21l-8-4-8 4z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`);
