@@ -99,9 +99,18 @@ function hipRoof(b) {
 // only near-rectangular footprints get a pitched roof; L-shapes etc. stay flat so walls always sit under the roof
 function isRectangular(poly) { const o = obb(poly); const a = (o.mx[0] - o.mn[0]) * (o.mx[1] - o.mn[1]); return polyArea(poly) / a > 0.85; }
 function columns(poly, spacing = 6) { const out = []; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const n = Math.max(1, Math.round(L / spacing)); for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); } return out; }
+function pylonParts(b, posts, slabs, edges) {
+  const o = obb(b.poly), H0 = b.height || 22, base = b.base ?? 0, { mn, mx, toXZ } = o;
+  const cx = (mn[0] + mx[0]) / 2, cy = (mn[1] + mx[1]) / 2, w = Math.max(3, Math.min(mx[0] - mn[0], mx[1] - mn[1]));
+  for (const [du, dv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) posts.push({ pos: toXZ(cx + du * w * 0.38, cy + dv * w * 0.38), h: H0, w: 0.45, color: [120, 120, 118], base });
+  const arm = [toXZ(cx - w * 0.9, cy), toXZ(cx + w * 0.9, cy)]; // cross-arm at the top
+  edges.push({ path: [[...P(arm[0]), H0 - 1.5], [...P(arm[1]), H0 - 1.5]].map(([x, y, z]) => [x, y, z]), base, wide: true });
+  slabs.push({ poly: [toXZ(cx - w * 0.45, cy - w * 0.45), toXZ(cx + w * 0.45, cy - w * 0.45), toXZ(cx + w * 0.45, cy + w * 0.45), toXZ(cx - w * 0.45, cy + w * 0.45)], z: H0, color: [130, 130, 128], base });
+}
 function buildingParts(bs) {
   const walls = [], roofs = [], slabs = [], posts = [], edges = [];
   for (const b of bs) {
+    if (b.kind === 'powerline_towers') { pylonParts(b, posts, slabs, edges); continue; }
     const st = b.style || 'box';
     if (st === 'box' || st === 'tank') walls.push({ ...b, h: b.height });
     if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [215, 220, 226], base: b.base });
@@ -168,6 +177,7 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: data.underground, getPolygon: (d) => ringG(d.poly, 0.1), getFillColor: C.underground, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true }),
     new PathLayer({ id: 'rail', shadowEnabled: false, data: data.railway, getPath: (d) => ringG(d.path, 0.15), getColor: C.rail, getWidth: 2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'roads', shadowEnabled: false, data: data.roads, getPath: (d) => ringG(d.path, 0.12), getColor: (d) => (d.kind === 'highway' ? C.highway : d.kind === 'dirt' ? C.dirt : C.road), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 1.5, capRounded: true, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => ringG(d.path, 19), getColor: [90, 90, 90, 200], getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'fences', shadowEnabled: false, data: data.fences, getPath: (d) => ringG(d.path, 0.1), getColor: C.fence, getWidth: 0.6, widthUnits: 'meters', widthMinPixels: 0.5, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 1.2, getFillColor: C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 8 } }),
     new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 3, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
@@ -198,7 +208,7 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'roofs', data: parts.roofs, getPolygon: (d) => d.pts.map(([x, z, y]) => P([x, z], y + (d.b.base ?? 0))), getFillColor: (d) => d.color, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.8, diffuse: 0.4 } }),
     new SolidPolygonLayer({ id: 'slabs', shadowEnabled: false, data: parts.slabs, getPolygon: (d) => ringAt(d.poly, d.z + (d.base ?? 0)), getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'posts', data: parts.posts, getPolygon: (d) => box(P(d.pos), d.w).map(([x, y]) => [x, y, d.base ?? 0]), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5 } }),
-    new PathLayer({ id: 'slab-edges', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path.map((q) => [q[0], q[1], q[2] + (d.base ?? 0)]), getColor: [110, 110, 108], getWidth: 0.3, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'slab-edges', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path.map((q) => [q[0], q[1], q[2] + (d.base ?? 0)]), getColor: [110, 110, 108], getWidth: (d) => (d.wide ? 0.9 : 0.3), widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ];
   const dynamicLayers = () => {
     const markers = src.markers();
