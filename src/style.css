@@ -29,10 +29,6 @@ body { font: 14px system-ui, sans-serif; background: #111; color: #ddd; }
 #layers hr { border: 0; border-top: 1px solid #333; margin: 8px 0; }
 #layers .group { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #777; margin: 6px 0 2px; }
 #layers .pending { opacity: .45; }
-/* marker icons */
-.mk { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
-  background: var(--c); color: #111; border: 2px solid #111; box-shadow: 0 1px 4px rgba(0,0,0,.7); box-sizing: border-box; vertical-align: middle; }
-.mk svg { display: block; }
 /* live players */
 .player-arrow { width: 30px; height: 30px; transform-origin: center; filter: drop-shadow(0 0 3px #000); transition: transform .2s; }
 .player-arrow svg path { fill: var(--c); stroke: #fff; stroke-width: 1.2; }
@@ -48,3 +44,17 @@ body { font: 14px system-ui, sans-serif; background: #111; color: #ddd; }
 #live .err { color: #f66; font-size: 12px; }
 #live .opts label { display: inline-flex; gap: 4px; margin-right: 10px; font-size: 12px; }
 @media (max-width: 700px) { #app { flex-direction: column; } #sidebar { width: auto; max-height: 45vh; border-right: 0; border-bottom: 1px solid #333; } }
+/* marker icons */
+:root { --marker-opacity: .6; }
+.mk { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; vertical-align: middle;
+  background: var(--c); color: #fff; border: 1.5px solid rgba(255,255,255,.85); box-shadow: 0 1px 3px rgba(0,0,0,.6);
+  opacity: var(--marker-opacity); transition: opacity .15s, transform .15s; }
+.mk.ci { border-radius: 50%; }
+.mk.sq { border-radius: 26%; }
+.mk.dia { border-radius: 22%; transform: rotate(45deg); }
+.mk.dia svg { transform: rotate(-45deg); }
+.mk svg { display: block; }
+.leaflet-marker-icon:hover .mk { opacity: 1; }
+.leaflet-marker-icon:hover .mk.dia { transform: rotate(45deg) scale(1.15); }
+.leaflet-marker-icon:hover .mk:not(.dia) { transform: scale(1.15); }
+#layers .mk { opacity: 1; }

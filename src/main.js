@@ -65,7 +65,7 @@ map.on('mousemove', (e) => {
 });
 
 const icons = {};
-const iconFor = (kind) => (icons[kind] ??= L.divIcon({ className: '', html: iconHtml(kind), iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -10] }));
+const iconFor = (kind) => (icons[kind] ??= L.divIcon({ className: '', html: iconHtml(kind), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
 const marker = (p, kind, html) => L.marker(pos(p), { icon: iconFor(kind) }).bindPopup(html);
 
 function buildLayers(d) {
