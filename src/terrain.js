@@ -16,6 +16,7 @@
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
 import { COORDINATE_SYSTEM, LightingEffect, AmbientLight, DirectionalLight } from '@deck.gl/core';
+import earcut from 'earcut';
 import { allWaterRings, carveWaterHeightfield, makeWaterHeightCapper } from './water.js';
 
 // ---------------------------------------------------------------- tunables
@@ -382,22 +383,96 @@ export function buildTerrain(data, relief = 3) {
       uv[k * 2 + 1] = clamp((gz - Z0) / D, 0, 1) * vTop;
     }
   }
-  // clip: keep only cells whose centre is inside the limit polygon (scanline, ~2 ms)
-  const keep = rasterRings([limit], new Uint8Array(NCX * NCZ), NCX, NCZ, X0, Z0, cw, ch);
-  const kept = (i, j) => i >= 0 && j >= 0 && i < NCX && j < NCZ && keep[j * NCX + i];
-  const idx = [], cliffEdges = [];
+  // Exact boundary clip. Keep only grid cells whose complete square is safely inside the ring;
+  // the narrow remainder between that inset grid and the actual polygon is one constrained
+  // earcut band. Its outer vertices are the <=2 m limit samples themselves, so neither the
+  // terrain silhouette nor its skirt can inherit the old 2.5 m raster staircase.
+  const centreInside = rasterRings([limit], new Uint8Array(NCX * NCZ), NCX, NCZ, X0, Z0, cw, ch);
+  const nearEdge = new Uint8Array(NCX * NCZ), halfDiagonal = Math.hypot(cw, ch) / 2 + 1e-5;
+  const segmentDistance = (x, z, a, b) => {
+    const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1;
+    const t = clamp(((x - a[0]) * dx + (z - a[1]) * dz) / l2, 0, 1);
+    return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz);
+  };
+  for (let q = 0; q < limit.length; q++) {
+    const a = limit[q], b = limit[(q + 1) % limit.length];
+    const i0 = clamp(Math.floor((Math.min(a[0], b[0]) - halfDiagonal - X0) / cw - 0.5), 0, NCX - 1);
+    const i1 = clamp(Math.ceil((Math.max(a[0], b[0]) + halfDiagonal - X0) / cw - 0.5), 0, NCX - 1);
+    const j0 = clamp(Math.floor((Math.min(a[1], b[1]) - halfDiagonal - Z0) / ch - 0.5), 0, NCZ - 1);
+    const j1 = clamp(Math.ceil((Math.max(a[1], b[1]) + halfDiagonal - Z0) / ch - 0.5), 0, NCZ - 1);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = X0 + (i + 0.5) * cw, z = Z0 + (j + 0.5) * ch;
+      if (segmentDistance(x, z, a, b) <= halfDiagonal) nearEdge[j * NCX + i] = 1;
+    }
+  }
+  const full = new Uint8Array(NCX * NCZ);
+  for (let k = 0; k < full.length; k++) full[k] = centreInside[k] && !nearEdge[k] ? 1 : 0;
+  const kept = (i, j) => i >= 0 && j >= 0 && i < NCX && j < NCZ && full[j * NCX + i];
+  const idx = [], insetEdges = [];
   for (let j = 0; j < NCZ; j++) for (let i = 0; i < NCX; i++) {
-    if (!keep[j * NCX + i]) continue;
+    if (!full[j * NCX + i]) continue;
     const a = j * NVX + i, b = a + 1, c = a + NVX + 1, d = a + NVX;
     idx.push(a, b, c, a, c, d);
-    if (!kept(i - 1, j)) cliffEdges.push([d, a]);
-    if (!kept(i + 1, j)) cliffEdges.push([b, c]);
-    if (!kept(i, j - 1)) cliffEdges.push([a, b]);
-    if (!kept(i, j + 1)) cliffEdges.push([c, d]);
+    if (!kept(i, j - 1)) insetEdges.push([a, b]);
+    if (!kept(i + 1, j)) insetEdges.push([b, c]);
+    if (!kept(i, j + 1)) insetEdges.push([c, d]);
+    if (!kept(i - 1, j)) insetEdges.push([d, a]);
   }
-  const TOT = NV;
-  const positions = pos, normals = nrm, texCoords = uv;
+  // Stitch the exposed cell edges into one ring per inset component. Directed cell edges keep
+  // filled ground on their left; a maximum-left-turn tie break separates diagonal point touches.
+  const edgeStarts = new Map();
+  insetEdges.forEach((edge, index) => { if (!edgeStarts.has(edge[0])) edgeStarts.set(edge[0], []); edgeStarts.get(edge[0]).push(index); });
+  const edgeUsed = new Uint8Array(insetEdges.length), insetRings = [];
+  const gridPoint = (vertex) => [X0 + (vertex % NVX) * cw, Z0 + Math.floor(vertex / NVX) * ch];
+  for (let seed = 0; seed < insetEdges.length; seed++) {
+    if (edgeUsed[seed]) continue;
+    const vertices = [insetEdges[seed][0]]; let current = seed;
+    for (let guard = 0; guard <= insetEdges.length; guard++) {
+      edgeUsed[current] = 1;
+      const end = insetEdges[current][1];
+      if (end === vertices[0]) break;
+      vertices.push(end);
+      const candidates = (edgeStarts.get(end) || []).filter((edge) => !edgeUsed[edge]);
+      if (!candidates.length) throw new Error('open inset terrain ring');
+      if (candidates.length === 1) current = candidates[0];
+      else {
+        const from = insetEdges[current], a = gridPoint(from[0]), b = gridPoint(from[1]), dx = b[0] - a[0], dz = b[1] - a[1];
+        current = candidates.sort((p, q) => {
+          const pp = gridPoint(insetEdges[p][1]), qp = gridPoint(insetEdges[q][1]);
+          const pa = Math.atan2(dx * (pp[1] - b[1]) - dz * (pp[0] - b[0]), dx * (pp[0] - b[0]) + dz * (pp[1] - b[1]));
+          const qa = Math.atan2(dx * (qp[1] - b[1]) - dz * (qp[0] - b[0]), dx * (qp[0] - b[0]) + dz * (qp[1] - b[1]));
+          return qa - pa;
+        })[0];
+      }
+    }
+    const ring = vertices.map(gridPoint);
+    const signedArea = ring.reduce((sum, [x, z], i) => { const [nx, nz] = ring[(i + 1) % ring.length]; return sum + x * nz - nx * z; }, 0) / 2;
+    if (ring.length >= 4 && signedArea > 1e-4) insetRings.push(ring);
+  }
+
+  const bandRings = [limit, ...insetRings], bandPoints = [], holes = [];
+  for (let r = 0; r < bandRings.length; r++) {
+    if (r) holes.push(bandPoints.length);
+    bandPoints.push(...bandRings[r]);
+  }
+  const flatBand = bandPoints.flat(), bandIndices = earcut(flatBand, holes, 2);
+  const deviation = earcut.deviation(flatBand, holes, 2, bandIndices);
+  if (!bandIndices.length || deviation > 1e-5) throw new Error(`exact terrain boundary triangulation failed (deviation ${deviation})`);
+
+  const TOT = NV + bandPoints.length;
+  const positions = new Float32Array(TOT * 3), normals = new Float32Array(TOT * 3), texCoords = new Float32Array(TOT * 2);
+  positions.set(pos); normals.set(nrm); texCoords.set(uv);
+  for (let i = 0; i < bandPoints.length; i++) {
+    const [gx, gz] = bandPoints[i], k = NV + i, h = H(gx, gz);
+    positions[k * 3] = -gx; positions[k * 3 + 1] = -gz; positions[k * 3 + 2] = h;
+    const dhdx = (H(gx + E, gz) - H(gx - E, gz)) / (2 * E), dhdz = (H(gx, gz + E) - H(gx, gz - E)) / (2 * E);
+    const nl = Math.sqrt(dhdx * dhdx + dhdz * dhdz + 1);
+    normals[k * 3] = dhdx / nl; normals[k * 3 + 1] = dhdz / nl; normals[k * 3 + 2] = 1 / nl;
+    texCoords[k * 2] = clamp((gx - X0) / W, 0, 1); texCoords[k * 2 + 1] = clamp((gz - Z0) / D, 0, 1) * vTop;
+  }
+  for (const vertex of bandIndices) idx.push(NV + vertex);
   const indices = new Uint32Array(idx); // > 65k vertices: WebGL2 requires 32-bit indices
+  const cliffEdges = limit.map((_, i) => [NV + i, NV + ((i + 1) % limit.length)]);
 
   const mesh = new Geometry({
     topology: 'triangle-list',
@@ -417,8 +492,8 @@ export function buildTerrain(data, relief = 3) {
   const cliffPos = new Float32Array(cliffVerts.length * 2 * 3), cliffNrm = new Float32Array(cliffVerts.length * 2 * 3), cliffIdx = new Uint32Array(cliffEdges.length * 6);
   for (let i = 0; i < cliffVerts.length; i++) {
     const v = cliffVerts[i], src = v * 3, top = i * 3, bottom = (i + cliffVerts.length) * 3;
-    cliffPos.set([pos[src], pos[src + 1], pos[src + 2]], top);
-    cliffPos.set([pos[src], pos[src + 1], voidZ], bottom);
+    cliffPos.set([positions[src], positions[src + 1], positions[src + 2]], top);
+    cliffPos.set([positions[src], positions[src + 1], voidZ], bottom);
     cliffNrm.set([0, 0, 1], top); cliffNrm.set([0, 0, 1], bottom); // ignored by material:false
   }
   for (let i = 0; i < cliffEdges.length; i++) {
@@ -465,7 +540,8 @@ export function buildTerrain(data, relief = 3) {
   // into acne. Verified in headless. Relief therefore comes from the mesh normals plus the baked
   // two-light hillshade, which need no extra pass.
 
-  return { H, voidZ, layers: () => [cliffLayer(), layer()], lighting, stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, cliffSegments: cliffEdges.length, tex: [TEX_W, TH] } };
+  const maxBoundaryStep = limit.reduce((largest, point, i) => Math.max(largest, Math.hypot(point[0] - limit[(i + 1) % limit.length][0], point[1] - limit[(i + 1) % limit.length][1])), 0);
+  return { H, voidZ, layers: () => [cliffLayer(), layer()], lighting, stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, cliffSegments: cliffEdges.length, boundaryVerts: limit.length, boundaryBandTris: bandIndices.length / 3, fullCells: full.reduce((sum, value) => sum + value, 0), maxBoundaryStep, tex: [TEX_W, TH] } };
 }
 
 // ---------------------------------------------------------------- contours (baked, not a layer)
