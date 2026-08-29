@@ -32,7 +32,7 @@ export function createLive(map, mapData, ui) {
 
   function onPos(p, m) {
     // Username sent by the companion wins over the code; a name typed on the site is a fallback/override.
-    if (typeof m.name === 'string' && m.name.trim() && m.name.trim() !== p.name && !p.nameOverride) {
+    if (typeof m.name === 'string' && m.name.trim() && m.name.trim() !== p.name && (!p.nameOverride || p.name === p.code)) {
       p.name = m.name.trim().slice(0, 24);
       p.marker?.setTooltipContent(esc(p.name));
       persist();
