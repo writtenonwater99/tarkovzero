@@ -20,7 +20,7 @@ const C = {
   glass: [26, 34, 36, 220], roofWarehouse: [92, 102, 106], roofHouse: [122, 78, 62], roofFlat: [98, 96, 90], roofRib: [0, 0, 0, 46],
   skylight: [168, 178, 174, 230], parapet: [116, 111, 101], dockDoor: [42, 37, 34],
   tank: [154, 158, 158], tankBand: [0, 0, 0, 60], tower: [122, 124, 118],
-  understory: [18, 34, 22, 72], tree: [38, 64, 37], treeShadow: [16, 26, 20, 120], rock: [124, 120, 106],
+  understory: [27, 43, 29, 48], tree: [48, 67, 46], treeShadow: [16, 26, 20, 120], rock: [124, 120, 106],
   bridge: [106, 102, 92], bridgeRail: [64, 61, 55], pier: [84, 80, 72],
   contour: [26, 42, 26, 90], contourMajor: [20, 32, 20, 150],
   void: [10, 13, 12], oob: [10, 13, 12], voidRing: [24, 28, 26],
@@ -484,7 +484,7 @@ export async function createView3d(container, mapData, src) {
   }
   for (const tree of data.trees || []) {
     if (!Number.isFinite(tree.x) || !Number.isFinite(tree.z)) continue;
-    const turn = hash1(tree.x, tree.z) * Math.PI * 2, sides = 6;
+    const turn = hash1(tree.x, tree.z) * Math.PI * 2, sides = 10;
     tree.poly = Array.from({ length: sides }, (_, i) => [tree.x + tree.radius * Math.cos(turn + (i / sides) * Math.PI * 2), tree.z + tree.radius * Math.sin(turn + (i / sides) * Math.PI * 2)]);
     tree.base = H(tree.x, tree.z) + tree.height * 0.42;
     tree.depth = tree.height * 0.58;
@@ -515,6 +515,7 @@ export async function createView3d(container, mapData, src) {
   const waitFonts = (async () => { try { await Promise.race([document.fonts?.load?.('700 16px "Barlow Condensed"') ?? Promise.resolve(), new Promise((r) => setTimeout(r, 4000))]); } catch {} })();
   waitFonts.then(() => { fontsReady = fontLoaded(); if (initialised) render(); });
   let floor = 'all'; // 'all' | 0 | 1 | 2 | 3 | 'U'
+  let nature = { trees: true, rocks: true };
   const capH = (b, h) => (floor === 'all' || floor === 'U' ? h : Math.min(h, (Number(floor) + 1) * 3.3 - 0.4 + (b.style === 'canopy' ? 10 : 0)));
 
   // TRACK B: lighting comes from terrain.js so the sun azimuth matches the baked hillshade exactly
@@ -544,7 +545,7 @@ export async function createView3d(container, mapData, src) {
     new PathLayer({ id: 'road-centre', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'highway'), getPath: (d) => ringG(d.path, 0.14), getColor: C.roadMarking, getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [6, 6], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => catenary(d.path, 19), getColor: [96, 96, 92, 170], getWidth: 0.2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d.poly ?? d, 0), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: (d) => d.color ?? C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5, shininess: 4 } }),
-    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.depth, getFillColor: (d) => d.color ?? C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.72, diffuse: 0.58, shininess: 2 } }),
+    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.depth, getFillColor: (d) => d.color ?? C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.88, diffuse: 0.26, shininess: 0 } }),
   ];
   const floorLines = data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
   const propData = propParts(data.props || []);
@@ -714,7 +715,10 @@ export async function createView3d(container, mapData, src) {
   const base = staticLayers();
   const extras = extraLayers();
   initialised = true;
-  function render() { deck.setProps({ layers: [...base, extras[0], ...buildingLayer(), ...extras.slice(1), ...dynamicLayers()] }); }
+  function render() {
+    const visibleBase = base.filter((layer) => (nature.trees || !['understory', 'trees'].includes(layer.id)) && (nature.rocks || layer.id !== 'rocks'));
+    deck.setProps({ layers: [...visibleBase, extras[0], ...buildingLayer(), ...extras.slice(1), ...dynamicLayers()] });
+  }
   render();
   // Under software GL (and on a cold cache) the baked ground texture can finish uploading after
   // deck's first paint without setting a redraw flag, which leaves the terrain mesh black. A few
@@ -723,6 +727,7 @@ export async function createView3d(container, mapData, src) {
   return {
     refresh: render,
     setFloor: (f) => { floor = f; render(); },
+    setNature: (next) => { nature = { ...nature, ...next }; render(); },
     // sidebar hover/click can pin an extract's name in 3D (name+kind key, or null to clear)
     focusExtract: (name, kind) => { pinnedExtract = name ? (name + '|' + (kind ?? 'extract-pmc')) : null; render(); },
     setView: ({ target, zoom }) => { viewState = { ...viewState, target, zoom }; deck.setProps({ viewState }); },

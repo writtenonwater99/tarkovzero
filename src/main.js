@@ -99,6 +99,33 @@ function setBase(kind, persist = true) {
 setBase(new URLSearchParams(location.search).get('base') ?? localStorage.getItem('base') ?? 'satellite', false);
 $$('.seg-cell', baseSeg).forEach((b) => (b.onclick = () => setBase(b.dataset.base)));
 
+// Nature is independent of the base/view choice: it hides the vector SVG fills in 2D
+// and the existing deck.gl geometry layers in 3D. Query values override saved state on load.
+const queryFlag = (name, fallback) => {
+  const raw = new URLSearchParams(location.search).get(name);
+  if (raw == null) return fallback;
+  return !['0', 'false', 'off'].includes(raw.toLowerCase());
+};
+let treesShown = queryFlag('trees', store.get('trees', true));
+let rocksShown = queryFlag('rocks', store.get('rocks', true));
+function setNature(kind, on, persist = true) {
+  if (kind === 'trees') treesShown = on;
+  else rocksShown = on;
+  document.body.classList.toggle(`${kind}-off`, !on);
+  $$(`#${kind}-toggle .seg-cell`).forEach((b) => {
+    const active = b.dataset[kind] === (on ? '1' : '0');
+    b.classList.toggle('on', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+  if (persist) store.set(kind, on);
+  view3d?.setNature({ trees: treesShown, rocks: rocksShown });
+}
+for (const kind of ['trees', 'rocks']) {
+  $$(`#${kind}-toggle .seg-cell`).forEach((b) => (b.onclick = () => setNature(kind, b.dataset[kind] === '1')));
+}
+setNature('trees', treesShown, false);
+setNature('rocks', rocksShown, false);
+
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
 const fit = () => map.fitBounds(bounds, { padding: [0, 0], animate: false });
 const hash = location.hash.slice(1).split('/').map(Number);
@@ -525,6 +552,7 @@ async function setView(mode) {
         },
       });
       view3d.setFloor(floor === 'all' || floor === 'U' ? floor : Number(floor));
+      view3d.setNature({ trees: treesShown, rocks: rocksShown });
       try { view3d.deck?.setProps({ onHover: (i) => { const c = i?.coordinate; Array.isArray(c) ? showCoords(-c[0], -c[1]) : idleCoords(); } }); } catch {}
     }
     const c = map.getCenter();

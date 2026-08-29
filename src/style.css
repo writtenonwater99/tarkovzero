@@ -40,6 +40,8 @@ body.view-3d #map{display:none}
 body.view-3d #map3d{display:block}
 .leaflet-container{background: rgb(10,16,14);font-family:var(--f-body)}
 #map.base-roadmap,.leaflet-container.base-roadmap{background:#DCDFD8}
+body.trees-off #map .roadmap .trees{display:none}
+body.rocks-off #map .roadmap .rock{display:none}
 :where(button,input,summary,a,[role=button]):focus-visible{outline:2px solid var(--focus);outline-offset:1px;border-radius:var(--r-sm)}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .vh{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}

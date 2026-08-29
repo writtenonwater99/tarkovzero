@@ -176,3 +176,31 @@ For the requested Customs survey run: bind EFT Make Screenshot to F11, then from
 - The prior Customs baseline is a black SwiftShader frame; the new CDP captures rendered successfully and can be compared structurally against the checked-in pre-pass data (10 m→5 m grid, 37 raised masks→4,082 crowns, Powerline pylon base 4.45→15.25 m). Software GL remains over-zoomed/blurry—especially the Woods wide fit—so the user's real GPU remains the sharpness/density gate.
 
 No deploy, push, or commit was performed.
+
+## Fix pass 4 — trees that don't fight the map
+
+### Changed
+
+- Tree generation is now deliberately open rather than canopy-filling. Customs drops from 4,082 to 1,327 crowns, Reserve from 412 to 113, and Woods from 6,001 to 2,166. Woods uses the lower open-forest density; deterministic edge-depth weighting makes the canopy polygon cores 2.38–3.48× denser than their edge bands.
+- Crowns are 4.6–9.0 m tall (map means 6.70–6.84 m) and 1.4–3.2 m radius. Their three opaque RGB colours are muted, low-saturation greens close to the ground palette. Runtime crowns use ten-sided silhouettes, no stroke/outline, and a high-ambient, low-diffuse, zero-shininess material for soft shading without transparency.
+- Clearance now uses exact point-to-segment distance instead of checking only sampled road vertices. The complete crown extent stays at least 3 m from every road edge and building footprint, including a generation margin for one-decimal JSON rounding. The measured final minima are 3.22 m from buildings and 3.27 m from roads.
+- The View block now has independent `Trees` and `Rocks` ON/OFF segmented controls. Both default ON, persist as `tz:trees` / `tz:rocks`, and keep all pre-existing element and deck layer IDs unchanged. `?trees=0` and the parallel `?rocks=0` override saved state on load.
+- Tree visibility controls both existing 3D layers (`trees` and `understory`) and the 2D vector Map base's `.trees` fills. Rock visibility controls the existing `rocks` 3D layer and the vector base's `.rock` fills. The vector tree colour is also changed from saturated light green to a quiet grey-green.
+
+### Verified
+
+- `node scripts/build-3d.mjs customs`, `reserve`, and `woods` pass. All output is finite, all crowns use opaque three-channel colours, and `builtAt` is preserved. Comparing against `HEAD` shows that `trees` is the only changed top-level key in each generated 3D document.
+- A post-rounding geometry audit found no crown-clearance violations. Core/edge crown-density ratios are Customs 2.38×, Reserve 3.48×, and Woods 2.55×.
+- `npm run build` passes; Vite reports only the existing deck.gl chunk-size advisory. `node --check` passes for the edited JavaScript and `git diff --check` passes.
+- A live Chromium control test clicked both nature controls Off over the vector base, observed both SVG groups at `display:none`, read `false` from both localStorage keys, reloaded, and observed the Off controls and body state restored. A separate `?trees=0&rocks=0` load selected both Off controls without mutating saved state.
+- Rendered captures are in `scratch/fix-pass-4/`: `customs-wide.png`, `customs-sniper-hill.png` (`#2.6/110/85`), and `woods-sawmill.png` (`#2.6/10/-3`). `customs-trees-off.png` additionally verifies the 3D query/toggle path. Labels, pings, and markers remain in their existing overlay layers above nature geometry.
+
+Deterministic data hashes:
+
+```text
+141cea6095eb601bcd0a9722c36a868cdd23f0b408e1ebd4f83e87517394df57  public/data/customs-3d.json
+a78d49717c94f3a4f49759205be4a06c9213d0bbff72b8541229b66c220b2c58  public/data/reserve-3d.json
+f48e2bfc11daaf52e59d0368e6e98e09967ae0d577a0a5c5136efa73bdf74ed1  public/data/woods-3d.json
+```
+
+No deploy, push, or commit was performed.
