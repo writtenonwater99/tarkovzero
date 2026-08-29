@@ -33,7 +33,8 @@ function contours(t, interval = 2) { // marching squares isolines in game coords
     const v = [h(r, c), h(r, c + 1), h(r + 1, c + 1), h(r + 1, c)]; const x = x0 + c * step, z = z0 + r * step;
     const pts = []; const edge = (a, b, pa, pb) => { if ((v[a] < lv) !== (v[b] < lv)) { const t2 = (lv - v[a]) / (v[b] - v[a]); pts.push([pa[0] + (pb[0] - pa[0]) * t2, pa[1] + (pb[1] - pa[1]) * t2]); } };
     edge(0, 1, [x, z], [x + step, z]); edge(1, 2, [x + step, z], [x + step, z + step]); edge(2, 3, [x + step, z + step], [x, z + step]); edge(3, 0, [x, z + step], [x, z]);
-    if (pts.length === 2) lines.push({ path: pts, lv }); else if (pts.length === 4) { lines.push({ path: [pts[0], pts[1]], lv }); lines.push({ path: [pts[2], pts[3]], lv }); }
+    const ok = (pp) => !t.limit || pp.every((q) => inPolyXZ(q, t.limit));
+    if (pts.length === 2) { if (ok(pts)) lines.push({ path: pts, lv }); } else if (pts.length === 4) { if (ok([pts[0], pts[1]])) lines.push({ path: [pts[0], pts[1]], lv }); if (ok([pts[2], pts[3]])) lines.push({ path: [pts[2], pts[3]], lv }); }
   }
   return lines;
 }
@@ -47,9 +48,9 @@ function terrainQuads(t, base, limit) { // shaded ground quads (cheap hillshade 
     const n = [-dx * 2.2, -dz * 2.2, 1], L = Math.hypot(...n); const shade = Math.max(0.5, Math.min(1.18, (n[0] * light[0] + n[1] * light[1] + n[2] * light[2]) / L + 0.32));
     const hm = (h(r, c) + h(r + 1, c + 1)) / 2, tint = Math.min(1, Math.max(0, hm / 12)); // higher ground slightly warmer/lighter
     const x = x0 + c * step, z = z0 + r * step;
-    const oob = limit && !inPolyXZ([x + step / 2, z + step / 2], limit);
-    const col = oob ? [200, 203, 207] : [base[0] + 8 * tint, base[1] + 4 * tint, base[2] - 10 * tint];
-    const sh = oob ? 0.85 + (shade - 1) * 0.5 : shade;
+    if (limit && !inPolyXZ([x + step / 2, z + step / 2], limit)) continue; // nothing outside the playable area
+    const col = [base[0] + 8 * tint, base[1] + 4 * tint, base[2] - 10 * tint];
+    const sh = shade;
     out.push({ poly: [[x, z, h(r, c)], [x + step, z, h(r, c + 1)], [x + step, z + step, h(r + 1, c + 1)], [x, z + step, h(r + 1, c)]], color: col.map((v) => Math.min(255, v * sh)) });
   }
   return out;
@@ -149,7 +150,8 @@ const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x +
 
 export async function createView3d(container, mapData, src) {
   const data = await (await fetch('/data/customs-3d.json')).json();
-  if (data.terrain) H = makeSampler(data.terrain);
+  if (data.terrain) { H = makeSampler(data.terrain); data.terrain.limit = data.limit; }
+  const inLimit = (x, z) => !data.limit || inPolyXZ([x, z], data.limit);
   const centroidOf = (poly) => poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]);
   for (const b of data.buildings) { const c = centroidOf(b.poly); b.base = H(c[0], c[1]); }
   // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
@@ -222,14 +224,14 @@ export async function createView3d(container, mapData, src) {
     new PathLayer({ id: 'slab-edges', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path.map((q) => [q[0], q[1], q[2] + (d.base ?? 0)]), getColor: [110, 110, 108], getWidth: (d) => (d.wide ? 0.9 : 0.3), widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ];
   const dynamicLayers = () => {
-    const markers = src.markers();
+    const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z));
     const players = src.players().filter((p) => p.last);
     return [
       new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => d.kind, getSize: 14, sizeUnits: 'meters', sizeMinPixels: 16, sizeMaxPixels: 32, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       // everything else lies flat on the ground like chips on a table
       new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: (d) => d.kind, getSize: 5, sizeUnits: 'meters', sizeMinPixels: 8, sizeMaxPixels: 22, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new LineLayer({ id: 'label-leaders', data: src.labels(), getSourcePosition: (d) => Pg(d.position, 0), getTargetPosition: (d) => Pg(d.position, 22 * ((d.size ?? 100) / 100)), getColor: [90, 95, 100, 170], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new TextLayer({ id: 'labels', data: src.labels(), getPosition: (d) => Pg(d.position, 22 * ((d.size ?? 100) / 100)), getText: (d) => d.text, getAlignmentBaseline: 'bottom', getSize: (d) => 9 * ((d.size ?? 100) / 100), sizeUnits: 'meters', sizeMinPixels: 9, sizeMaxPixels: 22, getColor: (d) => ((d.size ?? 100) >= 100 ? [30, 34, 40] : [70, 76, 84]), background: true, getBackgroundColor: (d) => ((d.size ?? 100) >= 100 ? [255, 255, 255, 235] : [255, 255, 255, 0]), backgroundPadding: [6, 3, 6, 3], getBorderColor: (d) => ((d.size ?? 100) >= 100 ? [200, 200, 200, 255] : [0, 0, 0, 0]), getBorderWidth: 1, extensions: [new CollisionFilterExtension()], collisionEnabled: true, getCollisionPriority: (d) => (d.size ?? 100), collisionTestProps: { sizeScale: 2 }, fontFamily: 'system-ui, sans-serif', fontWeight: 700, outlineWidth: 4, outlineColor: [255, 255, 255, 230], fontSettings: { sdf: true }, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new LineLayer({ id: 'label-leaders', data: src.labels().filter((d) => inLimit(d.position[0], d.position[1])), getSourcePosition: (d) => Pg(d.position, 0), getTargetPosition: (d) => Pg(d.position, 22 * ((d.size ?? 100) / 100)), getColor: [90, 95, 100, 170], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new TextLayer({ id: 'labels', data: src.labels().filter((d) => inLimit(d.position[0], d.position[1])), getPosition: (d) => Pg(d.position, 22 * ((d.size ?? 100) / 100)), getText: (d) => d.text, getAlignmentBaseline: 'bottom', getSize: (d) => 9 * ((d.size ?? 100) / 100), sizeUnits: 'meters', sizeMinPixels: 9, sizeMaxPixels: 22, getColor: (d) => ((d.size ?? 100) >= 100 ? [30, 34, 40] : [70, 76, 84]), background: true, getBackgroundColor: (d) => ((d.size ?? 100) >= 100 ? [255, 255, 255, 235] : [255, 255, 255, 0]), backgroundPadding: [6, 3, 6, 3], getBorderColor: (d) => ((d.size ?? 100) >= 100 ? [200, 200, 200, 255] : [0, 0, 0, 0]), getBorderWidth: 1, extensions: [new CollisionFilterExtension()], collisionEnabled: true, getCollisionPriority: (d) => (d.size ?? 100), collisionTestProps: { sizeScale: 2 }, fontFamily: 'system-ui, sans-serif', fontWeight: 700, outlineWidth: 4, outlineColor: [255, 255, 255, 230], fontSettings: { sdf: true }, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.3)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z) + 0.2)), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new IconLayer({ id: 'players', data: players, getPosition: (p) => P([p.last.x, p.last.z], (p.last.y ?? 0) + 0.2), iconAtlas: arrowAtlas.canvas, iconMapping: arrowAtlas.mapping, getIcon: (p) => p.color, getSize: 12, sizeUnits: 'meters', sizeMinPixels: 22, sizeMaxPixels: 44, billboard: false, getAngle: (p) => -((p.last.yaw ?? 0) + (mapData.coordinateRotation ?? 0)), pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last), getAngle: players.map((p) => p.last) } }),
