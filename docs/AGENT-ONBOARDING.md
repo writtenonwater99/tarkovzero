@@ -46,6 +46,7 @@ Real-GPU truth comes from the user's browser — ask for a screenshot when it ma
   in the worktree `../tarkovzero-codex` on branch `codex/maps`, one "fix pass" at a time; the orchestrator commits on its behalf
   (its sandbox cannot write worktree metadata), merges to `main`, deploys. Briefs and outcomes: `docs/plans/PROGRESS.md`.
 - **Game PC** (companion app, real-raid testing): a separate Claude session on the Windows laptop (`docs/GAME-LAPTOP-PROMPT.md`).
+- Workstation setup notes (not code): `docs/setup/LAN-MOUSE.md` — how the Linux dev laptop shares its keyboard/mouse with the Windows game laptop; rebuild the Linux side from it after a reinstall.
 - The user reviews on a real GPU and sends terse feedback; prioritise exactly what they name.
 
 ## 5. Current state and open work
