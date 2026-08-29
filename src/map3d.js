@@ -471,7 +471,7 @@ export async function createView3d(container, mapData, src) {
   for (const b of data.buildings) { const c = centroidOf(b.poly); b.base = H(c[0], c[1]); }
   // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
   async function buildAtlas(entries, cell) {
-    const canvas = document.createElement('canvas'); canvas.width = cell * entries.length; canvas.height = cell;
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, cell * entries.length); canvas.height = cell;
     const ctx = canvas.getContext('2d'); const mapping = {};
     await Promise.all(entries.map(([name, url], i) => new Promise((res) => {
       const img = new Image(); img.onload = () => { ctx.drawImage(img, i * cell, 0, cell, cell); res(); }; img.onerror = res; img.src = url;
@@ -483,7 +483,7 @@ export async function createView3d(container, mapData, src) {
   const letters = [...new Set(src.markers().filter((m) => m.kind.startsWith('extract')).map((m) => extractLetter(m.name)).filter(Boolean))];
   const letterAtlas = await buildAtlas(src.markers().filter((m) => m.kind.startsWith('extract') && extractLetter(m.name)).map((m) => [m.kind + ':' + extractLetter(m.name), iconDataUrl(m.kind, 64, extractLetter(m.name))]).filter((e, i, a) => a.findIndex((x) => x[0] === e[0]) === i), 64);
   Object.assign(iconAtlas.mapping, Object.fromEntries(Object.entries(letterAtlas.mapping).map(([k, m]) => [k, { ...m, x: m.x + iconAtlas.canvas.width }])));
-  { const merged = document.createElement('canvas'); merged.width = iconAtlas.canvas.width + letterAtlas.canvas.width; merged.height = 64; const cx2 = merged.getContext('2d'); cx2.drawImage(iconAtlas.canvas, 0, 0); cx2.drawImage(letterAtlas.canvas, iconAtlas.canvas.width, 0); iconAtlas.canvas = merged; }
+  if (Object.keys(letterAtlas.mapping).length) { const merged = document.createElement('canvas'); merged.width = iconAtlas.canvas.width + letterAtlas.canvas.width; merged.height = 64; const cx2 = merged.getContext('2d'); cx2.drawImage(iconAtlas.canvas, 0, 0); cx2.drawImage(letterAtlas.canvas, iconAtlas.canvas.width, 0); iconAtlas.canvas = merged; }
   const arrowAtlas = await buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
   const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
