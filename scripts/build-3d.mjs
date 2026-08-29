@@ -30,10 +30,10 @@ const CONFIG = {
     bounds: { xMax: 289, xMin: -303, zMin: -274, zMax: 272 }, base: 'Ground_Level',
     groups: { land: 'Terrains', limit: 'Terrains', water: null, pavement: 'Concrete', trees: 'Trees', rocks: 'Rocks', railway: 'Railroad', fence: 'Fences_int', powerlines: null },
     roadGroups: [['Roads', 7, 'main'], ['Dirty_roads', 4, 'dirt']],
-    buildingHeights: { Buildings: 8, Bunker_entr: 3 }, underground: /Bunkers/i,
-    colors: { 'White Pawn': [180, 174, 158], 'Black Pawn': [136, 126, 116], 'White Bishop': [184, 179, 166], 'Black Bishop': [138, 128, 118], 'White King': [154, 153, 145], 'White Knight': [156, 158, 151], 'Black Knight': [124, 126, 122], 'White Rook': [164, 157, 136], 'Train Station': [164, 157, 136], Dome: [164, 164, 158] },
-    roofs: { 'White Pawn': [112, 92, 78], 'Black Pawn': [92, 82, 74], 'White Rook': [92, 98, 96], 'Train Station': [92, 98, 96] },
-    styles: { 'White Rook': 'gable', 'Train Station': 'gable' },
+    buildingHeights: { Buildings: 8, Bunker_entr: 3 }, underground: /Bunkers/i, undergroundSvg: 'Bunkers',
+    colors: { 'White Pawn': [180, 174, 158], 'Black Pawn': [136, 126, 116], 'White Bishop': [184, 179, 166], 'Black Bishop': [138, 128, 118], 'White King': [154, 153, 145], 'White Knight': [156, 158, 151], 'Black Knight': [124, 126, 122], 'White Rook / Train Station': [174, 166, 143], 'White Queen / Dome': [184, 184, 176], 'Military Guard Barracks': [142, 136, 124] },
+    roofs: { 'White Pawn': [112, 92, 78], 'Black Pawn': [92, 82, 74], 'White Rook / Train Station': [92, 98, 96], 'White Queen / Dome': [132, 134, 132] },
+    styles: { 'White Rook / Train Station': 'gable' },
     terrainFilter: (p) => p.y > -9 && !/ZoneSub(Command|Storage)/i.test(p.zone) && !/snipe/i.test(p.zone),
     terrain: [
       { name: 'Dome summit', x: -8, z: 183, rx: 72, rz: 62, h: 20 },
@@ -49,9 +49,9 @@ const CONFIG = {
     groups: { land: 'Base_Terrain', limit: 'Base_Terrain', water: 'Water', pavement: null, trees: null, rocks: 'Rocks', railway: 'Railroad', fence: 'Fences', powerlines: 'Power_Line', plane: 'Plane', pier: 'Pier', minefield: 'Minefield' },
     roadGroups: [['Roads', 6, 'main'], ['Small Roads', 4, 'small'], ['Dirt_Roads', 3.5, 'dirt']],
     buildingHeights: { Buildings: 4 }, underground: /$a/,
-    colors: { Sawmill: [144, 139, 124], 'Old Sawmill': [128, 112, 94], 'Scav Town': [154, 143, 124], 'USEC Camp': [108, 116, 96], 'Military Camp': [146, 148, 136] },
-    roofs: { Sawmill: [88, 94, 92], 'Old Sawmill': [104, 82, 66], 'Scav Town': [110, 84, 66] },
-    styles: { Sawmill: 'gable', 'Old Sawmill': 'gable', 'Scav Town': 'gable', 'Cultist Village': 'gable', 'USEC Camp': 'gable', 'Military Camp': 'gable', Shack: 'gable', "Jaeger's Camp": 'gable' }, autoSmallTracks: true,
+    colors: { Sawmill: [144, 139, 124], 'Old Sawmill': [128, 112, 94], 'Scav Town': [154, 143, 124], 'Scav House': [156, 119, 83], 'USEC CAMP': [108, 116, 96], 'Military Camp': [146, 148, 136], 'Sunken Village / Abandoned Village': [126, 112, 91] },
+    roofs: { Sawmill: [88, 94, 92], 'Old Sawmill': [104, 82, 66], 'Scav Town': [110, 84, 66], 'Scav House': [132, 74, 57] },
+    styles: { Sawmill: 'gable', 'Old Sawmill': 'gable', 'Scav Town': 'gable', 'Scav House': 'gable', 'Sunken Village / Abandoned Village': 'gable', 'USEC CAMP': 'gable', 'Military Camp': 'gable', Shack: 'gable', "Jaeger's Camp": 'gable' }, autoSmallTracks: true,
     labelRadius: 80,
     extraBuildings: [
       ...[[583.4,97], [520.5,-33.2], [450.3,-160.1], [354.8,-268], [250.6,-368.8], [116.3,-405.4], [-27.4,-424.5], [-160.5,-478.7], [-286.2,-550.7]].map(([x, z]) => ({ poly: [[x-2,z-2], [x+2,z-2], [x+2,z+2], [x-2,z+2]], height: 20, floors: 1, kind: 'powerline_towers', name: 'power pylon' })),
@@ -166,8 +166,15 @@ for (const s of ground) {
   buildings.push(building);
 }
 for (const b of cfg.extraBuildings || []) buildings.push(structuredClone(b));
-// ---- underground volumes (bunkers/tunnels) from the Underground extents
-const underground = floorBoxes.filter((f) => cfg.underground.test(f.layer)).map((f) => ({ name: f.name, poly: [[f.x1, f.z1], [f.x2, f.z1], [f.x2, f.z2], [f.x1, f.z2]], depth: 4 }));
+// ---- underground volumes. Reserve's source SVG contains the real tunnel
+// silhouettes; its floor extents are deliberately broad interaction boxes and
+// made the old U view look like seven unrelated rectangles.
+const undergroundBoxes = floorBoxes.filter((f) => cfg.underground.test(f.layer)).map((f) => ({ name: f.name, poly: [[f.x1, f.z1], [f.x2, f.z1], [f.x2, f.z2], [f.x1, f.z2]], depth: 4 }));
+const undergroundPolys = cfg.undergroundSvg ? shapes.filter((s) => inGroup(s, cfg.undergroundSvg)).map((s) => s.pts.map(toGame)) : [];
+const underground = undergroundPolys.length ? undergroundPolys.map((poly) => {
+  const z = poly.reduce((sum, p) => sum + p[1] / poly.length, 0);
+  return { name: z < -60 ? 'Storage Bunker Tunnels' : 'Command Bunker Tunnels', poly, depth: 4 };
+}) : undergroundBoxes;
 // ---- other ground features
 const polysIn = (id) => ground.filter((s) => inGroup(s, id)).map((s) => s.pts.map(toGame));
 const linesIn = (id) => ground.filter((s) => inGroup(s, id)).map((s) => s.pts.map(toGame));
@@ -180,7 +187,9 @@ const roads = [
   ...cfg.roadGroups.flatMap(([group, width, kind]) => linesIn(group).map((path) => ({ path, width, kind }))),
 ];
 // ---- tag buildings with the nearest place label (for colours / tooltips)
-const labels = LABELS[key];
+// Underground-only callouts describe tunnel connections, not the surface
+// footprints above them, and must not steal chess-building colours/styles.
+const labels = LABELS[key].filter((l) => l.floor !== 'U');
 const centroid = (poly) => poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]);
 for (const b of buildings) {
   const c = centroid(b.poly);
@@ -343,13 +352,49 @@ const keepB = buildings.filter((b) => insideC(b.poly) && !(b.kind === 'powerline
 const propsIn = [...props, ...svgProps].filter((p) => p.poly ? insideC(p.poly) : (p.path ? inside(p.path[0]) : inside([p.x, p.z])));
 const undergroundIn = underground.filter((u) => insideC(u.poly));
 const rockPolys = (cfg.groups.rocks ? polysIn(cfg.groups.rocks) : []).filter(insideC);
-const rocksOut = key === 'customs' ? rockPolys : rockPolys.map((poly) => {
+const rockMasses = key === 'customs' ? rockPolys : rockPolys.map((poly) => {
   const h = Math.sqrt(area(poly)) * (key === 'reserve' ? 0.52 : 0.4);
   const evidence = rockEvidence.filter((p) => inPoly([p.x, p.z], poly));
   const observed = evidence.length ? Math.max(...evidence.map((p) => p.y - terrainHeight(p.x, p.z))) : 0;
   const cap = key === 'reserve' ? 16 : evidence.length ? 42 : 12;
-  return { poly, height: +Math.max(1.6, Math.min(cap, Math.max(h, observed))).toFixed(1) };
+  return { poly, height: +Math.max(1.6, Math.min(cap, Math.max(h, observed))).toFixed(1), evidence };
 });
+// Woods' largest SVG rocks describe whole ridges. A single full-height extrusion
+// turns Sniper Rock and the mountain spine into flat monoliths, so retain a low
+// base footprint and raise several separated, footprint-contained forms above it.
+const distToRing = ([x, z], poly) => { let best = Infinity; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2)); best = Math.min(best, Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz)); } return best; };
+function splitWoodsRock({ poly, height, evidence }, index) {
+  const A = area(poly);
+  if (A < 650 || height < 7) return [{ poly, height }];
+  const [x1, z1, x2, z2] = bbox(poly), step = Math.max(7, Math.min(15, Math.sqrt(A) / 5));
+  const candidates = [];
+  for (let z = z1 + step / 2; z < z2; z += step) for (let x = x1 + step / 2; x < x2; x += step) {
+    if (!inPoly([x, z], poly)) continue;
+    const edge = distToRing([x, z], poly);
+    if (edge >= 4.5) candidates.push({ x, z, edge });
+  }
+  if (candidates.length < 2) return [{ poly, height }];
+  const wanted = Math.min(7, Math.max(2, Math.round(Math.sqrt(A) / 25))), chosen = [];
+  const topEvidence = [...evidence].sort((a, b) => (b.y - terrainHeight(b.x, b.z)) - (a.y - terrainHeight(a.x, a.z)))[0];
+  const first = topEvidence
+    ? candidates.reduce((best, q) => Math.hypot(q.x - topEvidence.x, q.z - topEvidence.z) < Math.hypot(best.x - topEvidence.x, best.z - topEvidence.z) ? q : best, candidates[0])
+    : candidates.reduce((best, q) => q.edge > best.edge ? q : best, candidates[0]);
+  chosen.push(first);
+  while (chosen.length < wanted) {
+    const next = candidates.filter((q) => !chosen.includes(q)).map((q) => ({ q, d: Math.min(...chosen.map((p) => Math.hypot(q.x - p.x, q.z - p.z))) })).sort((a, b) => b.d - a.d || b.q.edge - a.q.edge)[0];
+    if (!next || next.d < 8) break;
+    chosen.push(next.q);
+  }
+  const base = { poly, height: +Math.max(3, Math.min(10, height * 0.55)).toFixed(1), form: 'base' };
+  const forms = chosen.map((q, i) => {
+    const r = Math.min(20, Math.max(4.5, q.edge * 0.68)), rx = r * (0.85 + hash2(index + i * 7, 31) * 0.25), rz = r * (0.82 + hash2(index + 43, i * 11) * 0.28);
+    const capPoly = Array.from({ length: 14 }, (_, k) => { const a = (k / 14) * Math.PI * 2; return [+(q.x + Math.cos(a) * rx).toFixed(1), +(q.z + Math.sin(a) * rz).toFixed(1)]; });
+    const scale = i === 0 ? 1 : 0.62 + hash2(index * 13 + i, 79) * 0.3;
+    return { poly: capPoly, height: +Math.max(base.height + 1.2, height * scale).toFixed(1), form: i === 0 ? 'summit' : 'outcrop' };
+  });
+  return [base, ...forms];
+}
+const rocksOut = key === 'customs' ? rockMasses : key === 'woods' ? rockMasses.flatMap(splitWoodsRock) : rockMasses.map(({ evidence, ...rock }) => rock);
 const output = `public/data/${key}-3d.json`;
 let builtAt = new Date().toISOString();
 if (!process.argv.includes('--stamp')) { try { builtAt = JSON.parse(await readFile(output, 'utf8')).builtAt || builtAt; } catch {} }
