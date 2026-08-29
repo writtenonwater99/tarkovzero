@@ -116,6 +116,11 @@ for (const r of [...roads.map((r) => ({ ...r, cls: 'road' })), ...linesIn('Railw
   for (const p of pts) { if (overWater(p)) run.push(p); else flush(); }
   flush();
 }
+// ---- playable boundary = the SVG 'Limit' (= ground polygon). Clip linear features to it; drop anything outside.
+const LIMIT = polysIn('Ground')[0];
+const inside = (pt) => inPoly(pt, LIMIT);
+function clipPath(path, step = 3) { const out = []; let run = []; for (const q of resample(path, step)) { if (inside(q)) run.push(q); else { if (run.length >= 2) out.push(run); run = []; } } if (run.length >= 2) out.push(run); return out; }
+const clipLines = (items) => items.flatMap((it) => clipPath(it.path).map((path) => ({ ...it, path })));
 // keep real crossings only: no dirt tracks (swamp), and merge overlapping road paths
 const mid = (b) => b.path[Math.floor(b.path.length / 2)];
 const kept = [];
@@ -124,9 +129,15 @@ for (const b of bridges.filter((b) => b.kind !== 'dirt').sort((a, c) => PRI[a.ki
   const m = mid(b);
   if (!kept.some((k) => Math.hypot(mid(k)[0] - m[0], mid(k)[1] - m[1]) < 20)) kept.push(b);
 }
-bridges.length = 0; bridges.push(...kept);
-// flat roads: drop the parts that are carried by a bridge deck (so the road doesn't show under the deck)
-const bridgeSet = new Set(bridges.map((b) => b.path));
+bridges.length = 0;
+// In-game river crossings (per playtest): Main Bridge (highway deck), Junk Bridge (foot bridge at the label, drawn as
+// pavement in the SVG), and a ground-level path just north of Main Bridge. Every other crossing is outside the playable area.
+const mainBridge = kept.find((b) => b.kind === 'highway');
+if (mainBridge) bridges.push({ ...mainBridge, name: 'Main Bridge' });
+const ford = kept.find((b) => Math.hypot(mid(b)[0] + 84, mid(b)[1] + 74) < 25);
+if (ford) bridges.push({ ...ford, name: 'River path', ford: true, height: 0.4, width: 3 });
+bridges.push({ name: 'Junk Bridge', kind: 'foot', foot: true, path: resample([[-68.5, 39.4], [-90.7, 39.4]], 3), width: 3, height: 2.5 });
+// flat roads: drop the parts that are carried by a bridge deck, and pieces over water without a real crossing; clip to limit
 const nearBridge = (pt) => bridges.some((b) => b.path.some((q) => Math.hypot(q[0] - pt[0], q[1] - pt[1]) < 4));
 const roadsCut = [];
 for (const r of roads) {
@@ -135,15 +146,15 @@ for (const r of roads) {
   for (const q of pts) { if (nearBridge(q) && overWater(q)) flushRun(); else run.push(q); }
   flushRun();
 }
-roads.length = 0; roads.push(...roadsCut);
-// fences: open a gap where a road crosses (gates), so fences don't run through roads
-const fenceLines = linesIn('Fence');
-const allRoads = [...roads];
+const realCrossing = (q) => bridges.some((b) => b.path.some((p) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 8));
+roads.length = 0; roads.push(...clipLines(roadsCut.filter((r) => !r.path.some((q) => overWater(q) && !realCrossing(q)))));
+// fences: clip to limit and open a gap where a road crosses (gates)
+const fenceLines = linesIn('Fence').flatMap((p) => clipPath(p, 2));
 const fencesCut = [];
 for (const f of fenceLines) {
   const pts = resample(f, 2); let run = [];
   const flushF = () => { if (run.length >= 2) fencesCut.push({ path: run }); run = []; };
-  for (const q of pts) { const onRoad = allRoads.some((r) => r.path.some((rp) => Math.hypot(rp[0] - q[0], rp[1] - q[1]) < r.width / 2 + 1.5)); if (onRoad) flushF(); else run.push(q); }
+  for (const q of pts) { const onRoad = roads.some((r) => r.path.some((rp) => Math.hypot(rp[0] - q[0], rp[1] - q[1]) < r.width / 2 + 1.5)); if (onRoad) flushF(); else run.push(q); }
   flushF();
 }
 const PLACE_COLORS = { 'Big Red': [200, 60, 55], 'Crackhouse': [120, 88, 66], 'Dorms 2-Story': [214, 190, 160], 'Dorms 3-Story': [214, 190, 160], 'New Gas': [235, 235, 235], 'Old Gas': [190, 190, 185], 'Fortress': [180, 180, 178], 'Skeleton': [176, 176, 176], 'Repair Shop': [140, 160, 185], 'Warehouse 3': [150, 165, 185], 'Warehouse 4': [150, 165, 185], 'Warehouse 7': [150, 165, 185], 'Warehouse 17': [150, 165, 185], 'Depot': [165, 170, 178], 'Boiler': [170, 110, 90], 'Oil Rig': [160, 120, 95], 'Streamer House': [120, 95, 70], 'Bus Station': [235, 235, 232], 'Storage': [170, 175, 180], 'Powerline Tower': [150, 150, 150], 'Water Pump': [160, 170, 180], 'Military Checkpoint': [175, 180, 170] };
@@ -196,14 +207,14 @@ const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights) }
 console.log(`props ${props.length}`);
 console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length} points, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 const out = {
-  props, terrain, bridges,
+  props, terrain, bridges, limit: LIMIT,
   map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
   land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement'), trees: polysIn('Trees'), rocks: polysIn('Rocks'),
-  roads, railway: linesIn('Railway').map((p) => ({ path: p })), fences: fencesCut, powerlines: linesIn('Powerlines').map((p) => ({ path: p })),
+  roads, railway: clipLines(linesIn('Railway').map((p) => ({ path: p }))), fences: fencesCut, powerlines: clipLines(linesIn('Powerlines').map((p) => ({ path: p }))),
   buildings, underground, floorBoxes,
 };
 await writeFile('public/data/customs-3d.json', JSON.stringify(out));
 const multi = buildings.filter((b) => b.floors > 1);
 console.log(`styles: ${JSON.stringify(buildings.reduce((a, b) => ((a[b.style] = (a[b.style] || 0) + 1), a), {}))}`);
-console.log(`bridges ${bridges.length} (${bridges.map((b) => b.kind + ':' + b.path.length).join(', ')}), named ${buildings.filter((b) => b.place).length}, coloured ${buildings.filter((b) => b.color).length}`);
+console.log(`bridges ${bridges.length} (${bridges.map((b) => (b.name || b.kind) + (b.ford ? ' [ford]' : '')).join(', ')}), named ${buildings.filter((b) => b.place).length}, coloured ${buildings.filter((b) => b.color).length}`);
 console.log(`buildings ${buildings.length} (multi-floor ${multi.length}: ${multi.map((b) => `${b.name}×${b.floors}`).join(', ')}), trees ${out.trees.length}, rocks ${out.rocks.length}, roads ${roads.length}, water ${out.water.length}, land ${out.land.length} → public/data/customs-3d.json (${(JSON.stringify(out).length / 1024).toFixed(0)} KB)`);
