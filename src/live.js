@@ -1,5 +1,7 @@
 import L from 'leaflet';
 import { pos } from './crs.js';
+import { ART } from './icon-art.js';
+const GASMASK = `<g transform='scale(0.046875)'><path d='${ART.gasmask}'/></g>`;
 
 // Live player positions from the relay. One subscription per pairing code; each code gets its own
 // coloured arrow + trail. Designed for several codes at once (you + friends) even though v1 UI is solo.
