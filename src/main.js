@@ -207,3 +207,14 @@ btn3d.onclick = () => setView(document.body.classList.contains('view-3d') ? '2d'
 document.querySelectorAll('#floors button').forEach((b) => (b.onclick = () => { document.querySelectorAll('#floors button').forEach((x) => x.classList.toggle('on', x === b)); view3d?.setFloor(b.dataset.floor === 'all' || b.dataset.floor === 'U' ? b.dataset.floor : Number(b.dataset.floor)); }));
 const origRender = ui.render; ui.render = () => { origRender(); view3d?.refresh(); };
 if (new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d') setView('3d');
+
+// ?debug=roads — draw the 3D road/track network over the 2D map to check it against the satellite
+if (new URLSearchParams(location.search).get('debug') === 'roads') {
+  fetch('/data/customs-3d.json').then((r) => r.json()).then((d) => {
+    const col = { highway: '#ffdd00', main: '#ff3030', small: '#ff30ff', track: '#ff8c00', dirt: '#b06000' };
+    for (const r of d.roads) L.polyline(r.path.map(([x, z]) => [z, x]), { color: col[r.kind] || '#fff', weight: r.kind === 'track' || r.kind === 'dirt' ? 2 : 3, opacity: 0.9, dashArray: r.kind === 'track' || r.kind === 'dirt' ? '6 4' : null }).addTo(map).bindTooltip(r.kind);
+    for (const b of d.bridges) L.polyline(b.path.map(([x, z]) => [z, x]), { color: '#00e5ff', weight: 5, opacity: 0.9 }).addTo(map);
+    L.polyline([...d.limit, d.limit[0]].map(([x, z]) => [z, x]), { color: '#ff0000', weight: 2, dashArray: '8 6' }).addTo(map);
+    document.getElementById('status').innerHTML += '<br><b>debug: roads</b> yellow=highway red=main magenta=small(paved) orange=track brown=dirt cyan=bridge';
+  });
+}
