@@ -1,0 +1,442 @@
+// src/terrain.js — smooth ground surface for the 3D view.
+//
+// Replaces the old per-quad `terrainQuads()` SolidPolygonLayer + `contours` PathLayer with ONE
+// SimpleMeshLayer: a pre-built, smoothly-shaded triangle mesh carrying a baked ground texture.
+//
+// The old look ("puzzle pieces") had three causes, all fixed here together:
+//   a) per-quad flat colour from a 5-stop ramp  -> per-texel gradient baked into a 2048px texture
+//   b) bilinear interpolation of the 10 m grid (C0: every cell edge is a crease)
+//                                              -> Gaussian-conditioned grid + bicubic Catmull-Rom
+//   c) per-quad forward-difference shading      -> smooth per-vertex normals + baked two-light hillshade
+// The source grid is IDW over SPT ground-spawn points, so it carries cone artifacts around every
+// sample; two passes of a separable 5x5 Gaussian condition those away before anything else.
+//
+// TRUE SCALE: geometry is never exaggerated (heights stay at the data's -0.28..11.12 m). Relief is
+// made legible by steepening the *normals* (NORMAL_VE) and the *baked hillshade* (SHADE_VE) only.
+import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
+import { Geometry } from '@luma.gl/engine';
+import { COORDINATE_SYSTEM, LightingEffect, AmbientLight, DirectionalLight } from '@deck.gl/core';
+
+// ---------------------------------------------------------------- tunables
+const CELL = 2.5;          // mesh cell size in metres (10 m source grid subdivided 4x)
+const PAD = 8;             // metres of mesh built outside the limit bbox (hidden, gives the skirt room)
+const TEX_W = 2048;        // baked ground texture width
+const BAND_PX = 12;        // dark rows at the bottom of the texture, used by the skirt only
+const NORMAL_VE = 9;       // exaggeration applied to the mesh NORMALS only (geometry stays true scale)
+const SHADE_VE = 14;       // exaggeration used by the baked hillshade; both are high because the
+                           // conditioning Gaussian below deliberately flattens the raw gradients
+const VOID_Z = -14;        // skirt bottom (matches map3d.js)
+
+// Light directions in DECK space (X=-gameX, Y=-gameZ, Z=up). `SUN_DIR` is the travel direction of
+// the sun; the bake's key light is exactly its negation, so the two shading systems agree.
+const SUN_DIR = [-0.62, -0.42, -0.66];
+const FILL_DIR = [0.5, 0.35, -0.79];
+
+const GRASS = [[40, 62, 42], [50, 76, 45], [62, 88, 49], [80, 100, 54], [102, 114, 62]];
+const GRASS_DRY = [110, 106, 84];
+const BAND_TOP = [66, 62, 54], BAND_BOT = [24, 27, 25];
+
+// ---------------------------------------------------------------- small maths helpers
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const smoothstep = (u) => u * u * (3 - 2 * u);
+// Catmull-Rom through p1..p2 (p0/p3 are the outer control points)
+const cr = (p0, p1, p2, p3, u) => {
+  const u2 = u * u, u3 = u2 * u;
+  return p0 * (-0.5 * u3 + u2 - 0.5 * u) + p1 * (1.5 * u3 - 2.5 * u2 + 1)
+       + p2 * (-1.5 * u3 + 2 * u2 + 0.5 * u) + p3 * (0.5 * u3 - 0.5 * u2);
+};
+const norm3 = (v) => { const L = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / L, v[1] / L, v[2] / L]; };
+// deterministic integer hash -> [0,1)
+const hash2 = (i, j) => {
+  let n = (i * 374761393 + j * 668265263) | 0;
+  n = Math.imul(n ^ (n >> 13), 1274126177);
+  return ((n ^ (n >> 16)) >>> 0) / 4294967296;
+};
+// 2D value noise with smoothstep interpolation
+function vnoise(x, z, wl) {
+  const fx = x / wl, fz = z / wl, i = Math.floor(fx), j = Math.floor(fz);
+  const su = smoothstep(fx - i), sv = smoothstep(fz - j);
+  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+  const t = a + (b - a) * su;
+  return t + ((c + (d - c) * su) - t) * sv;
+}
+
+// ---------------------------------------------------------------- step 1: conditioned height field
+// N passes of a separable 5x5 Gaussian [1,4,6,4,1], edges clamped (variance 1 cell^2 per pass per axis)
+function gaussian5(heights, cols, rows, passes = 2) {
+  const K = [1, 4, 6, 4, 1];
+  let src = Float32Array.from(heights);
+  const tmp = new Float32Array(src.length);
+  for (let p = 0; p < passes; p++) {
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      let s = 0;
+      for (let i = -2; i <= 2; i++) s += src[r * cols + clamp(c + i, 0, cols - 1)] * K[i + 2];
+      tmp[r * cols + c] = s / 16;
+    }
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      let s = 0;
+      for (let i = -2; i <= 2; i++) s += tmp[clamp(r + i, 0, rows - 1) * cols + c] * K[i + 2];
+      src[r * cols + c] = s / 16;
+    }
+  }
+  return src;
+}
+
+// bicubic (tensor-product Catmull-Rom) sampler over the conditioned grid — this becomes map3d's H()
+function makeBicubic(grid, cols, rows, x0, z0, step) {
+  const at = (c, r) => grid[clamp(r, 0, rows - 1) * cols + clamp(c, 0, cols - 1)];
+  return (x, z) => {
+    const fx = (x - x0) / step, fz = (z - z0) / step;
+    const cx = Math.floor(fx), cz = Math.floor(fz), u = fx - cx, v = fz - cz;
+    const r0 = cr(at(cx - 1, cz - 1), at(cx, cz - 1), at(cx + 1, cz - 1), at(cx + 2, cz - 1), u);
+    const r1 = cr(at(cx - 1, cz), at(cx, cz), at(cx + 1, cz), at(cx + 2, cz), u);
+    const r2 = cr(at(cx - 1, cz + 1), at(cx, cz + 1), at(cx + 1, cz + 1), at(cx + 2, cz + 1), u);
+    const r3 = cr(at(cx - 1, cz + 2), at(cx, cz + 2), at(cx + 1, cz + 2), at(cx + 2, cz + 2), u);
+    return cr(r0, r1, r2, r3, v);
+  };
+}
+
+// ---------------------------------------------------------------- rasterisation helpers
+// scanline fill of one or more rings into a Uint8 mask sampled at cell centres (never per-cell point-in-poly)
+function rasterRings(rings, mask, gw, gh, x0, z0, cw, ch) {
+  const xsBuf = [];
+  for (let j = 0; j < gh; j++) {
+    const z = z0 + (j + 0.5) * ch;
+    xsBuf.length = 0;
+    for (const poly of rings) {
+      for (let i = 0, n = poly.length; i < n; i++) {
+        const a = poly[i], b = poly[(i + 1) % n];
+        const za = a[1], zb = b[1];
+        if ((za > z) === (zb > z)) continue;
+        xsBuf.push(a[0] + ((z - za) / (zb - za)) * (b[0] - a[0]));
+      }
+    }
+    if (!xsBuf.length) continue;
+    xsBuf.sort((p, q) => p - q);
+    for (let k = 0; k + 1 < xsBuf.length; k += 2) {
+      let ia = Math.ceil((xsBuf[k] - x0) / cw - 0.5), ib = Math.floor((xsBuf[k + 1] - x0) / cw - 0.5);
+      ia = Math.max(0, ia); ib = Math.min(gw - 1, ib);
+      for (let i = ia; i <= ib; i++) mask[j * gw + i] = 1;
+    }
+  }
+  return mask;
+}
+// chamfer 3-4 distance (in cells) from every seed cell (mask===1)
+function chamfer(mask, gw, gh) {
+  const BIG = 1e6, d = new Float32Array(gw * gh);
+  for (let i = 0; i < d.length; i++) d[i] = mask[i] ? 0 : BIG;
+  const rel = (i, j, w) => { if (i < 0 || j < 0 || i >= gw || j >= gh) return BIG; return d[j * gw + i] + w; };
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    const k = j * gw + i;
+    d[k] = Math.min(d[k], rel(i - 1, j, 3), rel(i, j - 1, 3), rel(i - 1, j - 1, 4), rel(i + 1, j - 1, 4));
+  }
+  for (let j = gh - 1; j >= 0; j--) for (let i = gw - 1; i >= 0; i--) {
+    const k = j * gw + i;
+    d[k] = Math.min(d[k], rel(i + 1, j, 3), rel(i, j + 1, 3), rel(i + 1, j + 1, 4), rel(i - 1, j + 1, 4));
+  }
+  for (let i = 0; i < d.length; i++) d[i] /= 3; // chamfer units -> cells
+  return d;
+}
+
+// ---------------------------------------------------------------- main
+export function buildTerrain(data) {
+  const t = data.terrain;
+  const { x0, z0, step, cols, rows } = t;
+  const grid = gaussian5(t.heights, cols, rows, 5); // 5 passes ~ sigma 22 m: enough to dissolve the IDW cones
+  const H = makeBicubic(grid, cols, rows, x0, z0, step);
+  let hmin = Infinity, hmax = -Infinity;
+  for (let i = 0; i < grid.length; i++) { if (grid[i] < hmin) hmin = grid[i]; if (grid[i] > hmax) hmax = grid[i]; }
+  const hspan = Math.max(1, hmax - hmin);
+
+  // ---- bbox of the built surface (limit bbox + padding)
+  const limit = data.limit;
+  const lx = limit.map((p) => p[0]), lz = limit.map((p) => p[1]);
+  const X0 = Math.min(...lx) - PAD, X1 = Math.max(...lx) + PAD;
+  const Z0 = Math.min(...lz) - PAD, Z1 = Math.max(...lz) + PAD;
+  const W = X1 - X0, D = Z1 - Z0;
+
+  // ================================================================ texture
+  const TH_T = Math.round((TEX_W * D) / W);     // rows covering the ground
+  const TH = TH_T + BAND_PX;                    // + the skirt band
+  const mx = W / TEX_W, mz = D / TH_T;          // metres per texel
+
+  // fine height raster at texture resolution, built separably (bicubic == CR in x then CR in z)
+  const cxA = new Int32Array(TEX_W), cuA = new Float32Array(TEX_W);
+  for (let px = 0; px < TEX_W; px++) {
+    const fx = (X0 + (px + 0.5) * mx - x0) / step, c = Math.floor(fx);
+    cxA[px] = c; cuA[px] = fx - c;
+  }
+  const gAt = (c, r) => grid[clamp(r, 0, rows - 1) * cols + clamp(c, 0, cols - 1)];
+  const rowX = new Float32Array(rows * TEX_W);
+  for (let r = 0; r < rows; r++) for (let px = 0; px < TEX_W; px++) {
+    const c = cxA[px];
+    rowX[r * TEX_W + px] = cr(gAt(c - 1, r), gAt(c, r), gAt(c + 1, r), gAt(c + 2, r), cuA[px]);
+  }
+  const fine = new Float32Array(TEX_W * TH_T);
+  for (let py = 0; py < TH_T; py++) {
+    const fz = (Z0 + (py + 0.5) * mz - z0) / step, cz = Math.floor(fz), v = fz - cz;
+    const R = (k) => clamp(cz + k, 0, rows - 1) * TEX_W;
+    const a = R(-1), b = R(0), c2 = R(1), d2 = R(2), o = py * TEX_W;
+    for (let px = 0; px < TEX_W; px++) fine[o + px] = cr(rowX[a + px], rowX[b + px], rowX[c2 + px], rowX[d2 + px], v);
+  }
+
+  // coarse (4 m) distance rasters for the edge / shoreline ambient occlusion
+  const AOC = 4, aw = Math.ceil(W / AOC), ah = Math.ceil(D / AOC);
+  const insideMask = rasterRings([limit], new Uint8Array(aw * ah), aw, ah, X0, Z0, AOC, AOC);
+  const outsideMask = new Uint8Array(aw * ah);
+  for (let i = 0; i < outsideMask.length; i++) outsideMask[i] = insideMask[i] ? 0 : 1;
+  const dEdge = chamfer(outsideMask, aw, ah);                       // cells from the limit boundary, inwards
+  const waterMask = rasterRings(data.water || [], new Uint8Array(aw * ah), aw, ah, X0, Z0, AOC, AOC);
+  const dWater = chamfer(waterMask, aw, ah);
+  const sampleAO = (raster, px, py) => {
+    const i = clamp(Math.floor(((px + 0.5) * mx) / AOC), 0, aw - 1);
+    const j = clamp(Math.floor(((py + 0.5) * mz) / AOC), 0, ah - 1);
+    return raster[j * aw + i] * AOC; // metres
+  };
+
+  const canvas = document.createElement('canvas');
+  canvas.width = TEX_W; canvas.height = TH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: false });
+  const img = ctx.createImageData(TEX_W, TH);
+  const px8 = img.data;
+
+  const KEY = norm3([-SUN_DIR[0], -SUN_DIR[1], -SUN_DIR[2]]);
+  const FILL = norm3([-FILL_DIR[0], -FILL_DIR[1], -FILL_DIR[2]]);
+  const flatRaw = KEY[2] + 0.35 * FILL[2];      // response of a flat surface, so shade ~1 on the flats
+  const GRAD_PX = 3;
+
+  for (let py = 0; py < TH_T; py++) {
+    const gz = Z0 + (py + 0.5) * mz, o = py * TEX_W;
+    const pyA = clamp(py - GRAD_PX, 0, TH_T - 1) * TEX_W, pyB = clamp(py + GRAD_PX, 0, TH_T - 1) * TEX_W;
+    const dzSpan = (clamp(py + GRAD_PX, 0, TH_T - 1) - clamp(py - GRAD_PX, 0, TH_T - 1)) * mz || 1;
+    for (let px = 0; px < TEX_W; px++) {
+      const gx = X0 + (px + 0.5) * mx;
+      const h = fine[o + px];
+      // (a) hypsometry — smoothstep across the 5 grass stops
+      const f = clamp((h - hmin) / hspan, 0, 1) * (GRASS.length - 1);
+      const k = Math.min(GRASS.length - 2, Math.floor(f)), u = smoothstep(f - k);
+      const A = GRASS[k], B = GRASS[k + 1];
+      let r = A[0] + (B[0] - A[0]) * u, g = A[1] + (B[1] - A[1]) * u, b = A[2] + (B[2] - A[2]) * u;
+      // gradient of the true field
+      const ia = clamp(px - GRAD_PX, 0, TEX_W - 1), ib = clamp(px + GRAD_PX, 0, TEX_W - 1);
+      const dhdx = (fine[o + ib] - fine[o + ia]) / ((ib - ia) * mx || 1);
+      const dhdz = (fine[pyB + px] - fine[pyA + px]) / dzSpan;
+      // (c) slope tint toward dry khaki — an independent relief cue
+      const slope = Math.hypot(dhdx, dhdz), dry = Math.min(0.5, slope * 3.2);
+      r += (GRASS_DRY[0] - r) * dry; g += (GRASS_DRY[1] - g) * dry; b += (GRASS_DRY[2] - b) * dry;
+      // (b) two-light hillshade in deck space (Nx = +VE*dh/dx because deck X = -gameX)
+      const nx = SHADE_VE * dhdx, ny = SHADE_VE * dhdz;
+      const nl = Math.sqrt(nx * nx + ny * ny + 1);
+      const raw = (Math.max(0, nx * KEY[0] + ny * KEY[1] + KEY[2]) + 0.35 * Math.max(0, nx * FILL[0] + ny * FILL[1] + FILL[2])) / nl;
+      const shade = clamp(1 + (raw - flatRaw) * 1.55, 0.76, 1.18);
+      r *= shade; g *= shade; b *= shade;
+      // (d) mottle, two octaves
+      const m = 1 + (vnoise(gx, gz, 28) - 0.5) * 0.085;
+      const m2 = (vnoise(gx + 91, gz - 37, 7) - 0.5) * 0.04;
+      r *= m; g *= m * (1 + m2); b *= m;
+      // (e) edge / shoreline ambient occlusion
+      const ao = (1 - 0.14 * clamp(1 - sampleAO(dEdge, px, py) / 8, 0, 1))
+               * (1 - 0.10 * clamp(1 - sampleAO(dWater, px, py) / 3, 0, 1));
+      r *= ao; g *= ao; b *= ao;
+      // (f) dither — the ramp spans ~60 values, it WILL band on 8-bit without this
+      const dth = (hash2(px, py) - 0.5) * 5;
+      const q = (o + px) * 4;
+      px8[q] = clamp(r + dth, 0, 255); px8[q + 1] = clamp(g + dth, 0, 255); px8[q + 2] = clamp(b + dth, 0, 255); px8[q + 3] = 255;
+    }
+  }
+  // skirt band: a vertical dirt gradient the mesh skirt (and nothing else) samples
+  for (let py = TH_T; py < TH; py++) {
+    const u = (py - TH_T) / (BAND_PX - 1);
+    for (let px = 0; px < TEX_W; px++) {
+      const n = (vnoise(px * mx, py, 6) - 0.5) * 14, q = (py * TEX_W + px) * 4;
+      px8[q] = clamp(BAND_TOP[0] + (BAND_BOT[0] - BAND_TOP[0]) * u + n, 0, 255);
+      px8[q + 1] = clamp(BAND_TOP[1] + (BAND_BOT[1] - BAND_TOP[1]) * u + n, 0, 255);
+      px8[q + 2] = clamp(BAND_TOP[2] + (BAND_BOT[2] - BAND_TOP[2]) * u + n, 0, 255);
+      px8[q + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // dev aid: ?debugtex shows the baked ground texture over the map (judge the material at 1:1)
+  if (typeof location !== 'undefined' && location.search.includes('debugtex')) {
+    canvas.style.cssText = 'position:fixed;left:280px;top:0;width:1100px;height:auto;z-index:9999;image-rendering:pixelated';
+    setTimeout(() => document.body.appendChild(canvas), 0);
+  }
+
+  // (g) contours, drawn into the same canvas — perfectly smooth at any zoom, zero layers, no z-fighting
+  drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax);
+
+  // ================================================================ mesh
+  const NCX = Math.round(W / CELL), NCZ = Math.round(D / CELL);
+  const cw = W / NCX, ch = D / NCZ;
+  const NVX = NCX + 1, NVZ = NCZ + 1, NV = NVX * NVZ;
+  const vTop = TH_T / TH;                       // v of the last ground row
+  const pos = new Float32Array(NV * 3), nrm = new Float32Array(NV * 3), uv = new Float32Array(NV * 2);
+  const E = CELL;                               // central-difference step for the normals
+  for (let j = 0; j < NVZ; j++) {
+    const gz = Z0 + j * ch;
+    for (let i = 0; i < NVX; i++) {
+      const gx = X0 + i * cw, k = j * NVX + i;
+      const h = H(gx, gz);
+      pos[k * 3] = -gx; pos[k * 3 + 1] = -gz; pos[k * 3 + 2] = h;
+      const dhdx = (H(gx + E, gz) - H(gx - E, gz)) / (2 * E);
+      const dhdz = (H(gx, gz + E) - H(gx, gz - E)) / (2 * E);
+      // deck X = -gameX and deck Y = -gameZ, so the normal keeps the *positive* derivative
+      const nx = NORMAL_VE * dhdx, ny = NORMAL_VE * dhdz, nl = Math.sqrt(nx * nx + ny * ny + 1);
+      nrm[k * 3] = nx / nl; nrm[k * 3 + 1] = ny / nl; nrm[k * 3 + 2] = 1 / nl;
+      uv[k * 2] = clamp((gx - X0) / W, 0, 1);
+      uv[k * 2 + 1] = clamp((gz - Z0) / D, 0, 1) * vTop;
+    }
+  }
+  // clip: keep only cells whose centre is inside the limit polygon (scanline, ~2 ms)
+  const keep = rasterRings([limit], new Uint8Array(NCX * NCZ), NCX, NCZ, X0, Z0, cw, ch);
+  const idx = [];
+  for (let j = 0; j < NCZ; j++) for (let i = 0; i < NCX; i++) {
+    if (!keep[j * NCX + i]) continue;
+    const a = j * NVX + i, b = a + 1, c = a + NVX + 1, d = a + NVX;
+    idx.push(a, b, c, a, c, d);
+  }
+  // skirt: every exposed boundary edge gets a vertical quad down to the void, textured from the band
+  const sPos = [], sNrm = [], sUv = [];
+  const kept = (i, j) => i >= 0 && j >= 0 && i < NCX && j < NCZ && keep[j * NCX + i];
+  const vBandTop = (TH_T + 2.5) / TH, vBandBot = (TH - 1.5) / TH;
+  const skirt = (ka, kb, nx, ny) => {
+    const base = NV + sPos.length / 3;
+    const ax = pos[ka * 3], ay = pos[ka * 3 + 1], az = pos[ka * 3 + 2];
+    const bx = pos[kb * 3], by = pos[kb * 3 + 1], bz = pos[kb * 3 + 2];
+    sPos.push(ax, ay, az, bx, by, bz, bx, by, VOID_Z, ax, ay, VOID_Z);
+    for (let n = 0; n < 4; n++) sNrm.push(nx, ny, 0.12);
+    sUv.push(uv[ka * 2], vBandTop, uv[kb * 2], vBandTop, uv[kb * 2], vBandBot, uv[ka * 2], vBandBot);
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  for (let j = 0; j < NCZ; j++) for (let i = 0; i < NCX; i++) {
+    if (!keep[j * NCX + i]) continue;
+    const a = j * NVX + i, b = a + 1, c = a + NVX + 1, d = a + NVX;
+    if (!kept(i - 1, j)) skirt(d, a, 1, 0);
+    if (!kept(i + 1, j)) skirt(b, c, -1, 0);
+    if (!kept(i, j - 1)) skirt(a, b, 0, 1);
+    if (!kept(i, j + 1)) skirt(c, d, 0, -1);
+  }
+  const TOT = NV + sPos.length / 3;
+  const positions = new Float32Array(TOT * 3), normals = new Float32Array(TOT * 3), texCoords = new Float32Array(TOT * 2);
+  positions.set(pos); positions.set(sPos, NV * 3);
+  normals.set(nrm); normals.set(sNrm, NV * 3);
+  texCoords.set(uv); texCoords.set(sUv, NV * 2);
+  const indices = new Uint32Array(idx); // > 65k vertices: WebGL2 requires 32-bit indices
+
+  const mesh = new Geometry({
+    topology: 'triangle-list',
+    attributes: {
+      POSITION: { value: positions, size: 3 },
+      NORMAL: { value: normals, size: 3 },
+      TEXCOORD_0: { value: texCoords, size: 2 },
+    },
+    indices: { value: indices, size: 1 },
+  });
+
+  const layer = () => new SimpleMeshLayer({
+    id: 'terrain',
+    data: [{ p: [0, 0, 0] }],
+    getPosition: (d) => d.p,
+    mesh,
+    texture: canvas,
+    getColor: [255, 255, 255],
+    sizeScale: 1,
+    shadowEnabled: false, // see the shadow note below
+    pickable: false,
+    coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+    textureParameters: {
+      minFilter: 'linear', mipmapFilter: 'linear', magFilter: 'linear',
+      addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', maxAnisotropy: 16,
+    },
+    material: { ambient: 0.95, diffuse: 0.55, shininess: 1, specularColor: [10, 12, 10] }, // ambient is high so the baked shading (not the flat-normal diffuse) sets the ground value
+  });
+
+  const lighting = new LightingEffect({
+    ambient: new AmbientLight({ color: [214, 224, 232], intensity: 0.62 }),
+    sun: new DirectionalLight({ color: [255, 246, 226], intensity: 1.05, direction: SUN_DIR }),
+  });
+  // NOTE on cast shadows (`_shadow: true` on the sun): they render correctly under OrbitView, but
+  // deck gates casting AND receiving on the same `shadowEnabled` prop, so a ground surface that
+  // receives building shadows also shadow-maps itself. Over a 1 km, 11 m-relief surface lit at ~40
+  // degrees, the depth16 shadow map has nowhere near the precision for that and the whole map goes
+  // into acne. Verified in headless. Relief therefore comes from the baked two-light hillshade plus
+  // the steepened normals, which need no extra pass.
+
+  return { H, layers: () => [layer()], lighting, stats: { verts: TOT, tris: indices.length / 3, tex: [TEX_W, TH] } };
+}
+
+// ---------------------------------------------------------------- contours (baked, not a layer)
+// marching squares on the fine bicubic field, Chaikin-smoothed twice, stroked straight onto the texture.
+// 2 m minors / 10 m index lines: at 1 m the 11 m range draws concentric bullseyes around every dome.
+function drawContours(ctx, fine, gw, gh, hmin, hmax) {
+  const SS = 4;                                   // sample every 4th texel
+  const nx = Math.floor(gw / SS), nz = Math.floor(gh / SS);
+  const at = (i, j) => fine[Math.min(gh - 1, j * SS) * gw + Math.min(gw - 1, i * SS)];
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let lv = Math.ceil(hmin / 2) * 2; lv <= hmax; lv += 2) {
+    const segs = [];
+    for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      const v = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
+      const P4 = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]];
+      const pts = [];
+      for (let e = 0; e < 4; e++) {
+        const a = e, b = (e + 1) % 4;
+        if ((v[a] < lv) === (v[b] < lv)) continue;
+        const s = (lv - v[a]) / (v[b] - v[a]);
+        pts.push([(P4[a][0] + (P4[b][0] - P4[a][0]) * s) * SS, (P4[a][1] + (P4[b][1] - P4[a][1]) * s) * SS]);
+      }
+      if (pts.length === 2) segs.push(pts);
+      else if (pts.length === 4) { segs.push([pts[0], pts[1]]); segs.push([pts[2], pts[3]]); }
+    }
+    if (!segs.length) continue;
+    const major = lv % 10 === 0;
+    ctx.strokeStyle = major ? 'rgba(20,32,20,0.46)' : 'rgba(26,42,26,0.26)';
+    ctx.lineWidth = major ? 1.6 : 1;
+    ctx.beginPath();
+    for (const s of joinSegments(segs)) {
+      const p = chaikin(chaikin(s));
+      ctx.moveTo(p[0][0], p[0][1]);
+      for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
+    }
+    ctx.stroke();
+  }
+}
+// stitch marching-squares segments into polylines so Chaikin has something to smooth
+function joinSegments(segs) {
+  const key = (p) => `${Math.round(p[0] * 4)},${Math.round(p[1] * 4)}`;
+  const ends = new Map();
+  for (const s of segs) for (const p of [s[0], s[1]]) {
+    const k = key(p); if (!ends.has(k)) ends.set(k, []); ends.get(k).push(s);
+  }
+  const used = new Set(), out = [];
+  for (const s of segs) {
+    if (used.has(s)) continue;
+    used.add(s);
+    const line = [s[0], s[1]];
+    for (let dir = 0; dir < 2; dir++) {
+      for (;;) {
+        const tip = dir ? line[0] : line[line.length - 1];
+        const cand = (ends.get(key(tip)) || []).find((c) => !used.has(c));
+        if (!cand) break;
+        used.add(cand);
+        const next = key(cand[0]) === key(tip) ? cand[1] : cand[0];
+        if (dir) line.unshift(next); else line.push(next);
+        if (line.length > 4000) break;
+      }
+    }
+    if (line.length > 2) out.push(line);
+  }
+  return out;
+}
+function chaikin(p) {
+  if (p.length < 3) return p;
+  const out = [p[0]];
+  for (let i = 0; i < p.length - 1; i++) {
+    const a = p[i], b = p[i + 1];
+    out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+    out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+  }
+  out.push(p[p.length - 1]);
+  return out;
+}

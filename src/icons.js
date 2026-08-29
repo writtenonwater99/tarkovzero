@@ -15,26 +15,29 @@ const GLYPH = {
   lock: `<rect x='5' y='11' width='14' height='9' rx='2' fill='#fff'/><path d='M8 11V8a4 4 0 0 1 8 0v3' stroke='#fff' stroke-width='2.4' fill='none'/><circle cx='12' cy='15.5' r='1.3' fill='#111'/>`,
 };
 
-// Palette: greens = your way out, blues/ambers = people, reds = danger, neutrals = utilities.
+// Palette (TRACK C accents): greens = your way out, blues/ambers = people, reds = danger,
+// neutrals = utilities. The four extract hues are re-used by the 3D name chips' borders and by
+// the sidebar rows, so toggling 'Scav extracts' visibly removes exactly the orange-bordered chips.
 export const KINDS = {
-  'extract-pmc':     { label: 'PMC extracts',       glyph: 'exit',      color: '#228b48', shape: 'sq'  },
-  'extract-scav':    { label: 'Scav extracts',      glyph: 'exitScav',  color: '#d27818', shape: 'sq'  },
-  'extract-shared':  { label: 'Shared extracts',    glyph: 'exit',      color: '#228b48', color2: '#d27818', shape: 'sq' },
-  'extract-transit': { label: 'Transits',           glyph: 'transit',   color: '#187896', shape: 'sq'  },
-  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'soldier',   color: '#326fa8', shape: 'ci'  },
-  'spawn-scav':      { label: 'Scav spawns',        glyph: 'hood',      color: '#c4a028', shape: 'ci'  },
-  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'crosshair', color: '#dc5a1e', shape: 'ci'  },
-  'spawn-boss':      { label: 'Boss spawns',        glyph: 'skull',     color: '#be282c', shape: 'ci', ring: true },
-  'hazard':          { label: 'Hazards',            glyph: 'trefoil',   color: '#9646be', shape: 'dia' },
-  'weapon':          { label: 'Stationary weapons', glyph: 'turret',    color: '#6e6860', shape: 'dia' },
-  'switch':          { label: 'Switches / levers',  glyph: 'lever',     color: '#dcb41e', shape: 'dia' },
-  'lock':            { label: 'Locks',              glyph: 'lock',      color: '#828c96', shape: 'dia' },
+  'extract-pmc':     { label: 'PMC extracts',       glyph: 'exit',      color: '#2DBE6C', shape: 'sq'  },
+  'extract-scav':    { label: 'Scav extracts',      glyph: 'exitScav',  color: '#E0872B', shape: 'sq'  },
+  'extract-shared':  { label: 'Shared extracts',    glyph: 'exit',      color: '#2DBE6C', color2: '#E0872B', shape: 'sq' },
+  'extract-transit': { label: 'Transits',           glyph: 'transit',   color: '#3A96BA', shape: 'sq'  },
+  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'soldier',   color: '#5C7A9E', shape: 'ci'  },
+  'spawn-scav':      { label: 'Scav spawns',        glyph: 'hood',      color: '#B89A3C', shape: 'ci'  },
+  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'crosshair', color: '#C66834', shape: 'ci'  },
+  'spawn-boss':      { label: 'Boss spawns',        glyph: 'skull',     color: '#BE2E30', shape: 'ci', ring: true },
+  'hazard':          { label: 'Hazards',            glyph: 'trefoil',   color: '#8258A6', shape: 'dia' },
+  'weapon':          { label: 'Stationary weapons', glyph: 'turret',    color: '#6E6860', shape: 'dia' },
+  'switch':          { label: 'Switches / levers',  glyph: 'lever',     color: '#D6B236', shape: 'dia' },
+  'lock':            { label: 'Locks',              glyph: 'lock',      color: '#808682', shape: 'dia' },
 };
 // Letter codes for extracts (re3mr-style badges); null -> draw the glyph
 export const EXTRACT_LETTER = { 'Dorms V-Ex': 'D', 'Crossroads': 'C', 'Trailer Park': 'TP', 'Old Gas Station': 'OG', 'RUAF Roadblock': 'R', "Smugglers' Boat": 'SB', 'ZB-1011': '11', 'Smugglers\' Bunker (ZB-1012)': '12', 'ZB-013': '13', 'Railroad to Tarkov': 'R2', 'Railroad to Port': 'R1', 'Railroad to Military Base': 'R3', 'Sniper Roadblock': 'N', 'Old Road Gate': 'O', 'Passage Between Rocks': 'P', 'Military Base CP': 'M', 'Scav Checkpoint': 'S', 'Administration Gate': 'A', 'Factory Far Corner': 'F', 'Warehouse 4': '4', 'Factory Shacks': 'Y', 'Old Gas Station Gate': 'L', 'Warehouse 17': '17', "Trailer Park Workers' Shack": 'I', 'Boiler Room Basement (Co-op)': 'Z', 'Railroad Passage (Flare)': 'W', 'Transit to Factory': 'H', 'Transit to Reserve': 'V', 'Transit to Interchange': 'G', 'Transit to Shoreline': 'E' };
 export const extractLetter = (name) => EXTRACT_LETTER[(name || '').trim()] ?? null;
 
-const KEY = '#0a0e0c', CREAM = '#f5f2e8';
+// badge key line + cream inner rule; both come straight from the TRACK C palette (ink / cream)
+const KEY = '#0E1211', CREAM = '#E6E3D7';
 function badgeSvg(k, letter) {
   const shape = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='${k.color}'/>`
     : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='${k.color}'/>`

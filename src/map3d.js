@@ -5,17 +5,34 @@ import { SolidPolygonLayer, PathLayer, IconLayer, TextLayer, LineLayer, PolygonL
 import { PathStyleExtension, CollisionFilterExtension } from '@deck.gl/extensions';
 import { KINDS, iconDataUrl, arrowDataUrl, extractLetter } from './icons.js';
 import { esc, COLORS } from './live.js';
+import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 
 const C = {
-  grass: [62, 92, 48], grassHigh: [122, 140, 66], land: [62, 92, 48], water: [24, 44, 58], shore: [120, 170, 200, 160], pavement: [112, 116, 108],
-  road: [128, 130, 124], roadEdge: [60, 62, 58], highway: [119, 120, 106], highwayEdge: [86, 91, 80], track: [104, 94, 66], dirt: [122, 108, 78],
-  rail: [128, 118, 100], sleeper: [90, 84, 72], fence: [96, 88, 74], fenceTop: [60, 54, 46],
-  building: [168, 158, 142], buildingMulti: [150, 140, 124], roofWarehouse: [128, 122, 112], roofHouse: [110, 96, 84], tank: [146, 150, 148], tower: [122, 124, 120],
-  tree: [34, 62, 32], treeTop: [58, 96, 46], rock: [168, 158, 136], bridge: [126, 120, 108], bridgeRail: [70, 66, 60], pier: [104, 100, 92],
-  contour: [46, 70, 36, 150], contourMajor: [36, 56, 28, 220], oob: [20, 24, 22], cliff: [85, 82, 73], cliffShadow: [41, 45, 41], cliffTop: [133, 129, 116], shade: [0, 0, 0, 60], floorLine: [0, 0, 0, 70],
-  underground: [40, 40, 40, 110], buildingHover: [255, 214, 90], cream: [245, 242, 232], ink: [12, 16, 14], amber: [255, 214, 90],
+  // --- TRACK C palette: cold-green field, warm-grey concrete, no primary hues except the accents.
+  grass1: [40, 62, 42], grass2: [50, 76, 45], grass3: [62, 88, 49], grass4: [80, 100, 54], grass5: [102, 114, 62],
+  grass: [50, 76, 45], grassHigh: [102, 114, 62], land: [50, 76, 45], grassDry: [110, 106, 84], grassShadow: [22, 36, 26],
+  water: [20, 44, 56], waterDeep: [13, 30, 40], shore: [72, 108, 118, 150],
+  pavement: [72, 76, 72], pavementWorn: [84, 87, 81], road: [104, 108, 100], roadEdge: [62, 66, 60],
+  highway: [116, 118, 106], highwayEdge: [70, 74, 66], roadMarking: [214, 210, 190, 150],
+  track: [120, 110, 84], dirt: [110, 98, 74], dirtEdge: [78, 70, 54],
+  rail: [98, 94, 84], sleeper: [74, 70, 60], fence: [92, 88, 76], fenceTop: [56, 52, 44],
+  building: [150, 143, 130], buildingMulti: [134, 127, 115], buildingPlinth: [104, 99, 90], buildingHover: [255, 208, 92],
+  glass: [26, 34, 36, 220], roofWarehouse: [92, 102, 106], roofHouse: [122, 78, 62], roofFlat: [98, 96, 90], roofRib: [0, 0, 0, 46],
+  skylight: [168, 178, 174, 230], parapet: [116, 111, 101], dockDoor: [42, 37, 34],
+  tank: [154, 158, 158], tankBand: [0, 0, 0, 60], tower: [122, 124, 118],
+  tree: [26, 44, 30], treeTop: [44, 68, 42], treeShadow: [16, 26, 20, 120], rock: [124, 120, 106],
+  bridge: [106, 102, 92], bridgeRail: [64, 61, 55], pier: [84, 80, 72],
+  contour: [26, 42, 26, 90], contourMajor: [20, 32, 20, 150],
+  void: [10, 13, 12], oob: [10, 13, 12], voidRing: [24, 28, 26],
+  cliff: [79, 76, 68], cliffShadow: [38, 41, 38], cliffTop: [124, 118, 105],
+  shade: [8, 14, 10, 62], shadeSoft: [8, 14, 10, 26], floorLine: [0, 0, 0, 70],
+  underground: [46, 44, 40, 120], undergroundOn: [255, 176, 48, 190],
+  cream: [230, 227, 215], creamDim: [198, 196, 182], ink: [14, 18, 15], amber: [255, 208, 92],
+  accentExtract: [45, 190, 108], accentExtractScav: [224, 135, 43], accentExtractTransit: [58, 150, 186], accentExtractNeutral: [128, 134, 130],
+  accentPlayer: [56, 214, 200], accentDanger: [210, 69, 63], accentSpawn: [92, 122, 158], accentBoss: [190, 46, 48],
+  sandbag: [128, 116, 88], rust: [126, 76, 52], bigRed: [142, 58, 50], bigRedTrim: [206, 200, 186],
+  concreteRaw: [162, 158, 148], rebar: [138, 122, 96], hazardStripe: [214, 178, 54],
 };
-const HYPSO = [[53, 95, 46], [60, 100, 50], [65, 105, 54], [80, 116, 59], [97, 127, 63]];
 const P = ([x, z], y = 0) => [-x, -z, y];
 let H = () => 0; // terrain height at game (x, z); set once data is loaded
 const Pg = ([x, z], dy = 0) => P([x, z], H(x, z) + dy); // draped point
@@ -28,19 +45,6 @@ function makeSampler(t) {
     const h00 = heights[r * cols + c], h10 = heights[r * cols + c + 1], h01 = heights[(r + 1) * cols + c], h11 = heights[(r + 1) * cols + c + 1];
     return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
   };
-}
-function contours(t, interval = 2) { // marching squares isolines in game coords
-  const { x0, z0, step, cols, rows, heights } = t, lines = [];
-  const h = (r, c) => heights[r * cols + c];
-  const hmax = Math.max(...heights);
-  for (let lv = interval; lv <= hmax; lv += interval) for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++) {
-    const v = [h(r, c), h(r, c + 1), h(r + 1, c + 1), h(r + 1, c)]; const x = x0 + c * step, z = z0 + r * step;
-    const pts = []; const edge = (a, b, pa, pb) => { if ((v[a] < lv) !== (v[b] < lv)) { const t2 = (lv - v[a]) / (v[b] - v[a]); pts.push([pa[0] + (pb[0] - pa[0]) * t2, pa[1] + (pb[1] - pa[1]) * t2]); } };
-    edge(0, 1, [x, z], [x + step, z]); edge(1, 2, [x + step, z], [x + step, z + step]); edge(2, 3, [x + step, z + step], [x, z + step]); edge(3, 0, [x, z + step], [x, z]);
-    const ok = (pp) => !t.limit || pp.every((q) => inPolyXZ(q, t.limit));
-    if (pts.length === 2) { if (ok(pts)) lines.push({ path: pts, lv }); } else if (pts.length === 4) { if (ok([pts[0], pts[1]])) lines.push({ path: [pts[0], pts[1]], lv }); if (ok([pts[2], pts[3]])) lines.push({ path: [pts[2], pts[3]], lv }); }
-  }
-  return lines;
 }
 const inPolyXZ = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
 const VOID_Z = -14;
@@ -57,25 +61,23 @@ function cliffStrips(limit) {
   }
   return out;
 }
-function terrainQuads(t, base, limit) { // shaded ground quads (cheap hillshade baked into colour)
-  const { x0, z0, cols, rows } = t, out = [], light = [-0.55, -0.4, 0.72], SUB = 3, step = t.step / SUB;
-  const Hs = makeSampler(t);
-  const hmin = Math.min(...t.heights), hmax = Math.max(...t.heights), span = Math.max(1, hmax - hmin);
-  const ramp = (h) => { const f = Math.min(1, Math.max(0, (h - hmin) / span)) * (HYPSO.length - 1), k = Math.floor(f), u = f - k, a = HYPSO[k], b = HYPSO[Math.min(HYPSO.length - 1, k + 1)]; return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]; };
-  for (let r = 0; r < (rows - 1) * SUB; r++) for (let c = 0; c < (cols - 1) * SUB; c++) {
-    const h = (rr, cc) => Hs(x0 + cc * step, z0 + rr * step);
-    const dx = (h(r, c + 1) - h(r, c)) / step, dz = (h(r + 1, c) - h(r, c)) / step; // slope
-    const n = [-dx * 3, -dz * 3, 1], L = Math.hypot(...n); const shade = Math.max(0.42, Math.min(1.22, (n[0] * light[0] + n[1] * light[1] + n[2] * light[2]) / L + 0.32));
-    const hm = (h(r, c) + h(r + 1, c + 1)) / 2;
-    const x = x0 + c * step, z = z0 + r * step;
-    if (limit && !inPolyXZ([x + step / 2, z + step / 2], limit)) continue; // nothing outside the playable area
-    const col = ramp(hm);
-    const sh = shade;
-    out.push({ poly: [[x, z, h(r, c)], [x + step, z, h(r, c + 1)], [x + step, z + step, h(r + 1, c + 1)], [x, z + step, h(r + 1, c)]], color: col.map((v) => Math.min(255, v * sh)) });
-  }
-  return out;
-}
 const OVERLAY = { depthCompare: 'always', depthWriteEnabled: false };
+// One SDF recipe for every TextLayer so glyph weight is identical across major/minor/extract text.
+const LABEL_SDF = { sdf: true, fontSize: 64, buffer: 8, radius: 12 };
+// The requirement line under an extract name. Hand-written because the raw notes are sentences
+// ("Requires lever activation in warehouse #4 and Factory emergency exit key") and a HUD chip is not a paragraph.
+const EXTRACT_SUB = {
+  'Old Gas Station': 'REQ: GREEN FLARE', 'Railroad Passage (Flare)': 'REQ: GREEN FLARE',
+  "Smugglers' Boat": 'REQ: VORON NOTE', "Smugglers' Bunker (ZB-1012)": 'REQ: VORON NOTE',
+  'Dorms V-Ex': 'REQ: 20K ROUBLES', 'ZB-013': 'REQ: LEVER + KEY',
+  'RUAF Roadblock': 'PVE ONLY', 'Boiler Room Basement (Co-op)': 'CO-OP · PMC + SCAV',
+};
+const SUB_BY_KIND = { 'extract-pmc': 'PMC ONLY', 'extract-scav': 'SCAV ONLY', 'extract-shared': 'PMC + SCAV', 'extract-transit': 'TRANSIT · 1 MIN' };
+const subText = (m) => EXTRACT_SUB[(m.name || '').trim()] ?? SUB_BY_KIND[m.kind] ?? '';
+// short form = full name minus any parenthetical: "Smugglers' Bunker (ZB-1012)" -> "SMUGGLERS' BUNKER"
+const shortName = (n) => (n || '').replace(/\s*\([^)]*\)\s*/g, ' ').trim().toUpperCase();
+const EXTRACT_ACCENT = { 'extract-pmc': C.accentExtract, 'extract-scav': C.accentExtractScav, 'extract-transit': C.accentExtractTransit, 'extract-shared': C.accentExtractNeutral };
+
 // icons/labels always on top of geometry
 const ring = (poly) => poly.map((p) => P(p));
 const ringAt = (poly, y) => poly.map((p) => P(p, y));
@@ -126,42 +128,326 @@ function hipRoof(b) {
 // only near-rectangular footprints get a pitched roof; L-shapes etc. stay flat so walls always sit under the roof
 function isRectangular(poly) { const o = obb(poly); const a = (o.mx[0] - o.mn[0]) * (o.mx[1] - o.mn[1]); return polyArea(poly) / a > 0.85; }
 function columns(poly, spacing = 6) { const out = []; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const n = Math.max(1, Math.round(L / spacing)); for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); } return out; }
-function pylonParts(b, posts, slabs, edges) {
+// Lattice pylon: 4 legs tapering inward over 3 stacked segments, two cross-arms, insulator dots
+// and diagonal bracing. Straight untapered posts were the most obviously-CG thing on the ridge.
+function pylonParts(b, posts, slabs, edges, dots) {
   const o = obb(b.poly), H0 = b.height || 22, base = b.base ?? 0, { mn, mx, toXZ } = o;
   const cx = (mn[0] + mx[0]) / 2, cy = (mn[1] + mx[1]) / 2, w = Math.max(3, Math.min(mx[0] - mn[0], mx[1] - mn[1]));
-  for (const [du, dv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) posts.push({ pos: toXZ(cx + du * w * 0.38, cy + dv * w * 0.38), h: H0, w: 0.45, color: [120, 120, 118], base });
-  const arm = [toXZ(cx - w * 0.9, cy), toXZ(cx + w * 0.9, cy)]; // cross-arm at the top
-  edges.push({ path: [[...P(arm[0]), H0 - 1.5], [...P(arm[1]), H0 - 1.5]].map(([x, y, z]) => [x, y, z]), base, wide: true });
-  slabs.push({ poly: [toXZ(cx - w * 0.45, cy - w * 0.45), toXZ(cx + w * 0.45, cy - w * 0.45), toXZ(cx + w * 0.45, cy + w * 0.45), toXZ(cx - w * 0.45, cy + w * 0.45)], z: H0, color: [130, 130, 128], base });
+  const legs = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  const spread = (t) => w * (0.38 - 0.135 * t); // 35% narrower at the top
+  for (const [du, dv] of legs) for (let i = 0; i < 3; i++) {
+    const t = (i + 0.5) / 3, f = spread(t);
+    posts.push({ pos: toXZ(cx + du * f, cy + dv * f), h: H0 / 3 + 0.2, w: 0.34 - i * 0.05, color: [126, 126, 122], base: base + (i * H0) / 3 });
+  }
+  const armAt = (z, len) => { const a = toXZ(cx - len, cy), c = toXZ(cx + len, cy);
+    edges.push({ path: [[...P(a), z], [...P(c), z]], base, wide: true });
+    for (const q of [a, toXZ(cx, cy), c]) dots.push({ pos: [...P(q), base + z + 0.12], r: 0.22, color: [206, 202, 192], lvl: 0 });
+    for (const q of [a, c]) posts.push({ pos: q, h: 0.5, w: 0.15, color: [110, 110, 106], base: base + z - 0.5 }); };
+  armAt(H0 - 1.5, w * 0.9);
+  armAt(H0 * 0.72, w * 0.66);
+  // diagonal bracing on two faces
+  for (const [du, dv] of [[-1, -1], [1, 1]]) {
+    const lo = spread(0.1), hi = spread(0.75);
+    edges.push({ path: [[...P(toXZ(cx + du * lo, cy + dv * lo)), 0.5], [...P(toXZ(cx - du * hi, cy + dv * hi)), H0 * 0.62]], base });
+    edges.push({ path: [[...P(toXZ(cx - du * lo, cy + dv * lo)), 0.5], [...P(toXZ(cx + du * hi, cy + dv * hi)), H0 * 0.62]], base });
+  }
+  slabs.push({ poly: [toXZ(cx - w * 0.28, cy - w * 0.28), toXZ(cx + w * 0.28, cy - w * 0.28), toXZ(cx + w * 0.28, cy + w * 0.28), toXZ(cx - w * 0.28, cy + w * 0.28)], z: H0, color: [126, 126, 122], base });
 }
-function buildingParts(bs) {
-  const walls = [], roofs = [], slabs = [], posts = [], edges = [];
+// power cables hang; a straight line between two towers reads as a wireframe, not a wire
+const catenary = (path, y, sag = 1.2) => {
+  const out = [];
+  for (let i = 0; i < path.length - 1; i++) { const a = path[i], b = path[i + 1];
+    for (let k = 0; k < 4; k++) { const t = k / 4; out.push(Pg([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], y - sag * 4 * t * (1 - t))); } }
+  out.push(Pg(path[path.length - 1], y));
+  return out;
+};
+// ---- TRACK C: building personality -------------------------------------------------------
+// Every recipe below composes the primitives that already exist (obb / expand / rbox / circle /
+// strip / ringAt / columns) into FIVE shared buckets — extruded boxes, flat quads, solid lines,
+// dashed lines, dots — so ~20 identity recipes cost 5 draw calls, not 100.
+// `lvl` on each item is its height ABOVE the building base, so the floor selector can cut it.
+const mul = (c, k) => [Math.min(255, Math.round(c[0] * k)), Math.min(255, Math.round(c[1] * k)), Math.min(255, Math.round(c[2] * k)), c[3] ?? 255];
+// NOTE: 15% below the spec's values — deck's ambient+sun multiplies these by ~1.5 and the spec
+// numbers rendered as near-white boxes next to C.building [150,143,130].
+const BOX_WALL_TINTS = [[168, 161, 150], [156, 151, 141], [146, 141, 133], [136, 133, 126]];
+const BOX_ROOF_TINTS = [[120, 122, 118], [110, 106, 100], [130, 126, 118]];
+// Flat-roof colours for the landmarks the build script only colours the walls of. Seen from a
+// tilted top-down camera the roof IS the building, so a landmark whose roof is generic grey is
+// unrecognisable from overview zoom.
+const ROOF_BY_PLACE = { 'Dorms 2-Story': [122, 78, 62], 'Dorms 3-Story': [122, 78, 62], 'Big Red': [116, 62, 52],
+  'Fortress': [104, 101, 95], 'Oil Rig': [104, 100, 94], 'Military Checkpoint': [110, 106, 100], 'Old Gas': [112, 108, 100] };
+// generic unnamed boxes must not all be the same grey; the tint is a deterministic hash of the
+// centroid so it never flickers between frames.
+function tintBuildings(bs) {
   for (const b of bs) {
-    if (b.kind === 'powerline_towers') { pylonParts(b, posts, slabs, edges); continue; }
+    if (b.color || b.place || b.kind === 'powerline_towers') continue;
+    const c = b.poly.reduce((a, p) => [a[0] + p[0] / b.poly.length, a[1] + p[1] / b.poly.length], [0, 0]);
+    const r = hash1(c[0], c[1]);
+    b.tint = BOX_WALL_TINTS[Math.floor(r * 4) % 4];
+    b.roofTint = BOX_ROOF_TINTS[Math.floor(r * 97) % 3];
+  }
+}
+function detailParts(bs, scenes = []) {
+  const out = { boxes: [], flats: [], lines: [], dashes: [], dots: [] };
+  const B = (poly, base, h, color, lvl = 0) => { if (poly && poly.length > 2 && h > 0.02) out.boxes.push({ poly, base, h, color, lvl }); };
+  const F = (poly, z, color, lvl = 0) => { if (poly && poly.length > 2) out.flats.push({ ring: ringAt(poly, z), color, lvl }); };
+  const F3 = (ring, color, lvl = 0) => out.flats.push({ ring, color, lvl });
+  const L = (path, color, w, lvl = 0) => { if (path.length > 1) out.lines.push({ path, color, w, lvl }); };
+  const D = (path, color, w, dash, lvl = 0) => { if (path.length > 1) out.dashes.push({ path, color, w, dash, lvl }); };
+  const T = (pos, r, color, lvl = 0) => out.dots.push({ pos, r, color, lvl });
+  const closed = (poly, z) => { const r = ringAt(poly, z); return [...r, r[0]]; };
+  const seg = (a, b, za, zb) => [P(a, za), P(b, zb ?? za)];
+
+  for (const b of bs) {
+    if (b.kind === 'powerline_towers') continue; // pylonParts owns those
+    const st = b.style || 'box', place = b.place || '';
+    const base = b.base ?? 0, h = b.height, A = polyArea(b.poly);
+    const o = obb(b.poly);
+    const cen = b.poly.reduce((a, p) => [a[0] + p[0] / b.poly.length, a[1] + p[1] / b.poly.length], [0, 0]);
+    const rnd = hash1(cen[0], cen[1]);
+    const uLong = o.mx[0] - o.mn[0] >= o.mx[1] - o.mn[1];
+    const u0 = uLong ? o.mn[0] : o.mn[1], u1 = uLong ? o.mx[0] : o.mx[1];
+    const v0 = uLong ? o.mn[1] : o.mn[0], v1 = uLong ? o.mx[1] : o.mx[0];
+    const pt = uLong ? (u, v) => o.toXZ(u, v) : (u, v) => o.toXZ(v, u);
+    const rect = (a0, a1, c0, c1) => [pt(a0, c0), pt(a1, c0), pt(a1, c1), pt(a0, c1)];
+    const LEN = u1 - u0, WID = v1 - v0, vm = (v0 + v1) / 2;
+    const wall = b.color ?? b.tint ?? (b.floors > 1 ? C.buildingMulti : C.building);
+    const roof = b.roof ?? ROOF_BY_PLACE[place] ?? b.roofTint ?? C.roofFlat;
+
+    // --- 1. plinth: every building meets the ground instead of being pasted onto it
+    if (st !== 'canopy') B(expand(b.poly, 0.25), base, 0.75, mul(wall, 0.7), 0);
+
+    // --- 2. window bands: one dashed ring per floor. Dashes read as glass, gaps as piers.
+    const banded = st === 'box' && A >= 40 && !['Fortress', 'Big Red'].includes(place) && b.kind !== 'tank';
+    if (banded) for (let k = 1; k <= b.floors; k++) {
+      const z = k * 3.3 - 1.35; if (z > h - 0.4) break;
+      D(closed(b.poly, base + z), C.glass, 1.15, place.startsWith('Dorms') ? [1.55, 1.35] : [1.6, 1.5], z);
+    }
+
+    // --- 3. parapet lip + roof slab: roof and wall stop being the same grey
+    if (st === 'box') {
+      L(closed(expand(b.poly, 0.04), base + h + 0.30), C.parapet, 0.35, h);
+      F(expand(b.poly, -0.35), base + h + 0.02, roof, h);
+    }
+
+    // --- 4. door + threshold on the long facade
+    if (st !== 'canopy' && st !== 'frame' && A >= 25 && LEN > 4) {
+      const dw = Math.min(1.3, LEN * 0.22), dh = Math.min(2.1, h - 0.3);
+      const doorAt = (t) => { const um = u0 + LEN * t; B(rect(um - dw / 2, um + dw / 2, v0 - 0.14, v0 + 0.10), base, dh, C.dockDoor, 0);
+        L(seg(pt(um - dw / 2 - 0.2, v0 - 0.22), pt(um + dw / 2 + 0.2, v0 - 0.22), base + 0.05), [...C.cream, 150], 0.18, 0); };
+      doorAt(0.42); if (A > 400) doorAt(0.72);
+    }
+
+    // --- 5. roof clutter + corner pilasters (deterministic from the centroid hash)
+    if (st === 'box' && A >= 60 && LEN > 6 && WID > 5) {
+      const n = 1 + Math.floor(rnd * 3);
+      for (let i = 0; i < n; i++) {
+        const t = (rnd * (i + 3) * 7.13) % 1, s = (rnd * (i + 5) * 3.71) % 1;
+        const cu = u0 + 2.2 + (LEN - 4.4) * t, cv = v0 + 2 + (WID - 4) * s;
+        B(rect(cu - 0.45, cu + 0.45, cv - 0.45, cv + 0.45), base + h, 0.6, C.tower, h);
+      }
+      if (b.floors >= 2) B(rect(u0 + LEN * 0.2 - 1.6, u0 + LEN * 0.2 + 1.6, vm - 1.2, vm + 1.2), base + h, 2.4, mul(wall, 0.93), h);
+    }
+    if (st === 'box' && LEN > 20) for (const [cu, cv] of [[u0, v0], [u1, v0], [u0, v1], [u1, v1]])
+      B(rect(cu - 0.2, cu + 0.2, cv - 0.2, cv + 0.2), base, h, mul(wall, 0.88), 0);
+
+    // --- 6. gable roofs: ridge cap, eave line, corrugation ribs, skylight strips
+    if (st === 'gable' && isRectangular(b.poly)) {
+      const eave = h * 0.72, ridge = h + 0.4, r0 = u0 + WID / 2, r1 = u1 - WID / 2;
+      const zOn = (v) => eave + (ridge - eave) * Math.min(1, Math.abs(v - (v < vm ? v0 : v1)) / (WID / 2 || 1));
+      L(seg(pt(r0, vm), pt(r1, vm), base + ridge + 0.06), mul(roof, 1.2), 0.5, h);
+      L(closed(expand(b.poly, 0.05), base + eave), [...C.ink, 90], 0.3, eave);
+      const nRib = Math.max(4, Math.min(12, Math.round(LEN / 4)));
+      for (let i = 1; i < nRib; i++) {
+        const u = u0 + (LEN * i) / nRib, uc = Math.min(r1, Math.max(r0, u));
+        L([P(pt(u, v0), base + eave), P(pt(uc, vm), base + ridge)], C.roofRib, 0.18, eave);
+        L([P(pt(u, v1), base + eave), P(pt(uc, vm), base + ridge)], C.roofRib, 0.18, eave);
+      }
+      for (let i = 0; i < 3; i++) {
+        const ua = u0 + LEN * (0.18 + i * 0.28), ub = ua + Math.min(1.6, LEN * 0.06);
+        for (const side of [-1, 1]) {
+          const va = side < 0 ? v0 + WID * 0.28 : v1 - WID * 0.28, vb = side < 0 ? v0 + WID * 0.44 : v1 - WID * 0.44;
+          F3([P(pt(ua, va), base + zOn(va) + 0.04), P(pt(ub, va), base + zOn(va) + 0.04), P(pt(ub, vb), base + zOn(vb) + 0.04), P(pt(ua, vb), base + zOn(vb) + 0.04)], C.skylight, h);
+        }
+      }
+      D(closed(b.poly, base + 1.4), mul(wall, 0.86), 0.25, [0.5, 0.5], 1.4);
+      if (eave > 4.2) D(closed(b.poly, base + 3.6), mul(wall, 0.86), 0.25, [0.5, 0.5], 3.6);
+    }
+
+    // --- 7. frame (Skeleton, Old Construction): a real column grid, edge beams, a shear core
+    if (st === 'frame') {
+      const top = b.floors * 3.3;
+      for (let u = u0 + 2.2; u < u1 - 1; u += 4.5) for (let v = v0 + 2.2; v < v1 - 1; v += 4.5) {
+        const q = pt(u, v); if (!inPolyXZ(q, b.poly)) continue;
+        B(rect(u - 0.28, u + 0.28, v - 0.28, v + 0.28), base, top - 0.25, C.concreteRaw, 0);
+      }
+      for (let k = 1; k <= b.floors; k++) L(closed(expand(b.poly, 0.04), base + k * 3.3 - 0.15), mul(C.concreteRaw, 0.78), 0.3, k * 3.3);
+      B(rect(u0 + 0.4, u0 + 5.4, vm - 2, vm + 2), base, top, mul(C.concreteRaw, 0.88), 0);
+      for (const q of columns(b.poly, 6)) T([...P(q), base + top + 0.45], 0.1, C.rebar, top);
+      F(rect(u1 - 5, u1 - 1.5, vm - 1.5, vm + 1.5), base + top + 0.03, [26, 28, 26], top);
+      for (let i = 0; i < 5; i++) {
+        const a = hash1(cen[0] + i * 13.3, cen[1] - i * 7.7), a2 = hash1(cen[0] - i * 5.1, cen[1] + i * 11.9);
+        F(circle(cen[0] + (a - 0.5) * (LEN + 12), cen[1] + (a2 - 0.5) * (WID + 12), 1.4 + a * 2, 7), base + 0.05, C.rock, 0);
+      }
+      B(rect(u0 - 2.6, u0 - 0.2, vm - 1.2, vm + 1.2), base, 0.12, mul(C.concreteRaw, 0.8), 0);
+    }
+
+    // --- 8. canopy (New Gas, Old Gas, Bus Station): fascia, accent stripe, trapped shade, pumps
+    if (st === 'canopy') {
+      const fascia = place === 'New Gas' ? C.bigRedTrim : place === 'Old Gas' ? [150, 146, 134] : [176, 172, 160];
+      const stripe = place === 'New Gas' ? C.bigRed : place === 'Old Gas' ? [86, 110, 124] : C.hazardStripe;
+      B(expand(b.poly, 0.18), base + h - 0.45, 0.45, fascia, h);
+      L(closed(expand(b.poly, 0.24), base + h - 0.18), stripe, 0.22, h);
+      F(expand(b.poly, -0.25), base + h - 0.62, [8, 14, 10, 120], h - 0.62);
+      const nIsl = place === 'Old Gas' ? 1 : 2;
+      for (let i = 0; i < nIsl; i++) {
+        const v = nIsl === 1 ? vm : v0 + WID * (0.32 + 0.36 * i);
+        B(rect(u0 + LEN * 0.22, u0 + LEN * 0.78, v - 0.5, v + 0.5), base, 0.18, C.pavementWorn, 0);
+        for (const t of [0.34, 0.66]) B(rect(u0 + LEN * t - 0.3, u0 + LEN * t + 0.3, v - 0.25, v + 0.25), base + 0.18, 1.7, [188, 186, 178], 0);
+      }
+      if (place === 'Old Gas') { const q = pt(u0 + LEN * 0.5, v1 - 1.4); B(circle(q[0], q[1], 0.6, 10), base, 1.2, C.concreteRaw, 0); }
+      if (place === 'New Gas') { const q = pt(u1 + 3, vm); B(circle(q[0], q[1], 0.18, 8), base, 4.5, C.parapet, 0); B(rect(u1 + 1.7, u1 + 4.3, vm - 0.12, vm + 0.12), base + 3.6, 0.9, C.bigRed, 0); }
+    }
+
+    // --- 9. tanks: domed cap, hoop bands, catwalk + rail, ladder, bund wall
+    if (st === 'tank' || b.kind === 'tank') {
+      const r = Math.sqrt(A / Math.PI);
+      F(circle(cen[0], cen[1], r * 0.72, 20), base + h + 0.55, [206, 210, 207], h);
+      for (const f of [0.3, 0.55, 0.8]) L(closed(circle(cen[0], cen[1], r + 0.04, 20), base + h * f), C.tankBand, 0.22, h * f);
+      L(closed(circle(cen[0], cen[1], r + 0.5, 20), base + h * 0.78), [140, 144, 142], 0.6, h * 0.78);
+      L(closed(circle(cen[0], cen[1], r + 0.5, 20), base + h * 0.78 + 0.9), C.bridgeRail, 0.15, h * 0.78);
+      for (const dv of [-0.22, 0.22]) L([P([cen[0] + (r + 0.1), cen[1] + dv], base), P([cen[0] + (r + 0.1), cen[1] + dv], base + h + 0.6)], [150, 152, 150], 0.09, 0);
+      D([P([cen[0] + r + 0.1, cen[1]], base), P([cen[0] + r + 0.1, cen[1]], base + h + 0.6)], [150, 152, 150], 0.44, [0.15, 0.25], 0);
+      const bd = circle(cen[0], cen[1], r + 3.2, 24);
+      B(strip([...bd, bd[0]], 0.2), base, 0.9, mul(C.concreteRaw, 0.85), 0);
+      F(circle(cen[0], cen[1], r + 3.0, 24), base + 0.04, mul(C.pavement, 0.88), 0);
+    }
+
+    // --- 10. landmarks -------------------------------------------------------------------
+    if (place === 'Big Red') {
+      for (let u = u0 + 1.5; u < u1 - 1; u += 3.0) for (const v of [v0, v1])
+        B(rect(u - 0.11, u + 0.11, v - 0.12, v + 0.12), base, h, mul(wall, 0.86), 0);
+      L(closed(expand(b.poly, 0.08), base + 5.2), C.bigRedTrim, 0.8, 5.2);
+      for (const t of [0.22, 0.5, 0.78]) {
+        B(rect(u0 + LEN * t - 2.25, u0 + LEN * t + 2.25, v0 - 0.16, v0 + 0.06), base, 4.2, C.dockDoor, 0);
+        L(closed(rect(u0 + LEN * t - 2.4, u0 + LEN * t + 2.4, v0 - 0.24, v0 - 0.2), base + 4.35), C.bigRedTrim, 0.15, 4.35);
+      }
+      F(rect(u0, u1, v0 - 8, v0 - 0.1), base + 0.06, C.pavement, 0);
+      for (const t of [0.35, 0.65]) L(seg(pt(u0 + LEN * t, v0 - 7.6), pt(u0 + LEN * t, v0 - 0.6), base + 0.08), C.roadMarking, 0.18, 0);
+      for (const t of [0.3, 0.7]) B(rect(u0 + LEN * t - 0.45, u0 + LEN * t + 0.45, vm - 0.45, vm + 0.45), base + h + 0.4, 1.1, C.tower, h);
+    }
+    if (place.startsWith('Dorms') && A > 300) {
+      B(rect(u0 - 0.15, u0 + 3.6, vm - 2.1, vm + 2.1), base, h + 1.4, mul(wall, 0.97), 0);
+      B(rect(u0 + 0.5, u0 + 1.0, vm - 2.2, vm + 2.2), base, h + 1.4, C.glass, 0);
+      B(rect(u0 + LEN * 0.5 - 1.7, u0 + LEN * 0.5 + 1.7, v0 - 1.6, v0), base + 3.0, 0.2, C.parapet, 3.0);
+      for (const t of [-1.5, 1.5]) B(rect(u0 + LEN * 0.5 + t - 0.09, u0 + LEN * 0.5 + t + 0.09, v0 - 1.4, v0 - 1.22), base, 3.0, C.parapet, 0);
+      const q = pt(u1 - 3, vm); B(circle(q[0], q[1], 0.8, 14), base + h + 0.55, 1.2, C.tank, h);
+      if (b.floors >= 3) for (let k = 1; k <= 2; k++) {
+        L(closed(expand(b.poly, 0.5), base + k * 3.3), mul(wall, 0.9), 0.9, k * 3.3);
+        L(closed(expand(b.poly, 0.9), base + k * 3.3 + 0.9), C.bridgeRail, 0.12, k * 3.3);
+      }
+    }
+    if (place === 'Fortress') {
+      for (let k = 1; k <= 2; k++) D(closed(b.poly, base + k * 3.3 - 1.4), [26, 34, 36, 240], 0.55, [0.55, 2.6], k * 3.3);
+      D(closed(expand(b.poly, 0.06), base + h + 0.55), [196, 192, 182], 0.55, [1.25, 1.25], h);
+      const rim = columns(expand(b.poly, -0.6), Math.max(2.2, (LEN + WID) * 2 / 14));
+      rim.forEach((q, i) => B(rbox(q[0], q[1], 0.5, 0.9, i * 37 % 180), base + h + 0.06, 0.5, C.sandbag, h));
+      B(rect(u1 - 2.2, u1 - 0.6, v0 + 0.6, v0 + 2.2), base + h + 0.06, 0.9, mul(C.concreteRaw, 0.8), h);
+      for (const t of [0.33, 0.66]) for (const v of [v0, v1]) L(seg(pt(u0 + LEN * t, v - 0.1), pt(u0 + LEN * t, v + 0.1), base + h * 0.5), [...C.ink, 120], 0.25, 0);
+      for (let i = 0; i < 6; i++) { const q = pt(u0 + LEN * (0.1 + i * 0.16), v0 - 4 - (i % 2) * 1.6); B(rbox(q[0], q[1], 0.6, 1.8, (i % 2) * 8), base, 1.0, C.concreteRaw, 0); }
+    }
+    if (place === 'Crackhouse' || place === 'Streamer House') {
+      const eave = h * 0.72, ridge = h + 0.4;
+      B(rect(u0 + LEN * 0.3 - 0.42, u0 + LEN * 0.3 + 0.42, v1 - 1.4, v1 - 0.56), base + eave - 1, ridge + 1.6 - eave + 1, mul(wall, 0.88), h);
+      B(rect(u0 + LEN * 0.55 - 1.5, u0 + LEN * 0.55 + 1.5, v0 - 2.4, v0), base + 2.4, 0.18, mul(wall, 0.8), 2.4);
+      for (const t of [-1.3, 1.3]) B(rect(u0 + LEN * 0.55 + t - 0.09, u0 + LEN * 0.55 + t + 0.09, v0 - 2.2, v0 - 2.02), base, 2.4, C.parapet, 0);
+      for (let i = 0; i < 3; i++) B(rect(u0 + LEN * 0.55 - 0.6, u0 + LEN * 0.55 + 0.6, v0 - 2.4 - i * 0.3, v0 - 2.15 - i * 0.3), base, 0.12 * (3 - i), [138, 116, 92], 0);
+      const va = v0 + WID * 0.3, vb = v0 + WID * 0.46, zA = eave + (ridge - eave) * 0.6, zB = eave + (ridge - eave) * 0.92;
+      const ua = u0 + LEN * 0.4, ub = ua + 2.4;
+      F3([P(pt(ua, va), base + zA + 0.05), P(pt(ub, va), base + zA + 0.05), P(pt(ub, vb), base + zB + 0.05), P(pt(ua, vb), base + zB + 0.05)], [16, 19, 18, 225], h);
+      for (let i = 1; i < 5; i++) { const u = ua + (2.4 * i) / 5; L([P(pt(u, va), base + zA + 0.07), P(pt(u, vb), base + zB + 0.07)], [96, 72, 56], 0.1, h); }
+    }
+    if (place === 'Boiler') {
+      for (const t of [0.28, 0.62]) { const q = pt(u0 + LEN * t, vm); B(circle(q[0], q[1], 0.9, 18), base + h * 0.7, 9, [140, 136, 128], h);
+        for (let i = 0; i < 3; i++) L(closed(circle(q[0], q[1], 0.95, 18), base + h * 0.7 + 7.6 + i * 0.5), i % 2 ? C.cream : C.bigRed, 0.5, h); }
+      L(seg(pt(u0 + 1, v0 - 3.2), pt(u1 - 1, v0 - 3.2), base + 1.75), [132, 128, 120], 0.35, 0);
+      for (let u = u0 + 2; u < u1 - 1; u += 6) B(rect(u - 0.12, u + 0.12, v0 - 3.35, v0 - 3.05), base, 1.75, C.parapet, 0);
+    }
+    if (place === 'Water Pump') {
+      const q = pt((u0 + u1) / 2, vm); B(circle(q[0], q[1], 1.1, 16), base + h, 2.2, C.tank, h);
+      L(closed(circle(q[0], q[1], 0.55, 12), base + 1.2), [150, 152, 150], 0.14, 1.2);
+    }
+  }
+
+  // --- 11. scenes with no footprint in the data: bunker mouths + checkpoints ---------------
+  for (const s of scenes) {
+    const [x, z] = s.pos, a = s.rot, ca = Math.cos(a), sa = Math.sin(a);
+    const R = (du, dv) => [x + du * ca - dv * sa, z + du * sa + dv * ca];
+    const g = H(x, z);
+    if (s.type === 'bunker') {
+      out.boxes.push({ poly: rbox(...R(0, 0), 1.1, 3.2, (a * 180) / Math.PI), base: g, h: 2.6, color: [146, 142, 132], lvl: 0 });
+      out.boxes.push({ poly: rbox(...R(-0.62, 0), 0.35, 2.0, (a * 180) / Math.PI), base: g, h: 2.2, color: [20, 24, 20, 235], lvl: 0 });
+      out.flats.push({ ring: ringAt(rbox(...R(2.4, 0), 4, 3, (a * 180) / Math.PI), g + 0.06), color: mul(C.pavement, 0.85), lvl: 0 });
+      for (const dv of [-2.2, 2.2]) out.boxes.push({ poly: circle(...R(0.4, dv), 0.3, 10), base: g, h: 1.2, color: [122, 120, 112], lvl: 0 });
+      L([P(R(-0.8, -1.05), g + 2.25), P(R(-0.8, 1.05), g + 2.25)], [...C.cream, 170], 0.16, 0);
+    }
+    if (s.type === 'checkpoint') {
+      out.boxes.push({ poly: rbox(...R(-4, 3.4), 3, 3, (a * 180) / Math.PI), base: g, h: 2.8, color: [160, 156, 146], lvl: 0 });
+      out.boxes.push({ poly: rbox(...R(-4, 1.95), 0.3, 2.0, (a * 180) / Math.PI), base: g + 0.9, h: 1.3, color: C.glass, lvl: 0 });
+      out.flats.push({ ring: ringAt(rbox(...R(-4, 3.4), 3.6, 3.6, (a * 180) / Math.PI), g + 2.85), color: [110, 106, 100], lvl: 0 });
+      // boom barrier: two overlaid dashed paths read as hazard chevrons
+      const bA = P(R(-2.4, 2.2), g + 1.15), bB = P(R(-2.4, -4.4), g + 1.15);
+      D([bA, bB], [...C.cream, 255], 0.28, [0.8, 0.8], 0);
+      D([[bA[0] + 0.55, bA[1], bA[2]], [bB[0] + 0.55, bB[1], bB[2]]], C.bigRed, 0.28, [0.8, 0.8], 0);
+      out.boxes.push({ poly: rbox(...R(-2.4, 2.5), 0.5, 0.5, 0), base: g, h: 1.3, color: [120, 118, 112], lvl: 0 });
+      for (let i = 0; i < 6; i++) out.boxes.push({ poly: rbox(...R(1.6 + (i % 2) * 1.2, -3.5 + i * 1.4), 0.6, 2.4, (a * 180) / Math.PI + (i % 2) * 8), base: g, h: 0.95, color: [148, 144, 136], lvl: 0 });
+      out.boxes.push({ poly: circle(...R(4.4, 3.6), 2.2, 18), base: g, h: 0.95, color: C.sandbag, lvl: 0 });
+      out.boxes.push({ poly: circle(...R(-6, -1), 0.2, 8), base: g, h: 4.5, color: [120, 118, 112], lvl: 0 });
+      out.boxes.push({ poly: rbox(...R(-6, -1), 0.35, 0.7, (a * 180) / Math.PI), base: g + 4.5, h: 0.3, color: [150, 148, 142], lvl: 0 });
+      out.flats.push({ ring: ringAt(rbox(...R(-0.5, -1), 3, 6, (a * 180) / Math.PI), g + 0.07), color: [30, 34, 32, 120], lvl: 0 });
+      if (s.tower) {
+        for (const [du, dv] of [[-1.4, -1.4], [1.4, -1.4], [1.4, 1.4], [-1.4, 1.4]]) out.boxes.push({ poly: rbox(...R(6 + du, 5 + dv), 0.35, 0.35, 0), base: g, h: 4.5, color: [126, 124, 118], lvl: 0 });
+        out.flats.push({ ring: ringAt(rbox(...R(6, 5), 3.2, 3.2, (a * 180) / Math.PI), g + 4.6), color: [130, 126, 118], lvl: 0 });
+        L(closed(rbox(...R(6, 5), 3.2, 3.2, (a * 180) / Math.PI), g + 5.5), C.bridgeRail, 0.12, 0);
+        out.flats.push({ ring: ringAt(rbox(...R(6, 5), 3.6, 3.6, (a * 180) / Math.PI), g + 6.6), color: [110, 106, 100], lvl: 0 });
+      }
+    }
+  }
+  return out;
+}
+
+function buildingParts(bs) {
+  const walls = [], roofs = [], slabs = [], posts = [], edges = [], dots = [];
+  for (const b of bs) {
+    if (b.kind === 'powerline_towers') { pylonParts(b, posts, slabs, edges, dots); continue; }
     const st = b.style || 'box';
     if (st === 'box' || st === 'tank') walls.push({ ...b, h: b.height });
-    if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [215, 220, 226], base: b.base });
+    if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [196, 200, 198], base: b.base });
     if (st === 'gable') {
       if (!isRectangular(b.poly)) { walls.push({ ...b, h: b.height }); slabs.push({ poly: b.poly, z: b.height + 0.02, color: b.roof ?? C.roofWarehouse, base: b.base }); continue; }
       walls.push({ ...b, h: b.height * 0.72 });
       const rc = b.roof ?? (['Crackhouse', 'Streamer House'].includes(b.place) ? C.roofHouse : C.roofWarehouse), shade = (k) => rc.map((c) => Math.min(255, c * k));
       hipRoof(b).forEach((pts, i) => roofs.push({ pts, color: shade([1, 0.82, 0.9, 0.9][i]), b }));
     }
-    if (st === 'frame') { for (let k = 1; k <= b.floors; k++) { const z = k * 3.3; slabs.push({ poly: b.poly, z, color: [190, 190, 188, 205], base: b.base }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]], base: b.base }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: b.floors * 3.3, w: 0.7, color: [175, 175, 172], base: b.base }); }
-    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? [235, 235, 235], base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: [200, 200, 200], base: b.base }); }
+    if (st === 'frame') { for (let k = 1; k <= b.floors; k++) { const z = k * 3.3; slabs.push({ poly: b.poly, z, color: [C.concreteRaw[0], C.concreteRaw[1], C.concreteRaw[2], 235], base: b.base }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]], base: b.base }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: b.floors * 3.3, w: 0.55, color: C.concreteRaw, base: b.base }); }
+    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? C.roofFlat, base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: C.parapet, base: b.base }); }
   }
-  return { walls, roofs, slabs, posts, edges };
+  return { walls, roofs, slabs, posts, edges, dots };
 }
 // rotated box footprint in game coords: centre (x,z), w across, l along heading rot (deg)
 function rbox(x, z, w, l, rot) { const a = (rot * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a); return [[-l / 2, -w / 2], [l / 2, -w / 2], [l / 2, w / 2], [-l / 2, w / 2]].map(([u, v]) => [x + u * c - v * sn, z + u * sn + v * c]); }
 const circle = (x, z, r, n = 18) => Array.from({ length: n }, (_, i) => [x + r * Math.cos((i / n) * 2 * Math.PI), z + r * Math.sin((i / n) * 2 * Math.PI)]);
 // thin strip polygon around a polyline (for fences/walls)
 function strip(path, w) { const L = [], R = []; for (let i = 0; i < path.length; i++) { const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)]; const dx = b[0] - a[0], dz = b[1] - a[1], n = Math.hypot(dx, dz) || 1; L.push([path[i][0] - (dz / n) * w, path[i][1] + (dx / n) * w]); R.push([path[i][0] + (dz / n) * w, path[i][1] - (dx / n) * w]); } return [...L, ...R.reverse()]; }
-const PROP_COLORS = { container: [200, 70, 60], tank: [200, 205, 212], tanker: [205, 205, 210], railcar: [90, 80, 75], vehicle: [120, 130, 140], crane: [220, 180, 60], wall: [190, 186, 180], pipe: [150, 150, 150] };
+const PROP_COLORS = { container: [146, 74, 58], tank: [154, 158, 158], tanker: [162, 164, 166], railcar: [78, 72, 68], vehicle: [104, 112, 120], crane: [186, 150, 56], wall: [150, 146, 136], pipe: [128, 126, 120] };
+// containers/vehicles get a deterministic rusted tint so the yards stop reading as one plastic red
+const hash1 = (a, b) => { const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return n - Math.floor(n); };
+const CONTAINER_TINTS = [[146, 74, 58], [96, 104, 100], [122, 116, 102], [110, 88, 70]];
 function propParts(props) { // -> extruded footprints with base at terrain
   return props.map((p) => {
     const base = H(p.x ?? p.path?.[0]?.[0] ?? 0, p.z ?? p.path?.[0]?.[1] ?? 0);
-    const color = p.color ?? PROP_COLORS[p.type] ?? [160, 160, 160];
+    let color = p.color ?? PROP_COLORS[p.type] ?? [150, 148, 142];
+    if (!p.color && p.type === 'container') color = CONTAINER_TINTS[Math.floor(hash1(p.x ?? 0, p.z ?? 0) * CONTAINER_TINTS.length) % CONTAINER_TINTS.length];
     if (p.type === 'wall' || p.type === 'pipe') return { poly: strip(p.path, (p.w ?? 0.4) / 2), h: p.h ?? 2.5, base, color, p };
     if (p.type === 'tank') return { poly: circle(p.x, p.z, p.r), h: p.h ?? 6, base, color, p };
     return { poly: rbox(p.x, p.z, p.w ?? 2.4, p.l ?? 6, p.rot ?? 0), h: p.h ?? 2.6, base: base + (p.dz ?? 0), color, p };
@@ -171,7 +457,13 @@ const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x +
 
 export async function createView3d(container, mapData, src) {
   const data = await (await fetch('/data/customs-3d.json')).json();
-  if (data.terrain) { H = makeSampler(data.terrain); data.terrain.limit = data.limit; }
+  // --- TRACK B (terrain.js) --------------------------------------------------------------
+  // One surface, one sampler: the mesh below and every draped feature (roads, fences, props,
+  // trees, shade rings, building bases, player drop-lines) must sample the SAME bicubic field,
+  // or they float/sink by up to ~0.3 m and z-fight against the mesh.
+  let terrain = null;
+  if (data.terrain) { data.terrain.limit = data.limit; try { terrain = buildTerrain(data); H = terrain.H; } catch (e) { console.warn('terrain mesh failed, falling back to quads', e); H = makeSampler(data.terrain); } }
+  // --- end TRACK B ------------------------------------------------------------------------
   const inLimit = (x, z) => !data.limit || inPolyXZ([x, z], data.limit);
   const centroidOf = (poly) => poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]);
   for (const b of data.buildings) { const c = centroidOf(b.poly); b.base = H(c[0], c[1]); }
@@ -204,31 +496,33 @@ export async function createView3d(container, mapData, src) {
   let floor = 'all'; // 'all' | 0 | 1 | 2 | 3 | 'U'
   const capH = (b, h) => (floor === 'all' || floor === 'U' ? h : Math.min(h, (Number(floor) + 1) * 3.3 - 0.4 + (b.style === 'canopy' ? 10 : 0)));
 
-  const lighting = new LightingEffect({
+  // TRACK B: lighting comes from terrain.js so the sun azimuth matches the baked hillshade exactly
+  // (two shading systems lit from different sides fight each other and flatten the relief).
+  const lighting = terrain ? terrain.lighting : new LightingEffect({
     ambient: new AmbientLight({ color: [255, 255, 255], intensity: 0.85 }),
     sun: new DirectionalLight({ color: [255, 250, 240], intensity: 0.9, direction: [-0.6, -0.4, -1] }),
   });
 
   const staticLayers = () => [
-    ...(data.terrain ? [new PathLayer({ id: 'contours', shadowEnabled: false, data: contours(data.terrain, 2), getPath: (d) => d.path.map((p) => Pg(p, 0.15)), getColor: (d) => (d.lv % 10 === 0 ? C.contourMajor : C.contour), getWidth: (d) => (d.lv % 10 === 0 ? 0.9 : 0.5), widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })] : []),
+    // TRACK B: contours are baked into the ground texture (smooth at any zoom, no z-fighting, zero layers)
     ...(data.limit ? [
       new SolidPolygonLayer({ id: 'void', shadowEnabled: false, data: [voidRect(data.limit)], getPolygon: (d) => d.map(([x, z]) => P([x, z], VOID_Z)), getFillColor: C.oob, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new SolidPolygonLayer({ id: 'cliff', data: cliffStrips(data.limit), getPolygon: (d) => d.poly.map(([x, z]) => P([x, z], VOID_Z)), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.6, diffuse: 0.6, shininess: 0 } }),
     ] : []),
-    data.terrain ? new SolidPolygonLayer({ id: 'terrain', shadowEnabled: false, data: terrainQuads(data.terrain, C.land, data.limit), getPolygon: (d) => d.poly.map(([x, z, y]) => P([x, z], y)), getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.55, diffuse: 0.55, shininess: 0 } }) : new SolidPolygonLayer({ id: 'land', shadowEnabled: false, data: data.land, getPolygon: ring, getFillColor: C.land, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    ...(terrain ? terrain.layers() : [new SolidPolygonLayer({ id: 'land', shadowEnabled: false, data: data.land, getPolygon: ring, getFillColor: C.land, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })]), // TRACK B: one SimpleMeshLayer, smooth normals + baked texture
     new SolidPolygonLayer({ id: 'pavement', shadowEnabled: false, data: data.pavement, getPolygon: (d) => ringG(d, 0.08), getFillColor: C.pavement, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water, getPolygon: (d) => ringG(d, -0.2), getFillColor: C.water, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'shore', shadowEnabled: false, data: data.water, getPath: (d) => ringG([...d, d[0]], 0.05), getColor: C.shore, getWidth: 0.4, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: data.underground, getPolygon: (d) => ringG(d.poly, 0.1), getFillColor: () => (floor === 'U' ? [255, 120, 40, 200] : C.underground), updateTriggers: { getFillColor: floor }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true }),
+    new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: data.underground, getPolygon: (d) => ringG(d.poly, 0.1), getFillColor: () => (floor === 'U' ? C.undergroundOn : C.underground), updateTriggers: { getFillColor: floor }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true }),
     new PathLayer({ id: 'rail', shadowEnabled: false, data: data.railway, getPath: (d) => ringG(d.path, 0.1), getColor: C.rail, getWidth: 0.9, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'sleepers', shadowEnabled: false, data: data.railway, getPath: (d) => ringG(d.path, 0.12), getColor: C.sleeper, getWidth: 2.2, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [1.2, 1.2], extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'road-edges', shadowEnabled: false, data: data.roads.filter((d) => d.kind !== 'track' && d.kind !== 'dirt'), getPath: (d) => ringG(d.path, 0.1), getColor: (d) => (d.kind === 'highway' ? C.highwayEdge : d.kind === 'dirt' ? C.dirtEdge : C.roadEdge), getWidth: (d) => d.width + 1.6, widthUnits: 'meters', widthMinPixels: 2.5, capRounded: true, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'roads', shadowEnabled: false, data: data.roads.filter((d) => d.kind !== 'track' && d.kind !== 'dirt'), getPath: (d) => ringG(d.path, 0.12), getColor: (d) => (d.kind === 'highway' ? C.highway : C.road), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 1.5, capRounded: true, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'tracks', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'track' || d.kind === 'dirt'), getPath: (d) => ringG(d.path, 0.12), getColor: C.track, getWidth: (d) => (d.kind === 'dirt' ? 2.6 : 1.8), widthUnits: 'meters', widthMinPixels: 1, capRounded: true, jointRounded: true, getDashArray: [5, 3], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new PathLayer({ id: 'road-centre', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'highway'), getPath: (d) => ringG(d.path, 0.14), getColor: [255, 255, 255, 180], getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [6, 6], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => ringG(d.path, 19), getColor: [90, 90, 90, 200], getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'road-centre', shadowEnabled: false, data: data.roads.filter((d) => d.kind === 'highway'), getPath: (d) => ringG(d.path, 0.14), getColor: C.roadMarking, getWidth: 0.25, widthUnits: 'meters', widthMinPixels: 1, getDashArray: [6, 6], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => catenary(d.path, 19), getColor: [96, 96, 92, 170], getWidth: 0.2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 1.2, getFillColor: C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5, shininess: 4 } }),
-    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 3, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
+    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 3.4, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
   ];
   const floorLines = data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
   const propData = propParts(data.props || []);
@@ -237,19 +531,32 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'props', data: propData, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.55 } }),
     new PathLayer({ id: 'fence-tops', shadowEnabled: false, data: data.fences || [], getPath: (d) => ringG(d.path, 1.92), getColor: C.fenceTop, getWidth: 0.3, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'fences-3d', shadowEnabled: false, data: fenceStrips, getPolygon: (d) => ringG(d.poly, 0), extruded: true, getElevation: 1.9, getFillColor: C.fence, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'shade', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 1.6), 0.05), getFillColor: C.shade, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'tree-tops', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 3.02), getFillColor: C.treeTop, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    // two rings instead of one: reads as a blurred contact shadow at every zoom
+    new SolidPolygonLayer({ id: 'shade-soft', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 3.2), 0.04), getFillColor: C.shadeSoft, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'shade', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 1.1), 0.05), getFillColor: C.shade, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'tree-tops', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(expand(d, -0.5), 3.44), getFillColor: C.treeTop, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'piers', data: (data.bridges || []).flatMap(piers), getPolygon: (d) => box(d.pos, d.w).map(([x, y]) => [x, y, d.pos[2] - d.h]), extruded: true, getElevation: (d) => d.h, getFillColor: C.pier, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5 } }),
-    new PathLayer({ id: 'bridge-edges', shadowEnabled: false, data: (data.bridges || []).filter((b) => !b.ford), getPath: (d) => bridgePath(d).map((q) => [q[0], q[1], q[2] - 0.15]), getColor: [150, 150, 148], getWidth: (d) => d.width + 1.2, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new PathLayer({ id: 'bridges', shadowEnabled: false, data: data.bridges || [], getPath: bridgePath, getColor: (d) => (d.foot ? [150, 120, 90] : d.ford ? [222, 214, 196] : C.bridge), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'bridge-edges', shadowEnabled: false, data: (data.bridges || []).filter((b) => !b.ford), getPath: (d) => bridgePath(d).map((q) => [q[0], q[1], q[2] - 0.15]), getColor: [128, 124, 114], getWidth: (d) => d.width + 1.2, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'bridges', shadowEnabled: false, data: data.bridges || [], getPath: bridgePath, getColor: (d) => (d.foot ? [128, 108, 82] : d.ford ? [150, 143, 126] : C.bridge), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'bridge-rails', shadowEnabled: false, data: (data.bridges || []).filter((b) => !b.ford).flatMap((b) => { const p = bridgePath(b).map((q) => [q[0], q[1], q[2] + 1.1]); return [offsetPath(p, b.width / 2 - 0.3), offsetPath(p, -(b.width / 2 - 0.3))]; }), getPath: (d) => d, getColor: C.bridgeRail, getWidth: 0.4, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'floor-lines', shadowEnabled: false, data: floorLines, getPath: (d) => d.path, getColor: C.floorLine, getWidth: 0.35, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ];
+  tintBuildings(data.buildings);
+  // Scenes for things the footprint data has no polygon for: the ZB bunker mouths and the road
+  // checkpoints. Oriented towards the middle of the map so the door always faces the player.
+  const mid = data.limit ? centroidOf(data.limit) : [0, 0];
+  const SCENES = { 'ZB-1011': 'bunker', 'ZB-013': 'bunker', "Smugglers' Bunker (ZB-1012)": 'bunker',
+    'Scav Checkpoint': 'checkpoint', 'Military Base CP': 'checkpoint', 'RUAF Roadblock': 'checkpoint' };
+  const scenes = src.markers().filter((m) => SCENES[(m.name || '').trim()]).map((m) => ({
+    type: SCENES[m.name.trim()], pos: [m.position.x, m.position.z], tower: m.name.trim() === 'Military Base CP',
+    rot: Math.atan2(mid[1] - m.position.z, mid[0] - m.position.x) }));
+  const details = detailParts(data.buildings, scenes);
+  const showLvl = (d) => floor === 'all' || floor === 'U' || d.lvl <= (Number(floor) + 1) * 3.3;
   const parts = buildingParts(data.buildings);
   const buildingLayer = () => [
     new SolidPolygonLayer({
       id: 'buildings', data: parts.walls, getPolygon: (d) => ringAt(d.poly, d.base ?? 0), extruded: true, getElevation: (d) => capH(d, d.h), updateTriggers: { getElevation: floor, getFillColor: [hover, floor] },
-      getFillColor: (d, { index }) => (hover === index ? C.buildingHover : d.color ? d.color : d.kind === 'tank' ? C.tank : d.kind === 'powerline_towers' ? C.tower : d.floors > 1 ? C.buildingMulti : C.building),
+      getFillColor: (d, { index }) => (hover === index ? C.buildingHover : d.color ? d.color : d.tint ? d.tint : d.kind === 'tank' ? C.tank : d.kind === 'powerline_towers' ? C.tower : d.floors > 1 ? C.buildingMulti : C.building),
       pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       material: { ambient: 0.7, diffuse: 0.55, shininess: 12, specularColor: [30, 30, 30] },
       onHover: (i) => { if (i.index !== hover) { hover = i.index; render(); } },
@@ -257,41 +564,111 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'roofs', visible: floor === 'all' || floor === 'U', data: parts.roofs, getPolygon: (d) => d.pts.map(([x, z, y]) => P([x, z], y + (d.b.base ?? 0))), getFillColor: (d) => d.color, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.8, diffuse: 0.4 } }),
     new SolidPolygonLayer({ id: 'slabs', shadowEnabled: false, data: parts.slabs.filter((d) => floor === 'all' || floor === 'U' || d.z <= (Number(floor) + 1) * 3.3), getPolygon: (d) => ringAt(d.poly, d.z + (d.base ?? 0)), updateTriggers: { getPolygon: floor }, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'posts', data: parts.posts, getPolygon: (d) => box(P(d.pos), d.w).map(([x, y]) => [x, y, d.base ?? 0]), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5 } }),
-    new PathLayer({ id: 'slab-edges', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path.map((q) => [q[0], q[1], q[2] + (d.base ?? 0)]), getColor: [110, 110, 108], getWidth: (d) => (d.wide ? 0.9 : 0.3), widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'detail-boxes', data: details.boxes.filter(showLvl), getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: floor }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.55 } }),
+    new SolidPolygonLayer({ id: 'detail-flats', shadowEnabled: false, data: details.flats.filter(showLvl), getPolygon: (d) => d.ring, getFillColor: (d) => d.color, updateTriggers: { getPolygon: floor }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'detail-lines', shadowEnabled: false, data: details.lines.filter(showLvl), getPath: (d) => d.path, getColor: (d) => d.color, getWidth: (d) => d.w, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: floor }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'detail-dashes', shadowEnabled: false, data: details.dashes.filter(showLvl), getPath: (d) => d.path, getColor: (d) => d.color, getWidth: (d) => d.w, widthUnits: 'meters', widthMinPixels: 1, getDashArray: (d) => d.dash, dashJustified: false, extensions: [new PathStyleExtension({ dash: true })], updateTriggers: { getPath: floor }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new ScatterplotLayer({ id: 'detail-dots', shadowEnabled: false, data: [...details.dots, ...parts.dots].filter(showLvl), getPosition: (d) => d.pos, getRadius: (d) => d.r, radiusUnits: 'meters', radiusMinPixels: 0.5, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'slab-edges', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path.map((q) => [q[0], q[1], q[2] + (d.base ?? 0)]), getColor: [118, 114, 106], getWidth: (d) => (d.wide ? 0.9 : 0.3), widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ];
   const major = (d) => (d.size ?? 100) >= 100;
   const lift = (d) => (major(d) ? 26 : 16) * ((d.size ?? 100) / 100);
   const ring16 = (pos, r, dy) => { const pts = []; for (let i = 0; i <= 16; i++) pts.push(Pg([pos[0] + r * Math.cos((i / 16) * 2 * Math.PI), pos[1] + r * Math.sin((i / 16) * 2 * Math.PI)], dy)); return pts; };
   const pingLayers = (labelsAll) => { const labels = labelsAll.filter((d) => major(d) || viewState.zoom >= 0.8); return [
-    new PathLayer({ id: 'ping-ring', data: labels, getPath: (d) => ring16(d.position, major(d) ? 1.65 : 1.05, 0.1), getColor: [201, 198, 184, 190], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'ping-ring', data: labels, getPath: (d) => ring16(d.position, major(d) ? 1.65 : 1.05, 0.1), getColor: [198, 196, 182, 175], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new ScatterplotLayer({ id: 'ping-dot', data: labels, getPosition: (d) => Pg(d.position, 0.15), getRadius: 0.7, radiusUnits: 'meters', radiusMinPixels: 1.5, getFillColor: C.cream, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-stem-shadow', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [12, 16, 14, 160], getWidth: 3.5, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-stem', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [201, 198, 184, 190], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new LineLayer({ id: 'ping-stem-shadow', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [14, 18, 15, 165], getWidth: 3.5, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new LineLayer({ id: 'ping-stem', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [198, 196, 182, 175], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new ScatterplotLayer({ id: 'ping-cap', data: labels, getPosition: (d) => Pg(d.position, lift(d) - 1.5), getRadius: 3, radiusUnits: 'pixels', getFillColor: C.cream, getLineColor: C.ink, lineWidthMinPixels: 1, stroked: true, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ]; };
+  // --- TRACK C: extract names in 3D -----------------------------------------------------
+  // buildAtlas() anchors the badge at its BOTTOM edge (anchorY = cell), so the badge occupies
+  // -26..0 px ABOVE the anchor point. Names therefore go BELOW it — a negative offset would
+  // draw the text straight through the badge.
+  let pinnedExtract = null, hoverExtract = null;
+  const eKey = (m) => (m.name || '') + '|' + m.kind;
+  const minorAlpha = () => Math.round(120 + 135 * Math.min(1, Math.max(0, ((viewState.zoom ?? 0) - 0.8) / 0.4)));
+  const EXTRACT_PRIORITY = { 'extract-pmc': 0, 'extract-shared': 1, 'extract-scav': 2, 'extract-transit': 3 };
+  const EXTRACT_CHARS = [...new Set(
+    src.markers().filter((m) => m.kind.startsWith('extract') && m.name).flatMap((m) => [(m.name || '').toUpperCase(), shortName(m.name), subText(m)]).join('')
+    + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,:+-()’\'#·')];
+  function extractNameLayers(markers) {
+    const z = viewState.zoom ?? 0;
+    const full = z >= 0.6;
+    let cand = markers.filter((m) => m.kind.startsWith('extract') && m.name).map((m) => {
+      const k = eKey(m), lit = pinnedExtract === k || hoverExtract === k;
+      return { m, k, lit, text: full || lit ? (m.name || '').toUpperCase() : shortName(m.name),
+        sub: full || lit ? subText(m) : '', size: lit ? 13.5 : 12, pos: Pg([m.position.x, m.position.z], 0.5) };
+    }).filter((d) => d.lit || z >= -0.6);
+    if (!cand.length) return [];
+    // Greedy screen-space AABB declutter. A fixed offset table cannot cope with the Dorms/rail
+    // clusters; rejected extracts keep their badge and pop back as the camera moves.
+    try {
+      const vp = deck.getViewports?.()[0];
+      if (vp) {
+        for (const d of cand) { const q = vp.project(d.pos); d.px = q[0]; d.py = q[1]; }
+        const rest = cand.filter((d) => !d.lit).sort((a, b) => (b.py - a.py)
+          || (EXTRACT_PRIORITY[a.m.kind] ?? 9) - (EXTRACT_PRIORITY[b.m.kind] ?? 9) || a.text.length - b.text.length);
+        const boxes = [], out = [];
+        for (const d of [...cand.filter((x) => x.lit), ...rest]) {
+          const w = d.text.length * 5.6 * (d.size / 12), h = d.size * 1.15;
+          const b = [d.px - w / 2 - 4, d.py + 9 - h / 2 - 4, d.px + w / 2 + 4, d.py + 9 + h / 2 + 4 + (d.sub ? 15 : 0)];
+          if (boxes.some((o) => b[0] < o[2] && o[0] < b[2] && b[1] < o[3] && o[1] < b[3])) continue;
+          boxes.push(b); out.push(d);
+        }
+        cand = out;
+      }
+    } catch {}
+    const trig = [pinnedExtract, hoverExtract, full];
+    const text = (id, data, get, size, color, offset, chip) => new TextLayer({
+      id, data, getPosition: (d) => d.pos, getText: get, characterSet: EXTRACT_CHARS,
+      getSize: (d) => size(d), sizeUnits: 'pixels', sizeMinPixels: chip ? 10 : 9, sizeMaxPixels: chip ? 15 : 12,
+      getColor: color, getTextAnchor: 'middle', getPixelOffset: offset,
+      fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF,
+      outlineWidth: chip ? 3 : 2.5, outlineColor: [...C.ink, 240],
+      background: chip, getBackgroundColor: [10, 14, 12, 190], backgroundPadding: [5, 2, 5, 2],
+      getBorderColor: (d) => EXTRACT_ACCENT[d.m.kind] ?? C.accentExtractNeutral, getBorderWidth: chip ? 1 : 0,
+      billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      updateTriggers: { getText: trig, getSize: trig, getPixelOffset: trig },
+    });
+    return [
+      text('extract-names', cand, (d) => d.text, (d) => d.size, [...C.cream, 255], [0, 9], true),
+      text('extract-sub', cand.filter((d) => d.sub), (d) => d.sub, () => 10, [...C.creamDim, 255], [0, 24], false),
+    ];
+  }
   const dynamicLayers = () => {
     const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z));
     const labels = src.labels().filter((d) => inLimit(d.position[0], d.position[1]));
     const players = src.players().filter((p) => p.last);
     return [
-      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind === 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => (d.kind.startsWith('extract') && extractLetter(d.name) ? d.kind + ':' + extractLetter(d.name) : d.kind), getSize: 26, sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 32, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind === 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => (d.kind.startsWith('extract') && extractLetter(d.name) ? d.kind + ':' + extractLetter(d.name) : d.kind), getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+        getPixelOffset: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? [0, -4] : [0, 0]),
+        updateTriggers: { getSize: [hoverExtract, pinnedExtract], getPixelOffset: [hoverExtract, pinnedExtract] },
+        onHover: (i) => { const k = i.object && i.object.kind.startsWith('extract') ? eKey(i.object) : null; if (k !== hoverExtract) { hoverExtract = k; render(); } },
+        onClick: (i) => { if (!i.object || !i.object.kind.startsWith('extract')) return false; const k = eKey(i.object); pinnedExtract = pinnedExtract === k ? null : k; render(); return true; } }),
       // everything else lies flat on the ground like chips on a table
       new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && d.kind !== 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: (d) => d.kind, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       ...pingLayers(labels),
+      // TRACK C typography: majors are UPPERCASE/700, minors Title Case/600 — case, not a second grey,
+      // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
       ...[true, false].map((isMajor) => new TextLayer({ id: isMajor ? 'labels-major' : 'labels-minor',
         data: labels.filter((d) => major(d) === isMajor && (isMajor || viewState.zoom >= 0.8)).map((d) => ({ p: Pg(d.position, lift(d) + 1.5), t: isMajor ? d.text.toUpperCase() : d.text })),
-        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 8 : 6, sizeUnits: 'meters', sizeMinPixels: isMajor ? 10 : 8, sizeMaxPixels: isMajor ? 16 : 12,
-        getColor: isMajor ? [227, 225, 215] : [205, 205, 192], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: { sdf: true }, outlineWidth: 2, outlineColor: [32, 37, 34, 240],
+        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 7.2 : 5.4, sizeUnits: 'meters', sizeMinPixels: isMajor ? 11 : 9, sizeMaxPixels: isMajor ? 17 : 12,
+        getColor: isMajor ? [...C.cream, 255] : [...C.creamDim, minorAlpha()], updateTriggers: { getColor: isMajor ? 0 : minorAlpha() },
+        fontFamily: LABEL_FONT(), fontWeight: isMajor ? 700 : 600, fontSettings: LABEL_SDF,
+        outlineWidth: isMajor ? 2.5 : 2, outlineColor: isMajor ? [...C.ink, 242] : [...C.ink, 230],
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
+      ...extractNameLayers(markers),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.3)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z) + 0.2)), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new IconLayer({ id: 'players', data: players, getPosition: (p) => P([p.last.x, p.last.z], (p.last.y ?? 0) + 0.2), iconAtlas: arrowAtlas.canvas, iconMapping: arrowAtlas.mapping, getIcon: (p) => p.color, getSize: 12, sizeUnits: 'meters', sizeMinPixels: 22, sizeMaxPixels: 44, billboard: false, getAngle: (p) => -((p.last.yaw ?? 0) + (mapData.coordinateRotation ?? 0)), pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last), getAngle: players.map((p) => p.last) } }),
-      ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max((p.last.y ?? 0) + 0.2, H(p.last.x, p.last.z) + 0.3)), getText: (p) => p.name, getPixelOffset: [22, 0], getTextAnchor: 'start', getSize: 14, getColor: C.cream, outlineWidth: 4, outlineColor: [12, 16, 14, 230], fontFamily: LABEL_FONT(), fontSettings: { sdf: true }, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })]),
+      ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max((p.last.y ?? 0) + 0.2, H(p.last.x, p.last.z) + 0.3)), getText: (p) => p.name, getPixelOffset: [22, 0], getTextAnchor: 'start', getSize: 14, getColor: C.cream, outlineWidth: 4, outlineColor: [14, 18, 15, 240], fontFamily: LABEL_FONT(), fontSettings: { sdf: true }, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })]),
     ];
   };
   const hex = (h, a = 255) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
   container.addEventListener('contextmenu', (e) => e.preventDefault()); // right-drag = rotate/tilt, no browser menu
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pinnedExtract) { pinnedExtract = null; render(); } }); // Esc unpins an extract name
   const deck = new Deck({
     parent: container, views: new OrbitView({ orbitAxis: 'Z', fovy: 22 }), controller: { dragMode: 'pan', inertia: 300 }, // left-drag pans, right/shift-drag rotates
     initialViewState: viewState, effects: [lighting], getCursor: ({ isHovering }) => (isHovering ? 'pointer' : 'grab'),
@@ -312,9 +689,15 @@ export async function createView3d(container, mapData, src) {
   initialised = true;
   function render() { deck.setProps({ layers: [...base, extras[0], ...buildingLayer(), ...extras.slice(1), ...dynamicLayers()] }); }
   render();
+  // Under software GL (and on a cold cache) the baked ground texture can finish uploading after
+  // deck's first paint without setting a redraw flag, which leaves the terrain mesh black. A few
+  // forced redraws cost nothing and make the first frame deterministic.
+  for (const t of [300, 1200, 3500]) setTimeout(() => { try { deck.redraw('late-upload'); } catch {} }, t);
   return {
     refresh: render,
     setFloor: (f) => { floor = f; render(); },
+    // sidebar hover/click can pin an extract's name in 3D (name+kind key, or null to clear)
+    focusExtract: (name, kind) => { pinnedExtract = name ? (name + '|' + (kind ?? 'extract-pmc')) : null; render(); },
     setView: ({ target, zoom }) => { viewState = { ...viewState, target, zoom }; deck.setProps({ viewState }); },
     deck,
   };

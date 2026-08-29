@@ -2,29 +2,142 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B0F0D" />
     <title>TarkovZero — Customs</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="app">
-      <aside id="sidebar">
-        <div class="brand">TarkovZero</div>
-        <h1>Customs <button id="view-toggle" class="view-toggle" title="Switch 2D / 3D (3D is beta)">3D</button></h1>
-        <div id="status" class="muted">Loading data…</div>
-        <div id="layers"></div>
-        <div id="live"></div>
-        <div id="floors" class="floors"><span class="group">Floors</span><button data-floor="all" class="on">All</button><button data-floor="0">G</button><button data-floor="1">1</button><button data-floor="2">2</button><button data-floor="3">3</button><button data-floor="U">Under</button></div>
-        <div id="hint3d" class="muted">3D: drag to pan · right-drag or Ctrl+drag to rotate &amp; tilt · scroll to zoom</div>
-        <div id="coords" class="muted mono"></div>
-        <p class="credit">Tiles &amp; data: <a href="https://tarkov.dev" target="_blank">tarkov.dev</a></p>
+      <aside id="sidebar" aria-label="Map controls">
+        <button id="sheet-grab" class="grab" aria-label="Expand or collapse panel"></button>
+
+        <header class="rail-head">
+          <div class="head-id">
+            <div class="wordmark">TarkovZero</div>
+            <h1 class="map-title">Customs</h1>
+          </div>
+          <div id="view-toggle" class="seg" role="group" aria-label="2D or 3D view">
+            <button type="button" class="seg-cell on" data-view="2d" aria-pressed="true">2D</button>
+            <button type="button" class="seg-cell" data-view="3d" aria-pressed="false">3D</button>
+          </div>
+          <span id="sheet-badge" class="sheet-badge"></span>
+        </header>
+
+        <div class="block block-strip">
+          <button type="button" id="status" class="status" aria-expanded="false" aria-controls="status-pop">
+            <span class="dot" data-state="load"></span><span class="status-text">Loading raid data…</span>
+          </button>
+          <div id="status-pop" class="pop" hidden></div>
+        </div>
+
+        <div class="block block-find">
+          <div class="find">
+            <input id="find" type="text" placeholder="Find extract or place" autocomplete="off" spellcheck="false" aria-label="Find extract or place" />
+            <kbd class="kbd" id="find-kbd">⌘K</kbd>
+          </div>
+          <div id="find-results" class="results" hidden role="listbox" aria-label="Search results"></div>
+        </div>
+
+        <div class="block">
+          <div class="block-head">
+            <span class="block-title">Filters</span>
+            <span class="ghosts"><button type="button" class="ghost" id="all-on">All</button><button type="button" class="ghost" id="all-off">None</button></span>
+          </div>
+          <div id="layers"></div>
+        </div>
+
+        <div class="block block-view">
+          <div class="block-head"><span class="block-title">View</span></div>
+          <div class="line only-2d">
+            <span class="line-lab">Base</span>
+            <div id="base-toggle" class="seg" role="group" aria-label="Base layer">
+              <button type="button" class="seg-cell on" data-base="satellite">Satellite</button>
+              <button type="button" class="seg-cell" data-base="map">Vector</button>
+            </div>
+          </div>
+          <div class="line only-3d">
+            <span class="line-lab">Floors</span>
+            <div id="floors" class="seg" role="group" aria-label="Floors">
+              <button type="button" class="seg-cell on" data-floor="all">All</button>
+              <button type="button" class="seg-cell" data-floor="0">G</button>
+              <button type="button" class="seg-cell" data-floor="1">1</button>
+              <button type="button" class="seg-cell" data-floor="2">2</button>
+              <button type="button" class="seg-cell" data-floor="3">3</button>
+              <button type="button" class="seg-cell" data-floor="U">U</button>
+            </div>
+          </div>
+          <div class="line">
+            <span class="line-lab">Labels</span>
+            <div id="label-density" class="seg" role="group" aria-label="Label density">
+              <button type="button" class="seg-cell" data-density="off">Off</button>
+              <button type="button" class="seg-cell" data-density="key">Key</button>
+              <button type="button" class="seg-cell on" data-density="all">All</button>
+            </div>
+          </div>
+        </div>
+
+        <section class="block block-live" id="live-block">
+          <button type="button" class="block-head live-head" id="live-toggle" aria-expanded="false" aria-controls="live">
+            <span class="dot live" id="live-dot"></span>
+            <span class="block-title">Live position</span>
+            <span class="live-sum" id="live-sum">Not connected</span>
+            <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div id="live" hidden></div>
+        </section>
+
+        <footer class="rail-foot">
+          <span class="credit">Tiles &amp; data <a href="https://tarkov.dev" target="_blank" rel="noopener">tarkov.dev</a></span>
+          <button type="button" class="ghost help" id="help-btn" aria-expanded="false" aria-controls="hint3d" aria-label="Controls and shortcuts">?</button>
+          <div id="hint3d" class="pop pop-help" hidden>
+            <div class="pop-title">Controls</div>
+            <dl class="keys">
+              <dt>Drag</dt><dd>Pan</dd>
+              <dt>Right-drag</dt><dd>Rotate &amp; tilt (3D)</dd>
+              <dt>Scroll</dt><dd>Zoom</dd>
+              <dt><b>3</b></dt><dd>Toggle 2D / 3D</dd>
+              <dt><b>L</b></dt><dd>Place names</dd>
+              <dt><b>1</b>–<b>6</b></dt><dd>Toggle filter rows</dd>
+              <dt><b>F</b></dt><dd>Fit map</dd>
+              <dt><b>N</b></dt><dd>Reset north (3D)</dd>
+              <dt><b>[</b> <b>]</b></dt><dd>Step floors (3D)</dd>
+              <dt><b>/</b></dt><dd>Find</dd>
+              <dt><b>Esc</b></dt><dd>Close</dd>
+            </dl>
+          </div>
+        </footer>
       </aside>
-      <div id="map"></div>
-      <div id="map3d"></div>
+
+      <div id="stage">
+        <div id="map"></div>
+        <div id="map3d"></div>
+
+        <div class="hud hud-tr">
+          <div class="hud-group">
+            <button type="button" class="hud-btn" id="hud-zin" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button>
+            <button type="button" class="hud-btn" id="hud-zout" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+          </div>
+          <button type="button" class="hud-btn only-3d" id="hud-north" title="Reset north" aria-label="Reset north">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" class="ring"/><g id="needle"><path d="M12 4.5 15.4 13H8.6z" class="fillN"/><path d="M12 19.5 9.6 14h4.8z" class="fillS"/></g></svg>
+          </button>
+          <button type="button" class="hud-btn" id="hud-fit" title="Fit map" aria-label="Fit map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </div>
+
+        <div class="hud hud-bl">
+          <div id="coords" class="chip mono" aria-live="off">—</div>
+          <div id="scale" class="chip scale"><span class="scale-cap mono">—</span><span class="scale-line"><i style="width:80px"></i></span></div>
+        </div>
+
+        <div class="hud hud-br">
+          <a class="chip attrib" href="https://tarkov.dev" target="_blank" rel="noopener">tarkov.dev</a>
+        </div>
+      </div>
     </div>
+    <div id="toast" class="toast" hidden></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

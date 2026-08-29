@@ -1,0 +1,89 @@
+# TarkovZero — How a map gets built (the Customs playbook)
+
+This is the handover for building further maps (Reserve, Woods, …) the way Customs was built.
+Everything below was learned the hard way on Customs; follow it and you skip a week of dead ends.
+
+## 0. What a "map" is in this repo
+
+A map = one **coordinate frame** + four data products + a small amount of hand authoring:
+
+| Product | File (Customs) | Produced by |
+|---|---|---|
+| 2D config (tiles, bounds, transform) | `src/mapdata.js` | copied from tarkov.dev `maps.json` |
+| Marker data (extracts, spawns, bosses, locks, guns, switches) | `public/data/customs.json` | `scripts/build-community-data.mjs` (SPT + EFT Wiki) or `scripts/fetch-data.mjs` (tarkov.dev API, when up) |
+| 3D geometry (terrain, buildings, roads, props, bridges, limit) | `public/data/customs-3d.json` | `scripts/build-3d.mjs` |
+| Place labels | `src/labels.js` | tarkov.dev `maps.json` labels + hand additions |
+| Hand-authored extras | `data/customs-props.json`, `data/customs-roads.json`, `TERRAIN_FEATURES`/`PLACE_*` tables in `scripts/build-3d.mjs` | tracing + judgement |
+
+Today the code is **single-map** (Customs constants everywhere). Adding maps means: (1) make the pipeline
+take a map key, (2) produce the products per map, (3) add a map switcher in the UI. Keep Customs' output byte-identical while refactoring.
+
+## 1. Coordinate system — the one thing that must be right
+
+* Game coordinates (Unity): `x, y, z` with `y` = height. We plot on `x` (east–west) and `z` (north–south).
+* tarkov.dev's `maps.json` gives, per map: `transform [scaleX, offsetX, scaleY, offsetY]`, `coordinateRotation`
+  (Customs 180°), `bounds` as **`[[x, z], [x, z]]`** (they swap to Leaflet `[z, x]` in `getBounds()`), `tileSize`, `minZoom/maxZoom`,
+  `tilePath`, `svgPath`, `svgLayer`, `layers[]` with `extents` (floor boxes with real `height` ranges in game y!), and `labels[]` (`position` is `[x, z]`).
+  Source: https://raw.githubusercontent.com/the-hideout/tarkov-dev/main/src/data/maps.json (a copy is in `scripts/tarkov-dev-maps.json`).
+* Leaflet (2D): latLng = `[z, x]`; custom CRS in `src/crs.js` applies the transform + rotation exactly like tarkov.dev's `getCRS()`.
+* deck.gl (3D): cartesian `[-x, -z, y]` (`P()` in `src/map3d.js`) so on-screen orientation matches 2D at 0° orbit. Heading on screen = `yaw + coordinateRotation`.
+* SVG → game: the SVG `viewBox` maps linearly onto the map `bounds`:
+  `x = xMax − (svgX / vbW) · (xMax − xMin)`, `z = zMin + (svgY / vbH) · (zMax − zMin)` (see `toGame()` in `scripts/build-3d.mjs`).
+  Check other maps' `coordinateRotation` — if it is not 180 the SVG axis mapping must be derived from the transform, not copied.
+* Wiki interactive map → game: affine fit from ≥4 known points (`CALIBRATION` in `scripts/build-community-data.mjs`); we used bunker/basement
+  positions from `maps.json` `extents`. Keep residuals < 5 m.
+* Satellite screenshot → game (for tracing): at Leaflet zoom `z`, px per metre = `0.239 · 2^z` (Customs transform scale; use the map's own scaleX).
+  With a 1400×900 window and the sidebar (240 px), map centre is at px `(820, 450)`: `x = cx − (px − 820)/ppm`, `z = cz + (py − 450)/ppm`. **x decreases to the right.**
+
+## 2. Data sources and what each is good for
+
+| Source | Gives | Notes |
+|---|---|---|
+| tarkov.dev CDN `https://assets.tarkov.dev/maps/<key>_<ver>/main/{z}/{x}/{y}.png` | satellite tiles (ground truth for tracing) | version folder (`customs_0.16`) is in `maps.json` `tilePath` |
+| tarkov.dev SVG `https://assets.tarkov.dev/maps/svg/<Name>.svg` | hand-drawn vector map: `Ground_Level` with semantic groups (Ground/Trees/River/Dirt_Roads/Pavement/Roads/Main_Roads/High_Roads/Railway/Fence/Buildings/Limit/Rocks/Powerlines…), floor groups `Underground_Level`, `First_Floor`… | CC BY-NC-SA. Building footprints are clean polygons; floor groups are wall drawings (use as textures, not geometry). Roads continue beyond the `Limit` polygon — always clip. Their "small road" class mixes paved yard roads and forest trails. Group ids differ per map — inspect first. |
+| tarkov.dev `maps.json` | transform, bounds, tiles, labels, floor extents (heights!) | free, exact |
+| tarkov.dev GraphQL `https://api.tarkov.dev/graphql` | extracts/spawns/bosses/hazards/locks with positions | was down for days; `scripts/fetch-data.mjs` snapshot when it works |
+| SPT server DB `https://raw.githubusercontent.com/sp-tarkov/server/master/project/assets/database/locations/<id>/base.json` | `SpawnPointParams` (x,y,z, sides, categories, zone), `BossLocationSpawn`, exits (names only) | map ids: customs=`bigmap`, reserve=`rezervbase`, woods=`woods`, shoreline=`shoreline`, interchange=`interchange`, lighthouse=`lighthouse`, streets=`tarkovstreets`, labs=`laboratory`, factory=`factory4_day`, ground zero=`sandbox`. `looseLoot.json` is LFS (fetch from a local SPT install if needed) |
+| EFT Wiki interactive map `https://escapefromtarkov.fandom.com/api.php?action=query&prop=revisions&titles=Map:<Name>&rvslots=main&rvprop=content&format=json` | extracts (pmc/scav/transit), boss/sniper spawns, levers, guns, locked doors in wiki-image pixels | needs a browser User-Agent; convert with the affine fit |
+| re3mr renders (https://reemr.se/, mirrored on eft-ammo.com) | visual reference only (CC BY-NC-SA) | never copy assets |
+| BSG game files | forbidden by ToS — don't | |
+
+## 3. The pipeline, step by step (what `scripts/build-3d.mjs` does)
+
+1. Parse the SVG: walk `<g>`/`<path>`/`<circle>`, accumulate `translate/scale`, flatten paths (M/L/H/V/C/S/Q/A/Z with curve sampling).
+   **Bug we hit:** `s/S` reflect the previous control point — reset it after M/L/H/V/Z or roads become straight chords.
+2. Convert to game coords (`toGame`). `Limit` (= `Ground`) is the playable boundary. Clip every linear feature to it, drop polygons whose centroid is outside.
+3. Buildings: footprints from the `Buildings` group; floors = 1 + number of upper floor **extents** (from `maps.json`) covering ≥50 % of the footprint; height from the extent's real `y` ranges, else class defaults.
+   Tag each building with the nearest label (`place`) → `PLACE_COLORS`, `ROOF_COLORS`, `PLACE_STYLE` (box | gable→hip | frame | canopy | tank). Hip roofs only on near-rectangular footprints.
+4. Roads: SVG road classes + `data/<map>-roads.json` hand-traced additions; non-fixed "small" roads become **tracks** unless they serve pavement/buildings; audited `reclassify`/`remove` by midpoint.
+5. Bridges: road/rail runs over water polygons → decks with ramps/piers/rails; **verify with a playtest** which crossings are real (Customs: only Main Bridge, Junk Bridge footbridge, one ground path). Cut the flat road under decks.
+6. Fences: strips with gaps where roads cross; powerline towers → lattice pylons + cables; towers within 10 m of the limit dropped.
+7. Terrain: 10 m grid, IDW over SPT ground spawn points (exclude rooftop/sniper points, y>15), plus hand-authored `TERRAIN_FEATURES` hills with value-noise, one smoothing pass. TRUE scale (user decision). Render smooth (mesh + baked texture), never as flat tiles.
+8. Props: `data/<map>-props.json` (containers, tankers, rail cars, vehicles, walls, cranes) traced from satellite screenshots at zoom 5 using the formula in §1.
+9. Output one JSON; `src/map3d.js` renders it; `H(x,z)`/`Pg()` drape everything.
+
+Marker data (`scripts/build-community-data.mjs`): SPT spawns/bosses (exact) + wiki extracts/locks/guns/levers (calibrated). Output shape mirrors the tarkov.dev API so `src/api.js` can swap sources.
+
+## 4. Verification loop (do this constantly)
+
+* `npm run build` then preview on :4173; headless screenshots:
+  `chromium --headless=new --no-sandbox --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --window-size=1400,900 --timeout=24000 --screenshot=out.png "http://localhost:4173/?view=3d#<zoom>/<x>/<z>"`
+  (software GL renders over-zoomed and slightly blurry — judge structure, not sharpness).
+* Road accuracy: `http://localhost:5173/?base=satellite&debug=roads` draws the classified network over the satellite (yellow highway, red main, magenta paved, orange tracks, cyan bridges, red boundary). This overlay caught the flattener bug and the missing yard roads.
+* Independent judge: `codex exec --skip-git-repo-check -s read-only -i overlay.png -i reference.png < prompt.txt` with a screen→game formula in the prompt so findings come back as coordinates.
+* deck.gl TextLayer gotchas (9.3): no `CollisionFilterExtension` with pixel sizing; no `getAlignmentBaseline`; build the font atlas only after the webfont loaded (switch `fontFamily` when `document.fonts` confirms).
+
+## 5. Per-map checklist for a new map
+
+1. `maps.json` entry → transform/rotation/bounds/tiles/SVG/labels/extents. Confirm `coordinateRotation` and derive the SVG mapping if ≠ 180.
+2. Warm the tile cache (`scripts/warm-tiles.mjs` generalised to the map key) — the dev server caches under `.cache/`.
+3. Inspect the SVG groups (`python: list g ids/classes`) — map them to the semantic roles above; some maps have no rail/river/powerlines, others have cliffs, bunkers, multiple water bodies.
+4. SPT `base.json` for the map id → spawns/bosses; wiki `Map:<Name>` → extracts/locks/guns; pick ≥4 calibration points that exist in both (bunkers, basements, distinctive extracts) and check residuals.
+5. Build 3D data; run the road overlay; compare against satellite; add `data/<map>-roads.json`, `TERRAIN_FEATURES`, `PLACE_*` tables; trace props.
+6. Playtest facts to collect from the user: real river crossings, which "roads" are trails, map-limit quirks, landmark colours.
+7. Verify 2D + 3D screenshots; Codex judge; iterate.
+
+## 6. Known map-specific hints
+
+* **Reserve** (`rezervbase`): mountainous — real elevation matters (bunkers, the hill with the radar, the pawn/knight/bishop/rook buildings, the train station and the underground tunnels). SVG likely has multiple underground layers; extracts include the armored train and manholes. Cliffs form the boundary on most sides.
+* **Woods** (`woods`): large, rolling terrain, few buildings (sawmill, scav base, USEC camp, lumber mill), many rocks; roads are mostly dirt; the lake and river; the crash site. Terrain and rocks are the personality here — expect the SPT spawn coverage to be sparse in the forest, so hand-authored hills will carry more weight.
