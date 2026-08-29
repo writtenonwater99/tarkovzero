@@ -15,7 +15,7 @@ const CONFIG = {
     roadGroups: [['High_Roads', 12, 'highway'], ['Main_Roads', 8, 'main'], ['Roads', 5, 'small'], ['Dirt_Roads', 5, 'dirt']],
     buildingHeights: { 'Garages-2': 4, 'Big_Buildings-2': 9, 'Small_Buildings-2': 3.5, 'Powerline_Towers': 22 },
     underground: /Underground/i, colors: CUSTOMS_COLORS, roofs: CUSTOMS_ROOFS, styles: CUSTOMS_STYLES, autoSmallTracks: true,
-    terrainFilter: (p) => p.y < 15 && p.y > -6 && !/snipe/i.test(p.zone),
+    terrainFilter: (p) => p.y < 30 && p.y > -8 && !/snipe/i.test(p.zone),
     terrain: [
       { name: 'west hill (behind Big Red, up to Crossroads)', x: -360, z: -80, rx: 95, rz: 150, h: 11 },
       { name: 'Sniper Hill', x: 110, z: 85, rx: 45, rz: 40, h: 9 },
@@ -316,42 +316,100 @@ for (const b of buildings) {
   if (b.style === 'canopy') b.height = 4.8;
   if (b.style === 'gable' && ROOF_COLORS[b.place]) b.roof = ROOF_COLORS[b.place];
 }
-// ---- terrain: true-to-scale height grid from SPT spawn points (ground-level ones only), IDW + smoothing
+// ---- terrain: true-scale 5 m surface from merged survey / spawn / loose-loot evidence.
+// Loose loot contains shelves, rooftops and underground rooms, so classify it against a local
+// robust median before fitting. Hand-authored terrain features only contribute where evidence is
+// sparse; they no longer flatten or override a well-sampled real hill.
 const spt = JSON.parse(await readFile(cfg.spt, 'utf8'));
 const sptPoints = spt.SpawnPointParams.map((s) => ({ x: s.Position.x, z: s.Position.z, y: s.Position.y, zone: s.BotZoneName || '' }));
-const groundPts = sptPoints.filter(cfg.terrainFilter);
 const rockEvidence = cfg.rockEvidence ? sptPoints.filter((p) => cfg.rockEvidence.test(p.zone)) : [];
 const TERRAIN_FEATURES = cfg.terrain;
-const STEP = 10, x0 = BOUNDS.xMin - 40, z0 = BOUNDS.zMin - 40, cols = Math.ceil((BOUNDS.xMax - BOUNDS.xMin + 80) / STEP) + 1, rows = Math.ceil((BOUNDS.zMax - BOUNDS.zMin + 80) / STEP) + 1;
+const SAMPLE_SOURCE_WEIGHT = { looseLoot: 1, spawn: 2.5, survey: 4 };
+let evidenceInput;
+try {
+  const doc = JSON.parse(await readFile(`scripts/data/${key}/elevation-samples.json`, 'utf8'));
+  const names = doc.sourceTypes || ['looseLoot', 'spawn', 'survey'];
+  evidenceInput = doc.samples.map(([x, y, z, source = 1]) => ({ x, y, z, source: names[source] || 'spawn', zone: '' }));
+} catch {
+  evidenceInput = sptPoints.filter(cfg.terrainFilter).map((p) => ({ ...p, source: 'spawn' }));
+}
+const rawRockPolys = cfg.groups.rocks ? polysIn(cfg.groups.rocks) : [];
+const hardReject = { range: 0, building: 0, rock: 0, underground: 0, rooftop: 0, belowSurface: 0, isolated: 0 };
+const candidates = evidenceInput.filter((p) => {
+  if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z) || !cfg.terrainFilter(p) || !inside([p.x, p.z])) { hardReject.range++; return false; }
+  if (p.source === 'looseLoot' && buildings.some((b) => inPoly([p.x, p.z], b.poly))) { hardReject.building++; return false; }
+  if (p.source === 'looseLoot' && rawRockPolys.some((poly) => inPoly([p.x, p.z], poly))) { hardReject.rock++; return false; }
+  if (p.source === 'looseLoot' && underground.some((u) => inPoly([p.x, p.z], u.poly))) { hardReject.underground++; return false; }
+  return true;
+});
+const median = (values) => { const a = [...values].sort((x, y) => x - y), m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+function spatialIndex(points, size = 20) {
+  const bins = new Map();
+  for (const p of points) { const k = `${Math.floor(p.x / size)},${Math.floor(p.z / size)}`; if (!bins.has(k)) bins.set(k, []); bins.get(k).push(p); }
+  return (x, z, radius) => {
+    const out = [], x1 = Math.floor((x - radius) / size), x2 = Math.floor((x + radius) / size), z1 = Math.floor((z - radius) / size), z2 = Math.floor((z + radius) / size), r2 = radius * radius;
+    for (let iz = z1; iz <= z2; iz++) for (let ix = x1; ix <= x2; ix++) for (const p of bins.get(`${ix},${iz}`) || []) if ((p.x - x) ** 2 + (p.z - z) ** 2 <= r2) out.push(p);
+    return out;
+  };
+}
+const nearbyCandidate = spatialIndex(candidates, 18);
+const groundPts = candidates.filter((p) => {
+  let neighbours = nearbyCandidate(p.x, p.z, 16);
+  if (neighbours.length < 5) neighbours = nearbyCandidate(p.x, p.z, 32);
+  if (neighbours.length < 4) {
+    // Trusted ground spawns/survey traces are still useful in sparse forest. A lone loot
+    // point is much more likely to be a table, vehicle or detached underground sample.
+    if (p.source === 'looseLoot') { hardReject.isolated++; return false; }
+    return true;
+  }
+  const local = median(neighbours.map((q) => q.y));
+  if (p.y - local > 2.5) { hardReject.rooftop++; return false; }
+  if (p.y - local < -2.5) { hardReject.belowSurface++; return false; }
+  return true;
+});
+if (!groundPts.length) throw new Error(`${key}: elevation filtering removed every sample`);
+const nearGround = spatialIndex(groundPts, 30);
+const STEP = 5, x0 = BOUNDS.xMin - 40, z0 = BOUNDS.zMin - 40, cols = Math.ceil((BOUNDS.xMax - BOUNDS.xMin + 80) / STEP) + 1, rows = Math.ceil((BOUNDS.zMax - BOUNDS.zMin + 80) / STEP) + 1;
 // deterministic value noise so hills are irregular instead of perfect ellipses
 const hash2 = (i, j) => { const n = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return n - Math.floor(n); };
 const noise = (x, z) => { const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j, sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz); return (hash2(i, j) * (1 - sx) + hash2(i + 1, j) * sx) * (1 - sz) + (hash2(i, j + 1) * (1 - sx) + hash2(i + 1, j + 1) * sx) * sz; };
 const raw = new Float32Array(cols * rows);
 for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-  const x = x0 + c * STEP, z = z0 + r * STEP; let num = 0, den = 0;
+  const x = x0 + c * STEP, z = z0 + r * STEP;
   const n1 = noise(x / 90, z / 90) - 0.5, n2 = noise(x / 35 + 7, z / 35 + 3) - 0.5;
-  for (const p of groundPts) { const d2 = (p.x - x) ** 2 + (p.z - z) ** 2; const w = 1 / Math.pow(d2 + 144, 1.5); num += w * p.y; den += w; } // ~12 m softening, steeper falloff
-  let h = num / den;
+  let points = nearGround(x, z, 90);
+  if (points.length < 5) points = nearGround(x, z, 180);
+  if (!points.length) points = groundPts;
+  let coarseNum = 0, coarseDen = 0, fineNum = 0, fineDen = 0, density = 0, nearest = Infinity;
+  for (const p of points) {
+    const d2 = (p.x - x) ** 2 + (p.z - z) ** 2, sw = SAMPLE_SOURCE_WEIGHT[p.source] || 1;
+    const coarseW = sw / Math.pow(d2 + 225, 0.9); // broad, non-conical background
+    coarseNum += coarseW * p.y; coarseDen += coarseW;
+    if (d2 <= 55 ** 2) { const fineW = sw / Math.pow(d2 + 49, 1.1); fineNum += fineW * p.y; fineDen += fineW; }
+    if (d2 <= 45 ** 2) density += sw * Math.exp(-d2 / (2 * 18 ** 2));
+    nearest = Math.min(nearest, Math.sqrt(d2));
+  }
+  const coarse = coarseNum / coarseDen, fine = fineDen ? fineNum / fineDen : coarse;
+  const fineMix = Math.min(1, density / 3);
+  const dataHeight = coarse + (fine - coarse) * fineMix;
+  const confidence = Math.min(1, density / 3) * Math.min(1, Math.max(0, 1 - nearest / 55));
+  let fallback = coarse;
   for (const f of TERRAIN_FEATURES) {
     const d = ((x - f.x) / (f.rx * (1 + 0.35 * n1))) ** 2 + ((z - f.z) / (f.rz * (1 - 0.3 * n1))) ** 2;
     const weight = Math.exp(-d * 1.6);
-    if (key === 'customs') {
-      const bump = f.h * weight * (1 + 0.15 * n2);
-      h = Math.max(h, bump);
-    } else if (weight > 0.01 && f.h > h) {
-      // New-map feature heights are absolute targets. Blending prevents the tail of a
-      // positive mountain from flattening a map whose ordinary ground lies below y=0.
+    if (weight > 0.01 && f.h > fallback) {
       const target = f.h * (1 + 0.08 * n2);
-      h = Math.max(h, h * (1 - weight) + target * weight);
+      fallback = Math.max(fallback, fallback * (1 - weight) + target * weight);
     }
   }
-  h += 0.6 * n2 + 0.4 * n1; // gentle undulation everywhere
+  let h = dataHeight * confidence + fallback * (1 - confidence);
+  h += (1 - confidence) * (0.25 * n2 + 0.16 * n1); // only invent texture where evidence is thin
   raw[r * cols + c] = h;
 }
-// one light smoothing pass
+// One compact Gaussian pass (~5 m sigma) removes sample noise without erasing real hill crests.
 const heights = new Float32Array(cols * rows);
-for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let sum = 0, n = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) { sum += raw[rr * cols + cc]; n++; } } heights[r * cols + c] = +(sum / n).toFixed(2); }
-const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights) };
+for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let sum = 0, den = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = Math.max(0, Math.min(rows - 1, r + dr)), cc = Math.max(0, Math.min(cols - 1, c + dc)), w = (dr ? 1 : 2) * (dc ? 1 : 2); sum += raw[rr * cols + cc] * w; den += w; } heights[r * cols + c] = +(sum / den).toFixed(2); }
+const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights), evidence: { input: evidenceInput.length, accepted: groundPts.length, rejected: hardReject } };
 const terrainHeight = (x, z) => {
   const fx = Math.min(Math.max((x - x0) / STEP, 0), cols - 1.001), fz = Math.min(Math.max((z - z0) / STEP, 0), rows - 1.001);
   const c = Math.floor(fx), r = Math.floor(fz), tx = fx - c, tz = fz - r;
@@ -364,7 +422,7 @@ for (const b of buildings) if (b._topY != null) {
   delete b._topY;
 }
 console.log(`props ${props.length + svgProps.length}`);
-console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length} points, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
+console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length}/${evidenceInput.length} points, rejected ${JSON.stringify(hardReject)}, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 // drop anything whose centroid is outside the playable boundary
 const insideC = (poly) => inside(centroid(poly));
 const edgeDist = (pt) => { let best = Infinity; for (let i = 0; i < LIMIT.length; i++) { const a = LIMIT[i], b = LIMIT[(i + 1) % LIMIT.length]; const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1; const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dz) / L2)); best = Math.min(best, Math.hypot(pt[0] - (a[0] + t * dx), pt[1] - (a[1] + t * dz))); } return best; };
@@ -374,12 +432,15 @@ const propsIn = [...props, ...svgProps].filter((p) => p.poly ? insideC(p.poly) :
 if (key === 'woods') for (const p of propsIn) if (/^Sawmill log stack/i.test(p.name || '')) p.color = [116, 88, 58];
 const undergroundIn = underground.filter((u) => insideC(u.poly));
 const rockPolys = (cfg.groups.rocks ? polysIn(cfg.groups.rocks) : []).filter(insideC);
-const rockMasses = key === 'customs' ? rockPolys : rockPolys.map((poly) => {
-  const h = Math.sqrt(area(poly)) * (key === 'reserve' ? 0.52 : 0.4);
+const rockMasses = rockPolys.map((poly, index) => {
+  const h = key === 'customs'
+    ? Math.sqrt(area(poly)) * (0.15 + hash2(index + 17, 59) * 0.12)
+    : Math.sqrt(area(poly)) * (key === 'reserve' ? 0.52 : 0.4);
   const evidence = rockEvidence.filter((p) => inPoly([p.x, p.z], poly));
   const observed = evidence.length ? Math.max(...evidence.map((p) => p.y - terrainHeight(p.x, p.z))) : 0;
-  const cap = key === 'reserve' ? 16 : evidence.length ? 42 : 12;
-  return { poly, height: +Math.max(1.6, Math.min(cap, Math.max(h, observed))).toFixed(1), evidence };
+  const cap = key === 'customs' ? 4.8 : key === 'reserve' ? 16 : evidence.length ? 42 : 12;
+  const floor = key === 'customs' ? 0.8 : 1.6;
+  return { poly, height: +Math.max(floor, Math.min(cap, Math.max(h, observed))).toFixed(1), evidence };
 });
 // Woods' largest SVG rocks describe whole ridges. A single full-height extrusion
 // turns Sniper Rock and the mountain spine into flat monoliths, so retain a low
@@ -416,7 +477,9 @@ function splitWoodsRock({ poly, height, evidence }, index) {
   });
   return [base, ...forms];
 }
-const rocksOut = key === 'customs' ? rockMasses : key === 'woods' ? rockMasses.flatMap(splitWoodsRock) : rockMasses.map(({ evidence, ...rock }) => rock);
+const ROCK_COLORS = [[126, 122, 108], [112, 112, 102], [138, 130, 112], [102, 106, 98]];
+const rocksRaw = key === 'woods' ? rockMasses.flatMap(splitWoodsRock) : rockMasses.map(({ evidence, ...rock }) => rock);
+const rocksOut = rocksRaw.map((rock, index) => ({ ...rock, color: ROCK_COLORS[Math.floor(hash2(index + 101, 43) * ROCK_COLORS.length) % ROCK_COLORS.length] }));
 const output = `public/data/${key}-3d.json`;
 let builtAt = new Date().toISOString();
 if (!process.argv.includes('--stamp')) { try { builtAt = JSON.parse(await readFile(output, 'utf8')).builtAt || builtAt; } catch {} }
@@ -433,10 +496,35 @@ if (cfg.proceduralTrees) {
     if (insideC(poly)) treePolys.push(poly);
   }
 }
+// The SVG canopy rings are only a forest mask. Rendering them as raised slabs created the
+// reviewed green puzzle pieces. Retain them as a quiet understory tint and fill each ring with
+// deterministic individual crowns. About 0.2 crowns/m² gives Customs ~4k trees; cap the larger
+// Woods mask so a single SolidPolygonLayer remains comfortable on ordinary GPUs.
+const totalTreeArea = treePolys.reduce((sum, poly) => sum + area(poly), 0);
+const wantedTrees = Math.min(6000, Math.round(totalTreeArea * 0.2));
+const treeDensity = totalTreeArea ? wantedTrees / totalTreeArea : 0;
+const TREE_COLORS = [[31, 55, 34], [43, 68, 39], [55, 78, 43]];
+const treeCrowns = [];
+for (let index = 0; index < treePolys.length; index++) {
+  const poly = treePolys[index], [x1, z1, x2, z2] = bbox(poly);
+  const count = Math.max(1, Math.round(area(poly) * treeDensity));
+  let accepted = 0;
+  for (let attempt = 0; accepted < count && attempt < count * 30; attempt++) {
+    const x = x1 + hash2(index * 100003 + attempt * 17, 211) * (x2 - x1);
+    const z = z1 + hash2(index * 70001 + attempt * 29, 307) * (z2 - z1);
+    if (!inPoly([x, z], poly) || out0.water.some((w) => inPoly([x, z], w)) || buildings.some((b) => inPoly([x, z], b.poly))) continue;
+    if (roads.some((r) => r.path.some((q) => Math.hypot(q[0] - x, q[1] - z) < r.width / 2 + 1.5))) continue;
+    const radius = 1.5 + hash2(index * 313 + attempt, 401) * 2.5;
+    const height = 6 + hash2(index * 431 + attempt, 503) * 6;
+    const color = TREE_COLORS[Math.floor(hash2(index * 541 + attempt, 601) * TREE_COLORS.length) % TREE_COLORS.length];
+    treeCrowns.push({ x: +x.toFixed(1), z: +z.toFixed(1), radius: +radius.toFixed(1), height: +height.toFixed(1), color });
+    accepted++;
+  }
+}
 const out = {
   props: propsIn, terrain, bridges, limit: LIMIT,
-  map: key, builtAt, source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
-  land: polysIn(cfg.groups.land), water: out0.water, pavement: (cfg.groups.pavement ? polysIn(cfg.groups.pavement) : []).filter(insideC), trees: treePolys, rocks: rocksOut,
+  map: key, builtAt, source: 'tarkov.dev SVG/maps.json + SPT 4.1.2 loose-loot/spawn elevation samples + companion survey samples',
+  land: polysIn(cfg.groups.land), water: out0.water, pavement: (cfg.groups.pavement ? polysIn(cfg.groups.pavement) : []).filter(insideC), understory: treePolys, trees: treeCrowns, rocks: rocksOut,
   roads, railway: clipLines((cfg.groups.railway ? linesIn(cfg.groups.railway) : []).map((p) => ({ path: p }))), fences: fencesCut, powerlines: clipLines((cfg.groups.powerlines ? linesIn(cfg.groups.powerlines) : []).map((p) => ({ path: p }))),
   buildings, underground: undergroundIn, floorBoxes,
 };

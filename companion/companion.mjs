@@ -8,7 +8,7 @@
 //   options (also stored in companion.json): --dir <screenshots folder> --relay <wss url> --code <CODE>
 //     --name <text> (shown on the map instead of the code) --keep (don't delete screenshots)
 //     --auto <ms> (auto-press screenshot key) --map <name> (skip log detection)
-//     --logs <EFT Logs folder> --verbose
+//     --logs <EFT Logs folder> --elevation-log <file> (default elevation-<map>.jsonl) --verbose
 //   UI options: --headless (no UI server) --port <n> (default 4173) --no-open (don't open the browser)
 // Runs with Windows node or WSL node (paths under /mnt/c are handled).
 import fs from 'node:fs';
@@ -213,6 +213,19 @@ function pollLogs() {
 }
 const currentMap = () => cfg.map || detectedMap || 'customs';
 const currentKey = () => cfg.screenshotKey || keyToSendKeys(detectedKey) || '{PRTSC}';
+const elevationArg = args['elevation-log'];
+const elevationLogging = !['off', 'false', '0'].includes(String(elevationArg).toLowerCase());
+const elevationFile = (map) => {
+  if (!elevationLogging) return null;
+  if (elevationArg && elevationArg !== true) return path.resolve(toLocal(String(elevationArg)));
+  return path.join(here, `elevation-${String(map || 'customs').replace(/[^a-z0-9_-]/gi, '-').toLowerCase()}.jsonl`);
+};
+let elevationLogWarned = false;
+function logElevation(msg, t = Date.now()) {
+  const file = elevationFile(msg.map); if (!file) return;
+  try { fs.appendFileSync(file, `${JSON.stringify({ map: msg.map, x: msg.x, y: msg.y, z: msg.z, t })}\n`); }
+  catch (error) { if (!elevationLogWarned) { elevationLogWarned = true; log(`could not append elevation log ${file}: ${error.message}`); } }
+}
 function posMessage(p) { // every position carries the username when one is set
   const msg = { ...p, map: currentMap() };
   if (cfg.name) msg.name = cfg.name;
@@ -234,6 +247,7 @@ log(`
   EFT logs     : ${logsDir || '(not found — map detection off; use --logs or --map)'}
   Map          : ${cfg.map || 'auto (from logs, fallback customs)'}
   Delete PNGs  : ${cfg.deleteScreenshots}   Auto-screenshot: ${cfg.autoMs ? cfg.autoMs + ' ms' : 'off'}
+  Elevation log: ${elevationLogging ? (elevationArg && elevationArg !== true ? elevationFile(currentMap()) : 'elevation-<map>.jsonl (next to companion.json)') : 'off'}
 `);
 
 // ---- local UI server (127.0.0.1 only)
@@ -436,6 +450,7 @@ function scan() {
     const p = parseScreenshot(file);
     if (!p) { log(`could not parse position from filename: ${file}`); continue; }
     const msg = posMessage(p);
+    logElevation(msg, now);
     const ok = send(msg);
     log(`  ${ok ? 'sent' : 'DROP'} #${sent}  x ${msg.x}  y ${msg.y}  z ${msg.z}  yaw ${msg.yaw}  map ${msg.map}${msg.name ? '  name ' + msg.name : ''}  (file→detect ${age ?? '?'} ms)${verbose ? '  ' + file : ''}`);
     if (ok) rememberPos(msg);

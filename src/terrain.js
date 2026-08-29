@@ -8,10 +8,10 @@
 //   b) bilinear interpolation of the 10 m grid (C0: every cell edge is a crease)
 //                                              -> Gaussian-conditioned grid + bicubic Catmull-Rom
 //   c) per-quad forward-difference shading      -> smooth per-vertex normals + baked two-light hillshade
-// The source grid is IDW over SPT ground-spawn points, so it carries cone artifacts around every
-// sample; two passes of a separable 5x5 Gaussian condition those away before anything else.
+// The source grid is a robust 5 m fit over survey, loose-loot and SPT spawn samples. One compact
+// Gaussian pass conditions quantisation without smearing a real crest into its surroundings.
 //
-// TRUE SCALE: geometry is never exaggerated (heights stay at the data's -0.28..11.12 m). Relief is
+// TRUE SCALE: geometry is never exaggerated. Relief is
 // made legible by steepening the *normals* (NORMAL_VE) and the *baked hillshade* (SHADE_VE) only.
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
@@ -34,6 +34,7 @@ const FILL_DIR = [0.5, 0.35, -0.79];
 
 const GRASS = [[40, 62, 42], [50, 76, 45], [62, 88, 49], [80, 100, 54], [102, 114, 62]];
 const GRASS_DRY = [110, 106, 84];
+const GRASS_ROCK = [124, 118, 103];
 const YARD_EARTH = [112, 86, 57];
 const BAND_TOP = [66, 62, 54], BAND_BOT = [24, 27, 25];
 
@@ -143,7 +144,7 @@ function chamfer(mask, gw, gh) {
 export function buildTerrain(data) {
   const t = data.terrain;
   const { x0, z0, step, cols, rows } = t;
-  const grid = gaussian5(t.heights, cols, rows, 5); // 5 passes ~ sigma 22 m: enough to dissolve the IDW cones
+  const grid = gaussian5(t.heights, cols, rows, 1); // ~5 m sigma: smooth cell noise, retain surveyed crests
   const H = makeBicubic(grid, cols, rows, x0, z0, step);
   let hmin = Infinity, hmax = -Infinity;
   for (let i = 0; i < grid.length; i++) { if (grid[i] < hmin) hmin = grid[i]; if (grid[i] > hmax) hmax = grid[i]; }
@@ -209,7 +210,7 @@ export function buildTerrain(data) {
 
   const KEY = norm3([-SUN_DIR[0], -SUN_DIR[1], -SUN_DIR[2]]);
   const FILL = norm3([-FILL_DIR[0], -FILL_DIR[1], -FILL_DIR[2]]);
-  const flatRaw = KEY[2] + 0.35 * FILL[2];      // response of a flat surface, so shade ~1 on the flats
+  const flatRaw = KEY[2] + 0.28 * FILL[2];      // response of a flat surface, so shade ~1 on the flats
   const GRAD_PX = 3;
 
   for (let py = 0; py < TH_T; py++) {
@@ -229,8 +230,10 @@ export function buildTerrain(data) {
       const dhdx = (fine[o + ib] - fine[o + ia]) / ((ib - ia) * mx || 1);
       const dhdz = (fine[pyB + px] - fine[pyA + px]) / dzSpan;
       // (c) slope tint toward dry khaki — an independent relief cue
-      const slope = Math.hypot(dhdx, dhdz), dry = Math.min(0.5, slope * 3.2);
+      const slope = Math.hypot(dhdx, dhdz), dry = Math.min(0.56, slope * 2.8);
       r += (GRASS_DRY[0] - r) * dry; g += (GRASS_DRY[1] - g) * dry; b += (GRASS_DRY[2] - b) * dry;
+      const rocky = Math.min(0.34, Math.max(0, slope - 0.28) * 1.2);
+      r += (GRASS_ROCK[0] - r) * rocky; g += (GRASS_ROCK[1] - g) * rocky; b += (GRASS_ROCK[2] - b) * rocky;
       if (yardMask?.[o + px]) {
         const earth = 0.82 + (vnoise(gx - 43, gz + 17, 11) - 0.5) * 0.12;
         r += (YARD_EARTH[0] * earth - r) * 0.88;
@@ -240,8 +243,10 @@ export function buildTerrain(data) {
       // (b) two-light hillshade in deck space (Nx = +VE*dh/dx because deck X = -gameX)
       const nx = SHADE_VE * dhdx, ny = SHADE_VE * dhdz;
       const nl = Math.sqrt(nx * nx + ny * ny + 1);
-      const raw = (Math.max(0, nx * KEY[0] + ny * KEY[1] + KEY[2]) + 0.35 * Math.max(0, nx * FILL[0] + ny * FILL[1] + FILL[2])) / nl;
-      const shade = clamp(1 + (raw - flatRaw) * 1.55, 0.70, 1.26);
+      const horizontalFacing = (nx * KEY[0] + ny * KEY[1]) / nl;
+      const raw = (Math.max(0, nx * KEY[0] + ny * KEY[1] + KEY[2]) + 0.28 * Math.max(0, nx * FILL[0] + ny * FILL[1] + FILL[2])) / nl;
+      const lee = smoothstep(clamp((-horizontalFacing - 0.03) * 2.1, 0, 1)) * Math.min(1, slope * 5);
+      const shade = clamp((1 + (raw - flatRaw) * 1.9) * (1 - lee * 0.13), 0.60, 1.34);
       r *= shade; g *= shade; b *= shade;
       // (d) mottle, two octaves
       const m = 1 + (vnoise(gx, gz, 28) - 0.5) * 0.085;
@@ -404,8 +409,8 @@ function drawContours(ctx, fine, gw, gh, hmin, hmax) {
     }
     if (!segs.length) continue;
     const major = lv % 10 === 0;
-    ctx.strokeStyle = major ? 'rgba(20,32,20,0.46)' : 'rgba(26,42,26,0.26)';
-    ctx.lineWidth = major ? 1.6 : 1;
+    ctx.strokeStyle = major ? 'rgba(20,32,20,0.38)' : 'rgba(26,42,26,0.20)';
+    ctx.lineWidth = major ? 1.45 : 0.9;
     ctx.beginPath();
     for (const s of joinSegments(segs)) {
       const p = chaikin(chaikin(s));
