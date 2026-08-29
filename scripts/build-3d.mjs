@@ -9,6 +9,7 @@ let svg;
 try { svg = await readFile('.cache/maps/svg/Customs.svg', 'utf8'); } catch { svg = await (await fetch(SVG_URL)).text(); }
 const maps = JSON.parse(await readFile('scripts/tarkov-dev-maps.json', 'utf8'));
 const props = JSON.parse(await readFile('data/customs-props.json', 'utf8')).props;
+const extraRoads = JSON.parse(await readFile('data/customs-roads.json', 'utf8')).add;
 const customs = maps.find((m) => m.normalizedName === 'customs').maps[0];
 const [, , VW, VH] = svg.match(/viewBox="([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"/).slice(1).map(Number);
 const toGame = ([sx, sy]) => [+(BOUNDS.xMax - (sx / VW) * (BOUNDS.xMax - BOUNDS.xMin)).toFixed(1), +(BOUNDS.zMin + (sy / VH) * (BOUNDS.zMax - BOUNDS.zMin)).toFixed(1)];
@@ -92,6 +93,7 @@ const underground = floorBoxes.filter((f) => /Underground/i.test(f.layer)).map((
 const polysIn = (id) => ground.filter((s) => inGroup(s, id)).map((s) => s.pts.map(toGame));
 const linesIn = (id) => ground.filter((s) => inGroup(s, id)).map((s) => s.pts.map(toGame));
 const roads = [
+  ...extraRoads.map((r) => ({ ...r, path: r.path.map(([x, z]) => [x, z]) })),
   ...linesIn('High_Roads').map((p) => ({ path: p, width: 12, kind: 'highway' })),
   ...linesIn('Main_Roads').map((p) => ({ path: p, width: 8, kind: 'main' })),
   ...linesIn('Roads').map((p) => ({ path: p, width: 5, kind: 'small' })),
@@ -154,7 +156,7 @@ roads.length = 0; roads.push(...clipLines(roadsCut.filter((r) => !r.path.some((q
 const pav = polysIn('Pavement');
 const nearPaved = (q) => pav.some((pp) => inPoly(q, pp)) || buildings.some((b) => { const c = centroid(b.poly); return Math.hypot(c[0] - q[0], c[1] - q[1]) < 25; });
 for (const r of roads) {
-  if (r.kind !== 'small') continue;
+  if (r.kind !== 'small' || r.fixed) continue;
   const hits = r.path.filter(nearPaved).length;
   if (hits / r.path.length < 0.35) { r.kind = 'track'; r.width = 2.2; }
 }
