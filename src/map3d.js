@@ -7,6 +7,7 @@ import { KINDS, iconDataUrl, arrowDataUrl, soldierDataUrl, extractLetter } from 
 import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
+import { makeWaterHeightCapper, waterLevelAt, waterRings, waterSurfaceAt } from './water.js';
 
 const C = {
   // Brighter field palette: sage/olive ground, warm mineral structures, restrained accents.
@@ -35,8 +36,21 @@ const C = {
 };
 const P = ([x, z], y = 0) => [-x, -z, y];
 let H = () => 0; // terrain height at game (x, z); set once data is loaded
+let WATER = [], RELIEF = 3;
 const Pg = ([x, z], dy = 0) => P([x, z], H(x, z) + dy); // draped point
 const ringG = (poly, dy = 0) => poly.map((p) => Pg(p, dy));
+const waterPoint = (water, [x, z], dy = 0) => {
+  const level = waterLevelAt(water, x, z);
+  return P([x, z], level == null ? H(x, z) + dy : level * RELIEF + dy);
+};
+const waterPolygon = (water, dy = 0) => {
+  const rings = waterRings(water).map((ring) => ring.map((point) => waterPoint(water, point, dy)));
+  return rings.length === 1 ? rings[0] : rings;
+};
+const bridgeGround = (point) => {
+  const water = waterSurfaceAt(WATER, point);
+  return Math.max(H(point[0], point[1]), water == null ? -Infinity : water * RELIEF);
+};
 function makeSampler(t, relief = 3) {
   const { x0, z0, step, cols, rows, heights } = t;
   return (x, z) => {
@@ -82,7 +96,7 @@ function bridgeProfile(b) {
   const L = cum[cum.length - 1], ramp = Math.min(15, L / 3);
   return p.map((pt, i) => { const t = cum[i]; return { pt, lift: t < ramp ? (t / ramp) * b.height : t > L - ramp ? ((L - t) / ramp) * b.height : b.height }; });
 }
-const bridgePath = (b) => bridgeProfile(b).map(({ pt, lift }) => Pg(pt, lift + 0.1));
+const bridgePath = (b) => bridgeProfile(b).map(({ pt, lift }) => P(pt, bridgeGround(pt) + lift + 0.1));
 // offset a 3D path sideways by d metres (for railings on both sides of a deck)
 function offsetPath(p, d) {
   return p.map((q, i) => { const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)]; const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [q[0] - (dy / L) * d, q[1] + (dx / L) * d, q[2]]; });
@@ -92,7 +106,7 @@ function piers(b) {
   const p = bridgeProfile(b), out = [];
   for (let i = 3; i < p.length - 3; i += 3) {
     if (p[i].lift < b.height - 0.01) continue;
-    const top = Pg(p[i].pt, p[i].lift - 0.05), bottom = H(p[i].pt[0], p[i].pt[1]) + 0.25;
+    const top = P(p[i].pt, bridgeGround(p[i].pt) + p[i].lift - 0.05), bottom = H(p[i].pt[0], p[i].pt[1]) + 0.25;
     out.push({ pos: top, bottom, h: Math.max(0.2, top[2] - bottom), w: b.width * 0.5 });
   }
   return out;
@@ -481,10 +495,17 @@ export async function createView3d(container, mapData, src) {
   let terrain = null;
   const rebuildGround = () => {
     terrain = null;
+    WATER = data.water || [];
+    RELIEF = relief;
     if (!data.terrain) { H = () => 0; VOID_Z = -14; heightEpoch++; return; }
     data.terrain.limit = data.limit;
     try { terrain = buildTerrain(data, relief); H = terrain.H; VOID_Z = terrain.voidZ; }
-    catch (e) { console.warn('terrain mesh failed, falling back to quads', e); H = makeSampler(data.terrain, relief); VOID_Z = Math.min(-14, Math.floor((Math.min(...data.terrain.heights) * relief - 10) / 2) * 2); }
+    catch (e) {
+      console.warn('terrain mesh failed, falling back to quads', e);
+      const sample = makeSampler(data.terrain, relief), capWater = makeWaterHeightCapper(data.water || [], relief);
+      H = (x, z) => capWater(sample(x, z), x, z);
+      VOID_Z = Math.min(-14, Math.floor((Math.min(...data.terrain.heights) * relief - 10) / 2) * 2);
+    }
     heightEpoch++;
   };
   rebuildGround();
@@ -542,6 +563,7 @@ export async function createView3d(container, mapData, src) {
     sun: new DirectionalLight({ color: [255, 250, 240], intensity: 0.9, direction: [-0.6, -0.4, -1] }),
   });
   let lighting = sceneLighting();
+  const shoreData = (data.water || []).flatMap((water) => waterRings(water).map((path) => ({ water, path })));
 
   const staticLayers = () => [
     // TRACK B: contours are baked into the ground texture (smooth at any zoom, no z-fighting, zero layers)
@@ -550,10 +572,10 @@ export async function createView3d(container, mapData, src) {
     ] : []),
     ...(terrain ? terrain.layers() : [new SolidPolygonLayer({ id: 'land', shadowEnabled: false, data: data.land, getPolygon: (d) => ringG(d, 0), getFillColor: C.land, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })]),
     // At-grade pavement, roads, dirt/tracks, and rail are in terrain.js's single baked texture.
-    new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water, getPolygon: (d) => ringG(d, 0.12), getFillColor: C.water, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water || [], getPolygon: (d) => waterPolygon(d), getFillColor: C.water, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'minefields', shadowEnabled: false, data: data.minefields || [], getPolygon: (d) => ringG(d, 0.14), getFillColor: [142, 88, 52, 62], updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'understory', shadowEnabled: false, data: data.understory || [], getPolygon: (d) => ringG(d, 0.09), getFillColor: C.understory, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new PathLayer({ id: 'shore', shadowEnabled: false, data: data.water, getPath: (d) => ringG([...d, d[0]], 0.16), getColor: C.shore, getWidth: 0.5, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'shore', shadowEnabled: false, data: shoreData, getPath: (d) => [...d.path, d.path[0]].map((point) => waterPoint(d.water, point, 0.04)), getColor: C.shore, getWidth: 0.5, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => catenary(d.path, 19), getColor: [96, 96, 92, 170], getWidth: 0.2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d.poly ?? d, 0.04), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: (d) => d.color ? liftTone(d.color, 0.1) : C.rock, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 3 } }),
   ];
@@ -766,8 +788,10 @@ export async function createView3d(container, mapData, src) {
       buildings: data.buildings.length, props: propData.length, fences: (data.fences || []).length,
       bridges: (data.bridges || []).length, rocks: (data.rocks || []).length,
       treesAll: treeSet.all.length, treesFar: treeSet.far.length,
+      water: (data.water || []).length,
       markers: src.markers().filter((m) => inLimit(m.position.x, m.position.z)).length,
     },
+    water: (data.water || []).map((w) => ({ level: w.level, depth: w.depth, bank: w.bank, gradient: w.gradient ?? null, rings: waterRings(w).length })),
     layers: Object.fromEntries((deck.props.layers || []).map((layer) => {
       const d = layer.props.data; return [layer.id, Array.isArray(d) || ArrayBuffer.isView(d) ? d.length : null];
     })),
