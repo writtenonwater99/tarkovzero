@@ -219,12 +219,17 @@ for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let sum = 0, n =
 const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights) };
 console.log(`props ${props.length}`);
 console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length} points, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
+// drop anything whose centroid is outside the playable boundary
+const insideC = (poly) => inside(centroid(poly));
+const keepB = buildings.filter((b) => insideC(b.poly)); buildings.length = 0; buildings.push(...keepB);
+const propsIn = props.filter((p) => (p.path ? inside(p.path[0]) : inside([p.x, p.z])));
+const undergroundIn = underground.filter((u) => insideC(u.poly));
 const out = {
-  props, terrain, bridges, limit: LIMIT,
+  props: propsIn, terrain, bridges, limit: LIMIT,
   map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
-  land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement'), trees: polysIn('Trees'), rocks: polysIn('Rocks'),
+  land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement').filter(insideC), trees: polysIn('Trees').filter(insideC), rocks: polysIn('Rocks').filter(insideC),
   roads, railway: clipLines(linesIn('Railway').map((p) => ({ path: p }))), fences: fencesCut, powerlines: clipLines(linesIn('Powerlines').map((p) => ({ path: p }))),
-  buildings, underground, floorBoxes,
+  buildings, underground: undergroundIn, floorBoxes,
 };
 await writeFile('public/data/customs-3d.json', JSON.stringify(out));
 const multi = buildings.filter((b) => b.floors > 1);
