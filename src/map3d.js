@@ -30,7 +30,8 @@ export async function createView3d(container, mapData, src) {
   const iconAtlas = await buildAtlas(Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), 64);
   const arrowAtlas = await buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
-  let viewState = { target: [0, 0, 0], zoom: 0, rotationX: 50, rotationOrbit: 0, minZoom: -2, maxZoom: 5 };
+  const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
+  let viewState = { target: [0, 0, 0], zoom: 0, rotationX: 62, rotationOrbit: 0, minZoom: -2, maxZoom: 5 };
   let hover = null;
 
   const lighting = new LightingEffect({
@@ -39,15 +40,15 @@ export async function createView3d(container, mapData, src) {
   });
 
   const staticLayers = () => [
-    new SolidPolygonLayer({ id: 'land', data: data.land, getPolygon: ring, getFillColor: C.land, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'pavement', data: data.pavement, getPolygon: ring, getFillColor: C.pavement, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'water', data: data.water, getPolygon: ring, getFillColor: C.water, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'underground', data: data.underground, getPolygon: (d) => ring(d.poly), getFillColor: C.underground, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true }),
-    new PathLayer({ id: 'rail', data: data.railway, getPath: (d) => ring(d.path), getColor: C.rail, getWidth: 2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new PathLayer({ id: 'roads', data: data.roads, getPath: (d) => ring(d.path), getColor: (d) => (d.kind === 'highway' ? C.highway : d.kind === 'dirt' ? C.dirt : C.road), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 1.5, capRounded: true, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new PathLayer({ id: 'fences', data: data.fences, getPath: (d) => ring(d.path), getColor: C.fence, getWidth: 0.6, widthUnits: 'meters', widthMinPixels: 0.5, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'rocks', data: data.rocks, getPolygon: ring, extruded: true, getElevation: 1.2, getFillColor: C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 8 } }),
-    new SolidPolygonLayer({ id: 'trees', data: data.trees, getPolygon: ring, extruded: true, getElevation: 3, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
+    new SolidPolygonLayer({ id: 'land', shadowEnabled: false, data: data.land, getPolygon: ring, getFillColor: C.land, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'pavement', shadowEnabled: false, data: data.pavement, getPolygon: ring, getFillColor: C.pavement, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water, getPolygon: ring, getFillColor: C.water, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: data.underground, getPolygon: (d) => ring(d.poly), getFillColor: C.underground, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true }),
+    new PathLayer({ id: 'rail', shadowEnabled: false, data: data.railway, getPath: (d) => ring(d.path), getColor: C.rail, getWidth: 2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'roads', shadowEnabled: false, data: data.roads, getPath: (d) => ring(d.path), getColor: (d) => (d.kind === 'highway' ? C.highway : d.kind === 'dirt' ? C.dirt : C.road), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 1.5, capRounded: true, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new PathLayer({ id: 'fences', shadowEnabled: false, data: data.fences, getPath: (d) => ring(d.path), getColor: C.fence, getWidth: 0.6, widthUnits: 'meters', widthMinPixels: 0.5, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: ring, extruded: true, getElevation: 1.2, getFillColor: C.rock, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 8 } }),
+    new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: ring, extruded: true, getElevation: 3, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
   ];
   const buildingLayer = () => new SolidPolygonLayer({
     id: 'buildings', data: data.buildings, getPolygon: (d) => ring(d.poly), extruded: true, getElevation: (d) => d.height,
@@ -60,8 +61,11 @@ export async function createView3d(container, mapData, src) {
     const markers = src.markers();
     const players = src.players().filter((p) => p.last);
     return [
-      new IconLayer({ id: 'markers', data: markers, getPosition: (d) => P([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => d.kind, getSize: 14, sizeUnits: 'meters', sizeMinPixels: 14, sizeMaxPixels: 30, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new TextLayer({ id: 'labels', data: src.labels(), getPosition: (d) => P(d.position, 2), getText: (d) => d.text, getSize: (d) => 9 * ((d.size ?? 100) / 100), sizeUnits: 'meters', sizeMinPixels: 9, sizeMaxPixels: 22, getColor: [50, 55, 60], fontFamily: 'system-ui, sans-serif', fontWeight: 700, outlineWidth: 4, outlineColor: [255, 255, 255, 230], fontSettings: { sdf: true }, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract')), getPosition: (d) => P([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => d.kind, getSize: 14, sizeUnits: 'meters', sizeMinPixels: 16, sizeMaxPixels: 32, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      // everything else lies flat on the ground like chips on a table
+      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract')), getPosition: (d) => P([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: (d) => d.kind, getSize: 5, sizeUnits: 'meters', sizeMinPixels: 8, sizeMaxPixels: 22, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new LineLayer({ id: 'label-leaders', data: src.labels(), getSourcePosition: (d) => P(d.position, 0), getTargetPosition: (d) => P(d.position, 22 * ((d.size ?? 100) / 100)), getColor: [90, 95, 100, 170], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new TextLayer({ id: 'labels', data: src.labels(), getPosition: (d) => P(d.position, 22 * ((d.size ?? 100) / 100)), getText: (d) => d.text, getAlignmentBaseline: 'bottom', getSize: (d) => 9 * ((d.size ?? 100) / 100), sizeUnits: 'meters', sizeMinPixels: 9, sizeMaxPixels: 22, getColor: [50, 55, 60], fontFamily: 'system-ui, sans-serif', fontWeight: 700, outlineWidth: 4, outlineColor: [255, 255, 255, 230], fontSettings: { sdf: true }, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => P([ll.lng, ll.lat], 0.3)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => P([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], p.last.y ?? 0), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new IconLayer({ id: 'players', data: players, getPosition: (p) => P([p.last.x, p.last.z], (p.last.y ?? 0) + 0.2), iconAtlas: arrowAtlas.canvas, iconMapping: arrowAtlas.mapping, getIcon: (p) => p.color, getSize: 12, sizeUnits: 'meters', sizeMinPixels: 22, sizeMaxPixels: 44, billboard: false, getAngle: (p) => -((p.last.yaw ?? 0) + (mapData.coordinateRotation ?? 0)), pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last), getAngle: players.map((p) => p.last) } }),
