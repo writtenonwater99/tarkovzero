@@ -66,3 +66,8 @@ body.view-3d .view-toggle { background: #2a6; border-color: #2a6; }
 #layers .mk { opacity: 1; }
 #hint3d { display: none; margin-top: 10px; font-size: 11px; line-height: 1.4; }
 body.view-3d #hint3d { display: block; }
+.floors { display: none; margin-top: 10px; }
+body.view-3d .floors { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.floors .group { margin: 0 6px 0 0; }
+.floors button { background: #2a2a2a; color: #ccc; border: 1px solid #444; border-radius: 3px; padding: 2px 7px; font: 12px system-ui; cursor: pointer; }
+.floors button.on { background: #2a6; border-color: #2a6; color: #fff; }
