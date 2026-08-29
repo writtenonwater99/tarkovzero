@@ -8,6 +8,7 @@ const BOUNDS = { xMax: 698, xMin: -372, zMin: -307, zMax: 237 }; // tarkov.dev b
 let svg;
 try { svg = await readFile('.cache/maps/svg/Customs.svg', 'utf8'); } catch { svg = await (await fetch(SVG_URL)).text(); }
 const maps = JSON.parse(await readFile('scripts/tarkov-dev-maps.json', 'utf8'));
+const props = JSON.parse(await readFile('data/customs-props.json', 'utf8')).props;
 const customs = maps.find((m) => m.normalizedName === 'customs').maps[0];
 const [, , VW, VH] = svg.match(/viewBox="([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"/).slice(1).map(Number);
 const toGame = ([sx, sy]) => [+(BOUNDS.xMax - (sx / VW) * (BOUNDS.xMax - BOUNDS.xMin)).toFixed(1), +(BOUNDS.zMin + (sy / VH) * (BOUNDS.zMax - BOUNDS.zMin)).toFixed(1)];
@@ -171,9 +172,10 @@ for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
 const heights = new Float32Array(cols * rows);
 for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let sum = 0, n = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) { sum += raw[rr * cols + cc]; n++; } } heights[r * cols + c] = +(sum / n).toFixed(2); }
 const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights) };
+console.log(`props ${props.length}`);
 console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length} points, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 const out = {
-  terrain, bridges,
+  props, terrain, bridges,
   map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
   land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement'), trees: polysIn('Trees'), rocks: polysIn('Rocks'),
   roads, railway: linesIn('Railway').map((p) => ({ path: p })), fences: linesIn('Fence').map((p) => ({ path: p })), powerlines: linesIn('Powerlines').map((p) => ({ path: p })),

@@ -1,0 +1,440 @@
+{
+ "_doc": "Hand-traced props in game coords (x, z). box: w (across) \u00d7 l (along rot) \u00d7 h metres, rot in degrees (0 = along +x). cyl: r, h. wall: path + h. Traced from the tarkov.dev satellite render.",
+ "props": [
+  {
+   "type": "railcar",
+   "name": "Rail tanker",
+   "x": -336,
+   "z": -163,
+   "w": 3.2,
+   "l": 14,
+   "h": 3.6,
+   "rot": 78,
+   "color": [
+    150,
+    62,
+    48
+   ]
+  },
+  {
+   "type": "tanker",
+   "name": "Tank square tanker",
+   "x": 135.2,
+   "z": -11.1,
+   "w": 3.9,
+   "l": 13.7,
+   "h": 3.6,
+   "rot": 0,
+   "color": [
+    205,
+    205,
+    210
+   ]
+  },
+  {
+   "type": "tanker",
+   "name": "Tank square tanker",
+   "x": 136.2,
+   "z": -1.3,
+   "w": 3.9,
+   "l": 13.7,
+   "h": 3.6,
+   "rot": 0,
+   "color": [
+    205,
+    205,
+    210
+   ]
+  },
+  {
+   "type": "tanker",
+   "name": "Tank square tanker",
+   "x": 136.9,
+   "z": 6.6,
+   "w": 3.9,
+   "l": 13.7,
+   "h": 3.6,
+   "rot": 0,
+   "color": [
+    205,
+    205,
+    210
+   ]
+  },
+  {
+   "type": "tanker",
+   "name": "Tank square tanker",
+   "x": 137.8,
+   "z": 14.8,
+   "w": 3.9,
+   "l": 13.7,
+   "h": 3.6,
+   "rot": 0,
+   "color": [
+    205,
+    205,
+    210
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Green tank",
+   "x": 121.8,
+   "z": 22.3,
+   "w": 3.9,
+   "l": 13,
+   "h": 3.6,
+   "rot": 0,
+   "color": [
+    78,
+    95,
+    68
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Green tank",
+   "x": 120.5,
+   "z": 1.3,
+   "w": 3.9,
+   "l": 13.7,
+   "h": 3.6,
+   "rot": 90,
+   "color": [
+    78,
+    95,
+    68
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Green tank",
+   "x": 84.8,
+   "z": 15.7,
+   "w": 3.9,
+   "l": 13.7,
+   "h": 3.6,
+   "rot": 90,
+   "color": [
+    78,
+    95,
+    68
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rust tanker",
+   "x": 101.6,
+   "z": -13.7,
+   "w": 3.2,
+   "l": 13,
+   "h": 3.4,
+   "rot": 58,
+   "color": [
+    150,
+    62,
+    48
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Blue containers",
+   "x": 119.6,
+   "z": -26.1,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    60,
+    90,
+    150
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Blue containers",
+   "x": 145.4,
+   "z": -15.3,
+   "w": 2.5,
+   "l": 12,
+   "h": 2.6,
+   "rot": 30,
+   "color": [
+    60,
+    90,
+    150
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 59.4,
+   "z": -77.3,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 90,
+   "color": [
+    210,
+    110,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Containers",
+   "x": 105,
+   "z": -112,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    60,
+    120,
+    120
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Containers",
+   "x": 105,
+   "z": -108.5,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    170,
+    60,
+    50
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Red tanker trailer",
+   "x": 336,
+   "z": -189,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 18,
+   "color": [
+    150,
+    62,
+    48
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Old Gas tank",
+   "x": 313.7,
+   "z": -163.7,
+   "w": 5.2,
+   "l": 14.4,
+   "h": 4.2,
+   "rot": 0,
+   "color": [
+    78,
+    95,
+    68
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail tanker car",
+   "x": 262.1,
+   "z": -174.6,
+   "w": 3.2,
+   "l": 12,
+   "h": 3.6,
+   "rot": 57,
+   "color": [
+    128,
+    128,
+    132
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail tanker car",
+   "x": 267.1,
+   "z": -168.6,
+   "w": 3.2,
+   "l": 12,
+   "h": 3.6,
+   "rot": 57,
+   "color": [
+    128,
+    128,
+    132
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail tanker car",
+   "x": 271.9,
+   "z": -162.8,
+   "w": 3.2,
+   "l": 12,
+   "h": 3.6,
+   "rot": 57,
+   "color": [
+    128,
+    128,
+    132
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail tanker car",
+   "x": 276.5,
+   "z": -157.2,
+   "w": 3.2,
+   "l": 12,
+   "h": 3.6,
+   "rot": 57,
+   "color": [
+    128,
+    128,
+    132
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Locomotive",
+   "x": 251.6,
+   "z": -184,
+   "w": 3.4,
+   "l": 14,
+   "h": 4,
+   "rot": 57,
+   "color": [
+    60,
+    60,
+    65
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Rail cars",
+   "x": 341.8,
+   "z": -121.2,
+   "w": 3.2,
+   "l": 24,
+   "h": 3.4,
+   "rot": 0,
+   "color": [
+    110,
+    100,
+    90
+   ]
+  },
+  {
+   "type": "railcar",
+   "name": "Orange rail car",
+   "x": 328.8,
+   "z": -123.9,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 122,
+   "color": [
+    200,
+    120,
+    60
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Bus",
+   "x": 262.8,
+   "z": 54.3,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 74,
+   "color": [
+    232,
+    232,
+    226
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Bus",
+   "x": 257.6,
+   "z": 54.6,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 74,
+   "color": [
+    232,
+    232,
+    226
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Bus",
+   "x": 252.4,
+   "z": 54.3,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 74,
+   "color": [
+    232,
+    232,
+    226
+   ]
+  },
+  {
+   "type": "vehicle",
+   "name": "Bus",
+   "x": 246.5,
+   "z": 52.6,
+   "w": 3,
+   "l": 12,
+   "h": 3.2,
+   "rot": 74,
+   "color": [
+    232,
+    232,
+    226
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": 272.6,
+   "z": 2,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 0,
+   "color": [
+    170,
+    60,
+    50
+   ]
+  },
+  {
+   "type": "container",
+   "name": "Container",
+   "x": -260,
+   "z": -63.2,
+   "w": 2.5,
+   "l": 8,
+   "h": 2.6,
+   "rot": 40,
+   "color": [
+    170,
+    60,
+    50
+   ]
+  }
+ ]
+}

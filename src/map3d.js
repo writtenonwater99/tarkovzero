@@ -37,9 +37,10 @@ function contours(t, interval = 2) { // marching squares isolines in game coords
   return lines;
 }
 function terrainQuads(t, base) { // shaded ground quads (cheap hillshade baked into colour)
-  const { x0, z0, step, cols, rows, heights } = t, out = [], light = [-0.5, -0.35, 0.8];
-  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++) {
-    const h = (rr, cc) => heights[rr * cols + cc];
+  const { x0, z0, cols, rows } = t, out = [], light = [-0.5, -0.35, 0.8], SUB = 2, step = t.step / SUB;
+  const Hs = makeSampler(t);
+  for (let r = 0; r < (rows - 1) * SUB; r++) for (let c = 0; c < (cols - 1) * SUB; c++) {
+    const h = (rr, cc) => Hs(x0 + cc * step, z0 + rr * step);
     const dx = (h(r, c + 1) - h(r, c)) / step, dz = (h(r + 1, c) - h(r, c)) / step; // slope
     const n = [-dx * 2.2, -dz * 2.2, 1], L = Math.hypot(...n); const shade = Math.max(0.5, Math.min(1.18, (n[0] * light[0] + n[1] * light[1] + n[2] * light[2]) / L + 0.32));
     const hm = (h(r, c) + h(r + 1, c + 1)) / 2, tint = Math.min(1, Math.max(0, hm / 12)); // higher ground slightly warmer/lighter
@@ -115,6 +116,21 @@ function buildingParts(bs) {
   }
   return { walls, roofs, slabs, posts, edges };
 }
+// rotated box footprint in game coords: centre (x,z), w across, l along heading rot (deg)
+function rbox(x, z, w, l, rot) { const a = (rot * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a); return [[-l / 2, -w / 2], [l / 2, -w / 2], [l / 2, w / 2], [-l / 2, w / 2]].map(([u, v]) => [x + u * c - v * sn, z + u * sn + v * c]); }
+const circle = (x, z, r, n = 18) => Array.from({ length: n }, (_, i) => [x + r * Math.cos((i / n) * 2 * Math.PI), z + r * Math.sin((i / n) * 2 * Math.PI)]);
+// thin strip polygon around a polyline (for fences/walls)
+function strip(path, w) { const L = [], R = []; for (let i = 0; i < path.length; i++) { const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)]; const dx = b[0] - a[0], dz = b[1] - a[1], n = Math.hypot(dx, dz) || 1; L.push([path[i][0] - (dz / n) * w, path[i][1] + (dx / n) * w]); R.push([path[i][0] + (dz / n) * w, path[i][1] - (dx / n) * w]); } return [...L, ...R.reverse()]; }
+const PROP_COLORS = { container: [200, 70, 60], tank: [200, 205, 212], tanker: [205, 205, 210], railcar: [90, 80, 75], vehicle: [120, 130, 140], crane: [220, 180, 60], wall: [190, 186, 180], pipe: [150, 150, 150] };
+function propParts(props) { // -> extruded footprints with base at terrain
+  return props.map((p) => {
+    const base = H(p.x ?? p.path?.[0]?.[0] ?? 0, p.z ?? p.path?.[0]?.[1] ?? 0);
+    const color = p.color ?? PROP_COLORS[p.type] ?? [160, 160, 160];
+    if (p.type === 'wall' || p.type === 'pipe') return { poly: strip(p.path, (p.w ?? 0.4) / 2), h: p.h ?? 2.5, base, color, p };
+    if (p.type === 'tank') return { poly: circle(p.x, p.z, p.r), h: p.h ?? 6, base, color, p };
+    return { poly: rbox(p.x, p.z, p.w ?? 2.4, p.l ?? 6, p.rot ?? 0), h: p.h ?? 2.6, base: base + (p.dz ?? 0), color, p };
+  });
+}
 const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x + w / 2, y + w / 2], [x - w / 2, y + w / 2]];
 
 export async function createView3d(container, mapData, src) {
@@ -157,7 +173,11 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'trees', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 0), extruded: true, getElevation: 3, getFillColor: C.tree, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 4 } }),
   ];
   const floorLines = data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
+  const propData = propParts(data.props || []);
+  const fenceStrips = (data.fences || []).map((f) => ({ poly: strip(f.path, 0.12), base: 0 }));
   const extraLayers = () => [
+    new SolidPolygonLayer({ id: 'props', data: propData, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.55 } }),
+    new SolidPolygonLayer({ id: 'fences-3d', shadowEnabled: false, data: fenceStrips, getPolygon: (d) => ringG(d.poly, 0), extruded: true, getElevation: 1.1, getFillColor: [175, 175, 172, 220], coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'shade', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 1.6), 0.05), getFillColor: C.shade, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'tree-tops', shadowEnabled: false, data: data.trees, getPolygon: (d) => ringG(d, 3.02), getFillColor: C.treeTop, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'piers', data: (data.bridges || []).flatMap(piers), getPolygon: (d) => box(d.pos, d.w).map(([x, y]) => [x, y, d.pos[2] - d.h]), extruded: true, getElevation: (d) => d.h, getFillColor: C.pier, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.7, diffuse: 0.5 } }),
@@ -206,6 +226,7 @@ export async function createView3d(container, mapData, src) {
       if (!object) return null;
       if (layer.id === 'buildings') return { html: `<b>${esc(object.place ?? object.name ?? object.kind)}</b><br>${object.floors} floor${object.floors > 1 ? 's' : ''} · ${object.height} m`, className: 'deck-tooltip' };
       if (layer.id === 'roofs') return { html: `<b>${esc(object.b.place ?? object.b.name ?? object.b.kind)}</b><br>${object.b.floors} floor${object.b.floors > 1 ? 's' : ''} · ${object.b.height} m`, className: 'deck-tooltip' };
+      if (layer.id === 'props') return { html: `<b>${esc(object.p.name ?? object.p.type)}</b>`, className: 'deck-tooltip' };
       if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
       if (layer.id === 'markers') return { html: object.html, className: 'deck-tooltip' };
       if (layer.id === 'players') return { html: `<b>${esc(object.name)}</b><br>x ${object.last.x} z ${object.last.z} y ${object.last.y ?? 0}`, className: 'deck-tooltip' };
