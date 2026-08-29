@@ -116,11 +116,28 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   /* -------------------------------------------------------------- the card -- */
   // One HTML builder for both views: the Leaflet popup and the floating 3D card show exactly the
   // same thing, so a screenshot the player recognises in 2D is the same screenshot in 3D.
+  // Photos for ONE point: the wiki gallery covers the whole quest ("Cargo 1 …", "Cargo 2 …", plus map
+  // overviews), so pick the shots whose caption names this point's number; in-game shots first, map
+  // overviews after. Fallback: the k-th non-overview shot for point k; last resort: everything.
+  function imagesForPoint(p, all) {
+    if (!all.length) return all;
+    const n = Number(p.badge);
+    const isMap = (im) => /marked on (the )?map|map overview|on the map|overview/i.test(im.caption || '');
+    const numsOf = (im) => [...(im.caption || '').matchAll(/(?:^|\D)(\d{1,2})(?!\d)/g)].map((m) => Number(m[1]));
+    if (Number.isFinite(n) && n > 0) {
+      const mine = all.filter((im) => numsOf(im).includes(n));
+      if (mine.length) return [...mine.filter((im) => !isMap(im)), ...mine.filter(isMap)];
+      const nonMap = all.filter((im) => !isMap(im));
+      const anyNumbered = all.some((im) => numsOf(im).length);
+      if (!anyNumbered && nonMap.length >= n) return [nonMap[n - 1], ...all.filter((im) => im !== nonMap[n - 1])];
+    }
+    return [...all.filter((im) => !isMap(im)), ...all.filter(isMap)];
+  }
   function cardHtml(p, imgIndex = 0) {
     const o = p.objective, q = p.quest;
     // Objective-specific shots when the wiki caption identified one; otherwise the quest's own
     // gallery, which is still the right recognition aid for "which building is this?".
-    const images = (o.images?.length ? o.images : q.images) ?? [];
+    const images = imagesForPoint(p, (o.images?.length ? o.images : q.images) ?? []);
     const i = images.length ? ((imgIndex % images.length) + images.length) % images.length : 0;
     const im = images[i];
     const tags = [

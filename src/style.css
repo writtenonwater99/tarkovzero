@@ -486,3 +486,62 @@ body.view-3d .hud-btn.only-3d{display:grid}
   .qcard{width:min(300px,calc(100vw - 24px))}
   .qshot img{max-height:150px}
 }
+
+/* ---------- ask (AI quest assistant) ---------------------------------------
+   Chat panel in the rail, under Quests. Answers come from /api/assistant
+   (DeepSeek, grounded on quests.json); the actions it returns drive window.tz.
+--------------------------------------------------------------------------- */
+.block-ask{padding:10px var(--gutter)}
+.ask-head{width:100%;appearance:none;background:none;border:0;padding:0;cursor:pointer;color:inherit;text-align:left;margin-bottom:0}
+.ask-head .ask-ico{color:var(--text-mute);flex:0 0 auto;transition:color var(--t-fast)}
+.ask-head[aria-expanded=true] .ask-ico{color:var(--acc)}
+.ask-head .chev{color:var(--text-ghost);transition:transform var(--t-fast)}
+.ask-head[aria-expanded=true] .chev{transform:rotate(90deg)}
+.ask-sum{font:400 var(--fs-micro) var(--f-mono);color:var(--text-ghost);margin-left:auto;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kbd-inline{margin-right:0;padding:1px 4px}
+#ask{margin-top:8px}
+
+.ask-log{max-height:min(46vh,340px);overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:6px;
+  padding-right:2px;scrollbar-color:var(--line) transparent;scrollbar-width:thin}
+.ask-log::-webkit-scrollbar{width:6px}
+.ask-log::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.ask-msg{border:1px solid var(--line);border-radius:var(--r-md);padding:6px 8px;font:400 12.5px/1.45 var(--f-body);
+  color:var(--text-dim);background:var(--panel-2);word-wrap:break-word;overflow-wrap:anywhere}
+.ask-msg p{margin:0}
+.ask-msg p + p,.ask-msg ul{margin-top:5px}
+.ask-msg ul{margin-bottom:0;padding-left:16px}
+.ask-msg li{margin:2px 0}
+.ask-msg code{font:400 11.5px var(--f-mono);color:var(--cream);background:var(--panel-hi);padding:1px 3px;border-radius:3px}
+.ask-msg strong{color:var(--text);font-weight:600}
+.ask-msg a{color:var(--acc);text-decoration:none;border-bottom:1px solid rgba(45,190,108,.35)}
+.ask-msg a:hover{border-bottom-color:var(--acc)}
+.ask-user{background:var(--panel-hi);border-color:var(--line);color:var(--text);align-self:flex-end;max-width:92%}
+.ask-bot{box-shadow:inset 2px 0 0 var(--acc-dim)}
+.ask-note{box-shadow:none;border-style:dashed;color:var(--text-mute)}
+.ask-err{box-shadow:inset 2px 0 0 var(--danger);color:var(--text-dim)}
+.ask-did{margin-top:6px;padding-top:5px;border-top:1px solid var(--line-soft);
+  font:400 10.5px var(--f-mono);color:var(--acc);letter-spacing:.02em}
+.ask-dots{display:inline-flex;gap:4px;padding:2px 0}
+.ask-dots i{width:5px;height:5px;border-radius:50%;background:var(--text-ghost);animation:askdot 1s infinite ease-in-out}
+.ask-dots i:nth-child(2){animation-delay:.15s}
+.ask-dots i:nth-child(3){animation-delay:.3s}
+@keyframes askdot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+
+.ask-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.ask-chip{appearance:none;background:transparent;border:1px solid var(--line);border-radius:var(--r-pill);
+  padding:3px 9px;cursor:pointer;font:400 11px var(--f-body);color:var(--text-mute);text-align:left}
+.ask-chip:hover{border-color:var(--acc-dim);color:var(--text)}
+
+.find-ask{margin-top:8px}
+.find-ask input{font-size:12.5px}
+.ask-send{appearance:none;background:transparent;border:0;width:30px;height:100%;display:grid;place-items:center;
+  color:var(--text-mute);cursor:pointer;flex:0 0 30px}
+.ask-send:hover{color:var(--acc)}
+.find-ask.busy{opacity:.6;pointer-events:none}
+.ask-foot{margin-top:6px;font:400 9.5px/1.4 var(--f-mono);color:var(--text-ghost)}
+
+@media (max-width:760px){
+  .ask-log{max-height:38vh}
+  .ask-send{width:var(--tap);flex-basis:var(--tap)}
+}

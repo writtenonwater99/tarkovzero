@@ -8,6 +8,7 @@ import { LABELS } from './labels.js';
 import { KINDS, iconHtml, extractLetter } from './icons.js';
 import { createLive, esc } from './live.js';
 import { createQuests } from './quests.js';
+import { createAssistant } from './assistant.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -19,6 +20,7 @@ const num = (n, p = 1) => n.toFixed(p).replace('-', '−');
 function is3d() { return document.body.classList.contains('view-3d'); }
 // Declared up here: rail helpers below run during module init and poke at both.
 let view3d = null;
+let assistant = null;   // the Ask panel; created once window.tz exists (bottom of this file)
 let v3 = { target: [0, 0, 0], zoom: 0, rotationX: 50, rotationOrbit: 0, minZoom: -3, maxZoom: 8 };
 
 const requestedMap = new URLSearchParams(location.search).get('map');
@@ -721,6 +723,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '/') { e.preventDefault(); findEl.focus(); return; }
   if (e.key === '3') { setView(is3d() ? '2d' : '3d'); return; }
   if (e.key === 'q' || e.key === 'Q') { quests.setOpen(true); $('#quest-find')?.focus(); return; }
+  if (e.key === 'a' || e.key === 'A') { assistant?.focus(); return; }
   if (e.key === 'l' || e.key === 'L') { setLabels(!labelsShown); return; }
   if (e.key === 'f' || e.key === 'F') { $('#hud-fit').click(); return; }
   if (e.key === 'n' || e.key === 'N') { if (is3d()) $('#hud-north').click(); return; }
@@ -761,6 +764,17 @@ window.tz = {
     open: (on = true) => quests.setOpen(on),
   },
 };
+
+/* ------------------------------------------------------- ask (AI) panel -- */
+// Grounded quest Q&A: src/assistant.js posts to /api/assistant and replays the actions it gets
+// back through window.tz (select a quest, fly to an objective, switch map). See api/assistant.js.
+assistant = createAssistant({
+  mapKey: mapData.key,
+  tz: window.tz,
+  store,
+  onOpen: (reveal) => { if (mobile() && (reveal || document.body.dataset.sheet === 'peek')) sheet('full'); },
+});
+assistant.init();
 
 updateHud();
 if (starts3d) setView('3d');

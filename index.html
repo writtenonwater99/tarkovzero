@@ -76,6 +76,27 @@
           </div>
         </section>
 
+        <section class="block block-ask" id="ask-block">
+          <button type="button" class="block-head ask-head" id="ask-toggle" aria-expanded="false" aria-controls="ask">
+            <svg class="ask-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M4 5.5h16v11H12l-4.5 3.5V16.5H4z"/><circle cx="9" cy="11" r="1" fill="currentColor"/><circle cx="12" cy="11" r="1" fill="currentColor"/><circle cx="15" cy="11" r="1" fill="currentColor"/></svg>
+            <span class="block-title">Ask</span>
+            <span class="ask-sum" id="ask-sum">AI quest help</span>
+            <kbd class="kbd kbd-inline">A</kbd>
+            <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div id="ask" hidden>
+            <div id="ask-log" class="ask-log" role="log" aria-live="polite" aria-label="Assistant conversation">
+              <div class="ask-msg ask-bot ask-note"><p>Ask about a quest and I'll put its objectives on the map.</p></div>
+            </div>
+            <div id="ask-chips" class="ask-chips"></div>
+            <form id="ask-form" class="find find-ask" autocomplete="off">
+              <input id="ask-input" type="text" placeholder="Ask about a quest…" maxlength="2000" spellcheck="false" aria-label="Ask the quest assistant" />
+              <button type="submit" class="ask-send" aria-label="Send"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12h14m-5-6 6 6-6 6"/></svg></button>
+            </form>
+            <div class="ask-foot">Answers by DeepSeek · locations from tarkov.dev / SPT / EFT Wiki</div>
+          </div>
+        </section>
+
         <div class="block block-view">
           <div class="block-head"><span class="block-title">View</span></div>
           <div class="line only-2d">
@@ -155,6 +176,7 @@
               <dt><b>N</b></dt><dd>Reset north (3D)</dd>
               <dt><b>[</b> <b>]</b></dt><dd>Step floors (3D)</dd>
               <dt><b>Q</b></dt><dd>Quests</dd>
+              <dt><b>A</b></dt><dd>Ask the assistant</dd>
               <dt><b>/</b></dt><dd>Find</dd>
               <dt><b>Esc</b></dt><dd>Close</dd>
             </dl>
