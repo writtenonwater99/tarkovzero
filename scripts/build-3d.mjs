@@ -126,6 +126,22 @@ for (const b of bridges.filter((b) => b.kind !== 'dirt').sort((a, c) => PRI[a.ki
 bridges.length = 0; bridges.push(...kept);
 const PLACE_COLORS = { 'Big Red': [200, 60, 55], 'Crackhouse': [120, 88, 66], 'Dorms 2-Story': [214, 190, 160], 'Dorms 3-Story': [214, 190, 160], 'New Gas': [235, 235, 235], 'Old Gas': [190, 190, 185], 'Fortress': [180, 180, 178], 'Skeleton': [176, 176, 176], 'Repair Shop': [140, 160, 185], 'Warehouse 3': [150, 165, 185], 'Warehouse 4': [150, 165, 185], 'Warehouse 7': [150, 165, 185], 'Warehouse 17': [150, 165, 185], 'Depot': [165, 170, 178], 'Boiler': [170, 110, 90], 'Oil Rig': [160, 120, 95], 'Streamer House': [120, 95, 70], 'Bus Station': [235, 235, 232], 'Storage': [170, 175, 180], 'Powerline Tower': [150, 150, 150], 'Water Pump': [160, 170, 180], 'Military Checkpoint': [175, 180, 170] };
 for (const b of buildings) if (b.place && PLACE_COLORS[b.place]) b.color = PLACE_COLORS[b.place];
+// building identity: how each landmark is drawn (frame = unfinished concrete skeleton, gable = pitched roof, canopy = roof on posts)
+const ROOF_COLORS = { 'Warehouse 3': [118, 134, 156], 'Warehouse 4': [118, 134, 156], 'Warehouse 7': [118, 134, 156], 'Warehouse 17': [118, 134, 156], 'Depot': [125, 130, 140], 'Storage': [130, 135, 142], 'Crackhouse': [96, 72, 56], 'Streamer House': [96, 72, 56], 'Repair Shop': [110, 125, 145], 'Boiler': [130, 85, 70] };
+const PLACE_STYLE = { 'Skeleton': 'frame', 'Old Construction': 'frame', 'Crackhouse': 'gable', 'Streamer House': 'gable', 'Repair Shop': 'gable', 'Warehouse 3': 'gable', 'Warehouse 4': 'gable', 'Warehouse 7': 'gable', 'Warehouse 17': 'gable', 'Depot': 'gable', 'Boiler': 'gable', 'Storage': 'gable', 'New Gas': 'canopy', 'Old Gas': 'canopy', 'Bus Station': 'canopy' };
+const area = (poly) => Math.abs(poly.reduce((a, [x, z], i) => { const [nx, nz] = poly[(i + 1) % poly.length]; return a + x * nz - nx * z; }, 0)) / 2;
+for (const b of buildings) {
+  const st = b.place && PLACE_STYLE[b.place];
+  if (!st) { b.style = b.kind === 'tank' ? 'tank' : 'box'; continue; }
+  const siblings = buildings.filter((o) => o.place === b.place);
+  const largest = siblings.reduce((m, o) => (area(o.poly) > area(m.poly) ? o : m), siblings[0]);
+  // canopy/frame apply to the main footprint only; smaller side buildings stay boxes
+  b.style = (st === 'canopy' || st === 'frame') && b !== largest ? 'box' : st;
+  if (b.style === 'frame' && b.floors < 2) b.floors = 2;
+  if (b.style === 'frame') b.height = Math.max(b.height, b.floors * 3.3);
+  if (b.style === 'canopy') b.height = 4.8;
+  if (b.style === 'gable' && ROOF_COLORS[b.place]) b.roof = ROOF_COLORS[b.place];
+}
 const out = {
   bridges,
   map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
@@ -135,5 +151,6 @@ const out = {
 };
 await writeFile('public/data/customs-3d.json', JSON.stringify(out));
 const multi = buildings.filter((b) => b.floors > 1);
+console.log(`styles: ${JSON.stringify(buildings.reduce((a, b) => ((a[b.style] = (a[b.style] || 0) + 1), a), {}))}`);
 console.log(`bridges ${bridges.length} (${bridges.map((b) => b.kind + ':' + b.path.length).join(', ')}), named ${buildings.filter((b) => b.place).length}, coloured ${buildings.filter((b) => b.color).length}`);
 console.log(`buildings ${buildings.length} (multi-floor ${multi.length}: ${multi.map((b) => `${b.name}×${b.floors}`).join(', ')}), trees ${out.trees.length}, rocks ${out.rocks.length}, roads ${roads.length}, water ${out.water.length}, land ${out.land.length} → public/data/customs-3d.json (${(JSON.stringify(out).length / 1024).toFixed(0)} KB)`);
