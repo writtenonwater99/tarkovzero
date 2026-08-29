@@ -1,4 +1,11 @@
 {
+  "functions": {
+    "api/assistant.js": {
+      "memory": 512,
+      "maxDuration": 15,
+      "includeFiles": "public/data/quests.json"
+    }
+  },
   "rewrites": [
     { "source": "/api/graphql", "destination": "https://api.tarkov.dev/graphql" }
   ],
