@@ -145,14 +145,29 @@ for (const b of buildings) {
 // ---- terrain: true-to-scale height grid from SPT spawn points (ground-level ones only), IDW + smoothing
 const spt = JSON.parse(await readFile('scripts/spt-bigmap-base.json', 'utf8'));
 const groundPts = spt.SpawnPointParams.map((s) => ({ x: s.Position.x, z: s.Position.z, y: s.Position.y, zone: s.BotZoneName || '' })).filter((p) => p.y < 15 && p.y > -6 && !/snipe/i.test(p.zone));
-const STEP = 20, x0 = BOUNDS.xMin - 40, z0 = BOUNDS.zMin - 40, cols = Math.ceil((BOUNDS.xMax - BOUNDS.xMin + 80) / STEP) + 1, rows = Math.ceil((BOUNDS.zMax - BOUNDS.zMin + 80) / STEP) + 1;
+// Hand-authored relief for hills the spawn points under-sample (approximate real heights, metres). Tune here.
+const TERRAIN_FEATURES = [
+  { name: 'west hill (behind Big Red, up to Crossroads)', x: -360, z: -80, rx: 95, rz: 150, h: 11 },
+  { name: 'Sniper Hill', x: 110, z: 85, rx: 45, rz: 40, h: 9 },
+  { name: 'south rise (Old Road)', x: 230, z: 215, rx: 160, rz: 60, h: 8 },
+  { name: 'SE ridge (Sniper Ridge / checkpoint)', x: 540, z: 150, rx: 150, rz: 70, h: 10 },
+  { name: 'north bank above river', x: -60, z: -250, rx: 120, rz: 45, h: 6 },
+];
+const STEP = 10, x0 = BOUNDS.xMin - 40, z0 = BOUNDS.zMin - 40, cols = Math.ceil((BOUNDS.xMax - BOUNDS.xMin + 80) / STEP) + 1, rows = Math.ceil((BOUNDS.zMax - BOUNDS.zMin + 80) / STEP) + 1;
+// deterministic value noise so hills are irregular instead of perfect ellipses
+const hash2 = (i, j) => { const n = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return n - Math.floor(n); };
+const noise = (x, z) => { const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j, sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz); return (hash2(i, j) * (1 - sx) + hash2(i + 1, j) * sx) * (1 - sz) + (hash2(i, j + 1) * (1 - sx) + hash2(i + 1, j + 1) * sx) * sz; };
 const raw = new Float32Array(cols * rows);
 for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
   const x = x0 + c * STEP, z = z0 + r * STEP; let num = 0, den = 0;
-  for (const p of groundPts) { const d2 = (p.x - x) ** 2 + (p.z - z) ** 2; const w = 1 / (d2 + 900); num += w * p.y; den += w; } // 30 m softening radius
-  raw[r * cols + c] = num / den;
+  const n1 = noise(x / 90, z / 90) - 0.5, n2 = noise(x / 35 + 7, z / 35 + 3) - 0.5;
+  for (const p of groundPts) { const d2 = (p.x - x) ** 2 + (p.z - z) ** 2; const w = 1 / Math.pow(d2 + 144, 1.5); num += w * p.y; den += w; } // ~12 m softening, steeper falloff
+  let h = num / den;
+  for (const f of TERRAIN_FEATURES) { const d = ((x - f.x) / (f.rx * (1 + 0.35 * n1))) ** 2 + ((z - f.z) / (f.rz * (1 - 0.3 * n1))) ** 2; const bump = f.h * Math.exp(-d * 1.6) * (1 + 0.15 * n2); h = Math.max(h, bump); }
+  h += 0.6 * n2 + 0.4 * n1; // gentle undulation everywhere
+  raw[r * cols + c] = h;
 }
-// light smoothing pass so the surface rolls instead of bumps
+// one light smoothing pass
 const heights = new Float32Array(cols * rows);
 for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let sum = 0, n = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) { sum += raw[rr * cols + cc]; n++; } } heights[r * cols + c] = +(sum / n).toFixed(2); }
 const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights) };
