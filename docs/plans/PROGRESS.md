@@ -232,3 +232,43 @@ bb38391bb7f06130cfa64391d460316da7dbd88974539cdc3bfa3522829f836a  public/data/wo
 ```
 
 No deploy, push, or commit was performed.
+
+## Fix pass 6 — toggleable loot, stashes, and objects
+
+### Changed
+
+- The community builder now emits Wiki `containers` with `type`, `name`, calibrated `position`, and `level` for the requested stash, weapon-box, crate/bag, safe/cash, medical/ammo/tool, dead-body, key-spawn, and marked-loose-loot categories. Cleaned Wiki descriptions are retained as optional `note` text for the shared popup. Explicit floor wording wins over footprint inference; real-Y SPT points are checked against the underground height ranges.
+- Reserve and Woods reuse their existing surface-sheet calibration guards for the new categories. This excludes the detached Reserve floor/bunker panels and the Woods ZB-014 inset, whose pixels do not share the surface affine.
+- The checked-in SPT loose-loot samples are clipped to each map's bounds and deterministically thinned to points more than 6 m apart after one-decimal output rounding, with a hard 1,500-point cap. The emitted dense subsets are 333 Customs, 462 Reserve, and 307 Woods points.
+- The Objects group has eight new counted `data-kind` rows: Stashes, Weapon boxes, Crates & bags, Safes & cash, Med & ammo, Key spawns, Dead bodies, and Loose loot (dense). Stashes default ON; the other seven default OFF. Zero-count rows remain visible, so Reserve truthfully shows zero stashes rather than hiding the control.
+- The live tarkov.dev response is enriched with the snapshot's community-only containers, just like switches and marker levels. Find indexes named stashes and turns the stash layer on before flying to a selected result. The same classified marker objects feed Leaflet popups and deck.gl tooltips.
+- Eight muted Game Icons chips were added from upstream commit `82d948812bfe3f269ef8f731dcdb07b08160edc4`: Lorc `locked-chest`; sbed `ammo-box`, `medical-pack`, `key`, and `death-skull`; Delapouite `cargo-crate`, `strongbox`, and `two-coins`. The existing CC BY 3.0 source comment and visible game-icons.net footer credit remain. Existing `markers-chips` rendering keeps every new 3D object icon flat on the ground.
+
+Sidebar counts, in row order (Stashes / Weapon boxes / Crates & bags / Safes & cash / Med & ammo / Key spawns / Dead bodies / Loose loot):
+
+```text
+Customs  65 / 59 / 166 / 36 / 38 / 25 / 11 / 333  (733 objects)
+Reserve   0 / 29 /  44 / 16 / 19 /  2 /  3 / 462  (575 objects)
+Woods    45 / 40 / 145 /  7 / 53 /  6 / 15 / 307  (618 objects)
+```
+
+### Verified
+
+- All three community builders pass repeatedly and preserve `builtAt`. Every container has finite coordinates and a valid `surface`, `underground`, `upper`, or `rooftop` level. Final SPT minimum horizontal separations are 6.003 m Customs, 6.001 m Reserve, and 6.001 m Woods; all subsets are below the 1,500 cap.
+- `npm run build` passes with only the existing deck.gl chunk-size advisory. `node --check` passes for the edited modules and builder; `git diff --check` passes. All eight stored Game Icons paths were compared byte-for-byte with their named SVG path at the upstream commit.
+- A clean Chromium profile selected Stashes and left all seven other new rows off. All three maps displayed the sidebar counts above. Find returned Ground Cache stash results; selecting a marker enables its layer and flies to it. The popup capture shows `Unknown Key`, `Key spawn · surface`, and the cleaned multiline Wiki note `Inside the Dead Scav`.
+- 2D captures: `scratch/fix-pass-6/customs-2d-stashes.png`, `reserve-2d-counts.png`, `woods-2d-stashes.png`, and `customs-2d-key-popup.png`.
+- 3D captures: `scratch/fix-pass-6/customs-3d-stashes.png`, `reserve-3d-weapon-boxes.png`, and `woods-3d-stashes.png`. These visibly show the new chips draped flat over the rendered terrain on every map.
+
+Final data hashes:
+
+```text
+8027b339b3c99bdda988dd2ccfed813d89caeaa06211a41a35aa33d308fef393  public/data/customs.json
+c77f2495de7b5895c4c9eea15078d173ed771348383db8b791e507402f36294d  public/data/customs-3d.json
+1c9882595d7e74948f8238ea150f14b9f9c4716168976f739ca75ac6ba5ac597  public/data/reserve.json
+9e184a26860983f135273f7b705a6a2024626d279887e8795810982ec9e1a73b  public/data/woods.json
+```
+
+`customs-3d.json` is byte-identical to its pre-pass baseline. `customs.json` changed from `314265546709fc77d3b827da1d15881bd173571482f6b4e4fe2f5ecd4cd5e1d6` to the hash above solely through the new `containers` array.
+
+No deploy, push, or commit was performed.

@@ -1,10 +1,12 @@
 // Marker icons: white stroke glyphs on a coloured badge. Badge shape encodes the category —
-// extracts = rounded square, spawns = circle, utilities (weapons/switches/locks/hazards) = diamond.
+// extracts = rounded square, spawns = circle, utilities = diamonds, loot = compact chips.
 const S = 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"';
 import { ART } from './icon-art.js';
 const A = (k) => `<g transform='scale(0.046875)'><path d='${ART[k]}'/></g>`; // 512 -> 24
 const GLYPH = {
   gi_exit: A('exit'), gi_transit: A('transit'), gi_gasmask: A('gasmask'), gi_hood: A('hood'), gi_crosshair: A('crosshair'), gi_crownskull: A('crownskull'), gi_radioactive: A('radioactive'), gi_sentry: A('sentry'), gi_lever: A('lever'), gi_padlock: A('padlock'), gi_stairs: A('stairs'),
+  gi_lockedchest: A('lockedchest'), gi_ammobox: A('ammobox'), gi_cargocrate: A('cargocrate'), gi_strongbox: A('strongbox'),
+  gi_medicalpack: A('medicalpack'), gi_lootkey: A('lootkey'), gi_deathskull: A('deathskull'), gi_twocoins: A('twocoins'),
   // toy-soldier silhouettes (one colour, no badge). 24x24, feet at y=23.
   armyman: `<path d='M12 1.5a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8zM9.2 6.6h5.6l1.4 1.2 3.9-1.6.7 1.6-4 2.3-.8 5.4h-1.1l.3 7.5h-2.2l-.6-6h-.8l-.6 6H9.8l.3-7.5H9l-.8-5.2-3.3-1 .4-1.7 3.2.6z'/><path d='M4 23h16v.8H4z' opacity='.9'/>`,
   hoodman: `<path d='M12 1.2c-2.2 0-3.3 1.8-3.3 3.6v1.7h6.6V4.8c0-1.8-1.1-3.6-3.3-3.6zM9.3 7.1h5.4l1.1 1 3.5 3.6-1.2 1.2-2.4-2.1-.3 5h-1l.4 7.5h-2.1l-.5-6h-.8l-.5 6H9.1l.4-7.5h-1l-.3-5-2.4 2.1-1.2-1.2 3.5-3.6z'/><path d='M4 23h16v.8H4z' opacity='.9'/>`,
@@ -35,6 +37,14 @@ export const KINDS = {
   'spawn-scav':      { label: 'Scav spawns',        glyph: 'gi_hood',   color: '#c9a463', shape: 'fig' },
   'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'gi_crosshair',     color: '#e2793f', shape: 'fig' },
   'spawn-boss':      { label: 'Boss spawns',        glyph: 'gi_crownskull',   color: '#d24a4a', shape: 'fig' },
+  'stash':           { label: 'Stashes',            glyph: 'gi_lockedchest', color: '#77845A', shape: 'sq' },
+  'loot-weapon':     { label: 'Weapon boxes',       glyph: 'gi_ammobox',     color: '#707875', shape: 'ci' },
+  'loot-crate':      { label: 'Crates & bags',      glyph: 'gi_cargocrate',  color: '#81735E', shape: 'ci' },
+  'loot-cash':       { label: 'Safes & cash',       glyph: 'gi_strongbox',   color: '#7D7062', shape: 'ci' },
+  'loot-med':        { label: 'Med & ammo',         glyph: 'gi_medicalpack', color: '#64786E', shape: 'ci' },
+  'loot-key':        { label: 'Key spawns',         glyph: 'gi_lootkey',     color: '#80785C', shape: 'ci' },
+  'loot-dead':       { label: 'Dead bodies',        glyph: 'gi_deathskull',  color: '#706866', shape: 'ci' },
+  'loot-loose':      { label: 'Loose loot (dense)', glyph: 'gi_twocoins',    color: '#706F65', shape: 'ci' },
   'hazard':          { label: 'Hazards',            glyph: 'gi_radioactive',   color: '#8258A6', shape: 'dia' },
   'weapon':          { label: 'Stationary weapons', glyph: 'gi_sentry',    color: '#6E6860', shape: 'dia' },
   'switch':          { label: 'Switches / levers',  glyph: 'gi_lever',     color: '#D6B236', shape: 'dia' },

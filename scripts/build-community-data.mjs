@@ -1,8 +1,22 @@
 // Build public/data/<map>.json from reproducible community-source snapshots.
 //   spawns/bosses : SPT server database (game coordinates)
-//   extracts/transits/locks/guns : EFT Wiki interactive map (wiki pixels -> game coords)
+//   extracts/transits/locks/guns/containers : EFT Wiki interactive map (wiki pixels -> game coords)
+//   optional dense loose loot : thinned SPT loose-loot positions (game coordinates)
 // Output matches the shape of the tarkov.dev GraphQL response used by src/api.js.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+
+const WIKI_CONTAINER_TYPES = new Set([
+  'container_stash', 'container_weapon', 'container_crate', 'container_greencrate',
+  'container_duffle', 'container_jacket', 'container_supply', 'container_safe',
+  'container_cash', 'container_pc', 'container_drawer', 'container_tool',
+  'container_medcase', 'container_medical', 'container_ammo', 'container_grenade',
+  'container_dead', 'loot_key', 'loot_loose',
+]);
+// These symbols must belong to the calibrated surface sheet. Reserve and Woods
+// also contain detached floor/bunker panels that need their own future affine.
+const CALIBRATED_WIKI_TYPES = new Set(['locked', ...WIKI_CONTAINER_TYPES]);
+const SPT_LOOSE_RADIUS = 6;
+const SPT_LOOSE_MAX = 1500;
 
 const BOSS_NAMES = {
   bossBully: 'Reshala', bossGluhar: 'Glukhar', bossKojaniy: 'Shturman', bossKnight: 'Knight',
@@ -73,7 +87,7 @@ const CONFIG = {
       'Bunker Hermetic Door': [48, -184],
       'Depot Hermetic Door': [141, 25],
     },
-    include: (m) => !(['locked', 'loot_key'].includes(m.categoryId)
+    include: (m) => !(CALIBRATED_WIKI_TYPES.has(m.categoryId)
       && !(m.position[0] >= 374 && m.position[0] <= 3100 && m.position[1] >= 350 && m.position[1] <= 2420)),
     // D-2 and both Hermetic exits fall inside authoritative negative-Y Bunkers
     // extents. The Hermetic power lever is the explicit surface exception: it is
@@ -95,7 +109,7 @@ const CONFIG = {
       { id: '16', game: [-413.22, -522.429932] },
       { id: '21', game: [-331.468018, -138.725983] },
     ],
-    include: (m) => !(m.categoryId === 'locked' && m.position[0] < 500), // ZB-014 inset panel
+    include: (m) => !(CALIBRATED_WIKI_TYPES.has(m.categoryId) && m.position[0] < 500), // ZB-014 inset panel
   },
 };
 
@@ -167,11 +181,25 @@ function levelFor(m, type, position) {
   const title = titleOf(m);
   const override = cfg.levelOverrides?.[type]?.[title];
   if (override) return override;
+  if (type === 'container') {
+    const detail = `${title} ${cleanWikiNote(m.popup?.description)}`;
+    if (/\broof(?:top)?\b/i.test(detail)) return 'rooftop';
+    if (/\b(?:second|third|2nd|3rd|upper) floor\b|\bupstairs\b|\bon the tower\b/i.test(detail)) return 'upper';
+    if (/\bunderground\b|\bbasement\b|\bbunker\b|\btunnel\b/i.test(detail)) return 'underground';
+  }
   // The named underground/Bunkers layers carry negative-Y extents. Check the
   // panel name as well as height so above-ground Reserve buildings whose absolute
   // floors happen to be below Y=0 are never mistaken for tunnels.
   if (type !== 'extract' && floorExtents.some((ext) => /underground|bunkers/i.test(ext.layer) && ext.height?.[1] <= 18 && inExtent(position, ext))) return 'underground';
   return 'surface';
+}
+function sptLevelFor(position) {
+  // SPT points carry real Y, unlike Wiki pixels. Use it to avoid classifying
+  // surface loot above a bunker footprint as underground.
+  return floorExtents.some((ext) => /underground|bunkers/i.test(ext.layer) && inExtent(position, ext)
+    && Number.isFinite(ext.height?.[0]) && Number.isFinite(ext.height?.[1])
+    && position.y >= Math.min(...ext.height) - 0.75 && position.y <= Math.max(...ext.height) + 0.75)
+    ? 'underground' : 'surface';
 }
 const withLevel = (m, type) => {
   const position = toGame(m), level = levelFor(m, type, position);
@@ -222,10 +250,72 @@ const stationaryWeapons = markers.filter((m) => m.categoryId === 'stationarygun'
 const hazards = [];
 const switches = markers.filter((m) => m.categoryId === 'lever').map((m) => ({ name: titleOf(m), ...withLevel(m, 'switch') }));
 
+function cleanWikiNote(raw = '') {
+  return raw
+    .replace(/\[\[File:[^\]]*\]\]/gi, '')
+    .replace(/\[\[([^\]|]*)(\|[^\]]*)?\]\]/g, '$1')
+    .replace(/<\/?br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .split(/\n+/).map((line) => line.trim()).filter(Boolean).join('\n');
+}
+
+const wikiContainers = markers.filter((m) => WIKI_CONTAINER_TYPES.has(m.categoryId)).map((m) => {
+  const note = cleanWikiNote(m.popup?.description);
+  return {
+    type: m.categoryId,
+    name: titleOf(m) || m.categoryId,
+    ...withLevel(m, 'container'),
+    ...(note ? { note } : {}),
+  };
+});
+
+function thinLooseLoot(points) {
+  const [[ax, az], [bx, bz]] = mapEntry.bounds;
+  const minX = Math.min(ax, bx), maxX = Math.max(ax, bx), minZ = Math.min(az, bz), maxZ = Math.max(az, bz);
+  const sorted = points
+    .filter((p) => Array.isArray(p) && p.length >= 3 && p.slice(0, 3).every(Number.isFinite)
+      && p[0] >= minX && p[0] <= maxX && p[2] >= minZ && p[2] <= maxZ)
+    // Cluster the exact coordinates that will be emitted so one-decimal JSON
+    // rounding cannot move two retained points back inside the 6 m radius.
+    .map(([x, y, z]) => [+x.toFixed(1), +y.toFixed(1), +z.toFixed(1)])
+    .sort((a, b) => a[0] - b[0] || a[2] - b[2] || a[1] - b[1]);
+  const grid = new Map(), accepted = [];
+  for (const p of sorted) {
+    const gx = Math.floor(p[0] / SPT_LOOSE_RADIUS), gz = Math.floor(p[2] / SPT_LOOSE_RADIUS);
+    let clustered = false;
+    for (let dx = -1; dx <= 1 && !clustered; dx++) for (let dz = -1; dz <= 1 && !clustered; dz++) {
+      for (const i of grid.get(`${gx + dx},${gz + dz}`) ?? []) {
+        const q = accepted[i];
+        if (Math.hypot(p[0] - q[0], p[2] - q[2]) <= SPT_LOOSE_RADIUS) { clustered = true; break; }
+      }
+    }
+    if (clustered) continue;
+    const index = accepted.push(p) - 1, cell = `${gx},${gz}`;
+    if (!grid.has(cell)) grid.set(cell, []);
+    grid.get(cell).push(index);
+  }
+  if (accepted.length <= SPT_LOOSE_MAX) return accepted;
+  return Array.from({ length: SPT_LOOSE_MAX }, (_, i) => accepted[Math.floor(i * accepted.length / SPT_LOOSE_MAX)]);
+}
+
+let sptLoose = [];
+try {
+  const loose = JSON.parse(await readFile(`scripts/data/${key}/loose-loot-samples.json`, 'utf8'));
+  if (loose.map && loose.map !== key) throw new Error(`loose-loot map is ${loose.map}`);
+  sptLoose = thinLooseLoot(loose.points ?? []).map(([x, y, z]) => {
+    const position = { x: +x.toFixed(1), y: +y.toFixed(1), z: +z.toFixed(1) };
+    return { type: 'loot_spt', name: 'Loose loot (SPT)', position, level: sptLevelFor(position) };
+  });
+} catch (e) {
+  if (e?.code !== 'ENOENT') throw new Error(`${key}: invalid SPT loose-loot samples: ${e.message}`);
+}
+const containers = [...wikiContainers, ...sptLoose];
+
 const output = `public/data/${key}.json`;
 let builtAt = new Date().toISOString();
 if (!stamp) { try { builtAt = JSON.parse(await readFile(output, 'utf8')).builtAt || builtAt; } catch {} }
-const out = { name: cfg.name, normalizedName: key, source: 'community (SPT database + EFT Wiki)', builtAt, extracts, spawns, bosses, hazards, stationaryWeapons, locks, switches };
+const out = { name: cfg.name, normalizedName: key, source: 'community (SPT database + EFT Wiki)', builtAt, extracts, spawns, bosses, hazards, stationaryWeapons, locks, switches, containers };
 await mkdir('public/data', { recursive: true });
 await writeFile(output, JSON.stringify(out, null, 1));
-console.log(`wrote ${output}: ${extracts.length} extracts, ${spawns.length} spawns, ${bosses.length} bosses, ${locks.length} locks, ${stationaryWeapons.length} guns, ${switches.length} switches`);
+console.log(`wrote ${output}: ${extracts.length} extracts, ${spawns.length} spawns, ${bosses.length} bosses, ${locks.length} locks, ${stationaryWeapons.length} guns, ${switches.length} switches, ${wikiContainers.length} wiki containers, ${sptLoose.length} thinned SPT loose-loot points`);
