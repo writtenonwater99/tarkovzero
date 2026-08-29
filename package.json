@@ -12,6 +12,10 @@
     "build-community-data": "node scripts/build-community-data.mjs"
   },
   "dependencies": {
+    "@deck.gl/core": "^9.3.11",
+    "@deck.gl/extensions": "^9.3.11",
+    "@deck.gl/geo-layers": "^9.3.11",
+    "@deck.gl/layers": "^9.3.11",
     "leaflet": "^1.9.4"
   },
   "devDependencies": {

@@ -1,0 +1,105 @@
+// Build public/data/customs-3d.json from tarkov.dev's Customs SVG (+ floor extents from their maps.json).
+// Everything is emitted in GAME coordinates (x, z) so the 3D view shares data with the 2D map.
+import { readFile, writeFile } from 'node:fs/promises';
+
+const SVG_URL = 'https://assets.tarkov.dev/maps/svg/Customs.svg';
+const BOUNDS = { xMax: 698, xMin: -372, zMin: -307, zMax: 237 }; // tarkov.dev bounds for Customs
+
+let svg;
+try { svg = await readFile('.cache/maps/svg/Customs.svg', 'utf8'); } catch { svg = await (await fetch(SVG_URL)).text(); }
+const maps = JSON.parse(await readFile('scripts/tarkov-dev-maps.json', 'utf8'));
+const customs = maps.find((m) => m.normalizedName === 'customs').maps[0];
+const [, , VW, VH] = svg.match(/viewBox="([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"/).slice(1).map(Number);
+const toGame = ([sx, sy]) => [+(BOUNDS.xMax - (sx / VW) * (BOUNDS.xMax - BOUNDS.xMin)).toFixed(1), +(BOUNDS.zMin + (sy / VH) * (BOUNDS.zMax - BOUNDS.zMin)).toFixed(1)];
+
+// ---- minimal SVG parsing (no deps): groups by id, paths + circles, transforms translate/scale
+function* elements(str) { const re = /<(g|path|circle|\/g)\b([^>]*)>/g; let m; while ((m = re.exec(str))) yield { tag: m[1], attrs: m[2] }; }
+const attr = (a, n) => { const m = a.match(new RegExp(`\\b${n}="([^"]*)"`)); return m ? m[1] : null; };
+function parseTransform(t) {
+  let tx = 0, ty = 0, s = 1; if (!t) return { tx, ty, s };
+  const tr = t.match(/translate\(([-\d.]+)[ ,]+([-\d.]+)\)/); if (tr) { tx = +tr[1]; ty = +tr[2]; }
+  const sc = t.match(/scale\(([-\d.]+)\)/); if (sc) s = +sc[1];
+  return { tx, ty, s };
+}
+// Flatten a path's d into polylines (absolute coords), curves sampled.
+function flatten(d) {
+  const toks = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/g); const polys = []; let poly = null;
+  let x = 0, y = 0, sx = 0, sy = 0, cmd = '', i = 0, px = 0, py = 0;
+  const num = () => +toks[i++];
+  const start = () => { poly = []; polys.push(poly); };
+  const cubic = (x1, y1, x2, y2, x3, y3) => { for (let t = 0.2; t <= 1.001; t += 0.2) { const u = 1 - t; poly.push([u*u*u*x + 3*u*u*t*x1 + 3*u*t*t*x2 + t*t*t*x3, u*u*u*y + 3*u*u*t*y1 + 3*u*t*t*y2 + t*t*t*y3]); } px = x2; py = y2; x = x3; y = y3; };
+  while (i < toks.length) {
+    if (/[a-zA-Z]/.test(toks[i])) cmd = toks[i++];
+    const rel = cmd === cmd.toLowerCase();
+    switch (cmd.toUpperCase()) {
+      case 'M': { const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; start(); poly.push([x, y]); sx = x; sy = y; cmd = rel ? 'l' : 'L'; break; }
+      case 'L': { const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; poly.push([x, y]); break; }
+      case 'H': { const nx = num(); x = rel ? x + nx : nx; poly.push([x, y]); break; }
+      case 'V': { const ny = num(); y = rel ? y + ny : ny; poly.push([x, y]); break; }
+      case 'C': { let a = [num(), num(), num(), num(), num(), num()]; if (rel) a = [a[0]+x, a[1]+y, a[2]+x, a[3]+y, a[4]+x, a[5]+y]; cubic(...a); break; }
+      case 'S': { let a = [num(), num(), num(), num()]; if (rel) a = [a[0]+x, a[1]+y, a[2]+x, a[3]+y]; cubic(2*x - px, 2*y - py, ...a); break; }
+      case 'Q': { let a = [num(), num(), num(), num()]; if (rel) a = [a[0]+x, a[1]+y, a[2]+x, a[3]+y]; cubic(x + 2/3*(a[0]-x), y + 2/3*(a[1]-y), a[2] + 2/3*(a[0]-a[2]), a[3] + 2/3*(a[1]-a[3]), a[2], a[3]); break; }
+      case 'A': { num(); num(); num(); num(); num(); const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; poly.push([x, y]); break; }
+      case 'Z': { x = sx; y = sy; poly = null; if (i < toks.length && !/[a-zA-Z]/.test(toks[i])) { start(); poly.push([x, y]); } break; }
+      default: i++;
+    }
+    if (poly === null && i < toks.length && /[a-zA-Z]/.test(toks[i]) === false) { start(); poly.push([x, y]); }
+  }
+  return polys.filter((p) => p.length > 1);
+}
+
+// Walk the SVG, collecting shapes with their group path and accumulated transform.
+const shapes = []; const stack = [];
+for (const el of elements(svg)) {
+  if (el.tag === 'g') { const t = parseTransform(attr(el.attrs, 'transform')); const parent = stack[stack.length - 1] ?? { ids: [], tx: 0, ty: 0, s: 1 }; stack.push({ ids: [...parent.ids, attr(el.attrs, 'id') || ''], tx: parent.tx + t.tx * parent.s, ty: parent.ty + t.ty * parent.s, s: parent.s * t.s, cls: attr(el.attrs, 'class') || '' }); continue; }
+  if (el.tag === '/g') { stack.pop(); continue; }
+  const g = stack[stack.length - 1]; if (!g) continue;
+  const apply = ([x, y]) => [g.tx + x * g.s, g.ty + y * g.s];
+  if (el.tag === 'path') { const d = attr(el.attrs, 'd'); if (!d) continue; for (const poly of flatten(d)) shapes.push({ ids: g.ids, cls: g.cls, pts: poly.map(apply) }); }
+  if (el.tag === 'circle') { const cx = +attr(el.attrs, 'cx'), cy = +attr(el.attrs, 'cy'), r = +attr(el.attrs, 'r'); const pts = []; for (let a = 0; a < 16; a++) pts.push(apply([cx + r * Math.cos(a / 16 * 2 * Math.PI), cy + r * Math.sin(a / 16 * 2 * Math.PI)])); shapes.push({ ids: g.ids, cls: g.cls, pts, circle: true }); }
+}
+const inGroup = (s, id) => s.ids.includes(id);
+const ground = shapes.filter((s) => inGroup(s, 'Ground_Level'));
+const bbox = (pts) => pts.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]);
+const overlap = (a, b) => { const w = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])), h = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1])); return (w * h) / Math.max(1e-6, (a[2]-a[0]) * (a[3]-a[1])); };
+
+// ---- floor slabs from tarkov.dev layer extents (already game coords, [[x,z],[x,z],name])
+const floorBoxes = [];
+for (const layer of customs.layers) for (const ext of layer.extents) for (const b of ext.bounds) if (b.length === 3) floorBoxes.push({ layer: layer.name, name: b[2], x1: Math.min(b[0][0], b[1][0]), x2: Math.max(b[0][0], b[1][0]), z1: Math.min(b[0][1], b[1][1]), z2: Math.max(b[0][1], b[1][1]), y: ext.height });
+const FLOOR_H = 3.3;
+
+// ---- buildings
+const defaultHeight = { 'Garages-2': 4, 'Big_Buildings-2': 9, 'Small_Buildings-2': 3.5, 'Powerline_Towers': 22 };
+const buildings = [];
+for (const s of ground) {
+  const grp = Object.keys(defaultHeight).find((k) => inGroup(s, k)); if (!grp) continue;
+  const poly = s.pts.map(toGame); const bx = bbox(poly);
+  // floors from tarkov.dev extents: count distinct upper layers whose box covers most of this footprint
+  const gb = [bx[0], bx[1], bx[2], bx[3]];
+  const covering = floorBoxes.filter((f) => !/Underground/i.test(f.layer) && overlap(gb, [f.x1, f.z1, f.x2, f.z2]) > 0.5);
+  const topY = covering.reduce((m, f) => Math.max(m, Math.min(f.y[1], f.y[0] + FLOOR_H)), 0);
+  const floors = covering.length ? 1 + new Set(covering.map((f) => f.layer)).size : 1;
+  const tank = s.circle;
+  const height = topY > 0 ? +(topY + 0.5).toFixed(1) : tank ? 6 : defaultHeight[grp];
+  buildings.push({ poly, height, floors, kind: tank ? 'tank' : grp.replace(/-2$/, '').toLowerCase(), name: covering[0]?.name ?? null });
+}
+// ---- underground volumes (bunkers/tunnels) from the Underground extents
+const underground = floorBoxes.filter((f) => /Underground/i.test(f.layer)).map((f) => ({ name: f.name, poly: [[f.x1, f.z1], [f.x2, f.z1], [f.x2, f.z2], [f.x1, f.z2]], depth: 4 }));
+// ---- other ground features
+const polysIn = (id) => ground.filter((s) => inGroup(s, id)).map((s) => s.pts.map(toGame));
+const linesIn = (id) => ground.filter((s) => inGroup(s, id)).map((s) => s.pts.map(toGame));
+const roads = [
+  ...linesIn('High_Roads').map((p) => ({ path: p, width: 12, kind: 'highway' })),
+  ...linesIn('Main_Roads').map((p) => ({ path: p, width: 8, kind: 'main' })),
+  ...linesIn('Roads').map((p) => ({ path: p, width: 5, kind: 'small' })),
+  ...linesIn('Dirt_Roads').map((p) => ({ path: p, width: 5, kind: 'dirt' })),
+];
+const out = {
+  map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
+  land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement'), trees: polysIn('Trees'), rocks: polysIn('Rocks'),
+  roads, railway: linesIn('Railway').map((p) => ({ path: p })), fences: linesIn('Fence').map((p) => ({ path: p })), powerlines: linesIn('Powerlines').map((p) => ({ path: p })),
+  buildings, underground, floorBoxes,
+};
+await writeFile('public/data/customs-3d.json', JSON.stringify(out));
+const multi = buildings.filter((b) => b.floors > 1);
+console.log(`buildings ${buildings.length} (multi-floor ${multi.length}: ${multi.map((b) => `${b.name}×${b.floors}`).join(', ')}), trees ${out.trees.length}, rocks ${out.rocks.length}, roads ${roads.length}, water ${out.water.length}, land ${out.land.length} → public/data/customs-3d.json (${(JSON.stringify(out).length / 1024).toFixed(0)} KB)`);

@@ -71,3 +71,9 @@ Auto-pressing the screenshot key (`--auto`) is input automation — off by defau
 ## Commits
 Use conventional short messages; co-author trailer as configured by the harness. Keep `companion.json` (contains the
 pairing code) and `.env.local` out of git (already ignored).
+
+## 3D view (beta, deck.gl) — status 2026-08-29
+- `scripts/build-3d.mjs` → `public/data/customs-3d.json` (SVG footprints → game coords; heights seeded from tarkov.dev floor extents; 79 buildings, 14 multi-floor).
+- `src/map3d.js`: deck.gl OrbitView (perspective, fovy 22, pitch 50), SolidPolygonLayer extrusions with LightingEffect+shadow, PathLayer roads, IconLayer markers from a canvas atlas, TextLayer labels, live players at true height with drop-line + trail. Toggle button next to the map title; `?view=3d`; choice persisted.
+- Verified in headless (swiftshader): geometry/roads/trees/labels render, view sync 2D↔3D. NOT verified: marker icons visible (isolated tests pass, in-app they did not show under swiftshader), sharpness at higher zoom (in-app frames looked upscaled although deck reported correct canvas size). Check on a real GPU browser first before debugging further.
+- Icons/labels use `parameters: {depthCompare:'always', depthWriteEnabled:false}` so they draw over geometry; icon atlas anchors at bottom edge.

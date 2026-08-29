@@ -68,32 +68,37 @@ const icons = {};
 const iconFor = (kind) => (icons[kind] ??= L.divIcon({ className: '', html: iconHtml(kind), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
 const marker = (p, kind, html) => L.marker(pos(p), { icon: iconFor(kind) }).bindPopup(html);
 
-function buildLayers(d) {
-  const groups = {};
-  const add = (kind, m) => {
-    (groups[kind] ??= { ...KINDS[kind], layer: L.layerGroup(), n: 0 });
-    groups[kind].layer.addLayer(m); groups[kind].n++;
-  };
-
+/** Classify raw map data into marker points: [{kind, position, html}] — shared by the 2D and 3D views. */
+export function classify(d) {
+  const out = [];
+  const add = (kind, position, html) => out.push({ kind, position, html });
   for (const e of d.extracts) {
     const f = ['pmc', 'scav', 'transit'].includes(e.faction) ? e.faction : 'shared';
-    add('extract-' + f, marker(e.position, 'extract-' + f, `<b>${e.name}</b><br>Extract · ${f}${e.note ? `<br><i>${e.note}</i>` : ''}`));
+    add('extract-' + f, e.position, `<b>${e.name}</b><br>Extract · ${f}${e.note ? `<br><i>${e.note}</i>` : ''}`);
   }
   for (const s of d.spawns) {
     const isBoss = s.categories.includes('boss');
     const isPmc = s.sides.includes('pmc') || s.sides.includes('all');
-    const isSniper = s.categories.includes('sniper');
-    const isScav = s.categories.includes('scav');
     const info = `${s.zoneName ?? ''}<br>sides: ${s.sides.join(', ')}<br>cat: ${s.categories.join(', ')}`;
-    if (isBoss) add('spawn-boss', marker(s.position, 'spawn-boss', `<b>Boss spawn</b><br>${info}`));
-    else if (isPmc && s.categories.includes('player')) add('spawn-pmc', marker(s.position, 'spawn-pmc', `<b>PMC spawn</b><br>${info}`));
-    else if (isSniper) add('spawn-sniper', marker(s.position, 'spawn-sniper', `<b>Sniper scav spawn</b><br>${info}`));
-    else if (isScav) add('spawn-scav', marker(s.position, 'spawn-scav', `<b>Scav spawn</b><br>${info}`));
+    if (isBoss) add('spawn-boss', s.position, `<b>Boss spawn</b><br>${info}`);
+    else if (isPmc && s.categories.includes('player')) add('spawn-pmc', s.position, `<b>PMC spawn</b><br>${info}`);
+    else if (s.categories.includes('sniper')) add('spawn-sniper', s.position, `<b>Sniper scav spawn</b><br>${info}`);
+    else if (s.categories.includes('scav')) add('spawn-scav', s.position, `<b>Scav spawn</b><br>${info}`);
   }
-  for (const h of d.hazards) add('hazard', marker(h.position, 'hazard', `<b>${h.name}</b>`));
-  for (const w of d.stationaryWeapons) add('weapon', marker(w.position, 'weapon', `<b>${w.stationaryWeapon.name}</b>`));
-  for (const sw of d.switches ?? []) add('switch', marker(sw.position, 'switch', `<b>${sw.name}</b>`));
-  for (const l of d.locks) add('lock', marker(l.position, 'lock', `<b>${l.key?.name ?? 'Lock'}</b><br>${l.lockType}`));
+  for (const h of d.hazards) add('hazard', h.position, `<b>${h.name}</b>`);
+  for (const w of d.stationaryWeapons) add('weapon', w.position, `<b>${w.stationaryWeapon.name}</b>`);
+  for (const sw of d.switches ?? []) add('switch', sw.position, `<b>${sw.name}</b>`);
+  for (const l of d.locks) add('lock', l.position, `<b>${l.key?.name ?? 'Lock'}</b><br>${l.lockType}`);
+  return out;
+}
+let markerPoints = [];
+function buildLayers(d) {
+  markerPoints = classify(d);
+  const groups = {};
+  for (const m of markerPoints) {
+    (groups[m.kind] ??= { ...KINDS[m.kind], layer: L.layerGroup(), n: 0 });
+    groups[m.kind].layer.addLayer(marker(m.position, m.kind, m.html)); groups[m.kind].n++;
+  }
   return groups;
 }
 
@@ -104,8 +109,8 @@ const defaultOn = new Set(['extract-pmc', 'spawn-pmc']);
 function addToggle(label, kind, layer, count, on) {
   if (on) layer.addTo(map);
   const el = document.createElement('label');
-  el.innerHTML = `<input type="checkbox" ${on ? 'checked' : ''}> ${kind ? iconHtml(kind, 18) : ''} ${label} ${count != null ? `<span class="count">${count}</span>` : ''}`;
-  el.querySelector('input').onchange = (ev) => (ev.target.checked ? layer.addTo(map) : map.removeLayer(layer));
+  el.innerHTML = `<input type="checkbox" data-kind="${kind ?? ''}" ${on ? 'checked' : ''}> ${kind ? iconHtml(kind, 18) : ''} ${label} ${count != null ? `<span class="count">${count}</span>` : ''}`;
+  el.querySelector('input').onchange = (ev) => { ev.target.checked ? layer.addTo(map) : map.removeLayer(layer); view3d?.refresh(); };
   layersEl.appendChild(el);
 }
 const section = (title) => { const h = document.createElement('div'); h.className = 'group'; h.textContent = title; layersEl.appendChild(h); };
@@ -126,6 +131,7 @@ const CACHE_KEY = `tarkovzero:${mapData.key}`;
 function renderMarkers(data, source) {
   const groups = buildLayers(data);
   placeholders.remove();
+  view3d?.refresh();
   const bosses = data.bosses.map((b) => `${b.name} (${Math.round(b.spawnChance * 100)}%)`).join(', ');
   statusEl.innerHTML = `Data: ${source}${bosses ? `<br>Bosses: ${bosses}` : ''}`;
   for (const kind of MARKER_KINDS) {
@@ -172,3 +178,31 @@ ui.render();
 live.restore();
 for (const c of (new URLSearchParams(location.search).get('live') || '').split(',').filter(Boolean)) { try { live.add(c); } catch {} }
 ui.render();
+
+// ---- 3D view (deck.gl), lazy-loaded; shares marker/label/live data with the 2D map.
+let view3d = null;
+const visibleKinds = () => new Set([...document.querySelectorAll('#layers input[data-kind]:not([data-kind=""])')].filter((i) => i.checked).map((i) => i.dataset.kind));
+const labelsOn = () => document.querySelector('#layers input[data-kind=""]')?.checked ?? true;
+const btn3d = document.getElementById('view-toggle');
+async function setView(mode) {
+  localStorage.setItem('view', mode);
+  btn3d.textContent = mode === '3d' ? '2D' : '3D';
+  document.body.classList.toggle('view-3d', mode === '3d');
+  if (mode === '3d') {
+    if (!view3d) {
+      const { createView3d } = await import('./map3d.js');
+      view3d = await createView3d(document.getElementById('map3d'), mapData, {
+        markers: () => markerPoints.filter((m) => visibleKinds().has(m.kind)),
+        labels: () => (labelsOn() ? CUSTOMS_LABELS : []),
+        players: () => [...live.players.values()],
+        onViewChange: (v) => { /* keep 2D roughly in sync */ map.setView([-v.target[1], -v.target[0]], v.zoom + 2.06, { animate: false }); },
+      });
+    }
+    const c = map.getCenter();
+    view3d.setView({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - 2.06 });
+    view3d.refresh();
+  }
+}
+btn3d.onclick = () => setView(document.body.classList.contains('view-3d') ? '2d' : '3d');
+const origRender = ui.render; ui.render = () => { origRender(); view3d?.refresh(); };
+if (new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d') setView('3d');
