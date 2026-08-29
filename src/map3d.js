@@ -462,6 +462,11 @@ function propParts(props) { // -> extruded footprints with base at terrain
     return { poly: rbox(p.x, p.z, p.w ?? 2.4, p.l ?? 6, p.rot ?? 0), h: p.h ?? 2.6, base: base + (p.dz ?? 0), color, p };
   });
 }
+function viewCone(last, r, fovDeg) {
+  const yaw = ((last.yaw ?? 0) * Math.PI) / 180, half = (fovDeg * Math.PI) / 360, pts = [[last.x, last.z]];
+  for (let i = 0; i <= 14; i++) { const a = yaw - half + (2 * half * i) / 14; pts.push([last.x + r * Math.sin(a), last.z + r * Math.cos(a)]); }
+  return pts;
+}
 const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x + w / 2, y + w / 2], [x - w / 2, y + w / 2]];
 
 export async function createView3d(container, mapData, src) {
@@ -697,9 +702,12 @@ export async function createView3d(container, mapData, src) {
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
       ...extractNameLayers(markers),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.3)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      // live player: field-of-view cone on the ground (direction = the cone) + beacon
+      new SolidPolygonLayer({ id: 'player-cone', data: players, getPolygon: (p) => viewCone(p.last, 32, 60).map((q) => Pg(q, 0.35)), getFillColor: (p) => hex(p.color, 70), pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPolygon: players.map((p) => p.last) } }),
+      new SolidPolygonLayer({ id: 'player-cone-inner', data: players, getPolygon: (p) => viewCone(p.last, 12, 60).map((q) => Pg(q, 0.4)), getFillColor: (p) => hex(p.color, 120), pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPolygon: players.map((p) => p.last) } }),
+      new ScatterplotLayer({ id: 'player-ring', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.45), getRadius: 2.2, radiusUnits: 'meters', radiusMinPixels: 6, stroked: true, filled: true, getFillColor: (p) => hex(p.color, 255), getLineColor: [10, 14, 12, 230], lineWidthMinPixels: 2, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last) } }),
+      new LineLayer({ id: 'player-beacon', data: players, getSourcePosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.5), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 9), getColor: (p) => hex(p.color, 150), getWidth: 3, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getSourcePosition: players.map((p) => p.last), getTargetPosition: players.map((p) => p.last) } }),
       new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.2), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new IconLayer({ id: 'player-figures', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max((p.last.y ?? 0) + 0.2, H(p.last.x, p.last.z) + 0.3)), iconAtlas: soldierAtlas.canvas, iconMapping: soldierAtlas.mapping, getIcon: (p) => p.color, getSize: 34, sizeUnits: 'pixels', billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last) } }),
-      new IconLayer({ id: 'players', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.2), iconAtlas: arrowAtlas.canvas, iconMapping: arrowAtlas.mapping, getIcon: (p) => p.color, getSize: 12, sizeUnits: 'meters', sizeMinPixels: 22, sizeMaxPixels: 44, billboard: false, getAngle: (p) => -((p.last.yaw ?? 0) + (mapData.coordinateRotation ?? 0)), pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: [players.map((p) => p.last), relief], getAngle: players.map((p) => p.last) } }),
       ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.3), getText: (p) => p.name, getPixelOffset: [22, 0], getTextAnchor: 'start', getSize: 14, getColor: C.cream, outlineWidth: 4, outlineColor: [14, 18, 15, 240], fontFamily: LABEL_FONT(), fontSettings: { sdf: true }, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: relief } })]),
     ];
   };
@@ -718,7 +726,7 @@ export async function createView3d(container, mapData, src) {
       if (layer.id === 'props') return { html: `<b>${esc(object.p.name ?? object.p.type)}</b>`, className: 'deck-tooltip' };
       if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
       if (layer.id === 'markers-extract' || layer.id === 'markers-chips') return { html: object.html, className: 'deck-tooltip' };
-      if (layer.id === 'players') { const y = object.last.y ?? 0, g = H(object.last.x, object.last.z) / relief, rel = y - g; const fl = rel < -1.5 ? 'underground' : rel < 2.6 ? 'ground' : `floor ${Math.floor(rel / 3.3) + 1}`; const note = relief === 1 ? '' : `<br>Relief ${relief}× · ground height visually exaggerated`; return { html: `<b>${esc(object.name)}</b><br>${fl} · x ${object.last.x} z ${object.last.z} y ${y}${note}`, className: 'deck-tooltip' }; }
+      if (layer.id === 'players' || layer.id === 'player-ring') { const y = object.last.y ?? 0, g = H(object.last.x, object.last.z) / relief, rel = y - g; const fl = rel < -1.5 ? 'underground' : rel < 2.6 ? 'ground' : `floor ${Math.floor(rel / 3.3) + 1}`; const note = relief === 1 ? '' : `<br>Relief ${relief}× · ground height visually exaggerated`; return { html: `<b>${esc(object.name)}</b><br>${fl} · x ${object.last.x} z ${object.last.z} y ${y}${note}`, className: 'deck-tooltip' }; }
       return null;
     },
   });
