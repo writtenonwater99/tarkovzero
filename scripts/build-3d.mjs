@@ -142,8 +142,23 @@ for (const b of buildings) {
   if (b.style === 'canopy') b.height = 4.8;
   if (b.style === 'gable' && ROOF_COLORS[b.place]) b.roof = ROOF_COLORS[b.place];
 }
+// ---- terrain: true-to-scale height grid from SPT spawn points (ground-level ones only), IDW + smoothing
+const spt = JSON.parse(await readFile('scripts/spt-bigmap-base.json', 'utf8'));
+const groundPts = spt.SpawnPointParams.map((s) => ({ x: s.Position.x, z: s.Position.z, y: s.Position.y, zone: s.BotZoneName || '' })).filter((p) => p.y < 15 && p.y > -6 && !/snipe/i.test(p.zone));
+const STEP = 20, x0 = BOUNDS.xMin - 40, z0 = BOUNDS.zMin - 40, cols = Math.ceil((BOUNDS.xMax - BOUNDS.xMin + 80) / STEP) + 1, rows = Math.ceil((BOUNDS.zMax - BOUNDS.zMin + 80) / STEP) + 1;
+const raw = new Float32Array(cols * rows);
+for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+  const x = x0 + c * STEP, z = z0 + r * STEP; let num = 0, den = 0;
+  for (const p of groundPts) { const d2 = (p.x - x) ** 2 + (p.z - z) ** 2; const w = 1 / (d2 + 900); num += w * p.y; den += w; } // 30 m softening radius
+  raw[r * cols + c] = num / den;
+}
+// light smoothing pass so the surface rolls instead of bumps
+const heights = new Float32Array(cols * rows);
+for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let sum = 0, n = 0; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) { sum += raw[rr * cols + cc]; n++; } } heights[r * cols + c] = +(sum / n).toFixed(2); }
+const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights) };
+console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length} points, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 const out = {
-  bridges,
+  terrain, bridges,
   map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
   land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement'), trees: polysIn('Trees'), rocks: polysIn('Rocks'),
   roads, railway: linesIn('Railway').map((p) => ({ path: p })), fences: linesIn('Fence').map((p) => ({ path: p })), powerlines: linesIn('Powerlines').map((p) => ({ path: p })),
