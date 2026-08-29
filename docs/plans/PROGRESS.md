@@ -330,3 +330,31 @@ bb38391bb7f06130cfa64391d460316da7dbd88974539cdc3bfa3522829f836a  public/data/wo
 ```
 
 No deploy, push, or commit was performed.
+
+## Fix pass 9 — marker-complete playable limit and exact cliff edge
+
+### Changed
+
+- The 3D builder no longer treats tarkov.dev's visual `Limit` / `Ground` ring as complete gameplay evidence. It checks the shared 2D/3D marker inventory (`extracts`, transits, spawns, hazards, stationary weapons, switches, locks, and containers), unions deterministic 18.25 m circular or connected capsule patches around deficient markers, and fills only the narrow local bays created by those patches. Unaffected SVG edges remain unchanged, while the resulting playable ring contains every marker with at least an 18 m margin. Customs' Dorms V-Ex is consequently on terrain rather than hanging beyond it.
+- The final expanded outline is resampled at 1.9 m and rounded to centimetres. The same ring is serialized as `land` and is now the authority for terrain, cliff, void, and builder-time road/tree/rock/building/prop clipping. The builder prints raw outside counts and the final checked marker count, prints named offenders with coordinates and measured margin if the gate fails, and aborts generation on any offender.
+- Terrain raster cells are retained only when the entire cell is safely inside the playable polygon. `src/terrain.js` triangulates the narrow remainder between that inset grid and the exact outer ring with `earcut`, then welds the flat black cliff skirt directly to the exact outer terrain vertices. The visible silhouette and skirt therefore follow the polygon at no more than 1.913 m per segment instead of following 2.5 m raster-cell stairs.
+
+### Verified
+
+- Repeated clean builder runs produced byte-identical results. The permanent containment gate checked 1,099 Customs, 801 Reserve, and 983 Woods marker positions with zero offenders. Independent post-rounding geometry checks found minimum margins of 18.225 m on all three maps, zero self-intersections, finite coordinates, and maximum outline steps of 1.911 / 1.912 / 1.910 m respectively. One-metre sampling of every original SVG edge also found zero samples outside the expanded rings, confirming that the operation does not shrink the old playable area.
+- The raw tarkov.dev outlines excluded 228 Customs, 29 Reserve, and 25 Woods markers. Final outline sizes are 1,642 / 1,108 / 2,912 vertices. Runtime diagnostics at 3x relief report the exact-boundary path active: Customs has 3,072 boundary-band triangles and 1,642 cliff segments, Reserve 2,122 / 1,108, and Woods 5,466 / 2,912. In each case the cliff-segment count equals the exact outer-ring vertex count.
+- `npm run build` passes with only Vite's existing deck.gl chunk-size advisory. `node --check` passes for the edited builder and terrain module, all generated numbers are finite, and `git diff --check` passes.
+- Before/after comparisons are in `scratch/fix-pass-9/`: `customs-dorms-edge-comparison.png` at `#3/200/215`, `customs-crossroads-edge-comparison.png` at `#3/-315/-80`, and `woods-lake-edge-comparison.png` at `#2.2/10/90` with trees and rocks hidden so the shore/outer cliff is unobstructed. Each comparison is backed by separate `-before.png` and `-after.png` 1400x900 captures. The Dorms pair shows the previously missing Dorms V-Ex ground and badge; all three show the raster staircase replaced by the exact outline.
+
+Final deterministic data hashes:
+
+```text
+8027b339b3c99bdda988dd2ccfed813d89caeaa06211a41a35aa33d308fef393  public/data/customs.json
+9de71f7e59994de5c60c6cb6f3bfbc656a5c40d1832b51245bb491a83fccbeee  public/data/customs-3d.json
+1c9882595d7e74948f8238ea150f14b9f9c4716168976f739ca75ac6ba5ac597  public/data/reserve.json
+2d8ca348deaffa4fbd80643ce91cc997ec67910699c999099bc0179502608348  public/data/reserve-3d.json
+9e184a26860983f135273f7b705a6a2024626d279887e8795810982ec9e1a73b  public/data/woods.json
+00606d0791b92c6cb9129c35955f45afd4cec334cd68052a33685300c4d50645  public/data/woods-3d.json
+```
+
+No deploy, push, or commit was performed.

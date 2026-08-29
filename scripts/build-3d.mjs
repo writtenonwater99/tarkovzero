@@ -82,6 +82,7 @@ const BOUNDS = cfg.bounds;
 let svg;
 try { svg = await readFile(`.cache/maps/svg/${cfg.svgName}.svg`, 'utf8'); } catch { svg = await (await fetch(cfg.svgUrl)).text(); }
 const maps = JSON.parse(await readFile(cfg.maps, 'utf8'));
+const community = JSON.parse(await readFile(`public/data/${key}.json`, 'utf8'));
 const props = JSON.parse(await readFile(cfg.props, 'utf8')).props;
 const roadEdits = JSON.parse(await readFile(cfg.roads, 'utf8'));
 const yards = cfg.yards ? JSON.parse(await readFile(cfg.yards, 'utf8')).yards : [];
@@ -204,6 +205,196 @@ for (const b of buildings) {
 // ---- bridges: parts of roads/rail that run over water become elevated decks
 const inPoly = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
 const resample = (path, step) => { const r = [path[0]]; for (let i = 1; i < path.length; i++) { const [ax, az] = path[i - 1], [bx, bz] = path[i]; const L = Math.hypot(bx - ax, bz - az); for (let t = step; t < L; t += step) r.push([ax + ((bx - ax) * t) / L, az + ((bz - az) * t) / L]); r.push(path[i]); } return r; };
+const ringArea = (ring) => ring.reduce((sum, [x, z], i) => { const [nx, nz] = ring[(i + 1) % ring.length]; return sum + x * nz - nx * z; }, 0) / 2;
+const samePoint = (a, b, eps = 1e-7) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= eps;
+const cleanRing = (ring) => {
+  const out = [];
+  for (const p of ring) if (!out.length || !samePoint(p, out[out.length - 1])) out.push(p);
+  if (out.length > 1 && samePoint(out[0], out[out.length - 1])) out.pop();
+  let changed = true;
+  while (changed && out.length > 3) {
+    changed = false;
+    for (let i = 0; i < out.length; i++) {
+      const a = out[(i + out.length - 1) % out.length], b = out[i], c = out[(i + 1) % out.length];
+      const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+      if (Math.abs(cross) <= 1e-8 && (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1]) >= 0) {
+        out.splice(i, 1); changed = true; break;
+      }
+    }
+  }
+  return out;
+};
+const ccw = (ring) => ringArea(ring) < 0 ? [...ring].reverse() : [...ring];
+const ringDistance = ([x, z], ring) => {
+  let distance = Infinity, nearest = null;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2));
+    const point = [a[0] + t * dx, a[1] + t * dz], d = Math.hypot(x - point[0], z - point[1]);
+    if (d < distance) { distance = d; nearest = point; }
+  }
+  return { inside: inPoly([x, z], ring), distance, nearest };
+};
+const circleRing = ([x, z], radius, maxStep = 1.75) => {
+  const count = Math.max(24, Math.ceil((2 * Math.PI * radius) / maxStep));
+  return Array.from({ length: count }, (_, i) => { const a = (i / count) * 2 * Math.PI; return [x + Math.cos(a) * radius, z + Math.sin(a) * radius]; });
+};
+const capsuleRing = (a, b, radius, maxStep = 1.75) => {
+  const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+  if (samePoint(a, b)) return circleRing(a, radius, maxStep);
+  const count = Math.max(12, Math.ceil((Math.PI * radius) / maxStep)), ring = [];
+  for (let i = 0; i <= count; i++) { const q = angle - Math.PI / 2 + (i / count) * Math.PI; ring.push([b[0] + Math.cos(q) * radius, b[1] + Math.sin(q) * radius]); }
+  for (let i = 0; i <= count; i++) { const q = angle + Math.PI / 2 + (i / count) * Math.PI; ring.push([a[0] + Math.cos(q) * radius, a[1] + Math.sin(q) * radius]); }
+  return cleanRing(ring);
+};
+const segmentIntersection = (a, b, c, d) => {
+  const rx = b[0] - a[0], rz = b[1] - a[1], sx = d[0] - c[0], sz = d[1] - c[1];
+  const den = rx * sz - rz * sx;
+  if (Math.abs(den) < 1e-10) return null;
+  const qx = c[0] - a[0], qz = c[1] - a[1];
+  const t = (qx * sz - qz * sx) / den, u = (qx * rz - qz * rx) / den;
+  if (t < -1e-9 || t > 1 + 1e-9 || u < -1e-9 || u > 1 + 1e-9) return null;
+  const tc = Math.max(0, Math.min(1, t)), uc = Math.max(0, Math.min(1, u));
+  return { t: tc, u: uc, point: [a[0] + tc * rx, a[1] + tc * rz] };
+};
+// Boundary-overlay union for two overlapping simple rings. Marker patches are convex and always
+// overlap the current playable ring; retaining only the pieces outside the other ring leaves the
+// union outline while preserving every untouched SVG segment geometrically.
+function unionRings(leftInput, rightInput) {
+  const left = ccw(cleanRing(leftInput)), right = ccw(cleanRing(rightInput));
+  const leftSplits = left.map((p, i) => [{ t: 0, point: p }, { t: 1, point: left[(i + 1) % left.length] }]);
+  const rightSplits = right.map((p, i) => [{ t: 0, point: p }, { t: 1, point: right[(i + 1) % right.length] }]);
+  let intersections = 0;
+  for (let i = 0; i < left.length; i++) for (let j = 0; j < right.length; j++) {
+    const hit = segmentIntersection(left[i], left[(i + 1) % left.length], right[j], right[(j + 1) % right.length]);
+    if (!hit) continue;
+    leftSplits[i].push({ t: hit.t, point: hit.point }); rightSplits[j].push({ t: hit.u, point: hit.point }); intersections++;
+  }
+  if (intersections < 2) {
+    if (inPoly(right[0], left)) return left;
+    if (inPoly(left[0], right)) return right;
+    throw new Error(`disconnected limit patch (${intersections} boundary intersections)`);
+  }
+  const pieces = (ring, splits, other) => {
+    const out = [];
+    for (let i = 0; i < ring.length; i++) {
+      const points = splits[i].sort((a, b) => a.t - b.t).filter((v, k, all) => !k || Math.abs(v.t - all[k - 1].t) > 1e-8);
+      for (let j = 1; j < points.length; j++) {
+        const a = points[j - 1].point, b = points[j].point;
+        if (samePoint(a, b)) continue;
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if (!inPoly(mid, other)) out.push([a, b]);
+      }
+    }
+    return out;
+  };
+  const edges = [...pieces(left, leftSplits, right), ...pieces(right, rightSplits, left)];
+  const keyOf = (p) => `${Math.round(p[0] * 1e5)},${Math.round(p[1] * 1e5)}`;
+  const starts = new Map();
+  edges.forEach((edge, i) => { const key = keyOf(edge[0]); if (!starts.has(key)) starts.set(key, []); starts.get(key).push(i); });
+  const used = new Uint8Array(edges.length), rings = [];
+  for (let seed = 0; seed < edges.length; seed++) {
+    if (used[seed]) continue;
+    const ring = [edges[seed][0]], start = keyOf(edges[seed][0]); let edgeIndex = seed;
+    for (let guard = 0; guard <= edges.length; guard++) {
+      if (used[edgeIndex]) break;
+      used[edgeIndex] = 1;
+      const end = edges[edgeIndex][1]; ring.push(end);
+      if (keyOf(end) === start) break;
+      const next = (starts.get(keyOf(end)) || []).find((i) => !used[i]);
+      if (next == null) {
+        const endKey = keyOf(end), outgoing = starts.get(endKey)?.length || 0;
+        throw new Error(`open limit ring after marker union at ${end.map((v) => v.toFixed(6)).join(',')} (key ${endKey}, outgoing ${outgoing}, edges ${edges.length}, intersections ${intersections})`);
+      }
+      edgeIndex = next;
+    }
+    const cleaned = cleanRing(ring);
+    if (cleaned.length >= 3) rings.push(cleaned);
+  }
+  if (!rings.length) throw new Error('empty limit ring after marker union');
+  return ccw(rings.sort((a, b) => Math.abs(ringArea(b)) - Math.abs(ringArea(a)))[0]);
+}
+const resampleRing = (ring, step = 2) => {
+  const out = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    out.push(a);
+    for (let d = step; d < length - 1e-8; d += step) out.push([a[0] + ((b[0] - a[0]) * d) / length, a[1] + ((b[1] - a[1]) * d) / length]);
+  }
+  return out;
+};
+const MARKER_GROUPS = ['extracts', 'spawns', 'hazards', 'stationaryWeapons', 'switches', 'locks', 'containers'];
+const markerPoints = MARKER_GROUPS.flatMap((group) => (community[group] || []).map((marker, index) => ({
+  group, index, name: marker.name || marker.key?.name || marker.stationaryWeapon?.name || marker.zoneName || marker.type || `${group} #${index + 1}`,
+  point: [marker.position?.x, marker.position?.z],
+}))).filter((marker) => {
+  if (marker.point.every(Number.isFinite)) return true;
+  throw new Error(`${key}: invalid ${marker.group} marker position for ${marker.name}`);
+});
+const MARKER_MARGIN = 18, PATCH_RADIUS = 18.25;
+// Nearby marker bumps can otherwise leave a comb of narrow bays between overlapping gameplay
+// evidence. Removing only local concave vertices fills those bays (it can only add playable area),
+// while natural SVG concavities away from a deficient marker remain geometrically unchanged.
+function fillMarkerBays(input, deficientMarkers, influence = 75, maxChord = 120) {
+  const ring = ccw(cleanRing(input)); let removed = 0, changed = true;
+  const crossesOtherEdge = (a, c, at) => {
+    for (let j = 0; j < ring.length; j++) {
+      if (j === at || j === (at + ring.length - 1) % ring.length || j === (at + 1) % ring.length) continue;
+      const hit = segmentIntersection(a, c, ring[j], ring[(j + 1) % ring.length]);
+      if (hit && hit.t > 1e-7 && hit.t < 1 - 1e-7 && hit.u > 1e-7 && hit.u < 1 - 1e-7) return true;
+    }
+    return false;
+  };
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < ring.length && ring.length > 3; i++) {
+      const a = ring[(i + ring.length - 1) % ring.length], b = ring[i], c = ring[(i + 1) % ring.length];
+      const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+      if (cross >= -1e-7 || Math.hypot(c[0] - a[0], c[1] - a[1]) > maxChord) continue;
+      if (!deficientMarkers.some((marker) => Math.hypot(marker.point[0] - b[0], marker.point[1] - b[1]) <= influence)) continue;
+      if (crossesOtherEdge(a, c, i)) continue;
+      ring.splice(i, 1); removed++; changed = true; i--;
+    }
+  }
+  return { ring, removed };
+}
+function expandLimitForMarkers(rawLimit) {
+  let limit = ccw(cleanRing(rawLimit)), patches = 0;
+  const rawStats = markerPoints.map((marker) => ({ marker, ...ringDistance(marker.point, limit) }));
+  const pending = rawStats.filter((d) => !d.inside || d.distance < MARKER_MARGIN)
+    .sort((a, b) => (a.inside ? MARKER_MARGIN - a.distance : MARKER_MARGIN + a.distance) - (b.inside ? MARKER_MARGIN - b.distance : MARKER_MARGIN + b.distance)
+      || a.marker.group.localeCompare(b.marker.group) || a.marker.index - b.marker.index);
+  for (const { marker } of pending) {
+    const state = ringDistance(marker.point, limit);
+    if (state.inside && state.distance >= MARKER_MARGIN) continue;
+    let error = null, joined = null;
+    for (let attempt = 0; attempt < 4 && !joined; attempt++) {
+      const radius = PATCH_RADIUS + attempt * 0.75;
+      const patch = !state.inside && state.distance >= radius
+        ? capsuleRing(state.nearest, marker.point, radius)
+        : circleRing(marker.point, radius);
+      try { joined = unionRings(limit, patch); } catch (cause) { error = cause; }
+    }
+    if (!joined) throw new Error(`${key}: marker limit patch failed for ${marker.group}[${marker.index}] ${marker.name} @ ${marker.point.join(',')}: ${error.message}`, { cause: error });
+    limit = joined;
+    patches++;
+  }
+  const cleaned = fillMarkerBays(limit, pending.map((d) => d.marker));
+  limit = resampleRing(cleaned.ring, 1.9).map(([x, z]) => [+x.toFixed(2), +z.toFixed(2)])
+    .filter((point, index, all) => !index || !samePoint(point, all[index - 1], 1e-9));
+  console.log(`limit: ${rawLimit.length} SVG points -> ${limit.length} smooth points; ${rawStats.filter((d) => !d.inside).length} raw outside markers; ${patches} local buffered expansions; ${cleaned.removed} narrow-bay vertices filled`);
+  return limit;
+}
+function assertMarkerContainment(limit) {
+  const offenders = markerPoints.map((marker) => ({ marker, ...ringDistance(marker.point, limit) }))
+    .filter((d) => !d.inside || d.distance < MARKER_MARGIN - 0.02);
+  if (offenders.length) {
+    console.error(`${key}: ${offenders.length} marker containment offenders (required ${MARKER_MARGIN} m margin):`);
+    for (const d of offenders) console.error(`  ${d.marker.group}[${d.marker.index}] ${d.marker.name} @ ${d.marker.point.join(',')}: ${d.inside ? `${d.distance.toFixed(2)} m margin` : `${d.distance.toFixed(2)} m outside`}`);
+    throw new Error(`${key}: playable limit does not contain every marker`);
+  }
+  console.log(`marker containment: ${markerPoints.length} shared 2D/3D markers checked; 0 offenders; >=${MARKER_MARGIN} m margin`);
+}
 // Compound SVG water paths use reversed nested rings for islands. Preserve those as holes so
 // neither the basin carve nor the water fill erases dry land in the middle of a river.
 const waterRaw = cfg.groups.water ? polysIn(cfg.groups.water) : [];
@@ -221,9 +412,14 @@ for (const r of [...roads.map((r) => ({ ...r, cls: 'road' })), ...(cfg.groups.ra
   for (const p of pts) { if (overWater(p)) run.push(p); else flush(); }
   flush();
 }
-// ---- playable boundary = the SVG 'Limit' (= ground polygon). Clip linear features to it; drop anything outside.
-const LIMIT = polysIn(cfg.groups.limit)[0];
-if (!LIMIT) throw new Error(`${key}: no playable limit from SVG group ${cfg.groups.limit}`);
+// ---- playable boundary = SVG ground plus deterministic local buffers around every shared marker.
+// tarkov.dev's visual Ground/Limit ring is not the true gameplay edge everywhere (Dorms V-Ex is
+// the clearest example). Preserve its unaffected segments, attach only the buffered marker patches,
+// then resample the final outline at <=2 m so the terrain and flat cliff follow one clean curve.
+const RAW_LIMIT = polysIn(cfg.groups.limit)[0];
+if (!RAW_LIMIT) throw new Error(`${key}: no playable limit from SVG group ${cfg.groups.limit}`);
+const LIMIT = expandLimitForMarkers(RAW_LIMIT);
+assertMarkerContainment(LIMIT);
 const inside = (pt) => inPoly(pt, LIMIT);
 function clipPath(path, step = 3) { const out = []; let run = []; for (const q of resample(path, step)) { if (inside(q)) run.push(q); else { if (run.length >= 2) out.push(run); run = []; } } if (run.length >= 2) out.push(run); return out; }
 const clipLines = (items) => items.flatMap((it) => clipPath(it.path).map((path) => ({ ...it, path })));
@@ -513,7 +709,7 @@ console.log(`props ${props.length + svgProps.length}`);
 console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length}/${evidenceInput.length} points, rejected ${JSON.stringify(hardReject)}, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 // drop anything whose centroid is outside the playable boundary
 const insideC = (poly) => inside(centroid(poly));
-const edgeDist = (pt) => { let best = Infinity; for (let i = 0; i < LIMIT.length; i++) { const a = LIMIT[i], b = LIMIT[(i + 1) % LIMIT.length]; const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1; const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dz) / L2)); best = Math.min(best, Math.hypot(pt[0] - (a[0] + t * dx), pt[1] - (a[1] + t * dz))); } return best; };
+const edgeDist = (pt) => ringDistance(pt, LIMIT).distance;
 // towers hugging the boundary are outside the real playable area (the SVG limit is slightly generous)
 const keepB = buildings.filter((b) => insideC(b.poly) && !(b.kind === 'powerline_towers' && edgeDist(centroid(b.poly)) < 10)); buildings.length = 0; buildings.push(...keepB);
 const propsIn = [...props, ...svgProps].filter((p) => p.poly ? insideC(p.poly) : (p.path ? inside(p.path[0]) : inside([p.x, p.z])));
@@ -638,7 +834,7 @@ for (let index = 0; index < treePolys.length; index++) {
 const out = {
   props: propsIn, terrain, bridges, limit: LIMIT,
   map: key, builtAt, source: 'tarkov.dev SVG/maps.json + SPT 4.1.2 loose-loot/spawn elevation samples + companion survey samples',
-  land: polysIn(cfg.groups.land), water: out0.water, pavement: (cfg.groups.pavement ? polysIn(cfg.groups.pavement) : []).filter(insideC), understory: treePolys, trees: treeCrowns, rocks: rocksOut,
+  land: [LIMIT], water: out0.water, pavement: (cfg.groups.pavement ? polysIn(cfg.groups.pavement) : []).filter(insideC), understory: treePolys, trees: treeCrowns, rocks: rocksOut,
   roads, railway: clipLines((cfg.groups.railway ? linesIn(cfg.groups.railway) : []).map((p) => ({ path: p }))), fences: fencesCut, powerlines: clipLines((cfg.groups.powerlines ? linesIn(cfg.groups.powerlines) : []).map((p) => ({ path: p }))),
   buildings, underground: undergroundIn, floorBoxes,
 };
