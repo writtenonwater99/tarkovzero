@@ -64,3 +64,5 @@ body.view-3d .view-toggle { background: #2a6; border-color: #2a6; }
 .leaflet-marker-icon:hover .mk.dia { transform: rotate(45deg) scale(1.15); }
 .leaflet-marker-icon:hover .mk:not(.dia) { transform: scale(1.15); }
 #layers .mk { opacity: 1; }
+#hint3d { display: none; margin-top: 10px; font-size: 11px; line-height: 1.4; }
+body.view-3d #hint3d { display: block; }
