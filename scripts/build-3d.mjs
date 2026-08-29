@@ -227,7 +227,9 @@ console.log(`props ${props.length}`);
 console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length} points, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 // drop anything whose centroid is outside the playable boundary
 const insideC = (poly) => inside(centroid(poly));
-const keepB = buildings.filter((b) => insideC(b.poly)); buildings.length = 0; buildings.push(...keepB);
+const edgeDist = (pt) => { let best = Infinity; for (let i = 0; i < LIMIT.length; i++) { const a = LIMIT[i], b = LIMIT[(i + 1) % LIMIT.length]; const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1; const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dz) / L2)); best = Math.min(best, Math.hypot(pt[0] - (a[0] + t * dx), pt[1] - (a[1] + t * dz))); } return best; };
+// towers hugging the boundary are outside the real playable area (the SVG limit is slightly generous)
+const keepB = buildings.filter((b) => insideC(b.poly) && !(b.kind === 'powerline_towers' && edgeDist(centroid(b.poly)) < 10)); buildings.length = 0; buildings.push(...keepB);
 const propsIn = props.filter((p) => (p.path ? inside(p.path[0]) : inside([p.x, p.z])));
 const undergroundIn = underground.filter((u) => insideC(u.poly));
 const out = {
