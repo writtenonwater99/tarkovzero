@@ -1,0 +1,47 @@
+{
+ "_doc": "Hand-traced Reserve props in game coords (x, z), audited against tarkov.dev satellite zoom 5. Plane, service vehicles, rail stock, containers, and the radar are deliberately low-chroma overview landmarks.",
+ "props": [
+  { "type": "vehicle", "name": "Tarmac transport plane fuselage", "x": -126.8, "z": 40.1, "w": 4.4, "l": 38, "h": 3.8, "rot": 82, "color": [72, 88, 86] },
+  { "type": "vehicle", "name": "Tarmac transport plane wings", "x": -127.5, "z": 39.3, "w": 3.0, "l": 42, "h": 0.9, "rot": 145, "dz": 1.8, "color": [82, 96, 94] },
+  { "type": "vehicle", "name": "Tarmac transport plane tailplane", "x": -125.4, "z": 55.0, "w": 2.4, "l": 15, "h": 0.8, "rot": 145, "dz": 2.2, "color": [82, 96, 94] },
+  { "type": "vehicle", "name": "Plane port engine", "x": -113.8, "z": 30.5, "w": 3.1, "l": 5.8, "h": 2.2, "rot": 82, "dz": 0.8, "color": [70, 78, 76] },
+  { "type": "vehicle", "name": "Plane starboard engine", "x": -140.4, "z": 47.8, "w": 3.1, "l": 5.8, "h": 2.2, "rot": 82, "dz": 0.8, "color": [70, 78, 76] },
+  { "type": "vehicle", "name": "Orange tarmac truck", "x": -111.7, "z": 23.7, "w": 2.5, "l": 6.2, "h": 2.6, "rot": 136, "color": [150, 82, 47] },
+  { "type": "vehicle", "name": "Yellow tarmac loader", "x": -117.3, "z": 24.6, "w": 2.8, "l": 5.2, "h": 2.4, "rot": 145, "color": [176, 142, 61] },
+  { "type": "vehicle", "name": "Orange tarmac truck", "x": -106.0, "z": 38.5, "w": 2.5, "l": 6.6, "h": 2.6, "rot": 136, "color": [150, 82, 47] },
+  { "type": "vehicle", "name": "Orange tarmac truck", "x": -143.9, "z": 41.3, "w": 2.5, "l": 6.2, "h": 2.6, "rot": 92, "color": [150, 82, 47] },
+  { "type": "vehicle", "name": "Tarmac service bus", "x": -90.5, "z": 51.4, "w": 2.7, "l": 8.2, "h": 2.9, "rot": 81, "color": [133, 119, 76] },
+  { "type": "tanker", "name": "Tarmac fuel bowser", "x": -107.2, "z": 34.1, "w": 2.7, "l": 6.0, "h": 2.7, "rot": 8, "color": [134, 123, 76] },
+  { "type": "vehicle", "name": "Tarmac tractor", "x": -118.4, "z": 52.8, "w": 2.3, "l": 4.5, "h": 2.1, "rot": 22, "color": [172, 137, 54] },
+
+  { "type": "railcar", "name": "White Rook tank wagon", "x": 191.2, "z": -123.3, "w": 3.3, "l": 11.0, "h": 3.7, "rot": 0, "color": [132, 128, 114] },
+  { "type": "railcar", "name": "White Rook tank wagon", "x": 181.2, "z": -122.4, "w": 3.3, "l": 10.5, "h": 3.7, "rot": 0, "color": [126, 122, 110] },
+  { "type": "railcar", "name": "White Rook tank wagon", "x": 171.4, "z": -121.5, "w": 3.3, "l": 10.5, "h": 3.7, "rot": 0, "color": [138, 132, 116] },
+  { "type": "railcar", "name": "White Rook tank wagon", "x": 161.1, "z": -120.7, "w": 3.3, "l": 10.5, "h": 3.7, "rot": 0, "color": [126, 122, 110] },
+  { "type": "railcar", "name": "White Rook tank wagon", "x": 150.8, "z": -119.8, "w": 3.3, "l": 10.5, "h": 3.7, "rot": 0, "color": [138, 132, 116] },
+  { "type": "railcar", "name": "White Rook tank wagon", "x": 140.2, "z": -119.0, "w": 3.3, "l": 10.5, "h": 3.7, "rot": 0, "color": [126, 122, 110] },
+  { "type": "container", "name": "Train yard blue container", "x": 120.6, "z": -164.2, "w": 2.5, "l": 11.5, "h": 2.7, "rot": 90, "color": [72, 90, 111] },
+  { "type": "vehicle", "name": "Train yard cargo truck", "x": 119.9, "z": -169.5, "w": 2.5, "l": 5.5, "h": 2.7, "rot": 90, "color": [156, 80, 48] },
+  { "type": "vehicle", "name": "Train yard red car", "x": 135.8, "z": -158.5, "w": 1.9, "l": 4.4, "h": 1.6, "rot": 78, "color": [128, 63, 54] },
+  { "type": "vehicle", "name": "Train yard red car", "x": 164.1, "z": -169.7, "w": 1.9, "l": 4.4, "h": 1.6, "rot": 18, "color": [128, 63, 54] },
+  { "type": "crane", "name": "Train depot gantry", "x": 154.5, "z": -145.5, "w": 3.0, "l": 12.0, "h": 5.0, "rot": 86, "color": [154, 124, 51] },
+
+  { "type": "container", "name": "K-yard container", "x": 74.0, "z": -69.5, "w": 2.5, "l": 9.0, "h": 2.7, "rot": 90, "color": [83, 96, 86] },
+  { "type": "container", "name": "K-yard container", "x": 72.0, "z": -111.5, "w": 2.5, "l": 9.0, "h": 2.7, "rot": 90, "color": [122, 80, 58] },
+  { "type": "container", "name": "K-yard container", "x": 64.5, "z": -131.0, "w": 2.5, "l": 8.0, "h": 2.7, "rot": 0, "color": [77, 92, 96] },
+  { "type": "container", "name": "K-yard container", "x": -17.0, "z": -79.0, "w": 2.5, "l": 8.0, "h": 2.7, "rot": 0, "color": [119, 88, 65] },
+  { "type": "container", "name": "K-yard container", "x": -18.5, "z": -97.5, "w": 2.5, "l": 8.0, "h": 2.7, "rot": 0, "color": [79, 96, 83] },
+  { "type": "container", "name": "K-yard container", "x": -20.0, "z": -119.5, "w": 2.5, "l": 8.0, "h": 2.7, "rot": 0, "color": [122, 80, 58] },
+  { "type": "vehicle", "name": "K-yard loader", "x": 72.0, "z": -88.0, "w": 2.4, "l": 4.8, "h": 2.4, "rot": 15, "color": [172, 137, 54] },
+
+  { "type": "container", "name": "Shipping yard container", "x": -25.0, "z": -151.0, "w": 2.5, "l": 10.0, "h": 2.7, "rot": 4, "color": [80, 96, 99] },
+  { "type": "container", "name": "Shipping yard container", "x": -31.0, "z": -157.0, "w": 2.5, "l": 10.0, "h": 2.7, "rot": 4, "color": [126, 79, 58] },
+  { "type": "container", "name": "Shipping yard container", "x": -38.0, "z": -163.0, "w": 2.5, "l": 10.0, "h": 2.7, "rot": 4, "color": [81, 101, 86] },
+  { "type": "vehicle", "name": "Shipping yard truck", "x": -42.0, "z": -151.0, "w": 2.6, "l": 7.0, "h": 2.8, "rot": 95, "color": [102, 108, 104] },
+
+  { "type": "tank", "name": "Dome radar pedestal", "x": -8.0, "z": 181.5, "r": 5.0, "h": 3.8, "dz": 16.5, "color": [174, 174, 166] },
+  { "type": "vehicle", "name": "Dome radar support", "x": -8.0, "z": 181.5, "w": 7.5, "l": 7.5, "h": 1.2, "rot": 0, "dz": 15.5, "color": [114, 116, 112] },
+  { "type": "vehicle", "name": "Dome service truck", "x": -35.5, "z": 174.5, "w": 2.5, "l": 6.0, "h": 2.5, "rot": 90, "color": [100, 108, 102] },
+  { "type": "container", "name": "Dome service container", "x": -21.0, "z": 171.0, "w": 2.5, "l": 7.0, "h": 2.7, "rot": 90, "color": [78, 98, 101] }
+ ]
+}

@@ -1,0 +1,8196 @@
+{
+  "mapImage": "Reserve Interactive Map Base.png",
+  "pageCategories": [
+    "Interactive Maps"
+  ],
+  "defaultSort": "",
+  "description": "{{Reserve Interactive Map Description}}",
+  "coordinateOrder": "xy",
+  "mapBounds": [
+    [
+      0,
+      0
+    ],
+    [
+      4701,
+      2785
+    ]
+  ],
+  "origin": "bottom-left",
+  "useMarkerClustering": false,
+  "categories": [
+    {
+      "id": "exfil_pmc",
+      "listId": 1,
+      "name": "PMC",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map extract icon.png"
+    },
+    {
+      "id": "exfil_scav",
+      "listId": 2,
+      "name": "Scav",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map scav extract.png"
+    },
+    {
+      "id": "exfil_transit",
+      "listId": 3,
+      "name": "Transit",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map pmc extract.png"
+    },
+    {
+      "id": "spawn_pmc",
+      "listId": 4,
+      "name": "PMC",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map PMC Spawn icon.png"
+    },
+    {
+      "id": "spawn_scav",
+      "listId": 5,
+      "name": "Scav",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map scav spawn.png"
+    },
+    {
+      "id": "spawn_boss",
+      "listId": 6,
+      "name": "Boss",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map boss spawn.png"
+    },
+    {
+      "id": "spawn_rogueraider",
+      "listId": 7,
+      "name": "Scav Raiders",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map rogue raider icon.png"
+    },
+    {
+      "id": "lever",
+      "listId": 8,
+      "name": "Lever/Button",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map lever icon.png"
+    },
+    {
+      "id": "stationarygun",
+      "listId": 9,
+      "name": "Gun Emplacement",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map stationarygun icon.png"
+    },
+    {
+      "id": "locked",
+      "listId": 10,
+      "name": "Locked",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map locked door icon.png"
+    },
+    {
+      "id": "loot_key",
+      "listId": 12,
+      "name": "Key Spawn",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map key icon.png"
+    },
+    {
+      "id": "loot_loose",
+      "listId": 13,
+      "name": "Loose Loot",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map loose loot icon.png"
+    },
+    {
+      "id": "container_ammo",
+      "listId": 14,
+      "name": "Ammo Box",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive Map ammo box.png"
+    },
+    {
+      "id": "container_pc",
+      "listId": 15,
+      "name": "Computer",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map computer icon.png"
+    },
+    {
+      "id": "container_dead",
+      "listId": 16,
+      "name": "Dead Scav",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map dead scav icon.png"
+    },
+    {
+      "id": "container_drawer",
+      "listId": 17,
+      "name": "Drawer",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map file cabinet icon.png"
+    },
+    {
+      "id": "container_grenade",
+      "listId": 18,
+      "name": "Grenade Box",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map grenade box icon.png"
+    },
+    {
+      "id": "container_jacket",
+      "listId": 19,
+      "name": "Jacket",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map jacket icon.png"
+    },
+    {
+      "id": "container_medical",
+      "listId": 20,
+      "name": "Medbag",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map medical supplies icon.png"
+    },
+    {
+      "id": "container_medcase",
+      "listId": 21,
+      "name": "Medcase",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map medcase icon.png"
+    },
+    {
+      "id": "container_safe",
+      "listId": 22,
+      "name": "Safe",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map safe icon.png"
+    },
+    {
+      "id": "container_duffle",
+      "listId": 23,
+      "name": "Sports Bag",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map sportbag icon.png"
+    },
+    {
+      "id": "container_crate",
+      "listId": 24,
+      "name": "Supply Crate",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map supply crate icon.png"
+    },
+    {
+      "id": "container_tool",
+      "listId": 25,
+      "name": "Toolbox",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive Map Toolbox Icon.png"
+    },
+    {
+      "id": "container_weapon",
+      "listId": 26,
+      "name": "Weapon Box",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map weapon box icon.png"
+    },
+    {
+      "id": "container_greencrate",
+      "listId": 27,
+      "name": "Wooden Crate",
+      "color": "#fa005a",
+      "symbol": "",
+      "symbolColor": "",
+      "icon": "File:Interactive map wooden crate icon.png"
+    }
+  ],
+  "markers": [
+    {
+      "categoryId": "exfil_pmc",
+      "position": [
+        4569.6775734181,
+        1646.1445866023
+      ],
+      "popup": {
+        "title": "D-2",
+        "description": "1.Requires lever activation in the command part of the underground bunker system<br/>\n2.Press the button on the wall next to the sliding door\n[[File:D2 Extract.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "49"
+    },
+    {
+      "categoryId": "exfil_pmc",
+      "position": [
+        3399.1888213273,
+        2517.4769177194
+      ],
+      "popup": {
+        "title": "Bunker Hermetic Door",
+        "description": "Requires lever activation in the shack west of the white pawn barracks\n[[File:Bunker hermetic door.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "76"
+    },
+    {
+      "categoryId": "exfil_pmc",
+      "position": [
+        2061,
+        353.5
+      ],
+      "popup": {
+        "title": "Cliff Descent",
+        "description": "Requires:<br/>\n[[Red Rebel ice pick]]<br/>\n[[Paracord]]<br/>\nNo [[armor vest]] equipped\n[[File:Cliff descent (fence behind weather dome).png|center|265px]]\n",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "79"
+    },
+    {
+      "categoryId": "exfil_pmc",
+      "position": [
+        2150,
+        2226
+      ],
+      "popup": {
+        "title": "Scav Lands (Co-Op)",
+        "description": "Requires PMC + Scav\n[[File:Scav lands.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "80"
+    },
+    {
+      "categoryId": "exfil_pmc",
+      "position": [
+        911.58716511306,
+        1893.1016299317
+      ],
+      "popup": {
+        "title": "Armored Train",
+        "description": "Stays for 7 min<br/>Honks twice on arrival<br/>\nHonks once 1 min before departure<br/>\nHonks twice on closing doors\n[[File:Armored train 3.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "81"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        1576.5,
+        574
+      ],
+      "popup": {
+        "title": "Checkpoint Fence",
+        "description": "[[File:CP Fence.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "82"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        3198.375,
+        1843
+      ],
+      "popup": {
+        "title": "Depot Hermetic Door",
+        "description": "[[File:Depot hermetic door.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "83"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        1672.5,
+        2309.9375
+      ],
+      "popup": {
+        "title": "Heating Pipe",
+        "description": "[[File:Heating_Pipe.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "84"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        3095,
+        1471.125
+      ],
+      "popup": {
+        "title": "Hole in the Wall by the Mountains",
+        "description": "[[File:Hole in fence by the mountains (Northwest Corner of map).png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "85"
+    },
+    {
+      "categoryId": "exfil_pmc",
+      "position": [
+        1623.8308781033,
+        923.48145622963
+      ],
+      "popup": {
+        "title": "Sewer Manhole",
+        "description": "Requires no [[backpack]] equipped\n[[File:Sewer manhole.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "86"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        499,
+        2111
+      ],
+      "popup": {
+        "title": "RB-AO",
+        "description": "Requires: [[RB-AO key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "87"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        487.90367901872,
+        2214.8352153716
+      ],
+      "popup": {
+        "title": "RB-VO marked room",
+        "description": "Requires: [[RB-VO marked key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "88"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        1291,
+        998.5
+      ],
+      "popup": {
+        "title": "RB-ST",
+        "description": "Requires: [[RB-ST key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "89"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        77.125,
+        542.6875
+      ],
+      "popup": {
+        "title": "RB-MP13",
+        "description": "Requires: [[RB-MP13 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "90"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        242.13987838257,
+        542.9254254298
+      ],
+      "popup": {
+        "title": "RB-MP22",
+        "description": "Requires: [[RB-MP22 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "91"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        127.0625,
+        214
+      ],
+      "popup": {
+        "title": "RB-MP12",
+        "description": "Requires: [[RB-MP12 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "92"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        287.0625,
+        214.125
+      ],
+      "popup": {
+        "title": "RB-MP11",
+        "description": "Requires: [[RB-MP11 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "93"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        287.0625,
+        160.6875
+      ],
+      "popup": {
+        "title": "RB-MP21",
+        "description": "Requires: [[RB-MP21 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "94"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3424.75,
+        1783.5
+      ],
+      "popup": {
+        "title": "RB-PSP2",
+        "description": "Requires: [[RB-PSP2 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "95"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3602.5,
+        1782.5
+      ],
+      "popup": {
+        "title": "RB-PSV1",
+        "description": "Requires: [[RB-PSV1 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "96"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3601.5,
+        2032.75
+      ],
+      "popup": {
+        "title": "RB-PSV2",
+        "description": "Requires: [[RB-PSV2 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "97"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3612.5,
+        1906.75
+      ],
+      "popup": {
+        "title": "RB-PSV2",
+        "description": "Requires: [[RB-PSV2 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "98"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3428.5,
+        2033.25
+      ],
+      "popup": {
+        "title": "RB-PSP1",
+        "description": "Requires: [[RB-PSP1 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "99"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3419.5,
+        1907.75
+      ],
+      "popup": {
+        "title": "RB-PSP1",
+        "description": "Requires: [[RB-PSP1 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "100"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        2179.037934574,
+        561.75214347889
+      ],
+      "popup": {
+        "title": "RB-KPRL",
+        "description": "Requires: [[RB-KPRL key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "101"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        2154.4659739278,
+        546.37257098808
+      ],
+      "popup": {
+        "title": "RB-KPRL",
+        "description": "Requires: [[RB-KPRL key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "102"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3234.5936792771,
+        583.58406534802
+      ],
+      "popup": {
+        "title": "RB-RS",
+        "description": "Requires: [[RB-RS key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "103"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3245.0625,
+        627.9375
+      ],
+      "popup": {
+        "title": "RB-KORL",
+        "description": "Requires: [[RB-KORL key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "104"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3288.0465325174,
+        597.37264758116
+      ],
+      "popup": {
+        "title": "RB-RLSA",
+        "description": "Requires: [[RB-RLSA key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "105"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3506.125,
+        331.875
+      ],
+      "popup": {
+        "title": "RB-KSM",
+        "description": "Requires: [[RB-KSM key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "106"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3610,
+        331.875
+      ],
+      "popup": {
+        "title": "RB-SMP",
+        "description": "Requires: [[RB-SMP key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "107"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3929,
+        160.4375
+      ],
+      "popup": {
+        "title": "RB-AM",
+        "description": "Requires: [[RB-AM key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "108"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        3936.4634508655,
+        343.83067235196
+      ],
+      "popup": {
+        "title": "RB-AK",
+        "description": "Requires: [[RB-AK key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "109"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        1004.125,
+        134.3125
+      ],
+      "popup": {
+        "title": "RB-RH",
+        "description": "Requires: [[RB-RH key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "110"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4332.1875,
+        2267.5
+      ],
+      "popup": {
+        "title": "RB-PKPM marked room",
+        "description": "Requires: [[RB-PKPM marked key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "111"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4071.0625,
+        2227.4375
+      ],
+      "popup": {
+        "title": "RB-OP",
+        "description": "Requires: [[RB-OP key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "112"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4056.0625,
+        2174.5
+      ],
+      "popup": {
+        "title": "RB-GN",
+        "description": "Requires: [[RB-GN key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "113"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4544.0449526001,
+        516.18795026618
+      ],
+      "popup": {
+        "title": "RB-ORB1",
+        "description": "Requires: [[RB-ORB1 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "114"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4544.067049687,
+        285.51645999098
+      ],
+      "popup": {
+        "title": "RB-ORB2",
+        "description": "Requires: [[RB-ORB2]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "115"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4575.03125,
+        2094.875
+      ],
+      "popup": {
+        "title": "RB-BK marked room",
+        "description": "Requires: [[RB-BK marked key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "116"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4592.03125,
+        2135.09375
+      ],
+      "popup": {
+        "title": "RB-TB",
+        "description": "Requires: [[RB-TB key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "117"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4166.3125,
+        982
+      ],
+      "popup": {
+        "title": "RB-ORB3",
+        "description": "Requires: [[RB-ORB3 key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "118"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4275,
+        974.5625
+      ],
+      "popup": {
+        "title": "RB-OB",
+        "description": "Requires: [[RB-OB key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "119"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        3204.25,
+        162.1875
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "120"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3112.5625,
+        353.375
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "121"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        3077,
+        356.1875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "122"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        3276.0257172373,
+        522.19835790627
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "123"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        3244.2059120839,
+        553.66460966907
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "124"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        3305.5474253518,
+        585.83796821305
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "125"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        3312.6184931637,
+        639.75486027853
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "126"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        3317.2588814152,
+        639.75486027853
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "127"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        3284.8645520021,
+        640.10841366912
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "128"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        3284.7982607414,
+        636.79385063231
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "129"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        3137.4375,
+        645.5
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "130"
+    },
+    {
+      "categoryId": "lever",
+      "position": [
+        2136.8766927457,
+        1044.9270458984
+      ],
+      "popup": {
+        "title": "Bunker Hermetic Door power lever",
+        "description": "Turns on power for the \"Bunker Hermetic Door\" extraction for 4 minutes\n[[File:BunkerHermeticDoorExtractTrigger.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "131"
+    },
+    {
+      "categoryId": "lever",
+      "position": [
+        4309.75,
+        2280.5
+      ],
+      "popup": {
+        "title": "D-2 power lever",
+        "description": "Turns on power for the \"D-2\" extraction\n[[File:ReserveIMD2PowerLever.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "132"
+    },
+    {
+      "categoryId": "container_safe",
+      "position": [
+        2161.0625,
+        545.375
+      ],
+      "popup": {
+        "title": "Weapon Locker with Safe",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "166"
+    },
+    {
+      "categoryId": "container_safe",
+      "position": [
+        2167,
+        582.6875
+      ],
+      "popup": {
+        "title": "Safe",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "167"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2150.0625,
+        577.6875
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "168"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2146.5625,
+        568.3125
+      ],
+      "popup": {
+        "title": "Weapon Locker",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "169"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        2160.1875,
+        506
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "170"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        2171.75,
+        519
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "171"
+    },
+    {
+      "categoryId": "container_safe",
+      "position": [
+        2187.3125,
+        524.0625
+      ],
+      "popup": {
+        "title": "Safe",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "172"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2164.3125,
+        507.5625
+      ],
+      "popup": {
+        "title": "Weapon Locker",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "173"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        2195.875,
+        495.625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "174"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        2196.75,
+        492.8125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "175"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1586.4375,
+        767.75
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "176"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1581.2675394284,
+        767.74118767329
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "177"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        2126.375,
+        1052.3125
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "178"
+    },
+    {
+      "categoryId": "container_dead",
+      "position": [
+        2462.3125,
+        986.75
+      ],
+      "popup": {
+        "title": "Dead Scav",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "179"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        2598.7941975559,
+        1039.0934149536
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "180"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4201.375,
+        1457
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "181"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4228.375,
+        1427
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "182"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4239.6354832992,
+        1560.761442774
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "183"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4299.5625,
+        1544
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "184"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4129.1500487388,
+        1663.9990328272
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "185"
+    },
+    {
+      "categoryId": "container_safe",
+      "position": [
+        4084.9558749147,
+        1667.7113434285
+      ],
+      "popup": {
+        "title": "Safe",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "186"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4082.5,
+        1659.25
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "187"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4081.4375,
+        1655.9375
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "188"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        4083.5,
+        1649.375
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "189"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4134.0625,
+        1690
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "190"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4157.6110966816,
+        1627.9365869867
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "191"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4227.1875,
+        1667.5625
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "192"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4387.8125,
+        1718.9375
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "193"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4419.9477125018,
+        1611.8499077147
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "194"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4425.9581201419,
+        1610.2589174571
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "195"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4423.4375,
+        1595
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "196"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4337.1875,
+        2018.125
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "197"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4454.1875,
+        2023.5625
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "198"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4352.1759469425,
+        1936.8096678438
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "199"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4333.25,
+        1937.375
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "200"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4020.875,
+        2180.0625
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "201"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4068.6875,
+        2171.25
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "202"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4036.5625,
+        2210.375
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "203"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4078.6582051447,
+        2240.0921857121
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "204"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4472.3620026573,
+        2332.7894653082
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "205"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4200.625,
+        2379
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "206"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4129.6803788247,
+        2257.7919523286
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "207"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4181.2991738514,
+        2295.7989418174
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "208"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4614.3125,
+        2150.6875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "209"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4572.4375,
+        2198.3125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "210"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4561.625,
+        2318.0625
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "211"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        4216.6545129107,
+        2171.1713716333
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "212"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4275.3443757492,
+        2146.4226342918
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "213"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        4252.6875,
+        2200.25
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "214"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4303.5625,
+        2199.9375
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "215"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        4355.625,
+        2171.4375
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "216"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        4297.0879092706,
+        2171.1713716333
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "217"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4405.6288001828,
+        2146.4226342918
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "218"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        4433,
+        2197.4375
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "219"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4361.5625,
+        2250.3125
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "220"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4355.8125,
+        2271.25
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "221"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4338,
+        2253.5625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "222"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4335.1875,
+        2253.5625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "223"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4317.6875,
+        2271.8125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "224"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4320.4375,
+        2271.8125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "225"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4329.125,
+        2258.4375
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "226"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4333.5,
+        2247.875
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "227"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4336.4207239742,
+        2247.8703603051
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "228"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4355.9987429783,
+        2243.6719137918
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "229"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4280.3125,
+        2255.25
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "230"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4272.6485311459,
+        2255.1623989861
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "231"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4274.9908223586,
+        2255.1403018992
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "232"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4241.8451919905,
+        2229.6844577765
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "233"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4281.1875,
+        2272.90625
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "234"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4253.777618923,
+        2302.1629028481
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "235"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4256.5176577001,
+        2302.1629028481
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "236"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4281.0896183463,
+        2267.4262822223
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "237"
+    },
+    {
+      "categoryId": "container_medcase",
+      "position": [
+        4062.0632928738,
+        2450.3901618543
+      ],
+      "popup": {
+        "title": "Medcase",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "238"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        3915.03125,
+        2487.125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "239"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3957.7650426488,
+        2452.5998705455
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "240"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4542.125,
+        2491.875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "241"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4541.2386225622,
+        2493.8551318104
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "242"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4523.4375,
+        2476.625
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "243"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4540.75,
+        2451.5625
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "244"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4407.375,
+        2469.375
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "245"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4372.125,
+        2474.3125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "246"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4392.0169946449,
+        2504.3954422675
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "247"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4466.1875,
+        2525.6875
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "248"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4299,
+        2509.6875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "249"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        4250.125,
+        2470.9375
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "250"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        4314.125,
+        2575
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "251"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        4403.75,
+        2576.6875
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "252"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4382.9375,
+        2531.375
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "253"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        4504.9375,
+        2567.125
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "254"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        437.52232085918,
+        2372.5200275762
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "255"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        690.625,
+        2283.1875
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "256"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        631.25,
+        2335.3125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "257"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        442,
+        1937.6875
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "258"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        473.93832009028,
+        2175.9443424063
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "259"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        475.35253365266,
+        2121.4971202549
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "260"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        520.6073676486,
+        2126.9771978091
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "261"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1254,
+        2276.8125
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "262"
+    },
+    {
+      "categoryId": "container_medical",
+      "position": [
+        1234.4375,
+        2196.625
+      ],
+      "popup": {
+        "title": "Medbag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "263"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1178.0398974568,
+        2093.7431790934
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "264"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1067.2892978534,
+        855.82017610484
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "265"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        1043.3360556408,
+        1000.9096487696
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "266"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1026.5,
+        1229
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "267"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        835.375,
+        1218.625
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "268"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        528.75,
+        1312.375
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "269"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        423.91051532134,
+        886.71190360793
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "270"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        405.875,
+        882.5
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "271"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        572.18196850139,
+        1511.4407447862
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "272"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        655.875,
+        1738.5
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "273"
+    },
+    {
+      "categoryId": "container_dead",
+      "position": [
+        296,
+        1941
+      ],
+      "popup": {
+        "title": "Dead Scav",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "274"
+    },
+    {
+      "categoryId": "container_dead",
+      "position": [
+        317.84449814335,
+        1617.5067619642
+      ],
+      "popup": {
+        "title": "Dead Scav",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "275"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        1040.1875,
+        1601.5625
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "276"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1018.9408716898,
+        1608.6679271994
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "277"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        1367.7212915101,
+        2081.7223638132
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "278"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1358.1753499641,
+        2096.2180528275
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "279"
+    },
+    {
+      "categoryId": "container_dead",
+      "position": [
+        293.44931419242,
+        1727.2850897434
+      ],
+      "popup": {
+        "title": "Dead Scav",
+        "description": "On the roof",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "280"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        279.9375,
+        1726.375
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "On the roof",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "281"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        102.1875,
+        1783.5
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "On the roof",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "282"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        95.636192155481,
+        1738.952351633
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "283"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        258.27075182839,
+        1448.3314645653
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "284"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        224.77156806967,
+        1484.5706871012
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "285"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        171.20822939479,
+        1479.9744930234
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "286"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        293.5,
+        1031.25
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "Under the platform",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "287"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        68.677746122743,
+        1329.9794670642
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "288"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        166.25848192649,
+        943.98755288404
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "292"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        199.125,
+        999.125
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "293"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        196.125,
+        995.8125
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "294"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3595.4612056383,
+        1664.5293629131
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "295"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3622.8615934093,
+        1753.8015940379
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "296"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3628.1648942682,
+        1685.7425663487
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "297"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3628.625,
+        1714.75
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "298"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3632.0539815647,
+        1942.9526580053
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "299"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3613.3156518633,
+        1938.5332406229
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "300"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3587.8598077405,
+        1964.1658614409
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "301"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3600.9412831925,
+        2003.4102877968
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "302"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3400.2997340308,
+        1771.125710177
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "303"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3424.1645878959,
+        1740.3665651954
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "304"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3445,
+        1686.25
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "305"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3436.7157332619,
+        1665.2364696943
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "306"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3418.5077336464,
+        1665.2364696943
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "307"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3392.6983361331,
+        1942.0687745289
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "308"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3441.0625,
+        1912.6875
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "309"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3420,
+        1941.25
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "310"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3429.4678887548,
+        1967.8781720422
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "311"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        3404.3655980226,
+        2009.9510255228
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "312"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3428.7607819736,
+        2009.9510255228
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "313"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3445,
+        1991.875
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "314"
+    },
+    {
+      "categoryId": "lever",
+      "position": [
+        4547.5,
+        1652.1875
+      ],
+      "popup": {
+        "title": "D-2 sliding door button",
+        "description": "Opens the sliding door of the \"D-2\" extraction\n[[File:ReserveIMD2DoorButton.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "315"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        1601.9504127781,
+        2138.9980130893
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "316"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1621.5,
+        2186.625
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "317"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        2086.6721112815,
+        2259.7364959769
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "318"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        2036.9978599031,
+        2101.6981303817
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "320"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3480.3125,
+        2514.8125
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "323"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        3543.125,
+        2520.5
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "324"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        3555.5,
+        2391.5
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "325"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3515.5,
+        2373.5
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "326"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3460.0502570411,
+        2377.4697750445
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "327"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3496.8198096628,
+        2364.9186296784
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "328"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        1236,
+        2001.1875
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "329"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        2224.9375,
+        2217.25
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "330"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2281.3032528031,
+        2202.1072933102
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "331"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        2557.75,
+        2133.875
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "332"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        2666.8532252451,
+        2021.2647340217
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "333"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        2675.3385066193,
+        2007.122598398
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "334"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        1531.5932880501,
+        1730.6438469541
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "335"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        1542.906996549,
+        1766.7062927946
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "336"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1488.5039685715,
+        1779.8319624204
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "337"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1589.929597498,
+        1826.8103691954
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "338"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1443.2049404017,
+        1884.0860184716
+      ],
+      "popup": {
+        "title": "Weapon Box (5x5)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "339"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1353.25,
+        1894.75
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "340"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        1300,
+        1828.5
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "341"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1455.875,
+        1904.75
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "342"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        1405.5,
+        1980
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "343"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1294.4915454834,
+        1909.1883092037
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "344"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2250.8125,
+        1288.5625
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "345"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        2251.875,
+        1318.25
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "346"
+    },
+    {
+      "categoryId": "container_dead",
+      "position": [
+        2254,
+        1319.3125
+      ],
+      "popup": {
+        "title": "Dead Scav",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "347"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        2316.125,
+        1375.4375
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "348"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        2326.5,
+        1372.25
+      ],
+      "popup": {
+        "title": "Ration Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "349"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2387.5460466764,
+        1310.6224189293
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "350"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2397.6223183083,
+        1352.8720491052
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "351"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        2413.0018907991,
+        1386.4596212115
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "352"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        2494.3191706355,
+        1378.5046699232
+      ],
+      "popup": {
+        "title": "Technical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "353"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        2562.3781983248,
+        1280.9239341194
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "354"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1846.6093590687,
+        1298.9551570397
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "355"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1764.0546423651,
+        1275.2670798699
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "356"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1453.125,
+        1463.4375
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "357"
+    },
+    {
+      "categoryId": "container_dead",
+      "position": [
+        1452.5741052525,
+        1258.6500705121
+      ],
+      "popup": {
+        "title": "Dead Scav",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "358"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1460.25,
+        1126.0625
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "359"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        1673.5449743733,
+        1157.3570241071
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "360"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        1610,
+        979
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "361"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        2080.6617036414,
+        557.90725035619
+      ],
+      "popup": {
+        "title": "AGS-30 automatic grenade launcher",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "362"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        822.71873991055,
+        1779.4342148559
+      ],
+      "popup": {
+        "title": "NSV \"Utyos\" heavy machine gun",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "363"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        1480.5048231093,
+        2360.3224356007
+      ],
+      "popup": {
+        "title": "NSV \"Utyos\" heavy machine gun",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "364"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        598.5,
+        1089.5
+      ],
+      "popup": {
+        "title": "AGS-30 automatic grenade launcher",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "365"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        2265.3933502264,
+        1660.6402756166
+      ],
+      "popup": {
+        "title": "NSV \"Utyos\" heavy machine gun",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "369"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        2337.5182419074,
+        1558.4633457352
+      ],
+      "popup": {
+        "title": "NSV \"Utyos\" heavy machine gun",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "370"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        1913.0773965002,
+        660.61451032353
+      ],
+      "popup": {
+        "title": "NSV \"Utyos\" heavy machine gun",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "371"
+    },
+    {
+      "categoryId": "stationarygun",
+      "position": [
+        2889,
+        2079.5
+      ],
+      "popup": {
+        "title": "AGS-30 automatic grenade launcher",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "372"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        1485,
+        999
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "373"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        1523.5,
+        970
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "374"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        1529.8255210971,
+        969.97372709265
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "375"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1494.2934053425,
+        967.3220766632
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "376"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        2638.8783132143712,
+        1292.1492542707672
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "377"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        1068.0847929823,
+        965.37753301493
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "In the bunker",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "378"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        1526.8203172771,
+        950.70506730531
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "379"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        1620.6887424796,
+        1289.0556621031
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "380"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        663.97326753417,
+        1611.4963543241
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "381"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        669,
+        1952
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "383"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        612.70802589814,
+        2304.460999887
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "384"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        1190.5,
+        2120.5
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "In the bunker",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "385"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        1695.5,
+        2208
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "386"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        2234.1038751589,
+        2172.9391385863
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "387"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        1251.9325560907823,
+        1398.657213186991
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "In the bunker",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "388"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        2280,
+        1620
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "389"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        4375.046431896466,
+        2024.4467145370854
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "391"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        1983.5,
+        1293.5
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "392"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        2358.5,
+        493.5
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "393"
+    },
+    {
+      "categoryId": "spawn_pmc",
+      "position": [
+        4084.125,
+        1383.5625
+      ],
+      "popup": {
+        "title": "PMC Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "394"
+    },
+    {
+      "categoryId": "container_crate",
+      "position": [
+        2325.0625,
+        1386.375
+      ],
+      "popup": {
+        "title": "Medical Supply Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "396"
+    },
+    {
+      "categoryId": "spawn_boss",
+      "position": [
+        1441,
+        1850.5
+      ],
+      "popup": {
+        "title": "Glukhar Boss Spawn",
+        "description": "[[Glukhar]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "397"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1238.375,
+        873.6875
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "402"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        1281.9845942912,
+        919.06203884722
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "403"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        1285.8736815877,
+        913.40518459772
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "404"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1275.0903031746,
+        937.09326176747
+      ],
+      "popup": {
+        "title": "Weapon Box (5x5)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "405"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1270.4941090969,
+        987.47461992701
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "406"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        1332.5,
+        1083.5
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "407"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1299.131933735,
+        1080.1056082625
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "408"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1262.8927111992,
+        1127.3049859067
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "409"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1246.9828086225,
+        1266.7817984957
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "410"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        159,
+        458.75
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "411"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        148.4375,
+        454.1875
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "412"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        148.4375,
+        451.75
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "413"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        148.375,
+        447.5
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "414"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        126.57211383239,
+        437.16876746858
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "415"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        139.5625,
+        458.75
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "416"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        137,
+        458.75
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "417"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        61.010056964252,
+        537.71051291855
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "418"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        131.5218613007,
+        591.14126907195
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "419"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        104.625,
+        577.125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "420"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        73.8125,
+        568.9375
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "421"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        129.75,
+        547.6875
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "422"
+    },
+    {
+      "categoryId": "container_ammo",
+      "position": [
+        220.08698564431,
+        548.36130881017
+      ],
+      "popup": {
+        "title": "Ammo Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "423"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        207.875,
+        556.6875
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "424"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        259.6875,
+        542.75
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "425"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        231.5,
+        532.6875
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "426"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        228.9375,
+        532.6875
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "427"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        244.5,
+        508.0625
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "428"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        207,
+        495.3125
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "429"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        425.4375,
+        446.6875
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "430"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        425.6875,
+        460.25
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "431"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        445.875,
+        440.3125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "432"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        475.875,
+        458.4375
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "433"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        466.75,
+        457.875
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "434"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        372.93253581517,
+        487.94787319254
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "435"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        374.76659402887,
+        535.10305666292
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "436"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        102.53048327205,
+        138.76970580786
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "437"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        137.0625,
+        164.8125
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "438"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        143.1875,
+        164.5
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "439"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        130.25,
+        205.25
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "440"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        133.75,
+        220.6875
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "441"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        88.5,
+        260.5625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "442"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        104.6875,
+        247.3125
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "443"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        41.741397176918,
+        254.69102374863
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "444"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        55.5,
+        246.125
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "445"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        55.5,
+        249.875
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "446"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        289.5625,
+        149.9375
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "447"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        289.5,
+        146.125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "448"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        302.875,
+        164.625
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "449"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        320.31937187751,
+        147.78531726799
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "450"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        284.1875,
+        192.75
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "451"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        290.1875,
+        202.25
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "452"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        294.5,
+        220.375
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "453"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        248.5625,
+        262.5625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "454"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        248.5625,
+        267.0625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "455"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        264.5625,
+        247.1875
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "456"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        264.5625,
+        250.8125
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "457"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        222.75,
+        244.25
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "458"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        479.1875,
+        245.3125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "459"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        427.625,
+        253.75
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "460"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        411.55824373748,
+        271.52900397563
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "461"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        411.5,
+        267.3125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "462"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        411.5625,
+        263.0625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "463"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        405.125,
+        260.25
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "464"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        386.875,
+        244.4375
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "465"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        364.69032239696,
+        255.0003829654
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "466"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        365.3125,
+        271.75
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "467"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        367.5625,
+        272.6875
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "468"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        465.45303871604,
+        101.82337649086
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "469"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        378.12535123951,
+        183.8477631085
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "470"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        419.6875,
+        98.625
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "471"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        3456.4375,
+        133.5
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "472"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3471.6875,
+        211.5625
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "473"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        3542.75,
+        151.0625
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "474"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        3588.75,
+        170.6875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "475"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3631.5236514788,
+        439.99719459333
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "476"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        3515.125,
+        359.6875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "478"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        3459.5,
+        283.75
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "479"
+    },
+    {
+      "categoryId": "loot_key",
+      "position": [
+        2196.4946332345,
+        494.2676400494
+      ],
+      "popup": {
+        "title": "RB-AK Key",
+        "description": "[[RB-AK key]]</br>On the filling cabinet",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "480"
+    },
+    {
+      "categoryId": "loot_key",
+      "position": [
+        4127.3822817859,
+        1657.8118484919
+      ],
+      "popup": {
+        "title": "RB-AM Key",
+        "description": "[[RB-AM key]]</br>On the desk next to toolbox",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "481"
+    },
+    {
+      "categoryId": "loot_key",
+      "position": [
+        1098.75,
+        522
+      ],
+      "popup": {
+        "title": "RB-KORL Key",
+        "description": "[[RB-KORL key]]</br>On the desk",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "482"
+    },
+    {
+      "categoryId": "loot_key",
+      "position": [
+        4075.9402634545563,
+        2495.7333841979193
+      ],
+      "popup": {
+        "title": "RB-PSV1 Key",
+        "description": "[[RB-PSV1 key]]</br>On the white chair",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "483"
+    },
+    {
+      "categoryId": "loot_key",
+      "position": [
+        109.77832777921,
+        1788.0962729255
+      ],
+      "popup": {
+        "title": "RB-TB Key",
+        "description": "[[RB-TB key]]<br/>On the roof in the open part of the sleeping bag",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "484"
+    },
+    {
+      "categoryId": "loot_key",
+      "position": [
+        4184,
+        1511.5
+      ],
+      "popup": {
+        "title": "RB-ORB1 Key",
+        "description": "[[RB-ORB1 key]]<br/>In key case on the wall",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "485"
+    },
+    {
+      "categoryId": "loot_key",
+      "position": [
+        4288.6026278964,
+        1530.7094045736
+      ],
+      "popup": {
+        "title": "RB-ORB2 Key",
+        "description": "[[RB-ORB2 key]]<br/>Inside the right side locker",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "486"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4137.9375,
+        563
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "487"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4098.6875,
+        557.6875
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "488"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        4099.1875,
+        499.6875
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "489"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4071.1875,
+        555.25
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "490"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        3992.148109884,
+        523.61257146864
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "491"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3919.492888117,
+        565.15509486335
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "492"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3870.3489668246,
+        558.96791052797
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "493"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4099.625,
+        387.0625
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "494"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        4135,
+        366.1875
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "495"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4128.5,
+        310.625
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "496"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4128.0893885671,
+        341.5325753131
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "497"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        4088.25,
+        311
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "498"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4042.5294680435,
+        389.0855063479
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "499"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        3949.625,
+        374.25
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "500"
+    },
+    {
+      "categoryId": "container_medical",
+      "position": [
+        3986.5,
+        338.8125
+      ],
+      "popup": {
+        "title": "Medbag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "501"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        3908.9375,
+        310.875
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "502"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        3905.5,
+        310.875
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "503"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        3888.0266363542,
+        321.02647865869
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "504"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        3833.5625,
+        237.25
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "505"
+    },
+    {
+      "categoryId": "container_dead",
+      "position": [
+        3873.875,
+        133.1875
+      ],
+      "popup": {
+        "title": "Dead Scav",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "506"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        3873,
+        147.375
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "507"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        3877.8125,
+        147.359375
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "508"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        3916.9375,
+        158.875
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "509"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        3886.8125,
+        175.0625
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "510"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        3886.90625,
+        190.2109375
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "511"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3906.7649660557,
+        171.47339443774
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "512"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        3911.2506746988,
+        182.25677285083
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "513"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        3988.3125,
+        138.375
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "514"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        3949.5625,
+        183.25
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "515"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4008.5,
+        171.1875
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "516"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4009.1875,
+        193.875
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "517"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        4019.3125,
+        194.0625
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "518"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4054,
+        190.875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "519"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4042.0625,
+        147.625
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "520"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4071.375,
+        118.4375
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "521"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4099.5625,
+        117.375
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "522"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4099.625,
+        120.75
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "523"
+    },
+    {
+      "categoryId": "container_pc",
+      "position": [
+        4136.0443398554,
+        187.02974362384
+      ],
+      "popup": {
+        "title": "PC",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "524"
+    },
+    {
+      "categoryId": "container_tool",
+      "position": [
+        1105.3846756899,
+        486.48946545634
+      ],
+      "popup": {
+        "title": "Toolbox",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "525"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1110.875,
+        516.625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "526"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1110.8125,
+        512.625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "527"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        951.2353973912,
+        597.85878349323
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "528"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        946.625,
+        550.0625
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "529"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1014.6875,
+        521.875
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "530"
+    },
+    {
+      "categoryId": "container_medical",
+      "position": [
+        1289.5625,
+        516.875
+      ],
+      "popup": {
+        "title": "Medbag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "531"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1350.9375,
+        509.375
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "532"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1362.5625,
+        534.4140625
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "533"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1362.9375,
+        502.4375
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "534"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1456.625,
+        487
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "535"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1453.3125,
+        507
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "536"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        1466.7162408762,
+        228.21871362796
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "537"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1386.5625,
+        114.375
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "538"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        944.34110627463,
+        253.32100436008
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "539"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        1022.5625,
+        172.375
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "540"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        1040.3125,
+        234.125
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "541"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1054.25,
+        233.6875
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "542"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1110.75,
+        232.9375
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "543"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        1089.125,
+        148.3125
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "544"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1049.1696865855,
+        126.3953371371
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "545"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        1086.0625,
+        84.4375
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "546"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        1000.5625,
+        51.6875
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "547"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        977,
+        59.3125
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "548"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        976.75,
+        132.3125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "549"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        976.75,
+        129.125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "550"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        4557.3125,
+        955.5
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "551"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4536.5,
+        822
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "552"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4329.6148212052,
+        668.39268491658
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "553"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4560.875,
+        662.75
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "554"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4552.1766805837,
+        668.48107326423
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "555"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        4402.7734375,
+        615.6875
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "556"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4320.1572680069,
+        201.48123846434
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "557"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4328.5,
+        305.125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "558"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4440.9841392421,
+        296.27774131716
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "559"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4459.1921388577,
+        322.26391552577
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "560"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4562.5625,
+        285.375
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "561"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4560.0625,
+        313.6875
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "562"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4562.1875,
+        298.25
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "563"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4333.3492288934,
+        438.40620433566
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "564"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4363.25,
+        432.5
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "565"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4409.5,
+        390.25
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "566"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        4508.4375,
+        514.25
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "567"
+    },
+    {
+      "categoryId": "container_greencrate",
+      "position": [
+        4496.5625,
+        508.4375
+      ],
+      "popup": {
+        "title": "Wooden Crate",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "568"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4561.875,
+        513.5625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "569"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4558.1875,
+        513.5625
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "570"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4392.0169946449,
+        637.27998654438
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "571"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4505.6181184599,
+        659.00142297895
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "572"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4505.6171875,
+        654.203125
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "573"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        4505.596021373,
+        656.57074341862
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "574"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4402.4026254936,
+        1000.2025419884
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "575"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4402.4468196674,
+        993.6618042624
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "576"
+    },
+    {
+      "categoryId": "container_medical",
+      "position": [
+        4019.7252743502,
+        761.68658585938
+      ],
+      "popup": {
+        "title": "Medbag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "577"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4075.125,
+        783
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "578"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4014.9523035772,
+        855.95275862632
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "579"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4036.625,
+        966.9375
+      ],
+      "popup": {
+        "title": "Weapon Box (6x3)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "580"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4135.25,
+        766.75
+      ],
+      "popup": {
+        "title": "Weapon Box (5x5)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "581"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4146.625,
+        766.75
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "582"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        4173.5209992583,
+        826.60782720707
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "583"
+    },
+    {
+      "categoryId": "container_medical",
+      "position": [
+        4176.8797564689,
+        897.84883541162
+      ],
+      "popup": {
+        "title": "Medbag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "584"
+    },
+    {
+      "categoryId": "container_duffle",
+      "position": [
+        4170.3125,
+        941.5
+      ],
+      "popup": {
+        "title": "Sports Bag",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "585"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4152.25,
+        967.2109375
+      ],
+      "popup": {
+        "title": "Weapon Box (5x2)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "586"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4145.1875,
+        967.3125
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "587"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4151.25,
+        999.4375
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "588"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4155.625,
+        999.4375
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "589"
+    },
+    {
+      "categoryId": "container_weapon",
+      "position": [
+        4294.1875,
+        939.875
+      ],
+      "popup": {
+        "title": "Weapon Box (4x4)",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "590"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        4246.625,
+        967.25
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "591"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        893.7829714198,
+        1105.9150057758
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "592"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        1450.9831149948,
+        1217.6378772032
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "593"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        1084,
+        1829
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "594"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        1053.589103968,
+        2180.7173131793
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "595"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        2015.0775496864,
+        1598.4148788722
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "596"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        2001.1121907579,
+        1343.5028842544
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "597"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        2353.2513677888,
+        1310.9759723199
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "598"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        2361.7366491631,
+        1036.9720946101
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "599"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        2613.4666632655,
+        1339.2602435673
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "600"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        4279,
+        2182
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "601"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        3515.7349160595,
+        2169.4036046803
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "602"
+    },
+    {
+      "categoryId": "spawn_scav",
+      "position": [
+        3514.3207024971,
+        1800.293864901
+      ],
+      "popup": {
+        "title": "Scav Spawn",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "603"
+    },
+    {
+      "categoryId": "spawn_rogueraider",
+      "position": [
+        1174,
+        1848
+      ],
+      "popup": {
+        "title": "Scav Raiders Spawn",
+        "description": "[[Scav Raiders]]<br/>Possible to spawn around the time the armored train arrives.<br/>Additional ones may spawn upon activation of the Bunker Hermetic Door power lever.",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "604"
+    },
+    {
+      "categoryId": "spawn_rogueraider",
+      "position": [
+        4257.1363761336,
+        2186.3741674288
+      ],
+      "popup": {
+        "title": "Scav Raiders Spawn",
+        "description": "[[Scav Raiders]]<br/>Possible to spawn on raid start.<br/>Additional ones may spawn upon activation of the D-2 power lever.",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "605"
+    },
+    {
+      "categoryId": "container_jacket",
+      "position": [
+        2364,
+        1269
+      ],
+      "popup": {
+        "title": "Jacket",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "606"
+    },
+    {
+      "categoryId": "container_grenade",
+      "position": [
+        2137.053469441,
+        1978.1312203694
+      ],
+      "popup": {
+        "title": "Grenade Box",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "607"
+    },
+    {
+      "categoryId": "container_drawer",
+      "position": [
+        2137.3125,
+        1967
+      ],
+      "popup": {
+        "title": "Drawer",
+        "description": "",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "608"
+    },
+    {
+      "categoryId": "spawn_boss",
+      "position": [
+        3512.9064889348,
+        1967.171065261
+      ],
+      "popup": {
+        "title": "Glukhar Boss Spawn",
+        "description": "[[Glukhar]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "611"
+    },
+    {
+      "categoryId": "spawn_boss",
+      "position": [
+        2419.7194052204,
+        1606.5466068558
+      ],
+      "popup": {
+        "title": "Glukhar Boss Spawn",
+        "description": "[[Glukhar]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "612"
+    },
+    {
+      "categoryId": "spawn_boss",
+      "position": [
+        2615.5,
+        1300
+      ],
+      "popup": {
+        "title": "Glukhar Boss Spawn",
+        "description": "[[Glukhar]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "613"
+    },
+    {
+      "categoryId": "spawn_boss",
+      "position": [
+        1275.5,
+        1387.5
+      ],
+      "popup": {
+        "title": "Glukhar Boss Spawn",
+        "description": "[[Glukhar]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "614"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        921.58716511306,
+        1893.1016299317
+      ],
+      "popup": {
+        "title": "Armored Train",
+        "description": "Stays for 7 min<br/>Honks twice on arrival<br/>\nHonks once 1 min before departure<br/>\nHonks twice on closing doors\n[[File:Armored train 3.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "615"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        2160,
+        2226
+      ],
+      "popup": {
+        "title": "Scav Lands (Co-Op)",
+        "description": "Requires PMC + Scav\n[[File:Scav lands.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "616"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        1633.5,
+        923.48145622963
+      ],
+      "popup": {
+        "title": "Sewer Manhole",
+        "description": "Requires no [[backpack]] equipped\n[[File:Sewer manhole.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "617"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        3409.1888213273,
+        2517.4769177194
+      ],
+      "popup": {
+        "title": "Bunker Hermetic Door",
+        "description": "Requires lever activation in the shack west of the white pawn barracks\n[[File:Bunker hermetic door.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "618"
+    },
+    {
+      "categoryId": "exfil_transit",
+      "position": [
+        373.5,
+        1647
+      ],
+      "popup": {
+        "title": "Transit to Lighthouse",
+        "description": "Only available 1 min after raid start\n[[File:ReserveTransitToLighthouse.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "619"
+    },
+    {
+      "categoryId": "exfil_transit",
+      "position": [
+        373.5,
+        2066
+      ],
+      "popup": {
+        "title": "Transit to Woods",
+        "description": "Only available 1 min after raid start\n[[File:ReserveTransitToWoods.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "621"
+    },
+    {
+      "categoryId": "exfil_transit",
+      "position": [
+        2538,
+        2195
+      ],
+      "popup": {
+        "title": "Transit to Customs",
+        "description": "Only available 1 min after raid start\n[[File:ReserveTransitToCustoms.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "622"
+    },
+    {
+      "categoryId": "exfil_pmc",
+      "position": [
+        1254.887507379131,
+        2414.9464344473563
+      ],
+      "popup": {
+        "title": "Exit to Woods",
+        "description": "Requires [[Minefield map (Reserve)]]\n[[File:Exit to Woods.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "626"
+    },
+    {
+      "categoryId": "exfil_scav",
+      "position": [
+        1264.887507379131,
+        2414.9464344473563
+      ],
+      "popup": {
+        "title": "Exit to Woods",
+        "description": "Requires [[Minefield map (Reserve)]]\n[[File:Exit to Woods.png|center|265px]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "627"
+    },
+    {
+      "categoryId": "locked",
+      "position": [
+        4216.057897331115,
+        2295.003446688588
+      ],
+      "popup": {
+        "title": "RB-PKPTS",
+        "description": "Requires: [[RB-PKPTS key]]",
+        "link": {
+          "url": "",
+          "label": ""
+        }
+      },
+      "id": "634"
+    }
+  ],
+  "markerProgress": false
+}

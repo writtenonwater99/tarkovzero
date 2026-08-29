@@ -1,0 +1,46 @@
+{
+ "_doc": "Hand-traced Woods props in game coords (x, z), audited against tarkov.dev satellite zoom 5 at 5.936 px/m. SVG-derived plane and piers are added by the builder; this file carries camps, lumber-yard clutter, convoy wrecks, and antenna cues.",
+ "props": [
+  { "type": "container", "name": "Military Camp red container", "x": -196.4, "z": 201.3, "w": 2.5, "l": 12.5, "h": 2.7, "rot": 0, "color": [134, 70, 54] },
+  { "type": "container", "name": "Military Camp blue container", "x": -181.1, "z": 207.5, "w": 2.5, "l": 8.5, "h": 2.7, "rot": 90, "color": [67, 100, 116] },
+  { "type": "container", "name": "Military Camp blue container", "x": -207.2, "z": 206.4, "w": 2.5, "l": 8.5, "h": 2.7, "rot": 90, "color": [67, 100, 116] },
+  { "type": "container", "name": "Military Camp utility container", "x": -210.2, "z": 220.7, "w": 2.5, "l": 10, "h": 2.7, "rot": 90, "color": [118, 122, 111] },
+  { "type": "container", "name": "Military Camp west container", "x": -133.3, "z": 235.3, "w": 2.5, "l": 12, "h": 2.7, "rot": 90, "color": [139, 70, 54] },
+  { "type": "container", "name": "Military Camp south container", "x": -168.1, "z": 253.5, "w": 2.5, "l": 10, "h": 2.7, "rot": 138, "color": [82, 106, 82] },
+  { "type": "container", "name": "Military Camp south container", "x": -193.4, "z": 262.0, "w": 2.5, "l": 10, "h": 2.7, "rot": 90, "color": [76, 104, 82] },
+  { "type": "container", "name": "Military Camp orange container", "x": -176.0, "z": 264.0, "w": 2.5, "l": 9, "h": 2.7, "rot": 8, "color": [132, 76, 50] },
+  { "type": "vehicle", "name": "Military Camp ambulance", "x": -191.7, "z": 230.6, "w": 2.4, "l": 5.5, "h": 2.5, "rot": 72, "color": [145, 146, 136] },
+  { "type": "vehicle", "name": "Military Camp truck", "x": -184.1, "z": 244.3, "w": 2.6, "l": 7, "h": 2.8, "rot": 5, "color": [80, 91, 77] },
+  { "type": "vehicle", "name": "Military Camp truck", "x": -195.0, "z": 247.0, "w": 2.6, "l": 7, "h": 2.8, "rot": 90, "color": [88, 94, 83] },
+  { "type": "vehicle", "name": "Military Camp utility car", "x": -211.0, "z": 236.0, "w": 2.0, "l": 4.5, "h": 1.8, "rot": 12, "color": [103, 108, 101] },
+  { "type": "wall", "name": "Military Camp HESCO wall", "path": [[-214,214],[-216,235],[-205,253],[-188,270]], "w": 0.8, "h": 1.6, "color": [133, 121, 91] },
+
+  { "type": "container", "name": "Sawmill log stack", "x": 51.8, "z": -69.7, "w": 5.0, "l": 13, "h": 1.6, "rot": 86, "color": [121, 99, 69] },
+  { "type": "container", "name": "Sawmill log stack", "x": 50.1, "z": -55.2, "w": 5.0, "l": 12, "h": 1.6, "rot": 87, "color": [128, 103, 71] },
+  { "type": "container", "name": "Sawmill log stack", "x": 36.6, "z": -49.3, "w": 5.0, "l": 11, "h": 1.6, "rot": 82, "color": [119, 96, 67] },
+  { "type": "container", "name": "Sawmill log stack", "x": 28.2, "z": -62.0, "w": 4.5, "l": 12, "h": 1.5, "rot": 86, "color": [129, 104, 73] },
+  { "type": "container", "name": "Sawmill log stack", "x": -32.5, "z": -50.2, "w": 4.5, "l": 12, "h": 1.5, "rot": 70, "color": [124, 98, 68] },
+  { "type": "container", "name": "Sawmill log stack", "x": 37.5, "z": -0.5, "w": 5.5, "l": 14, "h": 1.7, "rot": 18, "color": [126, 101, 70] },
+  { "type": "container", "name": "Sawmill log stack", "x": 50.1, "z": -20.7, "w": 5.0, "l": 12, "h": 1.5, "rot": 79, "color": [118, 95, 66] },
+  { "type": "container", "name": "Sawmill log stack", "x": 53.5, "z": -28.3, "w": 5.0, "l": 12, "h": 1.5, "rot": 75, "color": [128, 102, 71] },
+  { "type": "container", "name": "Sawmill log stack", "x": -27.4, "z": 7.1, "w": 5.0, "l": 13, "h": 1.6, "rot": 78, "color": [122, 97, 67] },
+  { "type": "container", "name": "Sawmill log stack", "x": 45.0, "z": 10.5, "w": 5.5, "l": 14, "h": 1.7, "rot": 70, "color": [127, 101, 69] },
+  { "type": "container", "name": "Sawmill log stack", "x": 29.9, "z": 62.7, "w": 5.0, "l": 13, "h": 1.6, "rot": 5, "color": [124, 99, 69] },
+  { "type": "container", "name": "Sawmill log stack", "x": -32.5, "z": 42.5, "w": 5.0, "l": 13, "h": 1.6, "rot": 18, "color": [119, 96, 67] },
+  { "type": "vehicle", "name": "Sawmill yellow loader", "x": -52.7, "z": -26.6, "w": 2.6, "l": 5.2, "h": 2.5, "rot": 68, "color": [173, 138, 52] },
+  { "type": "vehicle", "name": "Sawmill orange truck", "x": -41.7, "z": -13.9, "w": 2.6, "l": 7.0, "h": 2.8, "rot": 86, "color": [145, 77, 48] },
+  { "type": "vehicle", "name": "Sawmill forklift", "x": 13.0, "z": -6.4, "w": 2.2, "l": 4.5, "h": 2.2, "rot": 52, "color": [166, 125, 46] },
+  { "type": "vehicle", "name": "Sawmill truck", "x": 58.5, "z": -51.0, "w": 2.6, "l": 7.0, "h": 2.8, "rot": 128, "color": [86, 93, 85] },
+
+  { "type": "wall", "name": "USEC Camp sandbags", "path": [[273,-520],[282,-524],[292,-522]], "w": 0.9, "h": 1.1, "color": [126, 114, 82] },
+  { "type": "container", "name": "USEC Camp green container", "x": 307.0, "z": -459.0, "w": 2.5, "l": 8.0, "h": 2.7, "rot": 78, "color": [74, 96, 76] },
+  { "type": "vehicle", "name": "USEC Camp utility truck", "x": 292.0, "z": -438.0, "w": 2.5, "l": 6.5, "h": 2.7, "rot": 30, "color": [82, 92, 79] },
+  { "type": "wall", "name": "USEC Camp barricade", "path": [[278,-505],[270,-496],[267,-486]], "w": 0.7, "h": 1.4, "color": [117, 108, 83] },
+
+  { "type": "vehicle", "name": "Convoy wrecked truck", "x": 201.0, "z": -603.0, "w": 2.7, "l": 7.5, "h": 2.5, "rot": 132, "color": [76, 84, 72] },
+  { "type": "vehicle", "name": "Convoy wrecked truck", "x": 198.0, "z": -592.0, "w": 2.7, "l": 7.0, "h": 2.3, "rot": 38, "color": [89, 83, 70] },
+  { "type": "vehicle", "name": "Convoy wrecked APC", "x": 205.0, "z": -584.0, "w": 3.1, "l": 7.2, "h": 2.4, "rot": 85, "color": [74, 85, 72] },
+  { "type": "crane", "name": "Scav Bunker radio mast", "x": 220.0, "z": -704.0, "w": 2.8, "l": 2.8, "h": 18, "rot": 0, "color": [92, 92, 88] },
+  { "type": "container", "name": "Scav Bunker equipment shelter", "x": 228.0, "z": -700.0, "w": 2.5, "l": 7.0, "h": 2.7, "rot": 20, "color": [75, 98, 91] }
+ ]
+}

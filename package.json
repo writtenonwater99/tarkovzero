@@ -4,12 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "vite --configLoader runner",
+    "build": "vite build --configLoader runner",
+    "preview": "vite preview --configLoader runner",
     "fetch-data": "node scripts/fetch-data.mjs",
     "warm-tiles": "node scripts/warm-tiles.mjs",
-    "build-community-data": "node scripts/build-community-data.mjs"
+    "build-community-data": "node scripts/build-community-data.mjs",
+    "build-3d": "node scripts/build-3d.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.11",
