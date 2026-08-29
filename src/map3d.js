@@ -24,14 +24,27 @@ function makeSampler(t) {
     return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
   };
 }
+function contours(t, interval = 2) { // marching squares isolines in game coords
+  const { x0, z0, step, cols, rows, heights } = t, lines = [];
+  const h = (r, c) => heights[r * cols + c];
+  const hmax = Math.max(...heights);
+  for (let lv = interval; lv <= hmax; lv += interval) for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++) {
+    const v = [h(r, c), h(r, c + 1), h(r + 1, c + 1), h(r + 1, c)]; const x = x0 + c * step, z = z0 + r * step;
+    const pts = []; const edge = (a, b, pa, pb) => { if ((v[a] < lv) !== (v[b] < lv)) { const t2 = (lv - v[a]) / (v[b] - v[a]); pts.push([pa[0] + (pb[0] - pa[0]) * t2, pa[1] + (pb[1] - pa[1]) * t2]); } };
+    edge(0, 1, [x, z], [x + step, z]); edge(1, 2, [x + step, z], [x + step, z + step]); edge(2, 3, [x + step, z + step], [x, z + step]); edge(3, 0, [x, z + step], [x, z]);
+    if (pts.length === 2) lines.push({ path: pts, lv }); else if (pts.length === 4) { lines.push({ path: [pts[0], pts[1]], lv }); lines.push({ path: [pts[2], pts[3]], lv }); }
+  }
+  return lines;
+}
 function terrainQuads(t, base) { // shaded ground quads (cheap hillshade baked into colour)
   const { x0, z0, step, cols, rows, heights } = t, out = [], light = [-0.5, -0.35, 0.8];
   for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++) {
     const h = (rr, cc) => heights[rr * cols + cc];
     const dx = (h(r, c + 1) - h(r, c)) / step, dz = (h(r + 1, c) - h(r, c)) / step; // slope
-    const n = [-dx, -dz, 1], L = Math.hypot(...n); const shade = Math.max(0.55, Math.min(1.15, (n[0] * light[0] + n[1] * light[1] + n[2] * light[2]) / L + 0.35));
+    const n = [-dx * 2.2, -dz * 2.2, 1], L = Math.hypot(...n); const shade = Math.max(0.5, Math.min(1.18, (n[0] * light[0] + n[1] * light[1] + n[2] * light[2]) / L + 0.32));
+    const hm = (h(r, c) + h(r + 1, c + 1)) / 2, tint = Math.min(1, Math.max(0, hm / 12)); // higher ground slightly warmer/lighter
     const x = x0 + c * step, z = z0 + r * step;
-    out.push({ poly: [[x, z, h(r, c)], [x + step, z, h(r, c + 1)], [x + step, z + step, h(r + 1, c + 1)], [x, z + step, h(r + 1, c)]], color: base.map((v) => Math.min(255, v * shade)) });
+    out.push({ poly: [[x, z, h(r, c)], [x + step, z, h(r, c + 1)], [x + step, z + step, h(r + 1, c + 1)], [x, z + step, h(r + 1, c)]], color: [Math.min(255, (base[0] + 8 * tint) * shade), Math.min(255, (base[1] + 4 * tint) * shade), Math.min(255, (base[2] - 10 * tint) * shade)] });
   }
   return out;
 }
@@ -132,6 +145,7 @@ export async function createView3d(container, mapData, src) {
   });
 
   const staticLayers = () => [
+    ...(data.terrain ? [new PathLayer({ id: 'contours', shadowEnabled: false, data: contours(data.terrain, 2), getPath: (d) => d.path.map((p) => Pg(p, 0.15)), getColor: (d) => (d.lv % 10 === 0 ? [120, 110, 95, 200] : [140, 130, 115, 130]), getWidth: (d) => (d.lv % 10 === 0 ? 0.8 : 0.5), widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })] : []),
     data.terrain ? new SolidPolygonLayer({ id: 'terrain', shadowEnabled: false, data: terrainQuads(data.terrain, C.land), getPolygon: (d) => d.poly.map(([x, z, y]) => P([x, z], y)), getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }) : new SolidPolygonLayer({ id: 'land', shadowEnabled: false, data: data.land, getPolygon: ring, getFillColor: C.land, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'pavement', shadowEnabled: false, data: data.pavement, getPolygon: (d) => ringG(d, 0.08), getFillColor: C.pavement, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water, getPolygon: (d) => ringG(d, 0.06), getFillColor: C.water, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
