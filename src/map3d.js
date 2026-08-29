@@ -3,7 +3,7 @@
 import { Deck, OrbitView, LightingEffect, AmbientLight, DirectionalLight, COORDINATE_SYSTEM } from '@deck.gl/core';
 import { SolidPolygonLayer, PathLayer, IconLayer, TextLayer, LineLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
 import { PathStyleExtension, CollisionFilterExtension } from '@deck.gl/extensions';
-import { KINDS, iconDataUrl, arrowDataUrl, extractLetter } from './icons.js';
+import { KINDS, iconDataUrl, arrowDataUrl, soldierDataUrl, extractLetter } from './icons.js';
 import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
@@ -510,6 +510,7 @@ export async function createView3d(container, mapData, src) {
     .filter((e, i, all) => all.findIndex((x) => x[0] === e[0]) === i);
   const iconAtlas = await buildAtlas(atlasEntries, 64);
   const arrowAtlas = await buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64);
+  const soldierAtlas = await buildAtlas(COLORS.map((c) => [c, soldierDataUrl(c, 64)]), 64);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
   const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
   let viewState = { target: [0, 0, 0], zoom: 0, rotationX: 62, rotationOrbit: 0, minZoom: -2, maxZoom: 5 };
@@ -608,13 +609,14 @@ export async function createView3d(container, mapData, src) {
   const major = (d) => (d.size ?? 100) >= 100;
   const lift = (d) => (major(d) ? 26 : 16) * ((d.size ?? 100) / 100);
   const ring16 = (pos, r, dy) => { const pts = []; for (let i = 0; i <= 16; i++) pts.push(Pg([pos[0] + r * Math.cos((i / 16) * 2 * Math.PI), pos[1] + r * Math.sin((i / 16) * 2 * Math.PI)], dy)); return pts; };
+  // name "beam": a soft vertical light column from the ground to the name (no cap, no outline)
   const pingLayers = (labelsAll) => { const labels = labelsAll.filter((d) => major(d) || viewState.zoom >= 0.8); return [
-    new PathLayer({ id: 'ping-ring', data: labels, getPath: (d) => ring16(d.position, major(d) ? 1.65 : 1.05, 0.1), getColor: [198, 196, 182, 175], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new ScatterplotLayer({ id: 'ping-dot', data: labels, getPosition: (d) => Pg(d.position, 0.15), getRadius: 0.7, radiusUnits: 'meters', radiusMinPixels: 1.5, getFillColor: C.cream, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-stem-shadow', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [14, 18, 15, 165], getWidth: 3.5, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-stem', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 1.5), getColor: [198, 196, 182, 175], getWidth: 1.2, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new ScatterplotLayer({ id: 'ping-cap', data: labels, getPosition: (d) => Pg(d.position, lift(d) - 1.5), getRadius: 3, radiusUnits: 'pixels', getFillColor: C.cream, getLineColor: C.ink, lineWidthMinPixels: 1, stroked: true, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new ScatterplotLayer({ id: 'ping-base', data: labels, getPosition: (d) => Pg(d.position, 0.15), getRadius: (d) => (major(d) ? 2.4 : 1.6), radiusUnits: 'meters', radiusMinPixels: 2, getFillColor: [255, 255, 255, 110], parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new LineLayer({ id: 'ping-beam-glow', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 0.5), getColor: [255, 255, 255, 38], getWidth: 7, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new LineLayer({ id: 'ping-beam-mid', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 0.5), getColor: [255, 255, 255, 90], getWidth: 3, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new LineLayer({ id: 'ping-beam-core', data: labels, getSourcePosition: (d) => Pg(d.position, 0.2), getTargetPosition: (d) => Pg(d.position, lift(d) - 0.5), getColor: [255, 255, 255, 230], getWidth: 1, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ]; };
+
   // --- TRACK C: extract names in 3D -----------------------------------------------------
   // buildAtlas() anchors the badge at its BOTTOM edge (anchorY = cell), so the badge occupies
   // -26..0 px ABOVE the anchor point. Names therefore go BELOW it — a negative offset would
@@ -676,13 +678,13 @@ export async function createView3d(container, mapData, src) {
       && (floor === 'U' ? d.floor === 'U' || d.floor === 'both' : d.floor !== 'U'));
     const players = src.players().filter((p) => p.last);
     return [
-      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind === 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind.startsWith('spawn-')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.5), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPixelOffset: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? [0, -4] : [0, 0]),
         updateTriggers: { getSize: [hoverExtract, pinnedExtract], getPixelOffset: [hoverExtract, pinnedExtract] },
         onHover: (i) => { const k = i.object && i.object.kind.startsWith('extract') ? eKey(i.object) : null; if (k !== hoverExtract) { hoverExtract = k; render(); } },
         onClick: (i) => { if (!i.object || !i.object.kind.startsWith('extract')) return false; const k = eKey(i.object); pinnedExtract = pinnedExtract === k ? null : k; render(); return true; } }),
       // everything else lies flat on the ground like chips on a table
-      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && d.kind !== 'spawn-boss'), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: markerIconKey, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && !d.kind.startsWith('spawn-')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.3), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: markerIconKey, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       ...pingLayers(labels),
       // TRACK C typography: majors are UPPERCASE/700, minors Title Case/600 — case, not a second grey,
       // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
@@ -696,6 +698,7 @@ export async function createView3d(container, mapData, src) {
       ...extractNameLayers(markers),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.3)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.2), getColor: (p) => hex(p.color, 160), getWidth: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'player-figures', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max((p.last.y ?? 0) + 0.2, H(p.last.x, p.last.z) + 0.3)), iconAtlas: soldierAtlas.canvas, iconMapping: soldierAtlas.mapping, getIcon: (p) => p.color, getSize: 34, sizeUnits: 'pixels', billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last) } }),
       new IconLayer({ id: 'players', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.2), iconAtlas: arrowAtlas.canvas, iconMapping: arrowAtlas.mapping, getIcon: (p) => p.color, getSize: 12, sizeUnits: 'meters', sizeMinPixels: 22, sizeMaxPixels: 44, billboard: false, getAngle: (p) => -((p.last.yaw ?? 0) + (mapData.coordinateRotation ?? 0)), pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: [players.map((p) => p.last), relief], getAngle: players.map((p) => p.last) } }),
       ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.3), getText: (p) => p.name, getPixelOffset: [22, 0], getTextAnchor: 'start', getSize: 14, getColor: C.cream, outlineWidth: 4, outlineColor: [14, 18, 15, 240], fontFamily: LABEL_FONT(), fontSettings: { sdf: true }, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: relief } })]),
     ];
