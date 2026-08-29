@@ -1,0 +1,171 @@
+{
+  "normalizedName": "woods",
+  "primaryPath": "/map/woods-2d",
+  "maps": [
+    {
+      "key": "woods",
+      "projection": "interactive",
+      "minZoom": 2,
+      "maxZoom": 6,
+      "transform": [
+        0.1855,
+        112.95,
+        0.1855,
+        167.85
+      ],
+      "coordinateRotation": 180,
+      "bounds": [
+        [
+          646,
+          -914
+        ],
+        [
+          -761,
+          442
+        ]
+      ],
+      "author": "Shebuka",
+      "authorLink": "https://github.com/the-hideout/tarkov-dev-svg-maps/",
+      "svgPath": "https://assets.tarkov.dev/maps/svg/Woods.svg",
+      "svgLayer": "Ground_Level",
+      "tilePath": "https://assets.tarkov.dev/maps/woods/main_0.16/{z}/{x}/{y}.png",
+      "layers": [],
+      "labels": [
+        {
+          "position": [
+            10,
+            -3
+          ],
+          "text": "Sawmill"
+        },
+        {
+          "position": [
+            -485,
+            -390
+          ],
+          "text": "Scav Town"
+        },
+        {
+          "position": [
+            -517,
+            -210
+          ],
+          "text": "Old Sawmill"
+        },
+        {
+          "position": [
+            -80,
+            -680
+          ],
+          "text": "Cultist Village"
+        },
+        {
+          "position": [
+            290,
+            -475
+          ],
+          "text": "USEC Camp"
+        },
+        {
+          "position": [
+            -188,
+            235
+          ],
+          "text": "Military Camp"
+        },
+        {
+          "position": [
+            -5,
+            -515
+          ],
+          "text": "Ponds",
+          "size": 80
+        },
+        {
+          "position": [
+            -252,
+            -37
+          ],
+          "text": "Crash Site",
+          "size": 80
+        },
+        {
+          "position": [
+            239,
+            -65
+          ],
+          "text": "Checkpoint",
+          "size": 70
+        },
+        {
+          "position": [
+            244,
+            125
+          ],
+          "text": "Shack",
+          "size": 70
+        },
+        {
+          "position": [
+            -16,
+            -122
+          ],
+          "text": "Lumber",
+          "size": 70
+        },
+        {
+          "position": [
+            -3,
+            -74
+          ],
+          "text": "Cabins",
+          "size": 70
+        },
+        {
+          "position": [
+            -234,
+            357
+          ],
+          "text": "Bus Stop",
+          "size": 70
+        },
+        {
+          "position": [
+            -327,
+            19
+          ],
+          "text": "Jaeger's Camp",
+          "size": 70
+        },
+        {
+          "position": [
+            85,
+            -147
+          ],
+          "text": "Sniper Rock",
+          "size": 70
+        },
+        {
+          "position": [
+            200,
+            -606
+          ],
+          "text": "Convoy",
+          "size": 70
+        }
+      ]
+    },
+    {
+      "key": "woods-2d",
+      "projection": "2D",
+      "author": "Jindouz",
+      "authorLink": "https://www.reddit.com/user/Jindouz"
+    },
+    {
+      "key": "woods-3d",
+      "projection": "3D",
+      "author": "re3mr",
+      "authorLink": "https://reemr.se"
+    }
+  ]
+}
