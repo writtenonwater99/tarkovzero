@@ -125,6 +125,27 @@ for (const b of bridges.filter((b) => b.kind !== 'dirt').sort((a, c) => PRI[a.ki
   if (!kept.some((k) => Math.hypot(mid(k)[0] - m[0], mid(k)[1] - m[1]) < 20)) kept.push(b);
 }
 bridges.length = 0; bridges.push(...kept);
+// flat roads: drop the parts that are carried by a bridge deck (so the road doesn't show under the deck)
+const bridgeSet = new Set(bridges.map((b) => b.path));
+const nearBridge = (pt) => bridges.some((b) => b.path.some((q) => Math.hypot(q[0] - pt[0], q[1] - pt[1]) < 4));
+const roadsCut = [];
+for (const r of roads) {
+  const pts = resample(r.path, 3); let run = [];
+  const flushRun = () => { if (run.length >= 2) roadsCut.push({ ...r, path: run }); run = []; };
+  for (const q of pts) { if (nearBridge(q) && overWater(q)) flushRun(); else run.push(q); }
+  flushRun();
+}
+roads.length = 0; roads.push(...roadsCut);
+// fences: open a gap where a road crosses (gates), so fences don't run through roads
+const fenceLines = linesIn('Fence');
+const allRoads = [...roads];
+const fencesCut = [];
+for (const f of fenceLines) {
+  const pts = resample(f, 2); let run = [];
+  const flushF = () => { if (run.length >= 2) fencesCut.push({ path: run }); run = []; };
+  for (const q of pts) { const onRoad = allRoads.some((r) => r.path.some((rp) => Math.hypot(rp[0] - q[0], rp[1] - q[1]) < r.width / 2 + 1.5)); if (onRoad) flushF(); else run.push(q); }
+  flushF();
+}
 const PLACE_COLORS = { 'Big Red': [200, 60, 55], 'Crackhouse': [120, 88, 66], 'Dorms 2-Story': [214, 190, 160], 'Dorms 3-Story': [214, 190, 160], 'New Gas': [235, 235, 235], 'Old Gas': [190, 190, 185], 'Fortress': [180, 180, 178], 'Skeleton': [176, 176, 176], 'Repair Shop': [140, 160, 185], 'Warehouse 3': [150, 165, 185], 'Warehouse 4': [150, 165, 185], 'Warehouse 7': [150, 165, 185], 'Warehouse 17': [150, 165, 185], 'Depot': [165, 170, 178], 'Boiler': [170, 110, 90], 'Oil Rig': [160, 120, 95], 'Streamer House': [120, 95, 70], 'Bus Station': [235, 235, 232], 'Storage': [170, 175, 180], 'Powerline Tower': [150, 150, 150], 'Water Pump': [160, 170, 180], 'Military Checkpoint': [175, 180, 170] };
 for (const b of buildings) if (b.place && PLACE_COLORS[b.place]) b.color = PLACE_COLORS[b.place];
 // building identity: how each landmark is drawn (frame = unfinished concrete skeleton, gable = pitched roof, canopy = roof on posts)
@@ -178,7 +199,7 @@ const out = {
   props, terrain, bridges,
   map: 'customs', builtAt: new Date().toISOString(), source: 'tarkov.dev SVG (CC BY-NC-SA) + tarkov.dev maps.json floor extents',
   land: polysIn('Ground'), water: polysIn('River'), pavement: polysIn('Pavement'), trees: polysIn('Trees'), rocks: polysIn('Rocks'),
-  roads, railway: linesIn('Railway').map((p) => ({ path: p })), fences: linesIn('Fence').map((p) => ({ path: p })), powerlines: linesIn('Powerlines').map((p) => ({ path: p })),
+  roads, railway: linesIn('Railway').map((p) => ({ path: p })), fences: fencesCut, powerlines: linesIn('Powerlines').map((p) => ({ path: p })),
   buildings, underground, floorBoxes,
 };
 await writeFile('public/data/customs-3d.json', JSON.stringify(out));

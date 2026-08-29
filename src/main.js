@@ -204,5 +204,6 @@ async function setView(mode) {
   }
 }
 btn3d.onclick = () => setView(document.body.classList.contains('view-3d') ? '2d' : '3d');
+document.querySelectorAll('#floors button').forEach((b) => (b.onclick = () => { document.querySelectorAll('#floors button').forEach((x) => x.classList.toggle('on', x === b)); view3d?.setFloor(b.dataset.floor === 'all' || b.dataset.floor === 'U' ? b.dataset.floor : Number(b.dataset.floor)); }));
 const origRender = ui.render; ui.render = () => { origRender(); view3d?.refresh(); };
 if (new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d') setView('3d');
