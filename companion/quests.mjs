@@ -119,30 +119,28 @@ export function sessionDate(dirName) {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
-/** Every push-notifications log under `logsDir`, oldest session first. */
-export function pushLogFiles(logsDir) {
+/**
+ * One pass over the Logs folder (a readdir per session dir, ~70 ms on /mnt/c — worth doing once):
+ * every push-notifications and application log, oldest session first.
+ * @returns {{push: Array<{rel:string,dir:string,full:string}>, app: string[]}}
+ */
+export function listLogFiles(logsDir) {
   let dirs;
-  try { dirs = fs.readdirSync(logsDir).filter((d) => d.startsWith('log_')).sort(); } catch { return []; }
-  const out = [];
+  try { dirs = fs.readdirSync(logsDir).filter((d) => d.startsWith('log_')).sort(); } catch { return { push: [], app: [] }; }
+  const push = [], app = [];
   for (const d of dirs) {
     let files;
     try { files = fs.readdirSync(path.join(logsDir, d)).sort(); } catch { continue; }
-    for (const f of files) if (/push-notifications_\d+\.log$/i.test(f)) out.push({ rel: `${d}/${f}`, dir: d, full: path.join(logsDir, d, f) });
+    for (const f of files) {
+      if (/push-notifications_\d+\.log$/i.test(f)) push.push({ rel: `${d}/${f}`, dir: d, full: path.join(logsDir, d, f) });
+      else if (/application_\d+\.log$/i.test(f)) app.push(path.join(logsDir, d, f));
+    }
   }
-  return out;
+  return { push, app };
 }
 
-function applicationLogs(logsDir) {
-  let dirs;
-  try { dirs = fs.readdirSync(logsDir).filter((d) => d.startsWith('log_')).sort(); } catch { return []; }
-  const out = [];
-  for (const d of dirs) {
-    let files;
-    try { files = fs.readdirSync(path.join(logsDir, d)).sort(); } catch { continue; }
-    for (const f of files) if (/application_\d+\.log$/i.test(f)) out.push(path.join(logsDir, d, f));
-  }
-  return out;
-}
+/** Every push-notifications log under `logsDir`, oldest session first. */
+export function pushLogFiles(logsDir) { return listLogFiles(logsDir).push; }
 
 function readHead(file, bytes) {
   try {
@@ -255,9 +253,11 @@ export class QuestTracker {
     this.logsDir = logsDir || null;
     this.statePath = statePath;
     this.log = log;
-    this.files = null;
+    this.files = null;       // push-notification logs, oldest first (null = not listed yet)
+    this.appFiles = [];      // application logs from the same listing pass
     this.taskIds = null;
     this.readError = null;   // file we last failed to read (so the failure is logged once, not per tick)
+    this.acctKey = null; this.acct = null;   // detectAccount() cache, keyed on the newest application log
     this.questsFile = questsFile;
     if (questsFile) {
       try { this.taskIds = loadTaskIds(questsFile); }
@@ -282,7 +282,7 @@ export class QuestTracker {
     this.save();
   }
 
-  setLogsDir(dir) { if (dir !== this.logsDir) { this.logsDir = dir || null; this.files = null; } }
+  setLogsDir(dir) { if (dir !== this.logsDir) { this.logsDir = dir || null; this.files = null; this.acctKey = null; this.acct = null; } }
 
   snapshot() {
     const s = this.state;
@@ -293,30 +293,42 @@ export class QuestTracker {
     return { active: s.active.length, done: s.done.length, failed: s.failed.length, unknown: s.unknown.length, since: s.since, accountId: s.accountId, ts: s.ts };
   }
 
-  detectAccount() {
-    const logs = applicationLogs(this.logsDir);
+  /** Player identity from the newest application log. Cached until that file changes: the walk plus the
+   *  4 MB head read costs ~150 ms on /mnt/c, and the answer only moves when the game writes a new session. */
+  detectAccount(logs = listLogFiles(this.logsDir).app) {
+    if (!logs.length) return null;
+    const newest = logs[logs.length - 1];
+    let key = null;
+    try { const st = fs.statSync(newest); key = `${logs.length}|${newest}|${st.size}|${st.mtimeMs}`; } catch {}
+    if (key && key === this.acctKey) return this.acct;
+    let hit = null;
     for (let i = logs.length - 1; i >= 0; i--) {   // newest session first; profile select is early in the file
-      const hit = extractAccount(readHead(logs[i], 4 * 1024 * 1024));
-      if (hit) return hit;
+      hit = extractAccount(readHead(logs[i], 4 * 1024 * 1024));
+      if (hit) break;
       if (this.state.accountId) break;             // known account: only ever look at the newest session
     }
-    return null;
+    if (key) { this.acctKey = key; this.acct = hit; }
+    return hit;
   }
 
   /**
    * Read whatever is new and fold it into the state.
-   * @param {{rescan?:boolean}} o rescan=true re-lists the log folders (do this every few seconds,
-   *   not on every 250 ms tick); otherwise only the file the cursor sits on is tailed.
+   * @param {{rescan?:boolean}} o rescan=true re-lists the log folders and re-checks the player identity
+   *   (do this every few seconds, not on every 250 ms tick); otherwise only the file the cursor sits on
+   *   is tailed, which is the cheap path the live tick needs.
    * @returns {{changed:boolean, applied:number, snapshot:object}} changed = the published set moved
    */
   sync({ rescan = false } = {}) {
     if (!this.logsDir) return { changed: false, applied: 0, snapshot: this.snapshot() };
     let dirty = false, changed = false;
-    if (rescan || !this.files) this.files = pushLogFiles(this.logsDir);
+    const relisted = rescan || !this.files;
+    if (relisted) { const all = listLogFiles(this.logsDir); this.files = all.push; this.appFiles = all.app; }
     const newest = this.files.length ? this.files[this.files.length - 1] : null;
 
     const s = this.state;
-    const acct = this.detectAccount();
+    // Identity detection re-reads the log folders; that belongs to the rescan tick (5 s), never to the
+    // 250 ms tail tick, which shares its event loop with the screenshot scan and the relay socket.
+    const acct = relisted ? this.detectAccount(this.appFiles) : null;
     let profileChange = null;
     if (acct) {
       if (s.accountId && acct.accountId !== s.accountId) { this.reset(`AccountId ${s.accountId} → ${acct.accountId}`, newest); changed = true; }

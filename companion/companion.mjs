@@ -500,8 +500,10 @@ function scan() {
 }
 
 if (quests) {
-  syncQuests(true, 'start');
-  setInterval(() => syncQuests(false), 250);   // tail the live push-notifications file
+  // The first sync replays every kept session (~300 ms on a real Logs folder), so it goes after the
+  // first turn of the loop instead of delaying the UI and the first screenshot scan.
+  setImmediate(() => syncQuests(true, 'start'));
+  setInterval(() => syncQuests(false), 250);   // tail the live push-notifications file (cheap path)
   setInterval(() => syncQuests(true), 5000);   // pick up a new log session / new log folder
 }
 
