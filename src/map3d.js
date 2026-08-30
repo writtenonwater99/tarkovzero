@@ -9,12 +9,14 @@ import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
 import { makeWaterHeightCapper, waterLevelAt, waterRings, waterSurfaceAt } from './water.js';
-import { CAM, clampTilt, groundFloorAngle } from './camera.js';
+import { CAM, clampTilt, groundFloorAngle, minFitZoom } from './camera.js';
 import {
   resolveLook, DEFAULT_LOOK, paletteFor, lightingFor, backgroundFor, backgroundCss,
   fogExtensionFor, limitDiagonal, fogParams, postFor, surfaceMaterial, referenceGroundMeters,
   loadRenderAssets, createGroundTextures, createLutTexture, groundDetailExtensionFor, gradeEffectFor,
+  waterExtensionFor, voidMargin, shadowRings, materialTint,
 } from './atmosphere.js';
+import { buildingMaterialId, roofMaterialId } from './render-style.js';
 
 /* ------------------------------------------------------------------ the look ---
  * `C` is the one colour table every recipe in this module draws from. Stage 1 makes it a function
@@ -28,8 +30,6 @@ import {
  */
 let LOOK = DEFAULT_LOOK;
 let C = paletteFor(LOOK);
-let BOX_WALL_TINTS = C.boxWallTints;
-let BOX_ROOF_TINTS = C.boxRoofTints;
 let CONTAINER_TINTS = C.containerTints;
 // Flat-roof colours for the landmarks the build script only colours the walls of. Seen from a
 // tilted top-down camera the roof IS the building, so a landmark whose roof is generic grey is
@@ -51,8 +51,6 @@ let PROP_COLORS = propColors(LOOK);
 function applyLook(look) {
   LOOK = resolveLook(look);
   C = paletteFor(LOOK);
-  BOX_WALL_TINTS = C.boxWallTints;
-  BOX_ROOF_TINTS = C.boxRoofTints;
   CONTAINER_TINTS = C.containerTints;
   ROOF_BY_PLACE = roofByPlace(LOOK);
   PROP_COLORS = propColors(LOOK);
@@ -119,7 +117,10 @@ function makeSurfaceSampler(base, hardRocks = [], relief = 1) {
   };
 }
 let VOID_Z = -14;
-function voidRect(limit) { const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]); const m = 60; return [[Math.min(...xs) - m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.max(...zs) + m], [Math.min(...xs) - m, Math.max(...zs) + m]]; }
+// R1.5: the margin is a parameter, because the realistic void plane is no longer a 60 m apron under
+// the map — it is the ground haze the diorama sits in, and it has to reach far enough past the
+// limit that the world fog can carry it all the way to the far-fog value before it runs out.
+function voidRect(limit, m = 60) { const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]); return [[Math.min(...xs) - m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.max(...zs) + m], [Math.min(...xs) - m, Math.max(...zs) + m]]; }
 const OVERLAY = { depthCompare: 'always', depthWriteEnabled: false };
 // One instance, reused: a fresh LayerExtension every render() makes deck rebuild the shader.
 const dashExt = new PathStyleExtension({ dash: true });
@@ -241,13 +242,32 @@ const catenary = (path, y, sag = 1.2) => {
 const mul = (c, k) => [Math.min(255, Math.round(c[0] * k)), Math.min(255, Math.round(c[1] * k)), Math.min(255, Math.round(c[2] * k)), c[3] ?? 255];
 // generic unnamed boxes must not all be the same grey; the tint is a deterministic hash of the
 // centroid so it never flickers between frames.
+/**
+ * Resolve every building's WALL and ROOF material class, then colour it from that class.
+ *
+ * R1.5. The pre-R1.5 version picked a wall tint out of a bag of four greys and a roof tint out of a
+ * bag of three, by centroid hash — deterministic, but it meant a corrugated warehouse and a precast
+ * concrete block were the same material with a different random grey, which is exactly the
+ * "featureless grey blocks ... the exact same matte shader properties" read. Now the class comes
+ * from src/render-style.js's deterministic resolver (landmark override -> kind -> form style ->
+ * conservative default), the colour comes from that class's authored albedo (realistic) or semantic
+ * fill (vector), and the centroid hash is demoted to a +/-6% value jitter so a yard of warehouses
+ * still is not one flat sheet.
+ *
+ * Buildings the DATA gives an explicit colour or a landmark place keep theirs; the class is still
+ * recorded on them, because the roof colour and the specular family read it.
+ */
 function tintBuildings(bs) {
   for (const b of bs) {
-    if (b.color || b.place || b.kind === 'powerline_towers') continue;
+    b.materialId = buildingMaterialId(b);
+    b.roofMaterialId = roofMaterialId(b);
+    if (b.kind === 'powerline_towers') continue;
     const c = b.poly.reduce((a, p) => [a[0] + p[0] / b.poly.length, a[1] + p[1] / b.poly.length], [0, 0]);
-    const r = hash1(c[0], c[1]);
-    b.tint = BOX_WALL_TINTS[Math.floor(r * 4) % 4];
-    b.roofTint = BOX_ROOF_TINTS[Math.floor(r * 97) % 3];
+    const seed = Math.floor(hash1(c[0], c[1]) * 1000) + 1;
+    // A roof is a different material from the wall under it, always — that is the whole point.
+    b.roofTint = materialTint(LOOK, b.roofMaterialId, seed, true);
+    if (b.color || b.place) continue;
+    b.tint = materialTint(LOOK, b.materialId, seed);
   }
 }
 function detailParts(bs, scenes = []) {
@@ -505,13 +525,15 @@ function buildingParts(bs) {
     if (st === 'box' || st === 'tank') walls.push({ ...b, h: b.height });
     if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [196, 200, 198], base: b.base });
     if (st === 'gable') {
-      if (!isRectangular(b.poly)) { walls.push({ ...b, h: b.height }); slabs.push({ poly: b.poly, z: b.height + 0.02, color: b.roof ?? C.roofWarehouse, base: b.base }); continue; }
+      if (!isRectangular(b.poly)) { walls.push({ ...b, h: b.height }); slabs.push({ poly: b.poly, z: b.height + 0.02, color: b.roof ?? b.roofTint ?? C.roofWarehouse, base: b.base }); continue; }
       walls.push({ ...b, h: b.height * 0.72 });
-      const rc = b.roof ? liftTone(b.roof, 0.12) : (['Crackhouse', 'Streamer House'].includes(b.place) ? C.roofHouse : C.roofWarehouse), shade = (k) => rc.map((c) => Math.min(255, c * k));
+      // R1.5: the roof falls back to its own MATERIAL CLASS (corrugated metal on a gable, tile on a
+      // house), not to one shared warehouse grey.
+      const rc = b.roof ? liftTone(b.roof, 0.12) : (b.roofTint ?? (['Crackhouse', 'Streamer House'].includes(b.place) ? C.roofHouse : C.roofWarehouse)), shade = (k) => rc.map((c) => Math.min(255, c * k));
       hipRoof(b).forEach((pts, i) => roofs.push({ pts, color: shade([1, 0.82, 0.9, 0.9][i]), b }));
     }
     if (st === 'frame') { for (let k = 1; k <= b.floors; k++) { const z = k * 3.3; slabs.push({ poly: b.poly, z, color: [C.concreteRaw[0], C.concreteRaw[1], C.concreteRaw[2], 235], base: b.base }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]], base: b.base }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: b.floors * 3.3, w: 0.55, color: C.concreteRaw, base: b.base }); }
-    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? C.roofFlat, base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: C.parapet, base: b.base }); }
+    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? b.roofTint ?? C.roofFlat, base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: C.parapet, base: b.base }); }
   }
   return { walls, roofs, slabs, posts, edges, dots };
 }
@@ -574,6 +596,9 @@ export async function createView3d(container, mapData, src) {
   // `extensionsChanged` every frame and recompile every world shader — the extensions are cached
   // here and only replaced by setLook().
   let fogExt = fogExtensionFor(look, mapDiagonal, fogScene);
+  // The realistic water material. Like the fog extension it is cached per look, never rebuilt per
+  // render, or deck sees `extensionsChanged` every frame and recompiles the water shader.
+  let waterExt = waterExtensionFor(look);
   let groundExt = null;   // realistic ground detail; armed once the textures upload
   let gradeEffect = null; // the combined post pass; armed once the LUT uploads
   let renderAssets = null, groundTextures = null, lutTexture = null;
@@ -778,16 +803,36 @@ export async function createView3d(container, mapData, src) {
   const boulders = rockRows.filter((r) => polyArea(r.poly) <= ROCK_MASS_AREA);
   const rockMasses = rockRows.filter((r) => polyArea(r.poly) > ROCK_MASS_AREA);
 
-  const staticLayers = () => [
+  const staticLayers = () => {
+  const waterSurface = terrain?.waterLayer?.(look, { fogExtension: fogExt, waterExtension: waterExt }) ?? null;
+  return [
     // TRACK B: contours are baked into the ground texture (smooth at any zoom, no z-fighting, zero layers)
     ...(data.limit ? [
-      new SolidPolygonLayer({ id: 'void', shadowEnabled: false, data: [voidRect(data.limit)], getPolygon: (d) => d.map(([x, z]) => P([x, z], VOID_Z)), getFillColor: C.oob, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      /*
+       * The backdrop plane. R1.5 made it FOGGED and much wider than the map.
+       *
+       * It used to be painted the exact clear colour, 60 m past the limit — so the whole background
+       * was one flat sheet and the map ended on a hard cut ("floating diorama"). It is now the
+       * contract's darker ground haze, reaching `voidMargin` past the limit, and the same
+       * distance fog every world layer takes washes it to the far-fog value on its way out. The
+       * frame reads sky at the top, haze at the horizon, and the two meet in a gradient rather
+       * than at an edge.
+       */
+      new SolidPolygonLayer({ id: 'void', shadowEnabled: false, data: [voidRect(data.limit, voidMargin(look, mapDiagonal))], getPolygon: (d) => d.map(([x, z]) => P([x, z], VOID_Z)), getFillColor: C.oob, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     ] : []),
     ...(terrain
       ? terrain.layers(look, { fogExtension: fogExt, groundExtension: groundExt })
       : [new SolidPolygonLayer({ id: 'land', shadowEnabled: false, data: data.land, getPolygon: (d) => ringG(d, 0), getFillColor: C.land, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() })]),
     // At-grade pavement, roads, dirt/tracks, and rail are in terrain.js's single baked texture.
-    new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water || [], getPolygon: (d) => waterPolygon(d), getFillColor: C.water, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    //
+    // Water is TWO mutually exclusive layers with two ids, never one id whose class changes: deck
+    // matches layers across renders by id and transfers the old layer's state onto the new one, so
+    // swapping a SolidPolygonLayer for a SimpleMeshLayer under one id hands the mesh layer a state
+    // with no model in it. Realistic draws the depth-tinted surface (terrain.js's water mesh);
+    // vector keeps the flat semantic fill Part C's flip table asks for.
+    ...(waterSurface ? [waterSurface] : [
+      new SolidPolygonLayer({ id: 'water', shadowEnabled: false, data: data.water || [], getPolygon: (d) => waterPolygon(d), getFillColor: C.water, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    ]),
     new SolidPolygonLayer({ id: 'minefields', shadowEnabled: false, data: data.minefields || [], getPolygon: (d) => ringG(d, 0.14), getFillColor: [142, 88, 52, 62], updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new SolidPolygonLayer({ id: 'understory', shadowEnabled: false, data: data.understory || [], getPolygon: (d) => ringG(d, 0.09), getFillColor: C.understory, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new PathLayer({ id: 'shore', shadowEnabled: false, data: shoreData, getPath: (d) => [...d.path, d.path[0]].map((point) => waterPoint(d.water, point, 0.04)), getColor: C.shore, getWidth: 0.5, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
@@ -800,23 +845,37 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'rock-masses', shadowEnabled: false, data: rockMasses, getPolygon: (d) => ringG(d.poly, 0.05), getFillColor: (d) => [...(d.color ? liftTone(d.color, 0.06) : C.rock).slice(0, 3), 150], updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: boulders, getPolygon: (d) => ringG(d.poly, 0.04), extruded: true, getElevation: (d) => d.height, getFillColor: (d) => d.color ? liftTone(d.color, 0.1) : C.rock, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'boulder') }),
   ];
+  };
   const makeFloorLines = () => data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
   let floorLines = makeFloorLines();
   let propData = propParts(data.props || []);
   const fenceStrips = (data.fences || []).map((f) => ({ poly: strip(f.path, 0.12) }));
-  const extraLayers = () => [
+  const extraLayers = () => {
+  const SHADE_RINGS = shadowRings(look);
+  return [
     new SolidPolygonLayer({ id: 'props', data: propData, getPolygon: (d) => d.drape ? ringG(d.poly, d.dz) : ringAt(d.poly, footprintGround(d.poly) + d.dz), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'prop') }),
     new PathLayer({ id: 'fence-tops', shadowEnabled: false, data: data.fences || [], getPath: (d) => ringG(d.path, 1.98), getColor: C.fenceTop, getWidth: 0.3, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new SolidPolygonLayer({ id: 'fences-3d', shadowEnabled: false, data: fenceStrips, getPolygon: (d) => ringG(d.poly, 0.04), extruded: true, getElevation: 1.9, getFillColor: C.fence, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
-    // two rings instead of one: reads as a blurred contact shadow at every zoom
-    new SolidPolygonLayer({ id: 'shade-soft', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 3.2), 0.10), getFillColor: C.shadeSoft, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
-    new SolidPolygonLayer({ id: 'shade', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, 1.1), 0.11), getFillColor: C.shade, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    /*
+     * The contact shadow: THREE rings now, not two, and a cool damp blue-grey rather than ink.
+     *
+     * deck's cast shadow is gated on Stage 7 (and on a kilometre-scale relief surface its depth16
+     * map goes straight into acne — see the note in terrain.js), so this stack IS the soft shadow.
+     * Widening it from two rings to three, with the outermost at 7% opacity, is what "soften shadow
+     * edges" means without a shadow map: the penumbra is approximated by more, fainter steps. The
+     * colour comes from SHADOW.realistic — an overcast shadow is lit by the whole sky dome, so it
+     * is blue-grey; #0a0c0a was a night-time value on a damp afternoon.
+     */
+    new SolidPolygonLayer({ id: 'shade-wide', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, SHADE_RINGS[2]), 0.09), getFillColor: C.shadeWide, updateTriggers: { getPolygon: [heightEpoch, look] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new SolidPolygonLayer({ id: 'shade-soft', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, SHADE_RINGS[1]), 0.10), getFillColor: C.shadeSoft, updateTriggers: { getPolygon: [heightEpoch, look] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new SolidPolygonLayer({ id: 'shade', shadowEnabled: false, data: data.buildings, getPolygon: (d) => ringG(expand(d.poly, SHADE_RINGS[0]), 0.11), getFillColor: C.shade, updateTriggers: { getPolygon: [heightEpoch, look] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new SolidPolygonLayer({ id: 'piers', data: (data.bridges || []).flatMap(piers), getPolygon: (d) => box(d.pos, d.w).map(([x, y]) => [x, y, d.bottom]), extruded: true, getElevation: (d) => d.h, getFillColor: C.pier, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'slabLike') }),
     new PathLayer({ id: 'bridge-edges', shadowEnabled: false, data: (data.bridges || []).filter((b) => !b.ford), getPath: (d) => bridgePath(d).map((q) => [q[0], q[1], q[2] - 0.15]), getColor: [128, 124, 114], getWidth: (d) => d.width + 1.2, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new PathLayer({ id: 'bridges', shadowEnabled: false, data: data.bridges || [], getPath: bridgePath, getColor: (d) => (d.foot ? [128, 108, 82] : d.ford ? [150, 143, 126] : C.bridge), getWidth: (d) => d.width, widthUnits: 'meters', widthMinPixels: 2, capRounded: false, jointRounded: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new PathLayer({ id: 'bridge-rails', shadowEnabled: false, data: (data.bridges || []).filter((b) => !b.ford).flatMap((b) => { const p = bridgePath(b).map((q) => [q[0], q[1], q[2] + 1.1]); return [offsetPath(p, b.width / 2 - 0.3), offsetPath(p, -(b.width / 2 - 0.3))]; }), getPath: (d) => d, getColor: C.bridgeRail, getWidth: 0.4, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new PathLayer({ id: 'floor-lines', shadowEnabled: false, data: floorLines, getPath: (d) => d.path, getColor: C.floorLine, getWidth: 0.35, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
   ];
+  };
   tintBuildings(data.buildings);
   // Scenes for things the footprint data has no polygon for: the ZB bunker mouths and the road
   // checkpoints. Oriented towards the middle of the map so the door always faces the player.
@@ -843,6 +902,13 @@ export async function createView3d(container, mapData, src) {
       onHover: (i) => { if (i.index !== hover) { hover = i.index; render(); } },
     }),
     new SolidPolygonLayer({ id: 'roofs', visible: floor === 'all', data: parts.roofs, getPolygon: (d) => d.pts.map(([x, z, y]) => P([x, z], y + (d.b.base ?? footprintGround(d.b.poly)))), getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'roof') }),
+    /*
+     * Flat roof decks. No `material` here, and none is missing: deck's SolidPolygonLayer only calls
+     * `lighting_getLightColor` when `extruded` is true (solid-polygon-layer-vertex-main.glsl), so
+     * every flat cap in this module — slabs, detail-flats, and the pitched `roofs` layer — is
+     * UNLIT and takes its albedo verbatim. That is why a roof's sky lobe is folded into its colour
+     * by atmosphere.js's materialTint() instead of being asked for as a Phong specular here.
+     */
     new SolidPolygonLayer({ id: 'slabs', visible: floor !== 'U', shadowEnabled: false, data: parts.slabs.filter((d) => floor === 'all' || d.z <= (Number(floor) + 1) * 3.3), getPolygon: (d) => ringAt(d.poly, d.z + (d.base ?? footprintGround(d.poly))), updateTriggers: { getPolygon: [floor, heightEpoch] }, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new SolidPolygonLayer({ id: 'posts', visible: floor !== 'U', data: parts.posts, getPolygon: (d) => box(P(d.pos), d.w).map(([x, y]) => [x, y, d.base ?? H(d.pos[0], d.pos[1])]), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'slabLike') }),
     new SolidPolygonLayer({ id: 'detail-boxes', visible: floor !== 'U', data: details.boxes.filter(showLvl), getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: [floor, heightEpoch] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'prop') }),
@@ -1177,6 +1243,7 @@ export async function createView3d(container, mapData, src) {
     if (wanted === look) return look;
     look = applyLook(wanted);
     fogExt = fogExtensionFor(look, mapDiagonal, fogScene);
+    waterExt = waterExtensionFor(look);
     groundExt = groundDetailExtensionFor(look, groundTextures);
     gradeEffect = gradeEffectFor(look, lutTexture);
     lighting = sceneLighting();
