@@ -358,7 +358,25 @@ rememberFit();
 // is in and 3D refits its projected one (the 3D fit depends on the viewport aspect, so a wider window
 // used to leave the diorama framed for the old one). The fit box the zoom floor is measured from
 // moves with the window whether or not anything is refitted.
-window.addEventListener('resize', () => { syncFitBox(); if (autoFit) { fit(); if (is3d()) fit3d(); } rememberFit(); updateHud(); });
+/**
+ * Leaflet caches its container size and only re-measures when it is told to. `getBoundsZoom()` —
+ * which both fits go through — reads that cache, so a `fit()` run straight off the resize event
+ * framed the map for the window it had BEFORE the resize: every refit landed one window behind
+ * (measured on Customs: 1400x985 → 1920x1165 stayed at zoom 2.3676 instead of 2.8407, then
+ * shrinking to 1200x800 jumped to 2.8407 instead of 2.1344 — i.e. shrink the window and the map is
+ * left zoomed for a window up to 60% wider, cropped). One `invalidateSize` ahead of the fit is the
+ * whole difference; `pan: false` keeps it from nudging the centre the fit is about to set anyway.
+ *
+ * Only while 2D is on screen: `#map` is `display: none` in 3D, where the container measures 0x0 and
+ * invalidating would cache THAT. 3D never needed it — fit3dBox() measures the live rects itself.
+ */
+window.addEventListener('resize', () => {
+  syncFitBox();
+  if (is3d()) { if (autoFit) fit3d(); updateHud(); return; }
+  map.invalidateSize({ animate: false, pan: false });
+  if (autoFit) fit();
+  rememberFit(); updateHud();
+});
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
 map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
 /**
