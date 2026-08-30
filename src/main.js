@@ -15,7 +15,7 @@ import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
 // zOff() is the 2D↔3D zoom relation. It is this MAP's CRS scale and nothing else, so the two views
 // always report the same metres per pixel — see the note in camera.js.
-import { CAM, zoomOffsetFor, fitZoom } from './camera.js';
+import { CAM, zoomOffsetFor, fitZoom, setFitBox } from './camera.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -200,18 +200,62 @@ function setLook(next, persist = true) {
 $$('#look-toggle .seg-cell').forEach((b) => (b.onclick = () => setLook(b.dataset.look)));
 setLook(look, false);
 
+/* ------------------------------------------------------------- footprint -- */
 /**
- * Fit = **cover**, not contain.
+ * THE box every fit frames — in both views, at every aspect.
  *
- * fitBounds() with the safe rect as padding shrinks the whole map until it sits inside that rect,
- * so every panel that opened left black bands around the map (step 1 defect). What a player wants
- * is the opposite: zoom so the map *covers* the viewport — the edges may crop — and put the middle
- * of the map in the middle of the safe rect. Leaflet's getBoundsZoom(bounds, true, …) is exactly
- * that "inside" scale; the negative padding grows the box we must cover by the recentring offset,
- * so the corners under the chips and the toolbar stay map, not void.
+ * The map's own bounds are not the whole of what a player has to see: the extract and transit
+ * badges sit ON the rim, and they carry a letter, a name and (in 3D) a hover line that hang off the
+ * marker's own position. Framing the terrain and forgetting the furniture is QA H5 — Woods opened
+ * with "RAILWAY BRIDGE TO TARKOV" cut by the right edge and two extract badges cut by the bottom.
+ * So the footprint is the union of the map bounds with every extract/transit position grown by
+ * MARKER_MARGIN metres, and the fit contains THAT.
  *
- * Only an explicit fit (F, #hud-fit, `> fit`, first load, window resize) calls this. Opening,
- * closing or pinning a panel never moves the camera.
+ * The margin is a distance, not a pixel count, because it has to mean the same thing before the
+ * zoom it will be measured at is known; 40 m is ~44 px at the Customs default framing, which clears
+ * the badge and most of its name.
+ */
+const MARKER_MARGIN = 40;
+const FURNITURE_KINDS = ['extract-pmc', 'extract-scav', 'extract-shared', 'extract-transit'];
+let footprint = {
+  x0: Math.min(bounds.getWest(), bounds.getEast()), x1: Math.max(bounds.getWest(), bounds.getEast()),
+  z0: Math.min(bounds.getSouth(), bounds.getNorth()), z1: Math.max(bounds.getSouth(), bounds.getNorth()),
+};
+/** Recompute the footprint from the markers that have loaded. Returns true when it actually moved. */
+function updateFootprint() {
+  const next = {
+    x0: Math.min(bounds.getWest(), bounds.getEast()), x1: Math.max(bounds.getWest(), bounds.getEast()),
+    z0: Math.min(bounds.getSouth(), bounds.getNorth()), z1: Math.max(bounds.getSouth(), bounds.getNorth()),
+  };
+  for (const m of markerPoints) {
+    if (!FURNITURE_KINDS.includes(m.kind)) continue;
+    const { x, z } = m.position ?? {};
+    if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+    next.x0 = Math.min(next.x0, x - MARKER_MARGIN); next.x1 = Math.max(next.x1, x + MARKER_MARGIN);
+    next.z0 = Math.min(next.z0, z - MARKER_MARGIN); next.z1 = Math.max(next.z1, z + MARKER_MARGIN);
+  }
+  const moved = ['x0', 'x1', 'z0', 'z1'].some((k) => Math.abs(next[k] - footprint[k]) > 0.5);
+  footprint = next;
+  if (moved) syncFitBox();
+  return moved;
+}
+const footprintBounds = () => L.latLngBounds([footprint.z0, footprint.x0], [footprint.z1, footprint.x1]);
+const footprintCentre = () => ({ x: (footprint.x0 + footprint.x1) / 2, z: (footprint.z0 + footprint.z1) / 2 });
+
+/**
+ * Fit = **contain the footprint in the safe rect**, not cover the window.
+ *
+ * Cover (`max(sx, sy)`) fills the frame by cropping the long axis, which reads well only while the
+ * viewport's aspect is near the map's. It is not: on a 2:1 map a taller window made cover pick a
+ * TIGHTER camera and slice the map off both sides (QA H1). Contain says the opposite and says it at
+ * every aspect — a window that grows can only ever show the same map bigger, never less of it.
+ * The safe rect (the part of the stage nothing floats over) is the box, so the corners under the
+ * chips, the toolbar and the omnibox are chrome, not the bit of the map you needed.
+ *
+ * Cover is still one keystroke away and unchanged: F / #hud-fit ask for it explicitly, and that is
+ * the only thing that switches `fitMode` (QA H2 — a first visit owes the player the whole map).
+ * Only an explicit fit (F, #hud-fit, `> fit`, first load, window resize, markers arriving) moves the
+ * camera; opening, closing or pinning a panel never does.
  */
 function coverZoom() {
   const off = safeOffset();
@@ -219,9 +263,21 @@ function coverZoom() {
   const z = map.getBoundsZoom(bounds, true, grow);
   return Number.isFinite(z) ? z : map.getZoom();
 }
-function fit() {
-  const z = coverZoom();
-  const centre = map.unproject(map.project(bounds.getCenter(), z).subtract(safeOffset()), z);
+function containZoom() {
+  const off = safeOffset();
+  // Positive padding SHRINKS the box Leaflet fits into, by the same recentring offset the negative
+  // padding above grows it — the map is centred on the safe rect, so this is that rect.
+  const shrink = L.point(2 * Math.abs(off.x), 2 * Math.abs(off.y));
+  const z = map.getBoundsZoom(footprintBounds(), false, shrink);
+  return Number.isFinite(z) ? z : map.getZoom();
+}
+let fitMode = 'contain';
+function fit(mode = fitMode) {
+  fitMode = mode === 'cover' ? 'cover' : 'contain';
+  const cover = fitMode === 'cover';
+  const z = cover ? coverZoom() : containZoom();
+  const b = cover ? bounds : footprintBounds();
+  const centre = map.unproject(map.project(b.getCenter(), z).subtract(safeOffset()), z);
   map.setView(centre, z, { animate: false });
 }
 
@@ -233,27 +289,39 @@ function fit() {
  * Customs' CRS scale (2.06 = -log2(0.239)), so every other map lands at the wrong scale; and a 2D
  * cover on a near-square map is decided by its width, while the 3D frame is decided by the depth of
  * the rhombus the tilt makes of it. Woods (1407 x 1356 m) therefore opened ~2.1x too close, with a
- * wider window making it worse. Now the fit asks the projected footprint at the tilt we are actually
- * going to use, and covers the stage with it — the corners under the chips and the toolbar stay map,
- * exactly as the 2D fit intends, while the map's middle lands in the middle of the safe rect.
+ * wider window making it worse. So the fit asks for the projected footprint at the tilt we are
+ * actually going to use, and CONTAINS it in the safe rect (see fit() above) — the map's middle in
+ * the middle of the rect nothing floats over, and every edge of it on screen at every aspect.
  */
-function fit3dZoom(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) {
-  const s = stageEl.getBoundingClientRect();
-  const off = safeOffset();
-  return fitZoom({
+function fit3dBox(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) {
+  const r = safeRect();
+  return {
     width: Math.abs(bounds.getEast() - bounds.getWest()),
     depth: Math.abs(bounds.getNorth() - bounds.getSouth()),
-    viewportWidth: s.width + 2 * Math.abs(off.x),
-    viewportHeight: s.height + 2 * Math.abs(off.y),
+    fitWidth: footprint.x1 - footprint.x0,
+    fitDepth: footprint.z1 - footprint.z0,
+    viewportWidth: Math.max(1, r.right - r.left),
+    viewportHeight: Math.max(1, r.bottom - r.top),
     rotationX, rotationOrbit,
-  });
+  };
 }
-/** Restore the default 3D framing: cover zoom at the oblique default, centred on the safe rect. */
+function fit3dZoom(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) {
+  return fitZoom(fit3dBox(rotationX, rotationOrbit));
+}
+/**
+ * Hand camera.js the box the fit frames, so the zoom FLOOR every drag, wheel and permalink is
+ * clamped against is exactly this fit minus MIN_ZOOM_MARGIN. map3d.js owns the clamp but knows
+ * neither the safe rect nor the marker furniture; without this the floor could sit above the fit.
+ */
+function syncFitBox() { setFitBox(fit3dBox()); }
+syncFitBox();
+/** Restore the default 3D framing: contain the footprint at the oblique default, on the safe rect. */
 function fit3d() {
+  syncFitBox();
   const zoom = fit3dZoom(CAM.rotationX, CAM.rotationOrbit);
   if (zoom == null) return;
-  const c = bounds.getCenter();
-  set3d({ target: target3dFor(c.lng, c.lat, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
+  const c = footprintCentre();
+  set3d({ target: target3dFor(c.x, c.z, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
 }
 
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
@@ -278,15 +346,34 @@ const rememberFit = () => {
   fitState = { center: bounds.getCenter(), zoom: coverZoom() };
 };
 rememberFit();
-// A resize changes the frame the fit was computed for, in both views: 2D refits its cover zoom and
-// 3D refits its projected one (the 3D fit depends on the viewport aspect, so a wider window used to
-// leave the diorama framed for the old one).
-window.addEventListener('resize', () => { if (autoFit) { fit(); if (is3d()) fit3d(); } rememberFit(); updateHud(); });
+// A resize changes the frame the fit was computed for, in both views: 2D refits in whichever mode it
+// is in and 3D refits its projected one (the 3D fit depends on the viewport aspect, so a wider window
+// used to leave the diorama framed for the old one). The fit box the zoom floor is measured from
+// moves with the window whether or not anything is refitted.
+window.addEventListener('resize', () => { syncFitBox(); if (autoFit) { fit(); if (is3d()) fit3d(); } rememberFit(); updateHud(); });
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
 map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
+/**
+ * The address bar follows the camera — but a permalink OWNS it until the camera leaves it.
+ *
+ * Every move writes `#zoom/x/z`, and on a permalinked load the first move IS the permalink being
+ * applied, so the URL was rewritten before the visitor had touched anything: `#1.4/-209/-280` on
+ * Woods came back as `#1.95/-209.0/-280.0` (QA H4), i.e. the sender's own link silently changed
+ * under them to a camera they never asked for. So while the camera still stands where the hash put
+ * it, nothing is written; the first move that lands somewhere else — including a clamp — arms the
+ * writer for good, because from then on the URL has to tell the truth about where the camera is.
+ */
+let hashArmed = !arrivedByHash;
+const onHash = (zoom2d, x, z) => {
+  if (!hashArmed) {
+    if (Math.abs(zoom2d - hash[0]) < 0.005 && Math.abs(x - hash[1]) < 0.05 && Math.abs(z - hash[2]) < 0.05) return;
+    hashArmed = true;
+  }
+  history.replaceState(null, '', `#${zoom2d.toFixed(2)}/${x.toFixed(1)}/${z.toFixed(1)}`);
+};
 map.on('moveend', () => {
-  if (is3d()) history.replaceState(null, '', `#${((v3.zoom ?? 0) + zOff()).toFixed(2)}/${(-v3.target[0]).toFixed(1)}/${(-v3.target[1]).toFixed(1)}`);
-  else { const c = map.getCenter(); history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`); }
+  if (is3d()) onHash((v3.zoom ?? 0) + zOff(), -v3.target[0], -v3.target[1]);
+  else { const c = map.getCenter(); onHash(map.getZoom(), c.lng, c.lat); }
 });
 map.on('move zoom', updateHud);
 // The marker tier and the cluster grid follow the zoom, not the pan — so they settle once, at the
@@ -700,6 +787,10 @@ function renderMarkers(data, source) {
     countOf.set(m.kind, (countOf.get(m.kind) ?? 0) + 1);
   }
   applyLod(true);   // fills every layer group at the tier the camera is already in
+  // The extracts are part of the box every fit frames (see updateFootprint), and they arrive after
+  // the first fit did. Re-fit only while the camera is still the one WE put there — a visitor who
+  // has already panned, or arrived on a permalink, keeps their view.
+  if (updateFootprint() && autoFit) { fit(); if (is3d()) fit3d(); }
   fillRows();
   for (const [kind, layer] of layerOf) if (onKinds.has(kind)) layer.addTo(map);
   view3d?.refresh();
@@ -1124,10 +1215,11 @@ function zoomBy(d) {
 $('#hud-zin').onclick = () => zoomBy(0.5);
 $('#hud-zout').onclick = () => zoomBy(-0.5);
 $('#hud-fit').onclick = () => {
-  // Fit in 3D also restores the default framing: cover zoom, oblique tilt, the diorama's near
-  // corner — centred on the safe rect, exactly as the 2D fit() is.
+  // Fit in 3D restores the default framing: the contain zoom, the oblique tilt and the diorama's
+  // near corner, centred on the safe rect. In 2D it is the one place cover lives (QA H2): asking
+  // for the fit by hand is asking to fill the window, and it sticks until the next explicit fit.
   if (is3d()) fit3d();
-  else { autoFit = true; fit(); }
+  else { autoFit = true; fit('cover'); }
 };
 $('#hud-north').onclick = () => {
   const t0 = performance.now(), o0 = v3.rotationOrbit ?? 0, x0 = v3.rotationX ?? CAM.rotationX;
