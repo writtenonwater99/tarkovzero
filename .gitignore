@@ -6,6 +6,9 @@ dist
 .vercel
 # per-step screenshots + report.json from `npm run e2e`
 .e2e
+# measured render baseline from `npm run render-baseline` (a machine-specific measurement, not a
+# source artifact — re-measure rather than diff someone else's adapter)
+.render
 .env*
 companion/companion.json
 companion/companion-quests.json
