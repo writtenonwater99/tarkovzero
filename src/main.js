@@ -268,10 +268,17 @@ function coverZoom() {
   return Number.isFinite(z) ? z : map.getZoom();
 }
 function containZoom() {
-  const off = safeOffset();
-  // Positive padding SHRINKS the box Leaflet fits into, by the same recentring offset the negative
-  // padding above grows it — the map is centred on the safe rect, so this is that rect.
-  const shrink = L.point(2 * Math.abs(off.x), 2 * Math.abs(off.y));
+  // Positive padding SHRINKS the box Leaflet fits into, and the box a contain fit has to land in is
+  // the SAFE RECT, so the padding is the chrome — the stage minus that rect, on both axes.
+  //
+  // It used to be `2 * |safeOffset()|`, the recentring OFFSET doubled, which is the right growth for
+  // the cover fit above (cover has to fill the stage even after the recentring slides it) and the
+  // wrong shrink for this one. The vertical chrome is near-symmetric — 68 px of chips on top, 70 px
+  // of omnibox underneath — so `off.y` was −1 and the fit reserved 2 px for 138 px of furniture.
+  // Bottom-row markers were then drawn under the omnibox on Woods and Reserve (QA D4, 2D half).
+  const s = stageEl.getBoundingClientRect();
+  const r = safeRect();
+  const shrink = L.point(Math.max(0, s.width - (r.right - r.left)), Math.max(0, s.height - (r.bottom - r.top)));
   const z = map.getBoundsZoom(footprintBounds(), false, shrink);
   return Number.isFinite(z) ? z : map.getZoom();
 }
