@@ -1,0 +1,4 @@
+2026-08-05 20:20:49.301|1.1.0.0.46657|Info|application|Application awaken
+2026-08-05 20:21:27.860|1.1.0.0.46657|Info|application|PrepareSelectedProfileLocally ProfileId:aaaa1111bbbb2222cccc3333 AccountId:10000001
+2026-08-05 20:21:27.860|1.1.0.0.46657|Info|application|CompleteSelectedProfile ProfileId:aaaa1111bbbb2222cccc3333 AccountId:10000001
+2026-08-05 21:20:04.512|1.1.0.0.46657|Info|application|scene preset path:maps/customs_preset.bundle rcid:bigmap.scenespreset.asset

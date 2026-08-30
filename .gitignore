@@ -1,9 +1,20 @@
 node_modules
 dist
+# vite dev tile cache, and the raw render-asset downloads
+# (.cache/render-assets/, re-fetched by scripts/prepare-render-assets.mjs)
 .cache
 .vercel
+# per-step screenshots + report.json from `npm run e2e`
+.e2e
+# measured render baseline from `npm run render-baseline` (a machine-specific measurement, not a
+# source artifact — re-measure rather than diff someone else's adapter)
+.render
 .env*
 companion/companion.json
+companion/companion-quests.json
 companion/elevation-*.jsonl
 # quest-layer build inputs: crawled/downloaded, re-fetched by scripts/build-quests.mjs
 scripts/data/tasks/
+# Versioned tarkov.dev JSON responses are reproducible local build caches. The
+# small URL/date/hash manifest beside this directory is committed.
+scripts/data/tarkov-dev-exact/

@@ -1,0 +1,7515 @@
+{
+ "schemaVersion": 1,
+ "map": "customs",
+ "source": {
+  "type": "committed-projection",
+  "baselineCommit": "15171e3",
+  "note": "Offline Wiki marker cache reconstructed from the committed pre-exact community snapshot; coordinates and notes are the previously reviewed affine projection."
+ },
+ "markers": [
+  {
+   "categoryId": "exfil_pmc",
+   "position": [
+    3872.1168611877,
+    1913.5273211762
+   ],
+   "popup": {
+    "title": "Trailer Park",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "50"
+  },
+  {
+   "categoryId": "exfil_shared",
+   "position": [
+    2832.1052983925,
+    596.361689022
+   ],
+   "popup": {
+    "title": "Smugglers' Boat",
+    "description": "Requires Note with code word Voron",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "51"
+  },
+  {
+   "categoryId": "exfil_pmc",
+   "position": [
+    1973.4290850077,
+    207.3383511532
+   ],
+   "popup": {
+    "title": "Dorms V-Ex",
+    "description": "Requires ~20,000 Roubles",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "52"
+  },
+  {
+   "categoryId": "exfil_pmc",
+   "position": [
+    192.0759466816,
+    1588.4477799847
+   ],
+   "popup": {
+    "title": "ZB-1011",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "53"
+  },
+  {
+   "categoryId": "exfil_shared",
+   "position": [
+    852.1858498522,
+    1524.1210863213
+   ],
+   "popup": {
+    "title": "Smugglers' Bunker (ZB-1012)",
+    "description": "Requires Note with code word Voron",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "54"
+  },
+  {
+   "categoryId": "exfil_pmc",
+   "position": [
+    1461.0131315832,
+    1763.8145996145
+   ],
+   "popup": {
+    "title": "Old Gas Station",
+    "description": "Green flare = Open",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "55"
+  },
+  {
+   "categoryId": "exfil_pmc",
+   "position": [
+    1938.1466414573,
+    1644.7336369401
+   ],
+   "popup": {
+    "title": "ZB-013",
+    "description": "Requires lever activation in warehouse #4 and Factory emergency exit key",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "56"
+  },
+  {
+   "categoryId": "exfil_shared",
+   "position": [
+    2725.4374457981,
+    1670.7706319943
+   ],
+   "popup": {
+    "title": "RUAF Roadblock",
+    "description": "PvE only",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "57"
+  },
+  {
+   "categoryId": "exfil_shared",
+   "position": [
+    3974.6821040669,
+    1400.0624628277
+   ],
+   "popup": {
+    "title": "Crossroads",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "58"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    3655.4990682268,
+    1945.3077710218
+   ],
+   "popup": {
+    "title": "Trailer Park Workers' Shack",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "59"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    3329.3415958709,
+    1915.4418061067
+   ],
+   "popup": {
+    "title": "Railroad to Tarkov",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "60"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    3241.1354869948,
+    859.4119184667
+   ],
+   "popup": {
+    "title": "Railroad to Port",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "61"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    2624.513246805,
+    550.414050691
+   ],
+   "popup": {
+    "title": "Sniper Roadblock",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "62"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    1956.198124204,
+    208.8699390975
+   ],
+   "popup": {
+    "title": "Old Road Gate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "63"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    781.6209627513,
+    229.1634793604
+   ],
+   "popup": {
+    "title": "Railroad to Military Base",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "64"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    609.3113547142,
+    281.2374694688
+   ],
+   "popup": {
+    "title": "Passage Between Rocks",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "65"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    159.6653299317,
+    429.4186030861
+   ],
+   "popup": {
+    "title": "Military Base CP",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "66"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    131.3573228971,
+    1156.9228766597
+   ],
+   "popup": {
+    "title": "Scav Checkpoint",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "67"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    59.1513919101,
+    1259.9221659183
+   ],
+   "popup": {
+    "title": "Administration Gate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "68"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    128.895757068,
+    1689.1496873267
+   ],
+   "popup": {
+    "title": "Factory Far Corner",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "69"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    1353.9350180173,
+    1151.1794218683
+   ],
+   "popup": {
+    "title": "Warehouse 4",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "70"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    1865.5304494988,
+    1032.48135618
+   ],
+   "popup": {
+    "title": "Factory Shacks",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "71"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    1505.7315774785,
+    1840.0110998467
+   ],
+   "popup": {
+    "title": "Old Gas Station Gate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "72"
+  },
+  {
+   "categoryId": "exfil_scav",
+   "position": [
+    2486.6655603753,
+    1345.6910908027
+   ],
+   "popup": {
+    "title": "Warehouse 17",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "73"
+  },
+  {
+   "categoryId": "exfil_transit",
+   "position": [
+    1305.5242233783,
+    1803.635886168
+   ],
+   "popup": {
+    "title": "Transit to Factory",
+    "description": "Only available 1 min after raid start",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "555"
+  },
+  {
+   "categoryId": "exfil_transit",
+   "position": [
+    130.1265399825,
+    435.1620578775
+   ],
+   "popup": {
+    "title": "Transit to Reserve",
+    "description": "Only available 1 min after raid start",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "558"
+  },
+  {
+   "categoryId": "exfil_transit",
+   "position": [
+    3987.400194184,
+    1863.7507129843
+   ],
+   "popup": {
+    "title": "Transit to Interchange",
+    "description": "Only available 1 min after raid start",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "559"
+  },
+  {
+   "categoryId": "exfil_shared",
+   "position": [
+    2246.2526310664,
+    1270.2603845427
+   ],
+   "popup": {
+    "title": "Boiler Room Basement (Co-op)",
+    "description": "Requires PMC + Scav",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "563"
+  },
+  {
+   "categoryId": "exfil_pmc",
+   "position": [
+    1959.0699510046,
+    2104.5929172358
+   ],
+   "popup": {
+    "title": "Railroad Passage (Flare)",
+    "description": "Requires a green flare to be shot into the sky while inside the signal flare area.",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "565"
+  },
+  {
+   "categoryId": "exfil_transit",
+   "position": [
+    2608.1028079443,
+    541.990316997
+   ],
+   "popup": {
+    "title": "Transit to Shoreline",
+    "description": "Only available 1 min after raid start",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "569"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    1230.8567265622,
+    1245.7549774329
+   ],
+   "popup": {
+    "title": "Cabin",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "327"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    1280.9085650873,
+    1080.3434794414
+   ],
+   "popup": {
+    "title": "Guard Building",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "328"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    1285.421435774,
+    1108.2949594261
+   ],
+   "popup": {
+    "title": "Guard Building",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "329"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    1383.884068938,
+    158.3275369335
+   ],
+   "popup": {
+    "title": "Gas Station Storage Room",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "330"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    1383.884068938,
+    134.5879237958
+   ],
+   "popup": {
+    "title": "Gas Station Office",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "331"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    422.642612674,
+    1022.9089315277
+   ],
+   "popup": {
+    "title": "Military Checkpoint Building",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "332"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    1173.0099295783,
+    1691.4470692432
+   ],
+   "popup": {
+    "title": "USEC Stash",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "334"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    1890.5563687613,
+    996.8719364735
+   ],
+   "popup": {
+    "title": "Bunkhouse",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "335"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3443.8044069241,
+    1865.2823009287
+   ],
+   "popup": {
+    "title": "Trailer Park Cabin",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "336"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3680.9352484609,
+    1906.2522784405
+   ],
+   "popup": {
+    "title": "Portable Cabin",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "337"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3726.8844772708,
+    844.4789360092
+   ],
+   "popup": {
+    "title": "Tarcone Director's Office",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "338"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2570.3587985647,
+    351.6905149096
+   ],
+   "popup": {
+    "title": "Dorm Room 206",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "339"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2818.5666863324,
+    111.2312076442
+   ],
+   "popup": {
+    "title": "Dorm Room 110",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "340"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2784.5150256965,
+    111.2312076442
+   ],
+   "popup": {
+    "title": "Dorm Room 114",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "341"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2835.3873861646,
+    361.2629395619
+   ],
+   "popup": {
+    "title": "Dorm Guard Desk",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "342"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2818.5666863324,
+    386.5341406439
+   ],
+   "popup": {
+    "title": "Dorm Room 105",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "343"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2784.5150256965,
+    386.5341406439
+   ],
+   "popup": {
+    "title": "Dorm Room 104",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "344"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3932.8354849722,
+    137.2682026984
+   ],
+   "popup": {
+    "title": "Dorm Room 108",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "345"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3745.346220989,
+    153.3498761143
+   ],
+   "popup": {
+    "title": "Dorm Room 118",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "346"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3899.1940853078,
+    445.500276502
+   ],
+   "popup": {
+    "title": "Dorm Room 103",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "347"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3418.3682266901,
+    153.3498761143
+   ],
+   "popup": {
+    "title": "Dorm Room 220",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "348"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3452.419887326,
+    153.3498761143
+   ],
+   "popup": {
+    "title": "Dorm Room 218",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "349"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3605.8574906733,
+    68.346745202
+   ],
+   "popup": {
+    "title": "Dorm Room 214",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "350"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3571.3955690659,
+    445.500276502
+   ],
+   "popup": {
+    "title": "Dorm Room 203",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "351"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3605.4472297018,
+    445.500276502
+   ],
+   "popup": {
+    "title": "Dorm Room 204",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "352"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3246.4688796245,
+    444.7344825298
+   ],
+   "popup": {
+    "title": "Dorm Room 303",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "353"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3280.9308012319,
+    377.3446129777
+   ],
+   "popup": {
+    "title": "Dorm Room 306",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "354"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3246.4688796245,
+    170.1973435023
+   ],
+   "popup": {
+    "title": "Dorm Room 315",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "355"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3280.9308012319,
+    136.1195117402
+   ],
+   "popup": {
+    "title": "Dorm Room 308",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "356"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3246.4688796245,
+    67.9638482159
+   ],
+   "popup": {
+    "title": "Marked Dorm Room 314",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "357"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2295.4839476485,
+    1059.2841452064
+   ],
+   "popup": {
+    "title": "Tanker Truck",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "360"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    3571.3955690659,
+    265.9215900251
+   ],
+   "popup": {
+    "title": "Dorm Overseer Room",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "546"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2297.9455134776,
+    1293.9999976804
+   ],
+   "popup": {
+    "title": "Company Director's Room",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "572"
+  },
+  {
+   "categoryId": "locked",
+   "position": [
+    2342.6639593729,
+    1485.06559374
+   ],
+   "popup": {
+    "title": "Reshala's Bunkhouse",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "575"
+  },
+  {
+   "categoryId": "lever",
+   "position": [
+    1301.8318746346,
+    1201.3389270463
+   ],
+   "popup": {
+    "title": "ZB-013 power lever",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "359"
+  },
+  {
+   "categoryId": "stationarygun",
+   "position": [
+    2205.6367948863,
+    1825.8439113613
+   ],
+   "popup": {
+    "title": "AGS-30 automatic grenade launcher",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "389"
+  },
+  {
+   "categoryId": "stationarygun",
+   "position": [
+    2244.2013262088,
+    1983.5974696309
+   ],
+   "popup": {
+    "title": "NSV \"Utyos\" heavy machine gun",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "390"
+  },
+  {
+   "categoryId": "stationarygun",
+   "position": [
+    2244.6115871804,
+    1878.3007984558
+   ],
+   "popup": {
+    "title": "NSV \"Utyos\" heavy machine gun",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "391"
+  },
+  {
+   "categoryId": "stationarygun",
+   "position": [
+    2416.9211952174,
+    1079.5776854693
+   ],
+   "popup": {
+    "title": "NSV \"Utyos\" heavy machine gun",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "392"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    4004.2208940161,
+    1408.1032995356
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "420"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3982.4770625258,
+    1411.9322693965
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "75"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3663.2940266856,
+    1295.1486886387
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "76"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3678.4736826318,
+    1311.6132590406
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "77"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3665.7555925147,
+    1408.1032995356
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "78"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    3733.8589137865,
+    1520.6750134465
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "79"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3820.4239787766,
+    1513.0170737247
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "80"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3838.4754615233,
+    1520.6750134465
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "81"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3745.346220989,
+    1711.7406095061
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "82"
+  },
+  {
+   "categoryId": "container_medical",
+   "position": [
+    3689.9609898342,
+    1704.4655667703
+   ],
+   "popup": {
+    "title": "Medbag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "83"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3714.9869090968,
+    1947.6051529383
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "84"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3670.2684632014,
+    1902.8062055657
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "85"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3670.2684632014,
+    1903.9548965239
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "87"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3670.2684632014,
+    1905.4864844683
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "86"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3415.0861389179,
+    1769.940951392
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "88"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    3407.7014414306,
+    1769.940951392
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "424"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3399.9064829718,
+    1776.4502001555
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "92"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3401.5475268579,
+    1791.7660795992
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "89"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3404.009092687,
+    1791.7660795992
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "90"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    4030.4775961932,
+    1098.3396377877
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "93"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3832.3215469506,
+    1025.2063134443
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "94"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3840.9370273524,
+    762.5389809856
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "95"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3710.0637774386,
+    685.5766867813
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "96"
+  },
+  {
+   "categoryId": "container_safe",
+   "position": [
+    3666.1658534863,
+    736.1190889453
+   ],
+   "popup": {
+    "title": "Safe",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "97"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    3692.4225556633,
+    771.7285086518
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "98"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    3663.7042876572,
+    771.3456116657
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "99"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3668.2171583438,
+    810.0182072609
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "100"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    3706.7816896664,
+    835.289408343
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "101"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    3485.6510260188,
+    1176.4506229504
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "102"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    3482.3689382467,
+    1184.4914596583
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "103"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3164.8269462927,
+    1038.2248109714
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "104"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2837.0284300507,
+    1364.8359401073
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "105"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2862.8748712563,
+    1490.8090485314
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "106"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2731.1810993994,
+    1526.4184682379
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "107"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2736.5144920291,
+    1644.350739954
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "108"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    2567.8972327356,
+    1514.9315586551
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "109"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    2566.2561888496,
+    1515.6973526273
+   ],
+   "popup": {
+    "title": "Unknown Key",
+    "description": "Unknown key\nInside the Dead Scav",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "110"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2514.5633064385,
+    1384.7465833841
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "111"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2610.1541128019,
+    1143.1385851604
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "112"
+  },
+  {
+   "categoryId": "container_cash",
+   "position": [
+    2615.0772444601,
+    885.0660165348
+   ],
+   "popup": {
+    "title": "Cash Register",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "113"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2663.8983000706,
+    786.6614911094
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "114"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    2301.6378622212,
+    855.2000516197
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "115"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2240.0987164937,
+    417.1658995312
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "116"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2281.1248136454,
+    934.4597277406
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "117"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2234.3550628924,
+    938.6715945876
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "118"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    2229.8421922058,
+    939.0544915737
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "119"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1899.9923711062,
+    788.1930790537
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "120"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1666.1436173416,
+    924.8873030883
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "121"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1594.3479473262,
+    778.6206544015
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "122"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1515.1675798234,
+    451.6266282794
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "123"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1329.7296206978,
+    721.1861064877
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "124"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1897.9410662486,
+    992.6600696265
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "125"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1864.2996665842,
+    1044.7340597349
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "On the second floor",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "126"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    1819.9914816604,
+    1062.7302180812
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "On the second floor",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "127"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1797.427128227,
+    1132.4174695499
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "On the second floor",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "128"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1804.4015647428,
+    1287.4907489169
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "129"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    1784.2987771385,
+    1325.3975505399
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "130"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    2231.8934970633,
+    1385.8952743423
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "131"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2306.1507329079,
+    1392.0216261198
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "132"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2299.1762963921,
+    1543.648832612
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "133"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    2768.1045868359,
+    1866.430991887
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "134"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    2766.4635429498,
+    1912.3786302179
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "135"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2737.3350139721,
+    1918.5049819954
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "136"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2836.2079081077,
+    1941.0959041748
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "137"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2814.4640766173,
+    1940.7130071887
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "140"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2759.8993674055,
+    1934.9695523973
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "139"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2814.8743375888,
+    1948.3709469105
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "138"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2817.7461643894,
+    1990.1067183945
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "141"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    2768.5148478074,
+    1976.3224268952
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "142"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    2672.1035195009,
+    2016.9095074209
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "143"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    2667.5906488142,
+    2016.9095074209
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "144"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1934.8645536851,
+    1940.7130071887
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "145"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    1904.5052417929,
+    2037.5859446698
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "146"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    1857.73549104,
+    2089.2770377921
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "147"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1782.2474722809,
+    1960.6236504655
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "148"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1550.0397624023,
+    1853.795391346
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "149"
+  },
+  {
+   "categoryId": "container_medical",
+   "position": [
+    1520.0907114816,
+    1794.8292554879
+   ],
+   "popup": {
+    "title": "Medbag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "150"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1331.7809255554,
+    1688.0009963684
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "151"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    1836.8121814926,
+    1542.5001416537
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "152"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2396.4081466416,
+    1830.8215721805
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "153"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2405.8441489865,
+    1830.8215721805
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "540"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2417.331456189,
+    1830.0557782083
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "539"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    2430.049546306,
+    1845.371657652
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "156"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2393.536319841,
+    1854.5611853181
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "157"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2373.8437932082,
+    1856.8585672347
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "158"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2370.561705436,
+    1856.8585672347
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "159"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2359.0743982336,
+    1942.2445951331
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "160"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2358.664137262,
+    1952.9657107436
+   ],
+   "popup": {
+    "title": "Weapon Box (5x5)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "537"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2393.1260588695,
+    1978.6198088117
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "162"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2411.1775416162,
+    2064.0058367101
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "163"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    2154.7644344182,
+    2028.0135200175
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "164"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    2172.4056561934,
+    1966.3671052568
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "165"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2182.6621804813,
+    1843.8400697076
+   ],
+   "popup": {
+    "title": "Ration Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "166"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2143.6873881872,
+    1939.9472132165
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "167"
+  },
+  {
+   "categoryId": "container_safe",
+   "position": [
+    2721.3348360829,
+    99.3614010754
+   ],
+   "popup": {
+    "title": "Safe",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "168"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    2721.7450970545,
+    108.1680317555
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "169"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    2770.566152665,
+    123.1010142131
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "170"
+  },
+  {
+   "categoryId": "container_safe",
+   "position": [
+    2846.8746933671,
+    100.5100920337
+   ],
+   "popup": {
+    "title": "Safe",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "171"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    2761.5404112916,
+    238.3530070266
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "172"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2848.5157372532,
+    239.5016979848
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "173"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2826.3616447913,
+    237.9701100405
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "452"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2832.9258203355,
+    237.9701100405
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "453"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2869.028785829,
+    296.1704519263
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "176"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2817.7461643894,
+    306.8915675369
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "177"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2816.5153814749,
+    321.8245499945
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "178"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    2866.9774809714,
+    339.0549143686
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "179"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    2882.9776588606,
+    352.8392058679
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "181"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2873.5416565157,
+    364.7090124367
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "180"
+  },
+  {
+   "categoryId": "container_safe",
+   "position": [
+    2834.1566032501,
+    376.1959220194
+   ],
+   "popup": {
+    "title": "Safe",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "182"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    2749.6428431176,
+    373.1327461307
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "183"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2755.7967576904,
+    398.7868441988
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "185"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2761.9506722631,
+    398.7868441988
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "184"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2548.6149670744,
+    122.3352202409
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "186"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2553.5380987326,
+    157.1788459752
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "187"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2542.4610525016,
+    157.1788459752
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "188"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2550.6662719319,
+    188.5763988347
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "189"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2521.5377429542,
+    201.9777933479
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "190"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2514.1530454669,
+    201.9777933479
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "191"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    2521.1274819827,
+    375.4301280473
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "192"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2537.1276598719,
+    408.7421658372
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "193"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2528.9224404415,
+    408.7421658372
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "194"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    2623.2824638904,
+    442.8199975993
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "195"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    2617.9490712607,
+    442.8199975993
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "196"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2654.0520367542,
+    203.5093812922
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "197"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2647.8981221814,
+    203.5093812922
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "198"
+  },
+  {
+   "categoryId": "container_grenade",
+   "position": [
+    1857.3252300685,
+    365.0919094228
+   ],
+   "popup": {
+    "title": "Grenade Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "199"
+  },
+  {
+   "categoryId": "container_cash",
+   "position": [
+    1995.9934384412,
+    553.8601235658
+   ],
+   "popup": {
+    "title": "Cash Register",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "200"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3870.8860782732,
+    468.0911986814
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "201"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3860.2192930137,
+    468.0911986814
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "202"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3949.2459238329,
+    458.135877043
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "203"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3842.167810267,
+    397.6381532406
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "204"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3837.2446786088,
+    397.6381532406
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "206"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    3863.5013807859,
+    388.8315225605
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "205"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3982.8873234973,
+    296.1704519263
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "207"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    3971.8102772663,
+    147.989318309
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "208"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    3994.3746306997,
+    126.929984074
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "209"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    3756.8335281915,
+    94.7666372423
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "210"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3758.064311106,
+    200.4462054035
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "211"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3758.064311106,
+    195.0856475982
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "212"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3417.1374437755,
+    92.4692553257
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "213"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3420.0092705761,
+    75.6217879377
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "214"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3428.624750978,
+    172.4947254188
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "215"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3429.445272921,
+    209.2528360836
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "216"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3599.7035761005,
+    172.1118284327
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "217"
+  },
+  {
+   "categoryId": "container_safe",
+   "position": [
+    3636.627063537,
+    52.6479687722
+   ],
+   "popup": {
+    "title": "Safe",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "218"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3616.1140149612,
+    206.1896601949
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "219"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3634.5757586795,
+    210.4015270419
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "220"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3657.1401121129,
+    226.8660974438
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "221"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    3666.5761144578,
+    417.1658995312
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "222"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3612.8319271891,
+    466.9425077231
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "223"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3619.3961027333,
+    466.9425077231
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "326"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3527.4976451136,
+    457.7529800569
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "225"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3537.34390843,
+    424.440942267
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "226"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3191.9041704128,
+    466.559610737
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "228"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3198.8786069286,
+    466.559610737
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "229"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3212.8274799601,
+    432.0988819888
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "230"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3337.9570762728,
+    115.0601775051
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "231"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    3332.2134226715,
+    115.0601775051
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "232"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3054.0564839831,
+    174.0263133632
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "233"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1058.1368575536,
+    173.6434163771
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "235"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    953.9305707883,
+    422.1435603504
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "236"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    537.5156846987,
+    293.8730700098
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "237"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    97.7159232327,
+    424.440942267
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "238"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    492.7972388034,
+    553.8601235658
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "239"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    738.543560742,
+    536.2468622056
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "240"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    762.33869709,
+    556.9232994546
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "241"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    831.6728012763,
+    548.4995657605
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "242"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    720.0818170237,
+    564.5812391764
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "243"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    784.0825285804,
+    603.2538347716
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "244"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    761.1079141754,
+    612.4433624378
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "245"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    592.9009158535,
+    883.5344285905
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "246"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    598.2343084832,
+    882.7686346183
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "247"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    430.4375711328,
+    1036.693223027
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "248"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    416.8989590728,
+    1056.9867632899
+   ],
+   "popup": {
+    "title": "Jacket (114 key)",
+    "description": "Has a chance to spawn the Dorm room 114 key",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "249"
+  },
+  {
+   "categoryId": "container_grenade",
+   "position": [
+    386.9499081521,
+    346.3299571043
+   ],
+   "popup": {
+    "title": "Grenade Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "250"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    354.5392914022,
+    351.3076179235
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "251"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    386.9499081521,
+    338.2891203964
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "473"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    305.3079748202,
+    1187.1717385609
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "253"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    64.8950455113,
+    1238.8628316833
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "254"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    116.1776669509,
+    1102.1686076486
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "255"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    139.9728032989,
+    1133.5661605081
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "256"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1103.675825392,
+    793.9365338451
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "257"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1163.984188205,
+    1007.210155098
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "258"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    1179.1638441511,
+    926.8017880188
+   ],
+   "popup": {
+    "title": "EMERCOM Medical Unit Key",
+    "description": "EMERCOM medical unit key\nOn the seat in the back of the ambulance",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "259"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    977.3154461648,
+    1044.3511627488
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "260"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1002.3413654273,
+    1087.6185221772
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "261"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1391.2687664253,
+    123.1010142131
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "262"
+  },
+  {
+   "categoryId": "container_cash",
+   "position": [
+    1367.0633691058,
+    193.93695664
+   ],
+   "popup": {
+    "title": "Cash Register",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "263"
+  },
+  {
+   "categoryId": "container_cash",
+   "position": [
+    1367.0633691058,
+    236.8214190822
+   ],
+   "popup": {
+    "title": "Cash Register",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "264"
+  },
+  {
+   "categoryId": "container_cash",
+   "position": [
+    1367.0633691058,
+    225.7174064855
+   ],
+   "popup": {
+    "title": "Cash Register",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "265"
+  },
+  {
+   "categoryId": "container_cash",
+   "position": [
+    1367.0633691058,
+    208.1041451253
+   ],
+   "popup": {
+    "title": "Cash Register",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "266"
+  },
+  {
+   "categoryId": "container_medical",
+   "position": [
+    1372.8070227071,
+    156.413052003
+   ],
+   "popup": {
+    "title": "Medbag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "267"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    1375.6788495077,
+    162.5394037805
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "471"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1417.5254686024,
+    162.9223007666
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "269"
+  },
+  {
+   "categoryId": "container_safe",
+   "position": [
+    1376.9096324222,
+    123.1010142131
+   ],
+   "popup": {
+    "title": "Safe",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "415"
+  },
+  {
+   "categoryId": "container_drawer",
+   "position": [
+    1273.9341285715,
+    1085.3211402606
+   ],
+   "popup": {
+    "title": "Drawer",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "271"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1263.6776042836,
+    1105.2317835374
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "272"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1325.6270109826,
+    1149.647833924
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "273"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    1308.8063111504,
+    1280.2157061811
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "274"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1422.0383392891,
+    1303.9553193188
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "275"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1388.8072005962,
+    1294.7657916526
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "On the second floor",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "516"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1338.3451010996,
+    1380.151819551
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "277"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1515.5778407949,
+    1145.435967077
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "278"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1484.8082679312,
+    1157.6886706319
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "279"
+  },
+  {
+   "categoryId": "container_medcase",
+   "position": [
+    1575.4759426364,
+    1260.6879598905
+   ],
+   "popup": {
+    "title": "Medcase",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "280"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1231.6772485053,
+    1329.992314373
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "281"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1225.933594904,
+    1408.1032995356
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "282"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    1185.3177587239,
+    1477.0247570321
+   ],
+   "popup": {
+    "title": "Jacket (204 key)",
+    "description": "Has a chance to spawn the Dorm room 204 key",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "283"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1045.4187674366,
+    1374.7912617457
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "284"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    994.95666794,
+    1367.899115996
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "285"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    841.1088036212,
+    1226.6101281283
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "286"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    850.9550669376,
+    1296.680276583
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "287"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    850.1345449946,
+    1510.336794822
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "Inside bunker",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "288"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    852.1858498522,
+    1509.1881038637
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "Inside bunker",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "289"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    743.8769533717,
+    1602.9978654561
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "413"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    643.3630153501,
+    1435.6718825342
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "292"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    644.5937982646,
+    1433.3745006177
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "291"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    512.4897654362,
+    1526.0355712518
+   ],
+   "popup": {
+    "title": "Weapon Box (5x5)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "293"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    453.0019245663,
+    1515.6973526273
+   ],
+   "popup": {
+    "title": "Weapon Box (5x5)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "294"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    428.7965272468,
+    1505.7420309889
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "414"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    431.2580930759,
+    1488.8945636009
+   ],
+   "popup": {
+    "title": "Dead Scav",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "295"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    105.5108816915,
+    1626.3545816077
+   ],
+   "popup": {
+    "title": "Ground Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "297"
+  },
+  {
+   "categoryId": "container_grenade",
+   "position": [
+    324.17997951,
+    1574.6634884854
+   ],
+   "popup": {
+    "title": "Grenade Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "298"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    270.4357922413,
+    1521.0579104326
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "299"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    241.7175242351,
+    1538.6711717928
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "300"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    241.3072632636,
+    1547.0949054868
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "301"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    325.821023396,
+    1526.801365224
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "302"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    318.8465868803,
+    1537.1395838484
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "304"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    322.9491965954,
+    1536.3737898762
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "303"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    309.0003235639,
+    1536.3737898762
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "305"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    299.9745821905,
+    1537.1395838484
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "306"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    287.666753045,
+    1539.0540687789
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "486"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1216.4975925591,
+    1688.7667903406
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "308"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1209.1128950718,
+    1698.722111979
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "502"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    1193.9332391257,
+    1709.8261245756
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "310"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1204.6000243851,
+    1709.8261245756
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "312"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1218.5488974167,
+    1715.9524763531
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "309"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1008.9055409716,
+    1669.2390440499
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "313"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    1002.3413654273,
+    1727.4393859358
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "314"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    1002.3413654273,
+    1722.0788281305
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "315"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    915.3660394658,
+    1904.33779351
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "316"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    969.9307486775,
+    1903.5719995378
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "317"
+  },
+  {
+   "categoryId": "container_pc",
+   "position": [
+    979.3667510224,
+    1903.9548965239
+   ],
+   "popup": {
+    "title": "PC",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "494"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1019.572326231,
+    1905.1035874822
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "319"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    1011.3671068007,
+    1989.7238214084
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "320"
+  },
+  {
+   "categoryId": "container_tool",
+   "position": [
+    986.3411875382,
+    1969.0473841595
+   ],
+   "popup": {
+    "title": "Toolbox",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "321"
+  },
+  {
+   "categoryId": "container_medical",
+   "position": [
+    947.7766562156,
+    1968.6644871734
+   ],
+   "popup": {
+    "title": "Medbag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "322"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    971.5717925636,
+    1960.6236504655
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "497"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    930.5456954119,
+    1941.0959041748
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "324"
+  },
+  {
+   "categoryId": "container_safe",
+   "position": [
+    3624.3192343915,
+    458.5187740291
+   ],
+   "popup": {
+    "title": "Weapon Locker with Safe",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "224"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3639.9091513092,
+    53.4137627444
+   ],
+   "popup": {
+    "title": "Dorm Room 203 Key",
+    "description": "Dorm room 203 key\nIn the red mug on the nightstand",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "383"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3529.1386889996,
+    424.440942267
+   ],
+   "popup": {
+    "title": "Machinery Key",
+    "description": "Machinery key\nInside the Yellow Jacket",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "384"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    2764.8224990637,
+    238.3530070266
+   ],
+   "popup": {
+    "title": "Dorm Guard Desk Key",
+    "description": "Dorm guard desk key\nIn the open hand of the Dead Scav",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "394"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3991.9130648706,
+    1419.2073121323
+   ],
+   "popup": {
+    "title": "Health Resort East Wing Room 310 Key",
+    "description": "Health Resort east wing room 310 key\nOn the driver seat of the blue van",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "395"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3615.2934930182,
+    1943.0103891053
+   ],
+   "popup": {
+    "title": "Health Resort East Wing Room 310 Key",
+    "description": "Health Resort east wing room 310 key\nOn a seat in the white bus",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "396"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3684.6275972045,
+    739.9480588062
+   ],
+   "popup": {
+    "title": "Health Resort East Wing Room 306 Key",
+    "description": "Health Resort east wing room 306 key\nOn the desk",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "397"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    1047.8803332657,
+    1033.6300471383
+   ],
+   "popup": {
+    "title": "Goshan Cash Register Key",
+    "description": "Goshan cash register key\nOn a seat in the white bus",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "398"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    839.8780207067,
+    1274.8551483758
+   ],
+   "popup": {
+    "title": "RB-MP11 Key",
+    "description": "RB-MP11 key\nOn the desk",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "399"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    2621.2311590328,
+    1038.6077079575
+   ],
+   "popup": {
+    "title": "RB-ORB3 Key",
+    "description": "RB-ORB3 key\nOn the floor next to the passenger seat in the Tigr vehicle",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "400"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    754.1334776596,
+    611.2946714795
+   ],
+   "popup": {
+    "title": "TerraGroup Labs Arsenal Storage Room Key",
+    "description": "TerraGroup Labs arsenal storage room key\nOn the chair",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "401"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3533.2412987148,
+    72.9415090351
+   ],
+   "popup": {
+    "title": "TerraGroup Labs Arsenal Storage Room Key",
+    "description": "TerraGroup Labs arsenal storage room key\nIn the nightstand",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "402"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    1363.3710203622,
+    185.1303259599
+   ],
+   "popup": {
+    "title": "TerraGroup Labs Arsenal Storage Room Key",
+    "description": "TerraGroup Labs arsenal storage room key\nOn the sideboard",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "403"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    1273.9341285715,
+    1088.3843161494
+   ],
+   "popup": {
+    "title": "TerraGroup Labs Arsenal Storage Room Key",
+    "description": "TerraGroup Labs arsenal storage room key\nIn the top compartment of the desk",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "404"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    1341.2169279003,
+    1074.9829216362
+   ],
+   "popup": {
+    "title": "OLI Logistics Department Office Key",
+    "description": "OLI logistics department office key\nIn the trunk",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "405"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3405.2398756015,
+    183.9816350016
+   ],
+   "popup": {
+    "title": "ZB-014 Key",
+    "description": "ZB-014 key\nOn the desk",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "406"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3836.0138956942,
+    365.0919094228
+   ],
+   "popup": {
+    "title": "Factory Emergency Exit Key",
+    "description": "Factory emergency exit key\nOn the desk next to the TV",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "407"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    501.4127192053,
+    1478.1734479904
+   ],
+   "popup": {
+    "title": "Factory Emergency Exit Key",
+    "description": "Factory emergency exit key\nIn the blue locker",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "408"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    2857.9517395981,
+    366.6234973672
+   ],
+   "popup": {
+    "title": "Key box on the wall",
+    "description": "Can contain different Customs keys",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "409"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    1115.573393566,
+    1926.1629217172
+   ],
+   "popup": {
+    "title": "Dorm Room 110 Key",
+    "description": "Dorm room 110 key\nIn the red box attached to the blue locker",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "411"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    3833.1420688936,
+    1620.6111268163
+   ],
+   "popup": {
+    "title": "Dorm Room 214 Key",
+    "description": "Dorm room 214 key\nIn garage #88 between the pallets",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "412"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    746.7487801723,
+    1598.7859986091
+   ],
+   "popup": {
+    "title": "Dorm Room 220 Key",
+    "description": "Dorm room 220 key\nUnder the blue pants",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "290"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    431.2580930759,
+    1490.4261515453
+   ],
+   "popup": {
+    "title": "Military Checkpoint Key",
+    "description": "Military checkpoint key\nNext to the Dead Scav",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "296"
+  },
+  {
+   "categoryId": "loot_key",
+   "position": [
+    1362.9607593906,
+    128.8444690044
+   ],
+   "popup": {
+    "title": "Gas Station Storage Room Key",
+    "description": "Gas station storage room key\nOn the ground under the desk",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "270"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2389.0234491543,
+    1462.4746715606
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "417"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3699.3969921791,
+    1932.6721704808
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "419"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    4005.8619379022,
+    1401.9769477582
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "74"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3991.0925429276,
+    1414.2296513131
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "421"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3146.3652025744,
+    1041.6708838462
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "422"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3353.1367322189,
+    1376.7057466761
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "423"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3402.7783097724,
+    1787.5542127522
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "91"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3701.8585580082,
+    769.4311267353
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "425"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3835.6036347227,
+    809.2524132888
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "426"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3938.1688776019,
+    968.5375595028
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "427"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3938.1688776019,
+    1108.6778564122
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "428"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    4044.8367301963,
+    1058.1354542481
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "429"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3721.551084641,
+    1718.2498582696
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "430"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3683.8070752615,
+    1303.9553193188
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "431"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3814.2700642038,
+    1511.1025887942
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "432"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2988.4147285404,
+    1235.7996557945
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "433"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2878.0545272024,
+    1146.5846580352
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "434"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2841.5413007374,
+    1354.4977214828
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "435"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2738.5657968867,
+    1660.8153103559
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "436"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2675.7958682446,
+    785.129903165
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "437"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2260.201504098,
+    417.1658995312
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "438"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2267.9964625568,
+    389.5973165326
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "439"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2081.3277205167,
+    864.3895792859
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "440"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1849.9405325812,
+    901.1476899507
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "441"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1456.910521868,
+    953.9874740313
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "442"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1372.3967617355,
+    751.434968389
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "443"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1833.119832749,
+    977.727087169
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "444"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1859.7867958976,
+    999.5522153762
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "445"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2042.3529282226,
+    992.2771726404
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "446"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    980.5975339369,
+    165.2196826831
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "447"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    930.5456954119,
+    174.7921073354
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "448"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    878.8528130008,
+    175.1750043215
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "449"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2745.1299724309,
+    364.7090124367
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "450"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2777.1303282092,
+    329.4824897163
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "451"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2865.7466980569,
+    262.0926201642
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "174"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2826.3616447913,
+    234.9069341517
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "175"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2528.51217947,
+    188.5763988347
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "454"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2548.2047061028,
+    88.2573884787
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "455"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3996.8361965288,
+    305.7428765786
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "456"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3636.627063537,
+    261.7097231781
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "457"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3543.0875620312,
+    123.8668081852
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "458"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3509.4461623668,
+    113.5285895608
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "459"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    3405.2398756015,
+    210.0186300558
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "460"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    3090.5697104481,
+    59.5401145219
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "461"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    3239.9047040802,
+    457.7529800569
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "462"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1207.4718511858,
+    953.6045770452
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "463"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1255.4723848532,
+    910.3372176169
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "464"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1160.7021004328,
+    1001.4667003066
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "465"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1102.855303449,
+    1078.8118914971
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "466"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    984.2898826806,
+    1055.4551753455
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "467"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    971.1615315921,
+    932.9281397963
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "468"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1035.9827650917,
+    832.6091294403
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "469"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1424.4999051182,
+    136.5024087263
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "470"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1356.8068448179,
+    146.0748333785
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "268"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    434.540180848,
+    1048.9459265819
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "472"
+  },
+  {
+   "categoryId": "container_grenade",
+   "position": [
+    369.3086863768,
+    362.0287335341
+   ],
+   "popup": {
+    "title": "Grenade Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "252"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    120.6905376376,
+    1132.800366536
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "474"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    265.9229215546,
+    792.4049459007
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "475"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    193.3067295961,
+    486.0873570277
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "476"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    431.2580930759,
+    420.9948693921
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "477"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1082.3422548731,
+    720.4203125156
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "478"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    912.9044736367,
+    684.8108928091
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "479"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    682.7480686157,
+    547.7337717884
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "480"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    807.0571429853,
+    522.0796737202
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "481"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    826.3394086466,
+    556.1575054824
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "482"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    799.672445498,
+    607.4657016186
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "483"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    153.9216763305,
+    1290.9368217917
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "484"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    389.0012130096,
+    1563.9423728748
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "485"
+  },
+  {
+   "categoryId": "container_grenade",
+   "position": [
+    306.5387577348,
+    1581.9385312211
+   ],
+   "popup": {
+    "title": "Grenade Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "307"
+  },
+  {
+   "categoryId": "container_grenade",
+   "position": [
+    311.0516284214,
+    1577.7266643741
+   ],
+   "popup": {
+    "title": "Grenade Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "487"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    294.2309285892,
+    1539.436965765
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "488"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    313.9234552221,
+    1524.1210863213
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "489"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    404.1808689558,
+    1359.8582792881
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "490"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    706.1329439922,
+    1607.2097323031
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "491"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    739.7743436565,
+    1594.191234776
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "492"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    891.5709031178,
+    1980.9171907283
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "493"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    996.1874508546,
+    1907.0180724127
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "318"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    929.3149124973,
+    1963.6868263542
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "495"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1001.9311044558,
+    1957.1775775906
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "496"
+  },
+  {
+   "categoryId": "container_medical",
+   "position": [
+    971.1615315921,
+    1990.1067183945
+   ],
+   "popup": {
+    "title": "Medbag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "323"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    958.443441475,
+    1665.7929711751
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "498"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1179.9843660941,
+    1665.0271772029
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "499"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1198.4461098124,
+    1665.0271772029
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "500"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1200.0871536985,
+    1751.5618960596
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "501"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1214.8565486731,
+    1715.9524763531
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "311"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1550.0397624023,
+    1741.6065744212
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "503"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1524.6035821683,
+    1793.6805645296
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "504"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1698.964495063,
+    1816.6543836951
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "505"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1867.1714933849,
+    2096.1691835418
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "506"
+  },
+  {
+   "categoryId": "container_ammo",
+   "position": [
+    856.6987205389,
+    1503.0617520863
+   ],
+   "popup": {
+    "title": "Ammo Box",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "507"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    859.980808311,
+    1460.1772896441
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "508"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1004.3926702849,
+    1408.8690935078
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "509"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    967.8794438199,
+    1456.3483197831
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "510"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1239.4722069641,
+    1262.985341807
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "511"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1316.6012696092,
+    1144.6701731048
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "512"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    794.7493138398,
+    1242.3089045581
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "513"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1042.546940636,
+    1381.6834074953
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "514"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1229.6259436477,
+    1374.0254677735
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "515"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    1421.6280783176,
+    1291.7026157639
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "276"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1397.8329419696,
+    1294.3828946665
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "On the second floor",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "517"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1534.4498454847,
+    1142.7556881743
+   ],
+   "popup": {
+    "title": "Weapon Box (6x3)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "518"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1569.7322890351,
+    1137.012233383
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "519"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1572.1938548642,
+    1156.9228766597
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "520"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    1778.1448625657,
+    1130.1200876333
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "On the second floor",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "521"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1861.0175788121,
+    1043.9682657628
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "On the second floor",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "522"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    1891.7871516759,
+    988.0653057934
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "523"
+  },
+  {
+   "categoryId": "container_greencrate",
+   "position": [
+    2302.0481231927,
+    932.5452428102
+   ],
+   "popup": {
+    "title": "Wooden Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "524"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2343.8947422874,
+    1386.2781713284
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "525"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    2328.3048253698,
+    1349.9029576497
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "526"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2293.4326427909,
+    1512.6341767386
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "527"
+  },
+  {
+   "categoryId": "container_jacket",
+   "position": [
+    2421.4340659041,
+    1745.4355442821
+   ],
+   "popup": {
+    "title": "Jacket",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "528"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1954.1468193464,
+    1959.4749595072
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "529"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1979.993260552,
+    1909.6983513153
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "530"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1735.0674605564,
+    1200.5731330741
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "531"
+  },
+  {
+   "categoryId": "container_stash",
+   "position": [
+    1783.0679942239,
+    1241.926007572
+   ],
+   "popup": {
+    "title": "Barrel Cache",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "532"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2171.9953952219,
+    1928.8432006199
+   ],
+   "popup": {
+    "title": "Technical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "533"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2171.9953952219,
+    1851.1151124433
+   ],
+   "popup": {
+    "title": "Ration Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "534"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2180.2006146522,
+    2048.3070602804
+   ],
+   "popup": {
+    "title": "Medical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "535"
+  },
+  {
+   "categoryId": "container_crate",
+   "position": [
+    2221.6369727754,
+    1975.9395299091
+   ],
+   "popup": {
+    "title": "Medical Supply Crate",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "536"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2343.0742203444,
+    1918.5049819954
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "161"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2402.5620612144,
+    2084.299376973
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "538"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2408.7159757871,
+    1854.5611853181
+   ],
+   "popup": {
+    "title": "Weapon Box (4x4)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "155"
+  },
+  {
+   "categoryId": "container_weapon",
+   "position": [
+    2412.4083245308,
+    1854.5611853181
+   ],
+   "popup": {
+    "title": "Weapon Box (5x2)",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "154"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2766.4635429498,
+    1906.6351754266
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "541"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2805.8485962154,
+    1931.5234795225
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "542"
+  },
+  {
+   "categoryId": "container_duffle",
+   "position": [
+    2837.0284300507,
+    1948.7538438966
+   ],
+   "popup": {
+    "title": "Sports Bag",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "543"
+  },
+  {
+   "categoryId": "container_dead",
+   "position": [
+    3509.0359013953,
+    283.9177483714
+   ],
+   "popup": {
+    "title": "PMC Body",
+    "description": "",
+    "link": {
+     "url": "",
+     "label": ""
+    }
+   },
+   "id": "547"
+  }
+ ]
+}

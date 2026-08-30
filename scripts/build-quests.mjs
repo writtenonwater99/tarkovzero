@@ -209,6 +209,11 @@ for (const t of tasks) {
   }
   // Several optional objectives of one quest can synthesize to the same sentence ("Locate the
   // objective on Customs" ×7). Identical rows in a checklist are useless — number them.
+  //
+  // The counter is a BUILD ARTIFACT and the panel reads it back as one: src/active-quests.js's
+  // objectiveRows() folds a run of `<same sentence> (n of m)` rows that carry no zone into a single
+  // "<sentence> ×m" row (QA M4 — eight of the eleven visible rows on Abandoned Cargo were these).
+  // Change the `(n of m)` shape here and that fold stops matching; they are one contract.
   const bySynthText = new Map();
   for (const o of objectives) if (o.synth) bySynthText.set(o.text, [...(bySynthText.get(o.text) ?? []), o]);
   for (const [, group] of bySynthText) {

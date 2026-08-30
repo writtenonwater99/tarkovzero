@@ -8,6 +8,10 @@
 // deck takes [-x, -z, y]. This module never converts — it hands raw {x, y, z} to both views.
 import L from 'leaflet';
 import { iconHtml } from './icons.js';
+import { currentTier } from './lod.js';
+// "My quests" is fed by the game itself (companion -> relay -> src/live.js). Everything that turns
+// a set of task ids into rows, and decides what auto-select may add, is pure and lives next door.
+import { activeRows, doneRows, autoSelectSlugs, sinceCaveat, objectiveRows } from './active-quests.js';
 
 // One hue per selected quest so two quests on screen at once stay readable. Deliberately not the
 // extract greens/oranges: a quest pin must never be mistaken for a way out.
@@ -26,14 +30,36 @@ const levelTag = (level) => (level === 'underground' ? '<span class="qtag qtag-u
  * @param {()=>boolean} deps.is3d
  * @param {()=>void} deps.refresh3d     re-render the deck layers
  * @param {(x:number,z:number,y:number)=>number[]|null} deps.project3d  game coords -> screen px
+ * @param {{setOpen(on:boolean):void, isOpen():boolean}} [deps.panel]  the shell's Quests panel
+ * @param {(n:number)=>void} [deps.onSelection]  number of selected quests changed
+ * @param {()=>{left:number,top:number,right:number,bottom:number}} [deps.safeRect]  stage area nothing floats over
+ * @param {()=>void} [deps.afterDraw]   the 2D pins moved — whatever de-conflicts against them re-runs
  */
-export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, project3d }) {
+export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, project3d, panel, onSelection, safeRect, afterDraw }) {
   let all = [];                       // every quest in the file
   let loaded = false, loading = null;
   let selected = [];                  // slugs, in selection order (colour = index)
   let done = new Set(store.get('questDone', []));
   let visible = store.get('questsVisible', true) !== false; // the "Quest objectives" filter row
+  // The quest log the game reported, straight off the live socket. Empty until a companion (or
+  // ?quests=) hands one over — the section stays out of the panel until then.
+  let mine = { active: [], done: [], failed: [], since: null, ts: 0 };
+  let autoOn = store.get('questsAuto', true) !== false;
+  // Slugs auto-select has already put on the map once. Persisted per map, because a page load is
+  // not a new decision: a quest the player deliberately took off the map used to come straight back
+  // on the next load (and a map switch IS a load), appended at the end of `selected` — which also
+  // reshuffled every selected quest's colour, since colourOf is the index in that list. Cleared for
+  // a slug once the game stops reporting it as active, so re-accepting a quest re-adds it.
+  const AUTO_KEY = 'questsAutoApplied';
+  const autoApplied = new Set((store.get(AUTO_KEY, {}) ?? {})[mapKey] ?? []);
+  const saveAutoApplied = () => store.set(AUTO_KEY, { ...(store.get(AUTO_KEY, {}) ?? {}), [mapKey]: [...autoApplied] });
+  let mineForced = false;          // `> my quests` on an empty set: show the section and say why
   const layer = L.layerGroup();
+  // Quest pins get their own pane, explicitly above the place-label panes (450) — a marker should
+  // never be the thing a place name reads THROUGH. Leaflet's default markerPane (600) already sits
+  // above them; this just makes that ordering an explicit, named fact instead of an implicit default.
+  const QUEST_PANE = 'quests';
+  if (!map.getPane(QUEST_PANE)) { map.createPane(QUEST_PANE); map.getPane(QUEST_PANE).style.zIndex = 620; }
   const markerOf = new Map();         // pointId -> L.Marker (for flyTo / popup)
   let card = null;                    // { objectiveId, questSlug, pointId, img }
   let cardRaf = 0;
@@ -50,6 +76,17 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     vis: document.getElementById('quest-vis'),
     visIco: document.getElementById('quest-vis-ico'),
     visN: document.getElementById('quest-vis-n'),
+    mine: document.getElementById('quest-mine'),
+    mineN: document.getElementById('quest-mine-n'),
+    mineSince: document.getElementById('quest-mine-since'),
+    mineList: document.getElementById('quest-mine-list'),
+    mineOther: document.getElementById('quest-mine-other'),
+    mineOtherN: document.getElementById('quest-mine-other-n'),
+    mineOtherList: document.getElementById('quest-mine-other-list'),
+    mineDone: document.getElementById('quest-mine-done'),
+    mineDoneN: document.getElementById('quest-mine-done-n'),
+    mineDoneList: document.getElementById('quest-mine-done-list'),
+    auto: document.getElementById('quest-auto'),
   };
   el.visIco.innerHTML = iconHtml('quest-objective', 17);
 
@@ -204,14 +241,21 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     if (!p) return closeCard();
     const q = project3d?.(p.pin.x, p.pin.z);
     if (q && Number.isFinite(q[0])) {
+      // Keep the card inside the safe rect (chips / dock / omnibox insets) so it never lands under
+      // an open panel; fall back to the whole stage when the shell has not answered.
       const stage = el.card.parentElement.getBoundingClientRect();
+      const safe = safeRect?.() ?? { left: 8, top: 8, right: stage.width - 8, bottom: stage.height - 8 };
       const w = el.card.offsetWidth || 300, h = el.card.offsetHeight || 200;
-      const left = Math.min(Math.max(8, q[0] - w / 2), Math.max(8, stage.width - w - 8));
-      const top = Math.min(Math.max(8, q[1] - h - 26), Math.max(8, stage.height - h - 8));
+      const left = Math.min(Math.max(safe.left, q[0] - w / 2), Math.max(safe.left, safe.right - w));
+      const top = Math.min(Math.max(safe.top, q[1] - h - 26), Math.max(safe.top, safe.bottom - h));
       el.card.style.left = `${left}px`; el.card.style.top = `${top}px`;
       el.card.classList.remove('qcard-fixed');
     } else {
-      el.card.classList.add('qcard-fixed'); // off-screen point: park the card in a corner
+      // off-screen point: park the card in the safe rect's top-left corner
+      const stage = el.card.parentElement.getBoundingClientRect();
+      const safe = safeRect?.() ?? { left: 8, top: 8, right: stage.width - 8, bottom: stage.height - 8 };
+      el.card.classList.add('qcard-fixed');
+      el.card.style.left = `${safe.left}px`; el.card.style.top = `${safe.top}px`;
     }
     cardRaf = requestAnimationFrame(positionCard);
   }
@@ -234,12 +278,19 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
 
   /* ------------------------------------------------------------- 2D layer --- */
   function questIcon(p) {
+    // The pin rides the shared marker LOD (src/lod.js), like everything else on the map: below the
+    // `full` tier it loses 30% of its size and shows the objective glyph instead of its number.
+    // Gemini, 2026-08-29: at fit zoom the gold hexes were "disproportionate to the terrain" and
+    // overlapped each other, and the numbers inside them were too small to read anyway. main.js
+    // calls draw2d() again on every tier change, so this is re-evaluated when the camera crosses one.
+    const small = currentTier() !== 'full';
+    const box = small ? 24 : 34;
     return L.divIcon({
       className: '',
       // gold hexagon + numbered badge, with the quest's colour on the ring behind it — the same
       // split the 3D layer uses, so a pin looks like itself in both views
-      html: `<div class="qpin${done.has(p.objectiveId) ? ' qdone' : ''}" style="--qc:${p.color}">${iconHtml('quest-objective', 24, p.badge, p.level)}</div>`,
-      iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -17],
+      html: `<div class="qpin${small ? ' qpin-sm' : ''}${done.has(p.objectiveId) ? ' qdone' : ''}" style="--qc:${p.color}">${iconHtml('quest-objective', small ? 17 : 24, small ? null : p.badge, p.level)}</div>`,
+      iconSize: [box, box], iconAnchor: [box / 2, box / 2], popupAnchor: [0, -box / 2],
     });
   }
   function draw2d() {
@@ -253,7 +304,7 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
           dashArray: p.level === 'underground' ? '5 4' : null, interactive: false, className: 'qzone',
         }).addTo(layer);
       }
-      const m = L.marker([p.pin.z, p.pin.x], { icon: questIcon(p), riseOnHover: true, zIndexOffset: 500 })
+      const m = L.marker([p.pin.z, p.pin.x], { icon: questIcon(p), pane: QUEST_PANE, riseOnHover: true, zIndexOffset: 500 })
         .bindPopup('', { className: 'qpopup', maxWidth: 320, minWidth: 240, autoPanPadding: [24, 24] })
         .bindTooltip(`${esc(p.badge)}. ${esc(p.objective.text)}`, { direction: 'top', offset: [0, -15], className: 'qtip', opacity: 1 });
       m.on('popupopen', (e) => {
@@ -266,6 +317,25 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
       m.addTo(layer);
       markerOf.set(p.id, m);
     }
+    // The place labels de-conflict against these boxes; adding markers to a Leaflet layer raises no
+    // map event, so nothing else would re-run that pass on a fresh selection (QA D6).
+    afterDraw?.();
+  }
+  /**
+   * Where the 2D pins are on screen right now, in map-container px, as boxes a place label must
+   * not print through (QA D6 — a pin landed centred on CRACKHOUSE). Empty in 3D: map3d.js runs the
+   * same de-confliction against the projected pins in its own screen-space pass.
+   */
+  function pinBoxes() {
+    if (!visible || is3d()) return [];
+    const box = currentTier() === 'full' ? 34 : 24;
+    const out = [];
+    for (const p of points()) {
+      const q = map.latLngToContainerPoint([p.pin.z, p.pin.x]);
+      if (!Number.isFinite(q?.x)) continue;
+      out.push({ left: q.x - box / 2, top: q.y - box / 2, right: q.x + box / 2, bottom: q.y + box / 2 });
+    }
+    return out;
   }
 
   /* --------------------------------------------------------- 3D data feed --- */
@@ -310,29 +380,151 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     el.list.innerHTML = selectedQuests().map((q) => {
       const color = colorOf(q.slug);
       const pts = pointsOf(q);
-      const objs = (q.objectives ?? []).map((o) => {
-        const mine = pts.filter((p) => p.objectiveId === o.id);
+      // QA M4: runs of the same synthesised line under a `(n of 7)` counter, with no zone between
+      // them, are one row carrying every id — see objectiveRows() for the rule.
+      const objs = objectiveRows(q.objectives ?? []).map((row) => {
+        const o = row.objective;
+        const mine = pts.filter((p) => row.ids.includes(p.objectiveId));
         const nums = mine.length ? (mine.length > 1 ? `${mine[0].badge}–${mine[mine.length - 1].badge}` : mine[0].badge) : '';
         const off = (o.maps ?? []).length && !(o.maps ?? []).includes(mapKey);
-        return `<label class="qobj${done.has(o.id) ? ' done' : ''}${mine.length ? '' : ' qoff'}" data-obj="${esc(o.id)}">` +
-          `<input type="checkbox" class="vh" data-qdone="${esc(o.id)}"${done.has(o.id) ? ' checked' : ''}>` +
+        const allDone = row.ids.every((id) => done.has(id));
+        return `<label class="qobj${allDone ? ' done' : ''}${mine.length ? '' : ' qoff'}" data-obj="${esc(row.ids[0])}">` +
+          `<input type="checkbox" class="vh" data-qdone="${esc(row.ids.join(' '))}"${allDone ? ' checked' : ''}>` +
           `<span class="qbox" aria-hidden="true"></span>` +
           (nums ? `<span class="qnum" style="background:${esc(color)}">${esc(nums)}</span>` : `<span class="qnum qnum-off">${off ? '—' : '·'}</span>`) +
-          `<span class="qtext">${esc(o.text)}${o.optional ? ' <i>(optional)</i>' : ''}</span>` +
+          `<span class="qtext">${esc(row.text)}${row.count > 1 ? ` <i>×${row.count}</i>` : ''}${row.optional ? ' <i>(optional)</i>' : ''}</span>` +
           (mine.length ? `<button type="button" class="qfly" data-qfly="${esc(mine[0].id)}" title="Fly to" aria-label="Fly to objective">➤</button>` : '') +
         `</label>`;
       }).join('');
+      /*
+       * QA D7. A quest picked on Customs and then looked at on Woods has NOTHING to draw here, and
+       * the panel used to answer that with every one of its objectives listed, greyed, with a dash
+       * where the number goes — ten-plus dead rows burying the search field on a map where not one
+       * of them applies. The count and the map names are the whole answer; the rows stay one click
+       * away for the player who wants to read the quest anyway.
+       */
+      const body = pts.length ? `<div class="qobjs">${objs}</div>` : (() => {
+        const n = (q.objectives ?? []).length;
+        const maps = [...new Set((q.objectives ?? []).flatMap((o) => o.maps ?? []))].filter(Boolean).sort();
+        const where = maps.length ? maps.slice(0, 3).join(', ') + (maps.length > 3 ? ` +${maps.length - 3}` : '')
+          : 'another map';
+        return `<div class="qaway"><span class="qaway-t">${n} objective${n === 1 ? '' : 's'} on ${esc(where)}</span>` +
+          `<button type="button" class="qaway-x" data-qshow="${esc(q.slug)}" aria-expanded="false">Show</button></div>` +
+          `<div class="qobjs" data-qaway="${esc(q.slug)}" hidden>${objs}</div>`;
+      })();
       return `<div class="qsel-q" style="--qc:${esc(color)}">` +
         `<div class="qsel-head"><span class="qdot" style="background:${esc(color)}"></span>` +
           `<b>${esc(q.name)}</b>` +
           `<span class="qmeta">${esc(q.trader ?? '')}${q.minLevel ? ` · Lv ${q.minLevel}` : ''}</span>` +
           `<button type="button" class="qx" data-qremove="${esc(q.slug)}" aria-label="Remove quest">✕</button></div>` +
-        `<div class="qobjs">${objs}</div></div>`;
+        body + '</div>';
     }).join('');
 
+    for (const b of el.list.querySelectorAll('[data-qshow]')) b.onclick = () => {
+      const rows = el.list.querySelector(`[data-qaway="${CSS.escape(b.dataset.qshow)}"]`);
+      if (!rows) return;
+      rows.hidden = !rows.hidden;
+      b.textContent = rows.hidden ? 'Show' : 'Hide';
+      b.setAttribute('aria-expanded', String(!rows.hidden));
+    };
     for (const b of el.list.querySelectorAll('[data-qremove]')) b.onclick = () => deselect(b.dataset.qremove);
     for (const b of el.list.querySelectorAll('.qfly')) b.onclick = (e) => { e.preventDefault(); flyToPoint(b.dataset.qfly); };
-    for (const c of el.list.querySelectorAll('input[data-qdone]')) c.onchange = () => markObjective(c.dataset.qdone, c.checked);
+    // One checkbox can stand for a folded run, so `data-qdone` is a space-separated id list.
+    for (const c of el.list.querySelectorAll('input[data-qdone]')) c.onchange = () => { for (const id of c.dataset.qdone.split(' ')) markObjective(id, c.checked); };
+  }
+
+  /* ---------------------------------------------------------- my quests ---- */
+  // The game's own answer to "what am I on right now". Rows for THIS map come first because that is
+  // the only place their objectives can be drawn; everything else is folded away behind a count so
+  // a 20-quest log does not bury the search field.
+  function mineRowHtml(row, { struck = false } = {}) {
+    const on = selected.includes(row.slug);
+    const badges = struck || row.here ? ''
+      : row.maps.slice(0, 3).map((m) => `<span class="qmap">${esc(m)}</span>`).join('');
+    const label = struck ? 'Show this completed quest on the map' : on ? 'Take this quest off the map' : 'Put this quest on the map';
+    return `<button type="button" class="qmine-row${on ? ' on' : ''}${struck ? ' struck' : ''}" ` +
+        `data-mine="${esc(row.slug)}" aria-pressed="${on}" title="${esc(label)}"` +
+        (on ? ` style="--qc:${esc(colorOf(row.slug))}"` : '') + '>' +
+      `<span class="qmine-nm">${esc(row.name)}</span>` +
+      (row.trader ? `<span class="qmine-tr">${esc(row.trader)}</span>` : '') +
+      badges +
+    `</button>`;
+  }
+  function renderMine() {
+    if (!el.mine) return;
+    const { here, elsewhere } = activeRows(all, mine.active, mapKey);
+    const finished = doneRows(all, mine.done, mapKey);
+    const any = here.length || elsewhere.length || finished.length;
+    el.mine.hidden = !any && !mineForced;
+    if (el.mine.hidden) return;
+
+    el.mineN.textContent = String(here.length + elsewhere.length);
+    el.mineList.innerHTML = here.length
+      ? here.map((r) => mineRowHtml(r)).join('')
+      : `<p class="qmine-empty">${any
+          ? `Nothing active has objectives on ${esc(mapKey)}.`
+          : 'No quest log yet — connect the companion in the Live panel and it fills in from the game.'}</p>`;
+
+    el.mineOther.hidden = !elsewhere.length;
+    el.mineOtherN.textContent = String(elsewhere.length);
+    el.mineOtherList.innerHTML = elsewhere.map((r) => mineRowHtml(r)).join('');
+
+    el.mineDone.hidden = !finished.length;
+    el.mineDoneN.textContent = String(finished.length);
+    el.mineDoneList.innerHTML = finished.map((r) => mineRowHtml(r, { struck: true })).join('');
+
+    // EFT rotates its logs: the companion can only replay as far back as the oldest one it found.
+    const caveat = sinceCaveat(mine.since);
+    el.mineSince.hidden = !caveat;
+    el.mineSince.textContent = caveat;
+
+    el.auto.checked = autoOn;
+    for (const b of el.mine.querySelectorAll('[data-mine]')) b.onclick = () => toggle(b.dataset.mine);
+  }
+  /** Add the active quests that belong on this map. Only ever adds — see autoSelectSlugs(). */
+  function runAutoSelect() {
+    const slugs = autoSelectSlugs({ all, activeIds: mine.active, mapKey, selected, applied: autoApplied, auto: autoOn });
+    const fresh = slugs.filter((s) => bySlug(s) && !selected.includes(s));
+    for (const s of slugs) autoApplied.add(s);
+    // Forget a quest the game no longer calls active: the next time it appears is a new decision.
+    // Only when there is a live set to judge against — an empty one means "no companion", not
+    // "no quests", and must never wipe the record of what the player already took off the map.
+    if (loaded && all.length && mine.active.length) {
+      const live = new Set(activeRows(all, mine.active, mapKey).here.map((r) => r.slug));
+      for (const s of [...autoApplied]) if (!live.has(s)) autoApplied.delete(s);
+    }
+    saveAutoApplied();
+    if (!fresh.length) return 0;
+    selected = [...selected, ...fresh];
+    sync();                     // one redraw for the whole batch, not one per quest
+    return fresh.length;
+  }
+  /** A new set from the relay (or ?quests=). Called by main.js through live.js's onQuests hook. */
+  function setQuestSet(set) {
+    mine = {
+      active: set?.active ?? [], done: set?.done ?? [], failed: set?.failed ?? [],
+      since: set?.since ?? null, ts: set?.ts ?? Date.now(),
+    };
+    load().then(() => { runAutoSelect(); renderMine(); });
+  }
+  function setAutoSelect(on) {
+    autoOn = !!on;
+    store.set('questsAuto', autoOn);
+    if (el.auto) el.auto.checked = autoOn;
+    // Turning it back on catches up with whatever the game has said since it was off.
+    if (autoOn) load().then(() => { runAutoSelect(); renderMine(); });
+    else renderMine();
+  }
+  /** `> my quests` / the omnibox: open the panel with the section in view, even when it is empty. */
+  function revealMine() {
+    mineForced = true;
+    setOpen(true);
+    load().then(() => {
+      renderMine();
+      el.mine?.scrollIntoView({ block: 'nearest' });
+      el.mine?.classList.add('flash');
+      setTimeout(() => el.mine?.classList.remove('flash'), 1400);
+    });
   }
 
   let results = [], active = 0;
@@ -384,13 +576,17 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     const query = [rest, selected.length ? `quest=${selected.join(',')}` : ''].filter(Boolean).join('&');
     history.replaceState(null, '', url.pathname + (query ? `?${query}` : '') + url.hash);
     if (redraw) { draw2d(); refresh3d?.(); }
-    renderSummary(); renderList();
+    renderSummary(); renderList(); renderMine();
+    onSelection?.(selected.length);
   }
+  // The panel itself is the shell's — this only asks it to show/hide. #quests stays mounted so the
+  // ids inside it exist whether the panel is on screen or not.
+  const panelOpen = () => panel?.isOpen?.() ?? !el.body.hidden;
   function setOpen(open) {
-    el.body.hidden = !open;
-    el.toggle.setAttribute('aria-expanded', String(open));
-    store.set('questsOpen', open);
-    if (open) load().then(() => { renderSummary(); renderList(); });
+    panel?.setOpen?.(!!open);
+    el.toggle.setAttribute('aria-expanded', String(!!open));
+    store.set('questsOpen', !!open);
+    if (open) load().then(() => { renderSummary(); renderList(); renderMine(); });
   }
   function select(slug, { open = true } = {}) {
     const q = bySlug(slug);
@@ -436,8 +632,9 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   }
 
   /* ------------------------------------------------------------------ init -- */
-  el.toggle.onclick = () => setOpen(el.body.hidden);
+  el.toggle.onclick = () => setOpen(!panelOpen());
   el.vis.querySelector('input').onchange = (e) => setVisible(e.target.checked);
+  if (el.auto) { el.auto.checked = autoOn; el.auto.onchange = (e) => setAutoSelect(e.target.checked); }
   el.find.oninput = () => search(el.find.value);
   el.find.onkeydown = (e) => {
     if (e.key === 'ArrowDown') { active = Math.min(active + 1, results.length - 1); renderResults(); e.preventDefault(); }
@@ -450,25 +647,38 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   async function init() {
     const urlQuests = (new URLSearchParams(location.search).get('quest') || '').split(',').map((s) => s.trim()).filter(Boolean);
     const saved = urlQuests.length ? urlQuests : (store.get('quests', []) || []);
+    // Only ever *open* here: the shell owns whether a panel is on screen, and closing it from this
+    // side would drop a pin the user set by hand and the shell just restored.
     const wantOpen = store.get('questsOpen', false) || urlQuests.length > 0;
-    setOpen(wantOpen);
+    if (wantOpen) setOpen(true);
+    else el.toggle.setAttribute('aria-expanded', String(panelOpen()));
     // The list is ~500 KB; nothing above the fold needs it, so it loads out of band and the panel
     // fills in when it lands.
     await load();
     selected = saved.filter((s) => bySlug(s));
     sync();
+    // A quest set may have landed while quests.json was still in flight (the socket is faster than
+    // a 750 KB fetch): apply it now that the list exists.
+    runAutoSelect();
+    renderMine();
     if (urlQuests.length) setOpen(true);
   }
 
   return {
     layer, load, init, setOpen,
-    points, deckData, colorOf,
+    points, deckData, colorOf, pinBoxes,
     select, deselect, toggle, markObjective, flyToObjective, flyToPoint,
     openCardFor, closeCard, positionCard, setVisible,
     draw2d,
     count: () => points().length,
     isSelected: (slug) => selected.includes(slug),
     selectedSlugs: () => [...selected],
+    // --- the game's own quest log ---
+    setQuestSet, setAutoSelect, revealMine,
+    /** Task ids the game says are active — grounding for the assistant (window.tz.quests.active). */
+    activeIds: () => [...mine.active],
+    questSet: () => ({ ...mine, active: [...mine.active], done: [...mine.done], failed: [...mine.failed] }),
+    autoSelectOn: () => autoOn,
     quests: () => all,
     onDeckClick: (obj) => { if (obj?.id) openCardFor(obj.id); },
   };

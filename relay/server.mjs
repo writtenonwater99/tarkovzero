@@ -1,20 +1,32 @@
 // TarkovZero relay: rooms keyed by pairing code. Publishers (companion app) push positions,
 // subscribers (the website) receive them. Keeps the last position per room for late joiners.
+//
+//   ws  /pub/CODE      publisher socket ({type:'pos'|'map'})
+//   ws  /sub/CODE      subscriber socket; gets 'hello', then the cached position and quest set
+//   POST /pos/CODE     position without a socket
+//   POST /quests/CODE  {active,done,failed,accountId,ts,since} -> broadcast as {type:'quests',…},
+//                      cached per room exactly like the last position
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 
 const PORT = process.env.PORT || 8787;
 const CODE_RE = /^[A-Z0-9]{6}$/;
 const norm = (c) => (c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-const rooms = new Map(); // code -> { subs:Set<ws>, last:object|null, pubs:number }
-const room = (code) => rooms.get(code) ?? rooms.set(code, { subs: new Set(), last: null, pubs: 0 }).get(code);
+const rooms = new Map(); // code -> { subs:Set<ws>, last:object|null, quests:object|null, questsTs:number, pubs:number }
+const room = (code) => rooms.get(code) ?? rooms.set(code, { subs: new Set(), last: null, quests: null, questsTs: 0, pubs: 0 }).get(code);
 
 function publish(code, msg) {
   const r = room(code);
   const payload = JSON.stringify({ ...msg, code, t: Date.now() });
   if (msg.type === 'pos') r.last = payload;
+  // the active-quest set is cached exactly like the last position, so a late joiner gets it too
+  if (msg.type === 'quests') { r.quests = payload; r.questsTs = Number(msg.ts) || 0; }
   for (const ws of r.subs) if (ws.readyState === 1) ws.send(payload);
 }
+// public/data/quests.json carries 517 quests today and `done` grows monotonically until a wipe, so the cap
+// has to sit well above the quest count — at 1000 the three lists still fit inside the 200 KB body cap.
+const ID_CAP = 1000;
+const idList = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string' && /^[0-9a-f]{12,32}$/i.test(s)).slice(0, ID_CAP) : []);
 
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,6 +41,37 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try { publish(code, { type: 'pos', ...JSON.parse(body) }); res.end('ok'); }
       catch { res.statusCode = 400; res.end('bad json'); }
+    });
+    return;
+  }
+  const q = req.url.match(/^\/quests\/([^/?]+)$/);
+  if (req.method === 'POST' && q) { // companion -> relay: the player's active/done/failed quest ids
+    const code = norm(q[1]);
+    if (!CODE_RE.test(code)) { res.statusCode = 400; return res.end('bad code'); }
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 200_000) req.destroy(); });
+    // everything in here runs outside any request try/catch, so a throw would take the whole process
+    // (and every room with it) down — hence the explicit body check and the outer catch
+    req.on('end', () => {
+      try {
+        let b;
+        try { b = JSON.parse(body); } catch { res.statusCode = 400; return res.end('bad json'); }
+        if (!b || typeof b !== 'object' || Array.isArray(b)) { res.statusCode = 400; return res.end('bad json'); }
+        // POSTs are fire-and-forget, so a slow one can land after a newer one: keep the newest set
+        const ts = Number(b.ts) || Date.now();
+        if (ts < room(code).questsTs) return res.end('stale');
+        publish(code, {
+          type: 'quests',
+          active: idList(b.active), done: idList(b.done), failed: idList(b.failed),
+          accountId: b.accountId == null ? null : String(b.accountId).slice(0, 32),
+          since: b.since == null ? null : String(b.since).slice(0, 32),
+          ts,
+        });
+        res.end('ok');
+      } catch (e) {
+        console.error('quests handler:', e?.message || e);
+        try { res.statusCode = 500; res.end('error'); } catch {}
+      }
     });
     return;
   }
@@ -48,6 +91,7 @@ wss.on('connection', (ws, req) => {
     r.subs.add(ws);
     ws.send(JSON.stringify({ type: 'hello', code, publishers: r.pubs }));
     if (r.last) ws.send(r.last);
+    if (r.quests) ws.send(r.quests);
     ws.on('close', () => r.subs.delete(ws));
   } else {
     r.pubs++;
@@ -59,4 +103,4 @@ wss.on('connection', (ws, req) => {
   }
 });
 setInterval(() => { for (const ws of wss.clients) { if (!ws.isAlive) return ws.terminate(); ws.isAlive = false; ws.ping(); } }, 30_000);
-server.listen(PORT, () => console.log(`relay listening on :${PORT}`));
+server.listen(PORT, () => console.log(`relay listening on :${server.address().port}`)); // PORT=0 picks a free one (tests)
