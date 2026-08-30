@@ -32,6 +32,14 @@ const qaPlayer = () => ({
   code: 'QA0000', name: 'QA test', color: COLORS[0], map: null, status: 'QA',
   last: { x: 12.3, z: -45.6, yaw: 214 }, lastAt: Date.now() - QA_AGE_MS[QA_STATE], ws: { readyState: 1 },
 });
+// The walk the QA player arrives on. Feeding these through onPos() — the same function a relay
+// message lands in — is what makes the override draw an arrow, a drop-line and a trail instead of
+// only a panel row and a telemetry chip (QA D11): a synthetic object handed straight to summary()
+// never reaches the marker/trail code, so the HUD claimed "Streaming · 1 player" over an empty map.
+const QA_TRACK = [
+  { x: -78.4, z: -8.2, yaw: 108 }, { x: -44.1, z: -19.6, yaw: 116 }, { x: -12.7, z: -28.9, yaw: 124 },
+  { x: 18.6, z: -36.4, yaw: 148 }, { x: 12.3, z: -45.6, yaw: 214 },
+];
 
 export function createLive(map, mapData, ui, hooks = {}) {
   const players = new Map();
@@ -140,6 +148,29 @@ export function createLive(map, mapData, ui, hooks = {}) {
     }), 0);
   }
 
+  /**
+   * `?livestate=…` without a game PC: put ONE player in the real roster and walk it through onPos(),
+   * exactly as a relay `pos` message would. Everything downstream — marker, heading, drop-line,
+   * trail, follow, telemetry, the 3D player layers, `window.tz.live.state()` — is then the shipping
+   * code path and not a QA-only imitation of it. No socket and no persist(): the fake code must
+   * never survive into localStorage and come back on a real session.
+   */
+  function applyQaLive() {
+    if (!QA_STATE || players.size) return;
+    const p = {
+      code: 'QA0000', name: 'QA test', nameOverride: false, color: COLORS[0],
+      status: '', last: null, lastAt: null, map: null, resume: true, ws: { readyState: 1 },
+    };
+    players.set(p.code, p);
+    setTimeout(() => {
+      for (const q of QA_TRACK) onPos(p, { type: 'pos', x: q.x, z: q.z, yaw: q.yaw, map: mapData.key });
+      // playerState() is forced by QA_STATE anyway; back-date lastAt so the "…s ago" read-outs
+      // still match the state being screenshotted.
+      p.lastAt = Date.now() - QA_AGE_MS[QA_STATE];
+      ui.render?.();
+    }, 0);
+  }
+
   const TELEPORT_UNITS = 300; // a trail jump longer than this (game units) is a teleport / stale replay, not movement
 
   function onPos(p, m) {
@@ -230,8 +261,14 @@ export function createLive(map, mapData, ui, hooks = {}) {
   // 1 Hz ticker: nothing new has to arrive for "3s ago" to become "4s ago", or for streaming to tip
   // over into stale after STALE_MS of silence. ui.tick, when the caller provides it, is the *cheap*
   // path (text/attribute updates only) — ui.render stays reserved for real structural events.
-  setInterval(() => { if (players.size || QA_STATE) (ui.tick ?? ui.render)?.(); }, 1000);
+  setInterval(() => {
+    // The QA player is a still life: hold its age at the one the forced state describes, or a
+    // screenshot taken 20 s into a settle reads "streaming · 20s ago" past STALE_MS.
+    if (QA_STATE) { const p = players.get('QA0000'); if (p?.lastAt) p.lastAt = Date.now() - QA_AGE_MS[QA_STATE]; }
+    if (players.size || QA_STATE) (ui.tick ?? ui.render)?.();
+  }, 1000);
   applyQaQuests();
+  applyQaLive();
 
   return { players, opts, add, remove, rename, restore, clearTrails, relay: RELAY, summary, primary, setPrimary, state, quests };
 }
