@@ -162,6 +162,13 @@ export const LIGHT = deepFreeze({
 // Model: density(d) = 1 - exp(-k * (d - start)) for d > start, with k solved so
 // that density(FOG_TARGET_AT * D) == FOG_TARGET_DENSITY exactly. The height term
 // scales density by exp(-max(0, height - groundHeight) / heightFalloff).
+//
+// heightFalloff is REAL game metres. fogDensity() below takes `heightAboveGround`
+// directly; the shader (src/atmosphere.js) has no terrain sampler in the vertex
+// stage, so it uses the map's reference ground level in place of the ground under
+// each vertex and divides deck-space Z by the relief preference to get back to real
+// metres. Both readings agree wherever the ground is near that reference, which is
+// the near-ground band this term exists for.
 // ---------------------------------------------------------------------------
 export const FOG_MIN_START_M = 250;
 export const FOG_START_FRACTION = 0.12;
