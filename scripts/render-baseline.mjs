@@ -63,14 +63,21 @@ if (FIRST_PORT < 4240 || FIRST_PORT > 4299) {
  *
  * Every close bookmark is a real landmark centroid read once out of `public/data/<map>-3d.json`
  * and then FROZEN here — the plan requires exact, unchanging cameras, so these must never be
- * recomputed from data at run time. `customs-dorms-industrial` is the Fortress framing the Stage 1
- * brief names (#3.2/203/-128); the rest are the named places at the coordinates the builder emits.
+ * recomputed from data at run time.
+ *
+ * Customs is a LADDER — wide, mid, close — and the close rung is the one the whole suite exists for.
+ * It used to be `#3.2/203/-128`, "Fortress, close", against a default framing of `#3.15`: a 3.4%
+ * scale difference, i.e. four wide shots and nothing to judge a material by (QA H3). The rungs are
+ * now well over a zoom level apart each, and the close rung is `#5` on the Fortress — 0.13 m/px
+ * against the default framing's ~0.9, where brick, corrugation and window reveals are what the
+ * frame is made of. Every row records `honoured`, which is the app's own receipt: the camera clamp
+ * rewrites the hash when it moves a permalink, so a bookmark that no longer means what it says
+ * fails loudly here instead of quietly measuring some other camera.
  */
 const BOOKMARKS = [
-  { id: 'customs-wide', map: 'customs', hash: null, note: 'default 3D framing' },
-  { id: 'customs-dorms-industrial', map: 'customs', hash: '3.2/203/-128', note: 'Fortress, close' },
-  { id: 'customs-dorms', map: 'customs', hash: '2.6/231/150', note: 'Dorms 2-Story' },
-  { id: 'customs-river-rail', map: 'customs', hash: '2.4/-86/-91', note: 'river + rail crossing' },
+  { id: 'customs-wide', map: 'customs', hash: null, note: 'default 3D framing (wide)' },
+  { id: 'customs-mid', map: 'customs', hash: '3.6/231/150', note: 'Dorms 2-Story (mid)' },
+  { id: 'customs-close', map: 'customs', hash: '5/203/-128', note: 'Fortress (close)' },
   { id: 'reserve-wide-courtyard', map: 'reserve', hash: null, note: 'default 3D framing' },
   { id: 'reserve-courtyard', map: 'reserve', hash: '2.6/-17/17', note: 'White King courtyard' },
   { id: 'woods-wide', map: 'woods', hash: null, note: 'default 3D framing' },
@@ -154,10 +161,18 @@ try {
         await sleep(900);
         const stats = await page.evaluate('window.tz.renderStats()');
         const camera = await page.evaluate('window.tz.camera');
+        const landed = String(await page.evaluate('location.hash')).slice(1);
         const reported = await page.evaluate('window.tz.renderStyle()');
         if (reported !== look) throw new Error(`look did not apply: asked ${look}, page reports ${reported}`);
+        // The camera clamp rewrites the hash only when it MOVES the permalink, so this is the app
+        // telling us whether the bookmark still frames what its coordinates say.
+        const asked = bm.hash ? bm.hash.split('/').map(Number) : null;
+        const got = landed ? landed.split('/').map(Number) : null;
+        const honoured = !asked || !!(got && got.length === 3 && Math.abs(got[0] - asked[0]) < 0.01
+          && Math.abs(got[1] - asked[1]) < 0.1 && Math.abs(got[2] - asked[2]) < 0.1);
+        if (!honoured) console.warn(`  ! ${bm.id}: asked #${bm.hash}, camera settled at #${landed}`);
         if (SHOTS) writeFileSync(join(SHOTS, `${bm.id}-${look}.png`), await page.screenshot());
-        rows.push({ bookmark: bm.id, note: bm.note, hash: bm.hash, look, camera, stats, ms: Date.now() - t0 });
+        rows.push({ bookmark: bm.id, note: bm.note, hash: bm.hash, landed, honoured, look, camera, stats, ms: Date.now() - t0 });
         console.log(`✓ ${bm.id.padEnd(24)} ${look.padEnd(9)} layers ${String(stats.layers).padStart(3)} · draw ${String(stats.drawLayers ?? '—').padStart(3)} · models ${String(stats.models).padStart(4)} · gpu ${stats.gpuFrameMs ?? '—'} · cpu ${stats.cpuFrameMs == null ? '—' : stats.cpuFrameMs.toFixed(1)} ms`);
       } catch (e) {
         failures.push({ bookmark: bm.id, look, error: String(e.message ?? e) });
