@@ -75,6 +75,20 @@ export const setTier = (t) => { current = TIERS.includes(t) ? t : 'dot'; return 
 /* ------------------------------------------------------------------ clustering --- */
 /** Screen size of a cluster cell. 24 px ≈ one badge, so two badges never overlap inside a cell. */
 export const CLUSTER_PX = 24;
+
+/**
+ * Does a cluster at this tier get a count bubble?
+ *
+ * No, at `dot`. At fit zoom the map is already carrying ~100 marks; hanging an 8 px "2" off every
+ * second one adds a number nobody can read and a second shape to decode, which is exactly the
+ * "marker soup" the tier was cut to remove. A cluster at `dot` says "more than one here" the only
+ * way a 6 px mark can — by being a little bigger than its neighbours. The count comes back with the
+ * badge, from `icon` in, where there is room to read it. Shared by 2D (icons.js clusterHtml) and 3D
+ * (map3d.js cluster-counts) so the two views can never disagree about it.
+ */
+export const countsVisible = (t) => t !== 'dot';
+/** How much bigger a dot-tier cluster is than a lone dot: 6 px -> 9 px. */
+export const CLUSTER_DOT_PX = 9;
 /** Cell size in metres for a given m/px — the grid is in WORLD units, so panning cannot reshuffle it. */
 export const cellFor = (mpp, px = CLUSTER_PX) => Math.max(1e-6, Number(mpp) * px);
 

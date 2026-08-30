@@ -370,6 +370,10 @@ const pointsOf = new Map(); // kind -> points[] (the layer is rebuilt from these
 // exempt by construction — they are drawn by live.js and quests.js, which never ask about a tier.
 const clustered = (kind) => kind.startsWith('spawn-');
 let lodState = { tier: null, cell: 0 };
+// Things outside this module that also draw at a tier and have to be told when it moves. Filled in
+// after the modules that own them exist (quests.js is created further down), so applyLod can fire
+// during the first data load without reaching into a binding that is still in its temporal dead zone.
+const tierHooks = [];
 
 /** Refill one kind's layer group at the current tier. Cheap: ~200 points on Customs. */
 function fillMarkerLayer(kind) {
@@ -407,7 +411,7 @@ function applyLod(force = false) {
   if (!force && !tierChanged && Math.abs(cell - lodState.cell) < lodState.cell * 0.15) return;
   lodState = { tier: t, cell };
   if (!is3d()) rebuildMarkerLayers();
-  if (tierChanged) applyLabels();
+  if (tierChanged) { applyLabels(); for (const f of tierHooks) f(t); }
 }
 
 /* ------------------------------------------------------------- labels ---- */
@@ -699,6 +703,10 @@ const quests = createQuests({
 });
 quests.layer.addTo(map);
 quests.init();
+// Quest pins shrink and drop their numbers below the `full` tier (step 4 polish). The 3D layer
+// re-reads the tier on its own every frame; the Leaflet markers are built once per draw, so they
+// have to be rebuilt when the camera crosses a boundary.
+tierHooks.push(() => { if (!is3d()) quests.draw2d(); });
 
 /* --------------------------------------------------------- live panel ---- */
 // State model (red team #11): disconnected -> connecting -> streaming -> stale -> connecting again on

@@ -16,6 +16,7 @@
 // stays declined.
 const S = 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"';
 import { ART } from './icon-art.js';
+import { countsVisible, CLUSTER_DOT_PX } from './lod.js';
 const A = (k) => `<g transform='scale(0.046875)'><path d='${ART[k]}'/></g>`; // 512 -> 24
 const GLYPH = {
   gi_exit: A('exit'), gi_transit: A('transit'), gi_gasmask: A('gasmask'), gi_hood: A('hood'), gi_crosshair: A('crosshair'), gi_crownskull: A('crownskull'), gi_radioactive: A('radioactive'), gi_sentry: A('sentry'), gi_lever: A('lever'), gi_padlock: A('padlock'), gi_stairs: A('stairs'),
@@ -182,12 +183,18 @@ export function dotHtml(kind, size = 6) {
 /** How a count is written on a cluster: 3-digit crowds become "99+" rather than blowing the bubble. */
 export const clusterCount = (n) => (n > 99 ? '99+' : String(n));
 /**
- * One cluster marker: the tier's own mark (dot or badge) plus a count bubble. Clicking it zooms
- * one step in, which is what splits it — see main.js / map3d.js.
+ * One cluster marker: the tier's own mark (dot or badge), plus a count bubble from the `icon` tier
+ * in. Clicking it zooms one step in, which is what splits it — see main.js / map3d.js.
+ *
+ * At `dot` the mark is just a slightly larger dot: the count would be unreadable at that scale and
+ * only adds noise (see `countsVisible` in lod.js — both views read that one rule). The exact count
+ * is still one hover away, on the tooltip main.js binds.
  */
 export function clusterHtml(kind, count, tier = 'dot') {
-  const mark = tier === 'dot' ? dotHtml(kind, 8) : iconHtml(kind, 20);
-  return `<div class="mk-cluster mk-cluster-${tier}">${mark}<span class="mk-count mono">${clusterCount(count)}</span></div>`;
+  if (!countsVisible(tier)) {
+    return `<div class="mk-cluster mk-cluster-dot">${dotHtml(kind, CLUSTER_DOT_PX)}</div>`;
+  }
+  return `<div class="mk-cluster mk-cluster-${tier}">${iconHtml(kind, 20)}<span class="mk-count mono">${clusterCount(count)}</span></div>`;
 }
 export const soldierDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><circle cx="12" cy="12" r="11.5" fill="#0a0e0c" fill-opacity=".55"/><g fill="${color}" transform="translate(2.6 2.6) scale(.78)">${GLYPH.gi_gasmask}</g></svg>`);
 export const arrowDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M12 2 20 21l-8-4-8 4z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`);

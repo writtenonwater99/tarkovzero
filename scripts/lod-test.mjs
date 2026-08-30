@@ -10,7 +10,7 @@
  *
  * Plain node, no deps: lod.js imports nothing and touches no DOM.
  */
-import { tier, tierOf, TIERS, BOUNDS, HYSTERESIS, cellFor, CLUSTER_PX, clusterPoints, updateTier, setTier, currentTier } from '../src/lod.js';
+import { tier, tierOf, TIERS, BOUNDS, HYSTERESIS, cellFor, CLUSTER_PX, CLUSTER_DOT_PX, clusterPoints, updateTier, setTier, currentTier, countsVisible } from '../src/lod.js';
 
 /* ---------------------------------------------------------------- harness */
 let pass = 0;
@@ -148,6 +148,28 @@ console.log('cluster determinism');
   check(`fit zoom thins 120 spawns to ${atFit.length}`, atFit.length < spawns.length);
   check(`full zoom keeps ${atFull.length} of 120 apart`, atFull.length >= atFit.length);
   eq('every spawn is still accounted for', total(atFit), 120);
+}
+
+/* -------------------------------------------------- tier -> count bubble */
+// Gemini's fit-zoom read (2026-08-29): the grey [2]/[3] bubbles are unreadable at cover-fit and
+// litter the topology. The bubble is now a property of the TIER, asserted here so 2D (icons.js
+// clusterHtml) and 3D (map3d.js cluster-counts) cannot drift apart on it again.
+console.log('');
+console.log('count bubbles by tier');
+{
+  eq('no bubble at the dot tier', countsVisible('dot'), false);
+  eq('the badge tier gets the count back', countsVisible('icon'), true);
+  eq('and so does full', countsVisible('full'), true);
+  check('every tier answers the question', TIERS.every((t) => typeof countsVisible(t) === 'boolean'));
+  check('a dot cluster is bigger than a lone dot', CLUSTER_DOT_PX > 6);
+
+  // The tiers a cover-fit viewport actually lands in, on every map we ship: all three are `dot`,
+  // so a fit-zoom screenshot must contain no bubble at all.
+  for (const [map, mpp] of [['Customs', 0.552], ['Reserve', 0.423], ['Woods', 1.005]]) {
+    eq(`${map} at cover-fit draws no bubble`, countsVisible(tierOf(mpp)), false);
+  }
+  // One full zoom in from Customs' fit is `icon` — that is where the counts come back.
+  eq('one zoom into Customs brings them back', countsVisible(tierOf(0.276)), true);
 }
 
 /* -------------------------------------------------------------- summary */
