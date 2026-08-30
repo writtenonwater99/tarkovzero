@@ -115,10 +115,15 @@ export function macroNoise({ size = 256, seed = 20260829 } = {}) {
 // ---------------------------------------------------------------------------
 const LUM = [0.2126, 0.7152, 0.0722];
 
+// The grade runs entirely in linear light, so the neutral point the tint terms
+// are measured against must be linear too. sRGB 0.5 is linear 0.2140 — using the
+// sRGB number here is what made a mid-grey tint darken instead of doing nothing.
+export const MID_GREY_LINEAR = srgbToLinear(0.5);
+
 export const GRADE_DEFAULTS = Object.freeze({
   size: 16,
   saturation: 0.82, // pull chroma down; the target is damp overcast, not grey
-  contrast: 1.06, // gentle S-curve around mid grey
+  contrast: 1.06, // gentle S-curve through the pivot; see contrastCurve()
   pivot: 0.18,
   shadowLift: 0.055, // shadows drift toward the far-fog blue-grey
   highlightWarmth: 0.03, // a weak, slightly warm key survives in the highlights
@@ -163,6 +168,27 @@ function hexToLinear(color) {
   ];
 }
 
+/**
+ * Gentle S-curve that fixes BOTH ends instead of only the pivot.
+ *
+ *   v <= pivot : v' = pivot * (v/pivot)^contrast          — the plain power curve
+ *   v >  pivot : a quadratic through (pivot, pivot) and (1, 1) whose slope at
+ *                the pivot equals the power curve's, so the two halves join
+ *                smoothly and white stays white.
+ *
+ * The bare power curve returns pivot*(1/pivot)^contrast = 1.114 at v = 1 for the
+ * shipped contrast of 1.06, so everything above linear 0.908 used to clamp to
+ * pure white (395 of 4096 LUT entries). The shoulder removes that clip while
+ * keeping the pivot — and therefore the overall exposure — where it was.
+ */
+export function contrastCurve(v, contrast, pivot) {
+  if (v <= 0) return v;
+  if (contrast === 1) return v;
+  if (v <= pivot) return pivot * Math.pow(v / pivot, contrast);
+  const u = (v - pivot) / (1 - pivot);
+  return pivot + (1 - pivot) * (contrast * u + (1 - contrast) * u * u);
+}
+
 function grade(lin, shadow, highlight, o) {
   const out = [lin[0] * o.exposure, lin[1] * o.exposure, lin[2] * o.exposure];
   const L = out[0] * LUM[0] + out[1] * LUM[1] + out[2] * LUM[2];
@@ -171,14 +197,14 @@ function grade(lin, shadow, highlight, o) {
     // 1. desaturate toward luminance
     let v = L + (out[c] - L) * o.saturation;
     // 2. tint: shadows toward the fog colour, highlights toward the weak key.
-    //    Both weights are normalised against a mid-grey tint so a bright tint
-    //    colour cannot silently raise overall exposure.
+    //    Both weights are normalised against LINEAR mid grey, so a mid-grey tint
+    //    is exactly a no-op and a bright tint cannot silently raise exposure.
     const shadowW = (1 - L) * (1 - L);
     const highW = L * L;
-    v += o.shadowLift * shadowW * (shadow[c] - 0.5);
-    v += o.highlightWarmth * highW * (highlight[c] - 0.5);
-    // 3. gentle contrast around the pivot
-    v = v > 0 ? o.pivot * Math.pow(v / o.pivot, o.contrast) : v;
+    v += o.shadowLift * shadowW * (shadow[c] - MID_GREY_LINEAR);
+    v += o.highlightWarmth * highW * (highlight[c] - MID_GREY_LINEAR);
+    // 3. gentle contrast around the pivot, shouldered so white stays white
+    v = contrastCurve(v, o.contrast, o.pivot);
     out[c] = v < 0 ? 0 : v > 1 ? 1 : v;
   }
   return out;
