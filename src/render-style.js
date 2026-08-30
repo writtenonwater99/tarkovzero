@@ -58,7 +58,7 @@ export function rgb01(color) {
 // ---------------------------------------------------------------------------
 export const STYLE_MODES = deepFreeze(['realistic', 'vector']);
 
-export const DEFAULT_MODE = 'realistic';
+export const DEFAULT_MODE = 'vector'; // founder 2026-08-30: the vector look beats the R1 realistic pass; realistic stays opt-in (beta)
 
 /** True when `mode` names a supported skin. */
 export function isStyleMode(mode) {
