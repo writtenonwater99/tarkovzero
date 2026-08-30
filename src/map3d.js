@@ -292,6 +292,12 @@ const mul = (c, k) => [Math.min(255, Math.round(c[0] * k)), Math.min(255, Math.r
  *
  * Buildings the DATA gives an explicit colour or a landmark place keep theirs; the class is still
  * recorded on them, because the roof colour and the specular family read it.
+ *
+ * Note the ORDER below: the `b.color || b.place` early exit comes AFTER the roof assignment, so
+ * `b.roofTint` is set for every building except a pylon. `roofMaterialId()` always resolves to a
+ * class and `materialTint()` always answers a colour, so it is never undefined — which is why
+ * buildingParts() below no longer carries `?? C.roofHouse / C.roofWarehouse / C.roofFlat`
+ * fallbacks. Those read like live landmark overrides and could not fire.
  */
 function tintBuildings(bs) {
   for (const b of bs) {
@@ -331,7 +337,10 @@ function detailParts(bs, scenes = []) {
     const rect = (a0, a1, c0, c1) => [pt(a0, c0), pt(a1, c0), pt(a1, c1), pt(a0, c1)];
     const LEN = u1 - u0, WID = v1 - v0, vm = (v0 + v1) / 2;
     const wall = b.color ? liftTone(b.color, 0.12) : b.tint ?? (b.floors > 1 ? C.buildingMulti : C.building);
-    const roof = b.roof ? liftTone(b.roof, 0.12) : ROOF_BY_PLACE[place] ?? b.roofTint ?? C.roofFlat;
+    // ROOF_BY_PLACE is a live landmark override; `roofTint` is the class colour under it and is
+    // always set for anything that reaches here (pylons already `continue`d), so there is no third
+    // fallback to write.
+    const roof = b.roof ? liftTone(b.roof, 0.12) : ROOF_BY_PLACE[place] ?? b.roofTint;
 
     // --- 1. plinth: every building meets the ground instead of being pasted onto it
     if (st !== 'canopy') B(expand(b.poly, 0.25), b.plinthBase ?? base, b.plinthHeight ?? 0.75, mul(wall, 0.7), 0);
@@ -561,15 +570,18 @@ function buildingParts(bs) {
     if (st === 'box' || st === 'tank') walls.push({ ...b, h: b.height });
     if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [196, 200, 198], base: b.base });
     if (st === 'gable') {
-      if (!isRectangular(b.poly)) { walls.push({ ...b, h: b.height }); slabs.push({ poly: b.poly, z: b.height + 0.02, color: b.roof ?? b.roofTint ?? C.roofWarehouse, base: b.base }); continue; }
+      if (!isRectangular(b.poly)) { walls.push({ ...b, h: b.height }); slabs.push({ poly: b.poly, z: b.height + 0.02, color: b.roof ?? b.roofTint, base: b.base }); continue; }
       walls.push({ ...b, h: b.height * 0.72 });
-      // R1.5: the roof falls back to its own MATERIAL CLASS (corrugated metal on a gable, tile on a
-      // house), not to one shared warehouse grey.
-      const rc = b.roof ? liftTone(b.roof, 0.12) : (b.roofTint ?? (['Crackhouse', 'Streamer House'].includes(b.place) ? C.roofHouse : C.roofWarehouse)), shade = (k) => rc.map((c) => Math.min(255, c * k));
+      // R1.5: a roof takes its own MATERIAL CLASS — corrugated metal on a gable, tile on a house
+      // (ROOF_MATERIAL.byPlace maps Crackhouse and Streamer House to 'roof-tile') — not one shared
+      // warehouse grey. tintBuildings() sets `roofTint` on every non-pylon building, so the old
+      // `?? (place is a house ? roofHouse : roofWarehouse)` tail could never be reached; it read
+      // like a live landmark override and was the opposite of what the class resolver decides.
+      const rc = b.roof ? liftTone(b.roof, 0.12) : b.roofTint, shade = (k) => rc.map((c) => Math.min(255, c * k));
       hipRoof(b).forEach((pts, i) => roofs.push({ pts, color: shade([1, 0.82, 0.9, 0.9][i]), b }));
     }
     if (st === 'frame') { for (let k = 1; k <= b.floors; k++) { const z = k * 3.3; slabs.push({ poly: b.poly, z, color: [C.concreteRaw[0], C.concreteRaw[1], C.concreteRaw[2], 235], base: b.base }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]], base: b.base }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: b.floors * 3.3, w: 0.55, color: C.concreteRaw, base: b.base }); }
-    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? b.roofTint ?? C.roofFlat, base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: C.parapet, base: b.base }); }
+    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? b.roofTint, base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: C.parapet, base: b.base }); }
   }
   return { walls, roofs, slabs, posts, edges, dots };
 }
