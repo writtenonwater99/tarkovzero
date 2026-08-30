@@ -686,7 +686,23 @@ export const BACKDROP = deepFreeze({
     voidColor: BACKGROUND.realistic.ground,
     voidMarginFactor: 1.4,   // × the map's playable diagonal
     skirtTop: '#655f54',
-    skirtBottom: '#42403a',
+    /*
+     * The ramp's far end is the void plane's own colour, BY REFERENCE — not a hand-picked earth
+     * value that happens to sound like haze.
+     *
+     * "Feathered" means the cut edge stops being an edge, and an edge stops being one when the
+     * last row of the skirt is the colour of the thing behind it. This was authored as `#42403a`,
+     * 60 luma levels DARKER than the `#7d817b` plane the skirt bottom lands on, so the ramp walked
+     * away from the backdrop and terminated in a one-pixel step — measured on the Customs frame,
+     * skirt (40,41,37) to void (149,156,155) in a single row, the highest-contrast edge in the
+     * shot, and 11% worse than the pre-R1.5 baseline it was meant to fix. Gemini's first "game
+     * board" item ("the hard, un-feathered cutoff of the terrain mesh into the background colour")
+     * was never addressed by it.
+     *
+     * Tying the two together means a future change to the backdrop colour cannot silently re-open
+     * this: the skirt follows it.
+     */
+    skirtBottom: BACKGROUND.realistic.ground,
     skirtFeather: 0.72,      // how far down the skirt the ramp reaches
     /*
      * The sky's own vertical ramp, applied in the grade pass.
