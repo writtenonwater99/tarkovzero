@@ -619,7 +619,99 @@ function viewCone(last, r, fovDeg) {
 const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x + w / 2, y + w / 2], [x - w / 2, y + w / 2]];
 
 export async function createView3d(container, mapData, src) {
+  const bootMs = performance.now();
   const data = await (await fetch(`/data/${mapData.key}-3d.json`)).json();
+
+  /* --- the icon atlas, started FIRST -------------------------------------------------------
+   * QA D1: on a cold load the map showed every text label with no marker or extract badge under
+   * it for >16 s — names floating over nothing, which reads as broken rather than as loading.
+   *
+   * The cause was ORDER, not the atlas. `buildAtlas` decodes ~50 SVG data URLs, and decoding is
+   * off the main thread — but the loads did not START until after the heightfield, the building
+   * placement pass and the tree preparation had all run to completion SYNCHRONOUSLY, because the
+   * three `await buildAtlas(...)` calls sat below them. So the one piece of work that could have
+   * overlapped the expensive prep was the one piece queued behind it, and under software GL that
+   * prep is seconds long.
+   *
+   * The loads are kicked off here, before any of that, and awaited where the atlas is first
+   * needed — which is after the same prep, so nothing else moves. `atlasReadyMs` /
+   * `firstBadgeMs` in renderStats().timing are what the e2e report measures it with.
+   */
+  let atlasReadyMs = null, atlasWaitMs = null, prepMs = null, firstLabelMs = null, firstBadgeMs = null;
+  // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
+  async function buildAtlas(entries, cell) {
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, cell * entries.length); canvas.height = cell;
+    const ctx = canvas.getContext('2d'); const mapping = {};
+    await Promise.all(entries.map(([name, url], i) => new Promise((res) => {
+      const img = new Image(); img.onload = () => { ctx.drawImage(img, i * cell, 0, cell, cell); res(); }; img.onerror = res; img.src = url;
+      mapping[name] = { x: i * cell, y: 0, width: cell, height: cell, anchorY: cell, mask: false };
+    })));
+    return { canvas, mapping };
+  }
+  // Quest pins carry their sequence number inside the hexagon. It used to be BAKED — one atlas
+  // entry per number, `quest-objective:1` … `:12` — on the claim that "1..12 covers every quest in
+  // the data". It does not: Hot Wheels alone has 19 mapped objectives, and every pin past the
+  // twelfth silently fell back to the plain flag at the one tier that is supposed to number
+  // (QA M3). The number is drawn as text over an EMPTY hexagon instead, which is uncapped, is the
+  // same trick `cluster-counts` already uses, and takes 12 glyphs out of the cold-load atlas.
+  const QUEST_BLANK = 'quest-objective:blank';
+  const atlasPromises = (() => {
+    const markerEntries = src.markers().filter((m) => KINDS[m.kind]).map((m) => {
+      const isExtract = m.kind.startsWith('extract');
+      return [markerIconKey(m), iconDataUrl(m.kind, 64, isExtract ? extractLetter(m.name) : null, markerLevel(m), null, isExtract ? extractReq(m.name) : null)];
+    });
+    const entries = [...Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), ...markerEntries,
+      [QUEST_BLANK, iconDataUrl('quest-objective', 64, ' ')]]
+      .filter((e, i, all) => all.findIndex((x) => x[0] === e[0]) === i);
+    return {
+      icons: buildAtlas(entries, 64),
+      arrows: buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64),
+      soldiers: buildAtlas(COLORS.map((c) => [c, soldierDataUrl(c, 64)]), 64),
+    };
+  })();
+
+  /* --- clip the draped sheets to the playable limit ----------------------------------------
+   * QA M2: on Woods, 242 of the water sheet's 1,532 vertices and 15 of the 63 bridge-deck ones sit
+   * OUTSIDE `data.limit`. The east river therefore ran on past the terrain as a solid blue band
+   * over the void, and a blue wedge sat in the bottom-left corner with no ground under it — worst
+   * in the vector frame, where the void is black. The source polygons come from tarkov.dev's SVG,
+   * which has no reason to stop where the playable area does.
+   *
+   * A vertex outside the ring is pulled to the nearest point ON it, and a hair inside. This is a
+   * SNAP, not a boolean intersection: the excursions are shallow bulges past the edge, and a snap
+   * cannot introduce the self-intersections that clipping against a 2,636-point CONCAVE ring
+   * would. It runs on `data` before anything reads it, so terrain.js's realistic water MESH and
+   * map3d's vector water POLYGON are clipped by the same pass and neither file learns about it.
+   */
+  const clippedVerts = (() => {
+    const ring = data.limit;
+    if (!Array.isArray(ring) || ring.length < 3) return 0;
+    const INSET_M = 0.4;
+    const snap = (pt) => {
+      if (!Array.isArray(pt) || pt.length < 2 || inPolyXZ(pt, ring)) return pt;
+      let bx = pt[0], bz = pt[1], bd = Infinity;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const ax = ring[j][0], az = ring[j][1];
+        const dx = ring[i][0] - ax, dz = ring[i][1] - az;
+        const len = dx * dx + dz * dz;
+        const t = len > 0 ? Math.max(0, Math.min(1, ((pt[0] - ax) * dx + (pt[1] - az) * dz) / len)) : 0;
+        const qx = ax + dx * t, qz = az + dz * t;
+        const d = (qx - pt[0]) ** 2 + (qz - pt[1]) ** 2;
+        if (d < bd) { bd = d; bx = qx; bz = qz; }
+      }
+      const vx = bx - pt[0], vz = bz - pt[1], vl = Math.hypot(vx, vz) || 1;
+      return [bx + (vx / vl) * INSET_M, bz + (vz / vl) * INSET_M];
+    };
+    let moved = 0;
+    const clipRing = (poly) => (Array.isArray(poly) ? poly.map((p) => { const q = snap(p); if (q !== p) moved++; return q; }) : poly);
+    for (const w of data.water || []) {
+      w.poly = clipRing(w.poly);
+      if (Array.isArray(w.holes)) w.holes = w.holes.map(clipRing);
+    }
+    for (const b of data.bridges || []) b.path = clipRing(b.path);
+    return moved;
+  })();
+
   // --- TRACK B (terrain.js) --------------------------------------------------------------
   // One surface, one sampler: the mesh below and every draped feature (roads, fences, props,
   // trees, shade rings, building bases, player drop-lines) must sample the SAME bicubic field,
@@ -671,6 +763,7 @@ export async function createView3d(container, mapData, src) {
     H = makeSurfaceSampler(BASE_H, data.hardRocks || [], relief);
     heightEpoch++;
   };
+  const tGround = performance.now();
   rebuildGround();
   // --- end TRACK B ------------------------------------------------------------------------
   const inLimit = (x, z) => !data.limit || inPolyXZ([x, z], data.limit);
@@ -687,31 +780,18 @@ export async function createView3d(container, mapData, src) {
       b.plinthHeight = Math.max(0.75, b.base - b.plinthBase + 0.12);
     }
   };
+  const tBuildings = performance.now();
   placeBuildings();
+  const tTrees = performance.now();
   const treeSet = prepareTrees(data.trees, mapData.key);
-  // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
-  async function buildAtlas(entries, cell) {
-    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, cell * entries.length); canvas.height = cell;
-    const ctx = canvas.getContext('2d'); const mapping = {};
-    await Promise.all(entries.map(([name, url], i) => new Promise((res) => {
-      const img = new Image(); img.onload = () => { ctx.drawImage(img, i * cell, 0, cell, cell); res(); }; img.onerror = res; img.src = url;
-      mapping[name] = { x: i * cell, y: 0, width: cell, height: cell, anchorY: cell, mask: false };
-    })));
-    return { canvas, mapping };
-  }
-  const markerEntries = src.markers().filter((m) => KINDS[m.kind]).map((m) => {
-    const isExtract = m.kind.startsWith('extract');
-    return [markerIconKey(m), iconDataUrl(m.kind, 64, isExtract ? extractLetter(m.name) : null, markerLevel(m), null, isExtract ? extractReq(m.name) : null)];
-  });
-  // Quest pins carry their sequence number inside the hexagon (1..12 covers every quest in the
-  // data; anything beyond falls back to the plain flag).
-  const QUEST_BADGES = Array.from({ length: 12 }, (_, i) => String(i + 1));
-  const questEntries = QUEST_BADGES.map((b) => [`quest-objective:${b}`, iconDataUrl('quest-objective', 64, b)]);
-  const atlasEntries = [...Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), ...markerEntries, ...questEntries]
-    .filter((e, i, all) => all.findIndex((x) => x[0] === e[0]) === i);
-  const iconAtlas = await buildAtlas(atlasEntries, 64);
-  const arrowAtlas = await buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64);
-  const soldierAtlas = await buildAtlas(COLORS.map((c) => [c, soldierDataUrl(c, 64)]), 64);
+  const tAtlas = performance.now();
+  prepMs = { ground: Math.round(tBuildings - tGround), buildings: Math.round(tTrees - tBuildings), trees: Math.round(tAtlas - tTrees) };
+  const iconAtlas = await atlasPromises.icons;
+  const arrowAtlas = await atlasPromises.arrows;
+  const soldierAtlas = await atlasPromises.soldiers;
+  // What the atlas cost ON TOP of the synchronous prep it now overlaps, and when it was ready.
+  atlasWaitMs = Math.round(performance.now() - tAtlas);
+  atlasReadyMs = Math.round(performance.now() - bootMs);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
   const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
   let viewState = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -2, maxZoom: 5 };
@@ -998,6 +1078,165 @@ export async function createView3d(container, mapData, src) {
     new LineLayer({ id: 'ping-beam-core', data: labels, getSourcePosition: (d) => Pg(d.position, 0.7), getTargetPosition: (d) => Pg(d.position, lift(d) - 0.5), getColor: [255, 255, 255, 230], getWidth: 1, widthUnits: 'pixels', parameters: OVERLAY, updateTriggers: { getSourcePosition: heightEpoch, getTargetPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ]; };
 
+  /* --- screen-space text placement -------------------------------------------------------
+   * Everything with words in it is laid out ONCE per frame, in screen pixels, against one
+   * occupancy list. Three independent world-space TextLayers cannot de-conflict with each
+   * other, with the quest pins, or with the floating HUD, and every one of those was a defect:
+   *
+   *   D3/M8  a label whose ANCHOR is on screen but whose BOX is not was drawn cut — "HECKPOINT",
+   *          "WER SNIPER RIDGE", "RAILWAY BRIDGE TO TAR…". Nothing decided that a half-drawn
+   *          word is worse than no word.
+   *   D4     the bottom row was drawn under the omnibox ("UN ROADBLOCK", and a bare badge below it).
+   *   M1     "DEPOT" and "SMUGGLERS' BUNKER (ZB-1012) · UNDERGROUND" printed through each other
+   *          on every Customs frame; same for OLD GAS and FORTRESS.
+   *   D6     a quest pin landed centred on "CRACKHOUSE" and ate a letter.
+   *
+   * One pass, in priority order — quest pins (they are why the panel is open) → major place
+   * names → the extract names that belong under them → minor place names. Each box is first
+   * NUDGED into the safe rect (never cut), then walked up/down a short ladder until it is clear
+   * of everything already seated; a box that can do neither is hidden. Hiding beats cutting: a
+   * word the reader cannot finish is worse than a landmark they can still see the ping of.
+   */
+  const LABEL_INSET = 12;   // px of clear air between a label's ink and the chrome
+  const LABEL_NUDGE = 22;   // px a label may slide to escape the chrome before it is hidden
+  // M10: Woods place labels bottomed out at 10 px, ≈7 px of cap height — shapes, not words, on the
+  // physically largest map. The floor is the one number that decides the smallest map's type.
+  const MAJOR_MIN_PX = 12, MINOR_MIN_PX = 11;
+  // Barlow Condensed (and the Arial Narrow fallback) average ~0.5 em per glyph; 700 sits wider.
+  const inkWidth = (text, px, weight) => text.length * px * (weight >= 700 ? 0.52 : 0.47);
+  const boxHit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  /** The safe rect, inset, in the deck canvas' own pixels — or the whole canvas if there is none. */
+  function textRect(vp) {
+    let r = null;
+    try { r = src.safeRect?.(); } catch { r = null; }
+    const base = r && Number.isFinite(r.left) && r.right > r.left && r.bottom > r.top
+      ? r : { left: 0, top: 0, right: vp.width, bottom: vp.height };
+    return { left: Math.max(0, base.left) + LABEL_INSET, top: Math.max(0, base.top) + LABEL_INSET,
+      right: Math.min(base.right, vp.width) - LABEL_INSET, bottom: Math.min(base.bottom, vp.height) - LABEL_INSET };
+  }
+
+  /**
+   * @returns {{place:object[],extract:object[]}} draw-ready rows. `off` is the pixel offset the
+   *   TextLayer applies; rows that could not be seated are simply absent. With no viewport yet
+   *   (the very first frame) both lists come back unculled — drawing every name beats drawing none.
+   */
+  function textLayout(labelRows, markers, questPts) {
+    const z = viewState.zoom ?? 0;
+    const full = z >= 0.6;
+    const place = labelRows
+      .filter((d) => major(d) || z >= 0.8)
+      .map((d) => ({ d, major: major(d), text: major(d) ? d.text.toUpperCase() : d.text,
+        pos: Pg(d.position, lift(d) + 1.5), off: [0, 0] }));
+    // Every extract marker gets a badge seat; only some of them get their NAME drawn.
+    const extractAll = markers.filter((m) => m.kind.startsWith('extract')).map((m) => {
+      const k = eKey(m), lit = pinnedExtract === k || hoverExtract === k;
+      // The requirement is on the badge as a corner glyph now. Printing "REQ. GREEN FLARE" under
+      // every extract at every zoom was half the marker soup, so the words only appear for the
+      // one extract you are pointing at or have pinned.
+      return { m, k, lit, text: (full || lit ? (m.name || '').toUpperCase() : shortName(m.name)) + levelSuffix(m),
+        sub: lit ? subText(m) : '', size: lit ? 13.5 : 12, off: [0, 8],
+        pos: Pg([m.position.x, m.position.z], 0.7),
+        // Collision ranking uses the real-height field so changing visual relief cannot thin names.
+        rankPos: P([m.position.x, m.position.z], H(m.position.x, m.position.z) / relief + 0.7) };
+    });
+    const extract = extractAll.filter((d) => d.m.name && (d.lit || z >= -0.6));
+
+    let vp = null;
+    try { vp = deck?.getViewports?.()[0]; } catch { vp = null; }
+    if (!vp || !vp.width || !vp.height) return { place, extract, badge: null };
+    const rect = textRect(vp);
+    if (rect.right - rect.left < 60 || rect.bottom - rect.top < 60) return { place, extract };
+    const taken = [];
+    const project = (world) => { try { const q = vp.project(world); return Number.isFinite(q?.[0]) && Number.isFinite(q?.[1]) ? q : null; } catch { return null; } };
+    /** Pixels per world metre AT this point — the only honest way to size `sizeUnits:'meters'` text. */
+    const perMetre = (world, at) => { const b = project([world[0] + 1, world[1], world[2]]); return b ? Math.hypot(b[0] - at[0], b[1] - at[1]) : 0; };
+    /**
+     * Nudge a box into the rect, then walk it clear of everything seated. Returns the pixel
+     * offset to apply, or null when the box belongs nowhere on this frame.
+     */
+    function seat(cx, cy, w, h, upFirst) {
+      if (w > rect.right - rect.left || h > rect.bottom - rect.top) return null;
+      const b = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+      const dx = b[2] > rect.right ? rect.right - b[2] : b[0] < rect.left ? rect.left - b[0] : 0;
+      const dy = b[3] > rect.bottom ? rect.bottom - b[3] : b[1] < rect.top ? rect.top - b[1] : 0;
+      if (Math.abs(dx) > LABEL_NUDGE || Math.abs(dy) > LABEL_NUDGE) return null;
+      const step = h + 4;
+      const ladder = upFirst ? [0, -step, step, -2 * step, 2 * step] : [0, step, -step, 2 * step, -2 * step];
+      for (const k of ladder) {
+        const c = [b[0] + dx, b[1] + dy + k, b[2] + dx, b[3] + dy + k];
+        if (c[1] < rect.top || c[3] > rect.bottom || c[0] < rect.left || c[2] > rect.right) continue;
+        if (taken.some((o) => boxHit(c, o))) continue;
+        taken.push(c);
+        return [dx, dy + k];
+      }
+      return null;
+    }
+
+    // 1. quest pins. They are not moved and they are not dropped — everything else moves around
+    //    them. The badge hangs ABOVE its anchor (buildAtlas anchors at the bottom edge).
+    const pinPx = currentTier() === 'full' ? 30 : 21;
+    for (const q of questPts) {
+      const p = project(Pg([q.pin.x, q.pin.z], 0.7));
+      if (!p) continue;
+      taken.push([p[0] - pinPx / 2, p[1] - pinPx, p[0] + pinPx / 2, p[1] + 6]);
+    }
+    // 2. extract badges. The badge is the map's content, not a caption, so it is never dropped for
+    //    a neighbour — but a badge half under the omnibox, or sliced by the bottom edge, is a
+    //    marker nobody can use (QA D4). It is lifted into the safe rect with its name, and only
+    //    hidden when even that cannot clear the chrome. Reserved before any label is placed.
+    const badge = new Map();
+    const BADGE_PX = 26;   // markers-extract getSize, anchored at its bottom edge
+    for (const d of extractAll) {
+      const p = project(d.pos);
+      if (!p) { badge.set(d.k, null); continue; }
+      const b = [p[0] - BADGE_PX / 2, p[1] - BADGE_PX, p[0] + BADGE_PX / 2, p[1]];
+      const dx = b[2] > rect.right ? rect.right - b[2] : b[0] < rect.left ? rect.left - b[0] : 0;
+      const dy = b[3] > rect.bottom ? rect.bottom - b[3] : b[1] < rect.top ? rect.top - b[1] : 0;
+      if (Math.abs(dx) > BADGE_PX || Math.abs(dy) > BADGE_PX) { badge.set(d.k, null); continue; }
+      badge.set(d.k, [dx, dy]);
+      d.shift = [dx, dy];
+      taken.push([b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy]);
+    }
+    // 3. major place names, longest first so the landmark that needs the room asks for it first.
+    //    upFirst: a quest pin under the name pushes the NAME up, which is the D6 fix.
+    const seatPlace = (rows) => rows.filter((e) => {
+      const p = project(e.pos);
+      if (!p) return false;
+      const px = Math.max(e.major ? MAJOR_MIN_PX : MINOR_MIN_PX,
+        Math.min(e.major ? 15 : 12, (e.major ? 6.2 : 4.6) * perMetre(e.pos, p)));
+      const off = seat(p[0], p[1], inkWidth(e.text, px, e.major ? 700 : 600) + 6, px * 1.18 + 4, true);
+      if (!off) return false;
+      e.off = off;
+      return true;
+    });
+    const placedMajor = seatPlace(place.filter((e) => e.major).sort((a, b) => b.text.length - a.text.length));
+    // 4. extract names, stacked BELOW their badge and below any place name they would print
+    //    through. Ranked south-first, then by faction, so the same frame decides the same way.
+    for (const d of extract) { const p = project(d.rankPos); d.px = p ? p[0] : 0; d.py = p ? p[1] : 0; }
+    const rest = extract.filter((d) => !d.lit).sort((a, b) => (b.py - a.py)
+      || (EXTRACT_PRIORITY[a.m.kind] ?? 9) - (EXTRACT_PRIORITY[b.m.kind] ?? 9) || a.text.length - b.text.length);
+    const placedExtract = [...extract.filter((x) => x.lit), ...rest].filter((d) => {
+      if (!d.shift) return false;   // its badge could not be placed; the caption goes with it
+      const raw = project(d.pos);
+      const p = raw && [raw[0] + d.shift[0], raw[1] + d.shift[1]];
+      if (!p) return false;
+      const px = Math.max(10, Math.min(15, d.size));
+      const nameH = px * 1.18;
+      // ONE AABB over the name AND its requirement line: reserving only the name let the sub
+      // print through whatever sat below it.
+      const w = Math.max(inkWidth(d.text, px, 700), d.sub ? inkWidth(d.sub, 10, 600) : 0) + 6;
+      const h = nameH + (d.sub ? 16 : 0) + 4;
+      const off = seat(p[0], p[1] + 8 + (h - nameH) / 2 - 2, w, h, false);
+      if (!off) return false;
+      // the name rides its badge's lift, then its own seat on top of it
+      d.off = [d.shift[0] + off[0], d.shift[1] + 8 + off[1]];
+      return true;
+    });
+    // 5. minor names last: they are the tier the map can afford to lose.
+    const placedMinor = seatPlace(place.filter((e) => !e.major));
+    return { place: [...placedMajor, ...placedMinor], extract: placedExtract, badge };
+  }
+
   // --- TRACK C: extract names in 3D -----------------------------------------------------
   // buildAtlas() anchors the badge at its BOTTOM edge (anchorY = cell), so the badge occupies
   // -26..0 px ABOVE the anchor point. Names therefore go BELOW it — a negative offset would
@@ -1009,40 +1248,10 @@ export async function createView3d(container, mapData, src) {
   const EXTRACT_CHARS = [...new Set(
     src.markers().filter((m) => m.kind.startsWith('extract') && m.name).flatMap((m) => [(m.name || '').toUpperCase(), shortName(m.name), subText(m)]).join('')
     + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,:+-()’\'#·')];
-  function extractNameLayers(markers) {
-    const z = viewState.zoom ?? 0;
-    const full = z >= 0.6;
-    let cand = markers.filter((m) => m.kind.startsWith('extract') && m.name).map((m) => {
-      const k = eKey(m), lit = pinnedExtract === k || hoverExtract === k;
-      // The requirement is on the badge as a corner glyph now. Printing "REQ. GREEN FLARE" under
-      // every extract at every zoom was half the marker soup, so the words only appear for the
-      // one extract you are pointing at or have pinned.
-      return { m, k, lit, text: (full || lit ? (m.name || '').toUpperCase() : shortName(m.name)) + levelSuffix(m),
-        sub: lit ? subText(m) : '', size: lit ? 13.5 : 12,
-        pos: Pg([m.position.x, m.position.z], 0.7),
-        // Collision ranking uses the real-height field so changing visual relief cannot thin names.
-        rankPos: P([m.position.x, m.position.z], H(m.position.x, m.position.z) / relief + 0.7) };
-    }).filter((d) => d.lit || z >= -0.6);
+  /** Draws the rows textLayout() already seated — the declutter itself lives up there now. */
+  function extractNameLayers(cand) {
     if (!cand.length) return [];
-    // Greedy screen-space AABB declutter. A fixed offset table cannot cope with the Dorms/rail
-    // clusters; rejected extracts keep their badge and pop back as the camera moves.
-    try {
-      const vp = deck.getViewports?.()[0];
-      if (vp) {
-        for (const d of cand) { const q = vp.project(d.rankPos); d.px = q[0]; d.py = q[1]; }
-        const rest = cand.filter((d) => !d.lit).sort((a, b) => (b.py - a.py)
-          || (EXTRACT_PRIORITY[a.m.kind] ?? 9) - (EXTRACT_PRIORITY[b.m.kind] ?? 9) || a.text.length - b.text.length);
-        const boxes = [], out = [];
-        for (const d of [...cand.filter((x) => x.lit), ...rest]) {
-          const w = d.text.length * 5.6 * (d.size / 12), h = d.size * 1.15;
-          const b = [d.px - w / 2 - 4, d.py + 8 - h / 2 - 4, d.px + w / 2 + 4, d.py + 8 + h / 2 + 4 + (d.sub ? 14 : 0)];
-          if (boxes.some((o) => b[0] < o[2] && o[0] < b[2] && b[1] < o[3] && o[1] < b[3])) continue;
-          boxes.push(b); out.push(d);
-        }
-        cand = out;
-      }
-    } catch {}
-    const trig = [pinnedExtract, hoverExtract, full];
+    const trig = [pinnedExtract, hoverExtract, (viewState.zoom ?? 0) >= 0.6, cand];
     // Unboxed, like the place names (Gemini, 2026-08-29: the black plate with an orange keyline
     // "clashes completely with the sleek HUD aesthetic" next to SKELETON / CRACKHOUSE floating in
     // clean type). The plate was doing two jobs: legibility over a bright tile, and carrying the
@@ -1062,9 +1271,11 @@ export async function createView3d(container, mapData, src) {
       billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       updateTriggers: { getText: trig, getSize: trig, getPixelOffset: trig, getColor: trig },
     });
+    // `off` is the seat textLayout() found for this name — its own stack offset plus whatever it
+    // took to keep it out of the chrome. The sub-line rides 14 px under the name it belongs to.
     return [
-      text('extract-names', cand, (d) => d.text, (d) => d.size, nameColor, [0, 8], 700),
-      text('extract-sub', cand.filter((d) => d.sub), (d) => d.sub, () => 10, [...C.creamDim, 255], [0, 22], 600),
+      text('extract-names', cand, (d) => d.text, (d) => d.size, nameColor, (d) => d.off, 700),
+      text('extract-sub', cand.filter((d) => d.sub), (d) => d.sub, () => 10, [...C.creamDim, 255], (d) => [d.off[0], d.off[1] + 14], 600),
     ];
   }
   // --- quest layer -----------------------------------------------------------------------
@@ -1081,14 +1292,27 @@ export async function createView3d(container, mapData, src) {
     // glyph — the numbers are for reading a checklist against the map, which is a zoomed-in job.
     // lodMarkerLayers() has already folded this frame's m/px into the shared tier.
     const small = currentTier() !== 'full';
-    const iconKey = (d) => (!small && iconAtlas.mapping[`quest-objective:${d.badge}`] ? `quest-objective:${d.badge}` : 'quest-objective');
+    // At `full` the hexagon is empty and the number is drawn into it; below it the pin keeps the
+    // objective glyph and no number. Uncapped either way — see QUEST_BLANK.
+    const iconKey = () => (small ? 'quest-objective' : QUEST_BLANK);
+    const pinPx = small ? 21 : 30;
     return [
       new SolidPolygonLayer({ id: 'quest-zone-fill', shadowEnabled: false, data: zones, getPolygon: (d) => ringG(d.outline, 0.5), getFillColor: (d) => [...d.color, d.level === 'underground' ? 45 : 70], parameters: OVERLAY, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new PathLayer({ id: 'quest-zone-line', shadowEnabled: false, data: zones, getPath: (d) => ringG([...d.outline, d.outline[0]], 0.55), getColor: (d) => [...d.color, 235], getWidth: 2, widthUnits: 'pixels', getDashArray: [5, 4], dashJustified: false, extensions: [dashExt], parameters: OVERLAY, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       // the per-quest colour lives on a ground ring, so the hexagon badge can stay one readable gold
       new ScatterplotLayer({ id: 'quest-ring', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.62), getRadius: small ? 2.4 : 3.4, radiusUnits: 'meters', radiusMinPixels: small ? 7 : 10, radiusMaxPixels: small ? 18 : 26, stroked: true, filled: true, getFillColor: (d) => [...d.color, 40], getLineColor: (d) => [...d.color, d.done ? 110 : 235], lineWidthMinPixels: 2, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getRadius: small, getLineColor: pts.map((d) => d.done) }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new IconLayer({ id: 'quest-markers', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: iconKey, getSize: small ? 21 : 30, sizeUnits: 'pixels', sizeMinPixels: small ? 15 : 22, sizeMaxPixels: small ? 28 : 40, billboard: true, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getSize: small, getIcon: [small, pts.map((d) => d.badge)] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      new IconLayer({ id: 'quest-markers', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: iconKey, getSize: pinPx, sizeUnits: 'pixels', sizeMinPixels: small ? 15 : 22, sizeMaxPixels: small ? 28 : 40, billboard: true, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getSize: small, getIcon: small }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         onClick: (i) => { if (!i.object) return false; src.onQuestClick?.(i.object); return true; } }),
+      // The number, at `full` only. The badge is anchored at its BOTTOM edge, and the hexagon's
+      // optical centre sits ~46% of its height above that, which is where the digits go.
+      ...(small ? [] : [new TextLayer({ id: 'quest-numbers', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.7),
+        getText: (d) => String(d.badge ?? ''), characterSet: QUEST_NUM_CHARS,
+        getSize: (d) => (String(d.badge ?? '').length > 1 ? 13 : 15), sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 17,
+        getPixelOffset: [0, -Math.round(pinPx * 0.46)], getTextAnchor: 'middle',
+        getColor: (d) => [242, 240, 231, d.done ? 150 : 255],
+        fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF,
+        billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+        updateTriggers: { getPosition: heightEpoch, getColor: pts.map((d) => d.done) } })]),
     ];
   }
 
@@ -1111,6 +1335,7 @@ export async function createView3d(container, mapData, src) {
     render();
   };
   const COUNT_CHARS = [...'0123456789+'];
+  const QUEST_NUM_CHARS = [...'0123456789'];
   function lodMarkerLayers(markers) {
     const mpp = 1 / Math.pow(2, viewState.zoom ?? 0);
     const t = updateTier(mpp);
@@ -1178,31 +1403,43 @@ export async function createView3d(container, mapData, src) {
     const labels = src.labels().filter((d) => inLimit(d.position[0], d.position[1])
       && (floor === 'U' ? d.floor === 'U' || d.floor === 'both' : d.floor !== 'U'));
     const players = src.players().filter((p) => p.last);
+    // One screen-space pass decides where every word goes — see textLayout(). The quest points it
+    // lays out around are the same ones questLayers() draws, filtered the same way.
+    const questPts = ((src.quests?.() ?? null)?.points ?? []).filter((d) => inLimit(d.position.x, d.position.z));
+    const laid = textLayout(labels, markers, questPts);
+    // A place name that was hidden takes its ping with it: a beam pointing at nothing is worse
+    // clutter than the label was (QA L2 — twelve of them out-contrast the buildings they mark).
     return [
-      // Extracts are exempt from the LOD tier: they are what the map is for.
-      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-        getPixelOffset: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? [0, -4] : [0, 0]),
-        updateTriggers: { getPosition: heightEpoch, getSize: [hoverExtract, pinnedExtract], getPixelOffset: [hoverExtract, pinnedExtract] },
+      // Extracts are exempt from the LOD tier: they are what the map is for. They are NOT exempt
+      // from the chrome — a badge sliced by the bottom edge or buried under the omnibox is a
+      // marker nobody can use, so textLayout() lifts it clear (`laid.badge`) or, when even that
+      // will not fit, drops it until the camera gives it room (QA D4).
+      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') && (!laid.badge || laid.badge.get(eKey(d)))), getPosition: (d) => Pg([d.position.x, d.position.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+        getPixelOffset: (d) => { const s = laid.badge?.get(eKey(d)) ?? [0, 0]; return eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? [s[0], s[1] - 4] : s; },
+        updateTriggers: { getPosition: heightEpoch, getSize: [hoverExtract, pinnedExtract], getPixelOffset: [hoverExtract, pinnedExtract, laid.badge] },
         onHover: (i) => { const k = i.object && i.object.kind.startsWith('extract') ? eKey(i.object) : null; if (k !== hoverExtract) { hoverExtract = k; render(); } },
         onClick: (i) => { if (!i.object || !i.object.kind.startsWith('extract')) return false; const k = eKey(i.object); pinnedExtract = pinnedExtract === k ? null : k; render(); return true; } }),
       ...lodMarkerLayers(markers),
-      ...pingLayers(labels),
+      ...pingLayers(laid.place.map((e) => e.d)),
       // TRACK C typography: majors are UPPERCASE/700, minors Title Case/600 — case, not a second grey,
       // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
       ...[true, false].map((isMajor) => new TextLayer({ id: isMajor ? 'labels-major' : 'labels-minor',
-        data: labels.filter((d) => major(d) === isMajor && (isMajor || viewState.zoom >= 0.8)).map((d) => ({ p: Pg(d.position, lift(d) + 1.5), t: isMajor ? d.text.toUpperCase() : d.text })),
-        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 6.2 : 4.6, sizeUnits: 'meters', sizeMinPixels: 10, sizeMaxPixels: isMajor ? 15 : 11,
+        data: laid.place.filter((e) => e.major === isMajor),
+        getPosition: (d) => d.pos, getText: (d) => d.text, getSize: isMajor ? 6.2 : 4.6, sizeUnits: 'meters',
+        sizeMinPixels: isMajor ? MAJOR_MIN_PX : MINOR_MIN_PX, sizeMaxPixels: isMajor ? 15 : 12,
+        // The seat textLayout() found: 0,0 for a label with room, otherwise the slide that kept it
+        // out of the chrome and off its neighbour.
+        getPixelOffset: (d) => d.off,
         getColor: isMajor ? [...C.cream, 255] : [...C.creamDim, minorAlpha()], updateTriggers: { getColor: isMajor ? 0 : minorAlpha() },
         fontFamily: LABEL_FONT(), fontWeight: isMajor ? 700 : 600, fontSettings: LABEL_SDF,
         // QA D13, both halves. The minor tier used to bottom out at 8 px of sentence-case type over
         // hillshade, where neither a 2 px halo nor a second grey is enough separation to read the
         // word — the 2D half of the same defect raised `.place-label` to 12.5/11 px in 32ce1cc, and
-        // leaving 3D at 8 made one defect behave two ways. The floor is 10 px in both tiers now;
-        // the hierarchy is carried by case, weight and colour (and by getSize everywhere above the
-        // floor), which is what this layer pair was built on in the first place.
+        // leaving 3D at 8 made one defect behave two ways. QA M10 then found Woods, the physically
+        // largest map, sitting ON that floor at ~7 px of cap height, so the floor is 12/11 now.
         outlineWidth: isMajor ? 3.2 : 3, outlineColor: isMajor ? [...C.ink, 252] : [...C.ink, 250],
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
-      ...extractNameLayers(markers),
+      ...extractNameLayers(laid.extract),
       ...questLayers(),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.6)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       // live player: field-of-view cone on the ground (direction = the cone) + beacon
@@ -1246,6 +1483,25 @@ export async function createView3d(container, mapData, src) {
     initialViewState: viewState, effects: sceneEffects(), getCursor: ({ isHovering }) => (isHovering ? 'pointer' : 'grab'),
     // The Stage 1 assets need a luma device to upload against; this is the first moment one exists.
     onDeviceInitialized: (device) => { armRenderAssets(device); },
+    // QA D1's measurement, not its fix: the first frame in which a place NAME actually has glyphs
+    // on screen, and the first in which a marker BADGE does. The gap between the two is the window
+    // where the map showed names floating over nothing. Both stop being written after the first
+    // hit, so this costs one array scan per frame until then and nothing afterwards.
+    onAfterRender: () => {
+      if (firstLabelMs != null && firstBadgeMs != null) return;
+      const layers = deck.props.layers || [];
+      // TextLayer is a CompositeLayer: its models live on the sublayer, so `getModels()` on the
+      // parent is always empty and a naive check never fires.
+      const hasModels = (l) => !!(l?.getModels?.().length) || !!(l?.getSubLayers?.().some((s) => s?.getModels?.().length));
+      const drawn = (id) => { const l = layers.find((x) => x && x.id === id); return !!(l && l.props.data?.length && hasModels(l)); };
+      const t = Math.round(performance.now() - bootMs);
+      if (firstLabelMs == null && drawn('labels-major')) firstLabelMs = t;
+      if (firstBadgeMs == null && drawn('markers-extract')) {
+        const l = layers.find((x) => x && x.id === 'markers-extract');
+        // an IconLayer with no atlas texture yet draws nothing — that WAS the defect
+        if (l.state?.iconManager?.isLoaded !== false) firstBadgeMs = t;
+      }
+    },
     // Every camera change goes through the tilt clamp — right-drag can lower the eye to the ground
     // plane and no further, and closing in on a hill raises the floor instead of burying the camera.
     onViewStateChange: ({ viewState: raw }) => {
@@ -1253,7 +1509,12 @@ export async function createView3d(container, mapData, src) {
       const zoomed = Math.abs((v.zoom ?? 0) - (viewState.zoom ?? 0)) > 0.05;
       viewState = v;
       deck.setProps({ viewState: v });
-      if (zoomed) render();
+      // A zoom changes the LOD tier, so it rebuilds immediately. A PAN used to rebuild nothing,
+      // which was fine while every label was placed in world space — textLayout() places them in
+      // SCREEN space, so a pan that slides a name under the omnibox has to be re-seated. One
+      // rebuild per animation frame at most; the layer set is diffed by id, so the static scene
+      // is untouched by it.
+      if (zoomed) render(); else scheduleRender();
       src.onViewChange?.(v);
     },
     getTooltip: ({ object, layer }) => {
@@ -1272,6 +1533,12 @@ export async function createView3d(container, mapData, src) {
   let base = staticLayers();
   let extras = extraLayers();
   initialised = true;
+  let renderPending = 0;
+  /** At most one layer rebuild per animation frame, however many moves land inside it. */
+  function scheduleRender() {
+    if (renderPending) return;
+    renderPending = requestAnimationFrame(() => { renderPending = 0; render(); });
+  }
   function render() {
     const visibleBase = base.filter((layer) => (nature.trees || layer.id !== 'understory') && (nature.rocks || !['rocks', 'hard-rocks', 'rock-talus', 'rock-masses'].includes(layer.id)));
     const vegetation = nature.trees ? treeLayers({ treeSet, H, zoom: viewState.zoom ?? 0, relief, look, fogExtension: fogExt }) : [];
@@ -1416,6 +1683,15 @@ export async function createView3d(container, mapData, src) {
       fog: { enabled: fog.enabled, diagonalMeters: Math.round(mapDiagonal), startMeters: Math.round(fog.startMeters), targetMeters: Math.round(fog.targetMeters), maxDensity: fog.maxDensity },
       post: { ...postFor(look), armed: Boolean(gradeEffect) },
       groundDetail: Boolean(groundExt),
+      /**
+       * Cold-load milestones, in ms since createView3d() started (QA D1). `firstBadgeMs` minus
+       * `firstLabelMs` IS the defect: the window in which the map showed place names with no
+       * marker under them. Null means "has not happened yet in this session".
+       */
+      timing: { atlasReadyMs, atlasWaitMs, prepMs, firstLabelMs, firstBadgeMs,
+        badgeLagMs: firstBadgeMs != null && firstLabelMs != null ? firstBadgeMs - firstLabelMs : null },
+      /** Draped vertices this map's limit ring had to pull back inside it (QA M2). */
+      clippedVerts,
     };
   }
   const api = {
