@@ -46,7 +46,7 @@ export const CONTRACT = {
     '#relief-toggle', '#relief-toggle .seg-cell[data-relief=1]', '#relief-toggle .seg-cell[data-relief=3]',
     '#trees-toggle', '#trees-toggle .seg-cell[data-trees=1]', '#trees-toggle .seg-cell[data-trees=0]',
     '#rocks-toggle', '#rocks-toggle .seg-cell[data-rocks=1]', '#rocks-toggle .seg-cell[data-rocks=0]',
-    '#label-density', '#label-density .seg-cell[data-density=off]',
+    '#label-density', '#label-density .seg-cell[data-density=auto]', '#label-density .seg-cell[data-density=off]',
     '#label-density .seg-cell[data-density=key]', '#label-density .seg-cell[data-density=all]',
     '#help-btn', '#hint3d',
   ],
