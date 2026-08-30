@@ -40,7 +40,7 @@ export function mdLite(src) {
   return out.join('') || `<p>${inline(src)}</p>`;
 }
 
-export function createAssistant({ mapKey, tz, store, onOpen }) {
+export function createAssistant({ mapKey, tz, store, panel }) {
   const el = {
     block: document.getElementById('ask-block'),
     toggle: document.getElementById('ask-toggle'),
@@ -132,7 +132,7 @@ export function createAssistant({ mapKey, tz, store, onOpen }) {
   async function ask(text) {
     const message = String(text ?? '').trim();
     if (!message || busy) return;
-    setOpen(true, true);
+    setOpen(true);
     el.input.value = '';
     el.chips.hidden = true;
     sayUser(message);
@@ -185,31 +185,31 @@ export function createAssistant({ mapKey, tz, store, onOpen }) {
 
   /* ---------------------------------------------------------------- panel -- */
 
-  /** `reveal` = the user asked for the panel, so bring it into view (rail scroll / mobile sheet). */
-  function setOpen(open, reveal = false) {
-    el.body.hidden = !open;
-    el.toggle.setAttribute('aria-expanded', String(open));
-    store.set('askOpen', open);
+  /** The Ask panel is one of the shell's transient panels; this only asks it to show/hide. */
+  const panelOpen = () => panel?.isOpen?.() ?? !el.body.hidden;
+  function setOpen(open) {
+    panel?.setOpen?.(!!open);
+    el.toggle.setAttribute('aria-expanded', String(!!open));
+    store.set('askOpen', !!open);
     if (!open) return;
-    onOpen?.(reveal);
     scroll();
-    if (reveal) requestAnimationFrame(() => el.block.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
   }
 
   function init() {
     renderChips();
-    el.toggle.onclick = () => setOpen(el.body.hidden, true);
+    el.toggle.onclick = () => setOpen(!panelOpen());
     el.form.onsubmit = (e) => { e.preventDefault(); ask(el.input.value); };
     // ?ask=1 opens the panel; ?ask=<question> opens it and asks — a shareable "show me this" link.
     const param = new URLSearchParams(location.search).get('ask');
-    setOpen(param != null || store.get('askOpen', false) === true, param != null);
+    if (param != null || store.get('askOpen', false) === true) setOpen(true);
+    else el.toggle.setAttribute('aria-expanded', String(panelOpen()));
     if (param && param !== '1') setTimeout(() => ask(param.slice(0, 2000)), 300);
 
     // finish a map switch that the assistant asked for
     let pending = null;
     try { pending = JSON.parse(sessionStorage.getItem(HANDOFF) || 'null'); sessionStorage.removeItem(HANDOFF); } catch { /* ignore */ }
     if (pending && pending.map === mapKey) {
-      setOpen(true, true);
+      setOpen(true);
       for (const t of pending.turns ?? []) {
         history.push(t);
         if (t.role === 'user') sayUser(t.content);
@@ -229,5 +229,5 @@ export function createAssistant({ mapKey, tz, store, onOpen }) {
     }
   }
 
-  return { init, setOpen, ask, focus: () => { setOpen(true, true); el.input.focus(); } };
+  return { init, setOpen, ask, focus: () => { setOpen(true); el.input.focus(); } };
 }

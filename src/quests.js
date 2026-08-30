@@ -26,8 +26,11 @@ const levelTag = (level) => (level === 'underground' ? '<span class="qtag qtag-u
  * @param {()=>boolean} deps.is3d
  * @param {()=>void} deps.refresh3d     re-render the deck layers
  * @param {(x:number,z:number,y:number)=>number[]|null} deps.project3d  game coords -> screen px
+ * @param {{setOpen(on:boolean):void, isOpen():boolean}} [deps.panel]  the shell's Quests panel
+ * @param {(n:number)=>void} [deps.onSelection]  number of selected quests changed
+ * @param {()=>{left:number,top:number,right:number,bottom:number}} [deps.safeRect]  stage area nothing floats over
  */
-export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, project3d }) {
+export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, project3d, panel, onSelection, safeRect }) {
   let all = [];                       // every quest in the file
   let loaded = false, loading = null;
   let selected = [];                  // slugs, in selection order (colour = index)
@@ -204,14 +207,21 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     if (!p) return closeCard();
     const q = project3d?.(p.pin.x, p.pin.z);
     if (q && Number.isFinite(q[0])) {
+      // Keep the card inside the safe rect (chips / dock / omnibox insets) so it never lands under
+      // an open panel; fall back to the whole stage when the shell has not answered.
       const stage = el.card.parentElement.getBoundingClientRect();
+      const safe = safeRect?.() ?? { left: 8, top: 8, right: stage.width - 8, bottom: stage.height - 8 };
       const w = el.card.offsetWidth || 300, h = el.card.offsetHeight || 200;
-      const left = Math.min(Math.max(8, q[0] - w / 2), Math.max(8, stage.width - w - 8));
-      const top = Math.min(Math.max(8, q[1] - h - 26), Math.max(8, stage.height - h - 8));
+      const left = Math.min(Math.max(safe.left, q[0] - w / 2), Math.max(safe.left, safe.right - w));
+      const top = Math.min(Math.max(safe.top, q[1] - h - 26), Math.max(safe.top, safe.bottom - h));
       el.card.style.left = `${left}px`; el.card.style.top = `${top}px`;
       el.card.classList.remove('qcard-fixed');
     } else {
-      el.card.classList.add('qcard-fixed'); // off-screen point: park the card in a corner
+      // off-screen point: park the card in the safe rect's top-left corner
+      const stage = el.card.parentElement.getBoundingClientRect();
+      const safe = safeRect?.() ?? { left: 8, top: 8, right: stage.width - 8, bottom: stage.height - 8 };
+      el.card.classList.add('qcard-fixed');
+      el.card.style.left = `${safe.left}px`; el.card.style.top = `${safe.top}px`;
     }
     cardRaf = requestAnimationFrame(positionCard);
   }
@@ -385,11 +395,15 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     history.replaceState(null, '', url.pathname + (query ? `?${query}` : '') + url.hash);
     if (redraw) { draw2d(); refresh3d?.(); }
     renderSummary(); renderList();
+    onSelection?.(selected.length);
   }
+  // The panel itself is the shell's — this only asks it to show/hide. #quests stays mounted so the
+  // ids inside it exist whether the panel is on screen or not.
+  const panelOpen = () => panel?.isOpen?.() ?? !el.body.hidden;
   function setOpen(open) {
-    el.body.hidden = !open;
-    el.toggle.setAttribute('aria-expanded', String(open));
-    store.set('questsOpen', open);
+    panel?.setOpen?.(!!open);
+    el.toggle.setAttribute('aria-expanded', String(!!open));
+    store.set('questsOpen', !!open);
     if (open) load().then(() => { renderSummary(); renderList(); });
   }
   function select(slug, { open = true } = {}) {
@@ -436,7 +450,7 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   }
 
   /* ------------------------------------------------------------------ init -- */
-  el.toggle.onclick = () => setOpen(el.body.hidden);
+  el.toggle.onclick = () => setOpen(!panelOpen());
   el.vis.querySelector('input').onchange = (e) => setVisible(e.target.checked);
   el.find.oninput = () => search(el.find.value);
   el.find.onkeydown = (e) => {
@@ -450,8 +464,11 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   async function init() {
     const urlQuests = (new URLSearchParams(location.search).get('quest') || '').split(',').map((s) => s.trim()).filter(Boolean);
     const saved = urlQuests.length ? urlQuests : (store.get('quests', []) || []);
+    // Only ever *open* here: the shell owns whether a panel is on screen, and closing it from this
+    // side would drop a pin the user set by hand and the shell just restored.
     const wantOpen = store.get('questsOpen', false) || urlQuests.length > 0;
-    setOpen(wantOpen);
+    if (wantOpen) setOpen(true);
+    else el.toggle.setAttribute('aria-expanded', String(panelOpen()));
     // The list is ~500 KB; nothing above the fold needs it, so it loads out of band and the panel
     // fills in when it lands.
     await load();

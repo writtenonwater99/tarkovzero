@@ -9,6 +9,7 @@ import { KINDS, iconHtml, extractLetter } from './icons.js';
 import { createLive, esc } from './live.js';
 import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
+import { createShell } from './shell.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -22,6 +23,30 @@ function is3d() { return document.body.classList.contains('view-3d'); }
 let view3d = null;
 let assistant = null;   // the Ask panel; created once window.tz exists (bottom of this file)
 let v3 = { target: [0, 0, 0], zoom: 0, rotationX: 50, rotationOrbit: 0, minZoom: -3, maxZoom: 8 };
+
+/* ------------------------------------------------------------------ shell -- */
+// Floating HUD: right icon toolbar, docked panels, pin model, safe-viewport rect. Everything the
+// panels contain is mounted statically in index.html — the shell only shows and hides it.
+let booted = false;   // the map exists and the HUD can be measured
+const shell = createShell({ store, onLayout: () => { if (booted) updateHud(); } });
+const stageEl = $('#stage');
+/** The rect nothing floats over, in stage CSS px. */
+const safeRect = () => shell.safeRect();
+/** Leaflet padding that keeps a fitted bounds inside the safe rect. */
+function safePad() {
+  const s = stageEl.getBoundingClientRect();
+  const r = safeRect();
+  return {
+    paddingTopLeft: L.point(Math.round(r.left), Math.round(r.top)),
+    paddingBottomRight: L.point(Math.round(s.width - r.right), Math.round(s.height - r.bottom)),
+  };
+}
+/** How far the safe rect's centre sits from the stage centre, in px. */
+function safeOffset() {
+  const s = stageEl.getBoundingClientRect();
+  const r = safeRect();
+  return L.point((r.left + r.right) / 2 - s.width / 2, (r.top + r.bottom) / 2 - s.height / 2);
+}
 
 const requestedMap = new URLSearchParams(location.search).get('map');
 const mapData = selectMap(requestedMap);
@@ -151,7 +176,7 @@ $$('#relief-toggle .seg-cell').forEach((b) => (b.onclick = () => setRelief(b.dat
 setRelief(relief, false);
 
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
-const fit = () => map.fitBounds(bounds, { padding: [0, 0], animate: false });
+const fit = () => map.fitBounds(bounds, { ...safePad(), animate: false });
 const hash = location.hash.slice(1).split('/').map(Number);
 const starts3d = new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d';
 let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
@@ -162,7 +187,11 @@ if (hash.length === 3 && hash.every(Number.isFinite)) { map.setView([hash[2], ha
 else fit();
 // Remember what "fit" means while the 2D map is measurable — #map is display:none in 3D.
 let fitState = { center: map.getCenter(), zoom: map.getZoom() };
-const rememberFit = () => { if (!is3d()) fitState = { center: bounds.getCenter(), zoom: map.getBoundsZoom(bounds, false) }; };
+const rememberFit = () => {
+  if (is3d()) return;
+  const p = safePad();
+  fitState = { center: bounds.getCenter(), zoom: map.getBoundsZoom(bounds, false, p.paddingTopLeft.add(p.paddingBottomRight)) };
+};
 rememberFit();
 window.addEventListener('resize', () => { if (autoFit) fit(); rememberFit(); updateHud(); });
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
@@ -331,8 +360,6 @@ function syncGroupCounts() {
     btn.textContent = `${n}/${kinds.length || g.kinds.length}`;
     btn.classList.toggle('full', kinds.length > 0 && n === kinds.length);
   }
-  const badge = $('#sheet-badge');
-  if (badge) badge.textContent = `${onKinds.size} filters`;
 }
 
 // Structure first (place-names row + three groups with skeletons); real rows land when the API answers.
@@ -524,9 +551,13 @@ if (!/Mac|iPhone|iPad/.test(navigator.platform)) $('#find-kbd').textContent = 'C
 function flyTo(x, z) {
   const z2 = Math.max(map.getZoom(), 4.4);
   if (is3d()) set3d({ target: [-x, -z, 0], zoom: z2 - 2.06 });
-  else map.setView([z, x], z2, { animate: true });
+  else {
+    // Land the target in the middle of the *safe* rect, not the middle of the window: with a panel
+    // docked on the right, the geometric centre is behind it.
+    const centre = map.unproject(map.project([z, x], z2).subtract(safeOffset()), z2);
+    map.setView(centre, z2, { animate: true });
+  }
   ping(x, z);
-  if (document.body.classList.contains('sheet-half') || document.body.classList.contains('sheet-full')) sheet('peek');
 }
 function ping(x, z) {
   const m = L.marker([z, x], { icon: L.divIcon({ className: 'ping', iconSize: [0, 0] }), interactive: false, keyboard: false }).addTo(map);
@@ -545,24 +576,31 @@ const quests = createQuests({
   is3d,
   refresh3d: () => view3d?.refresh(),
   project3d: (x, z) => view3d?.project?.(x, z) ?? null,
+  panel: { setOpen: (on) => shell.setOpen('quests', on), isOpen: () => shell.isOpen('quests') },
+  // A selected quest is a working session, not a lookup: the panel pins itself while one is on the
+  // map and lets go when the last is dropped — unless the user pinned it by hand.
+  onSelection: (n) => { shell.setAutoPin('quests', n > 0); shell.setIndicator('quests', n > 0); },
+  safeRect,
 });
 quests.layer.addTo(map);
 quests.init();
 
 /* --------------------------------------------------------- live panel ---- */
 const liveEl = $('#live'), liveToggle = $('#live-toggle'), liveSum = $('#live-sum');
-let liveOpen = store.get('liveOpen', false), liveCollapseTimer = 0;
+let liveCollapseTimer = 0;
 function setLiveOpen(o) {
-  liveOpen = o; store.set('liveOpen', o);
-  liveEl.hidden = !o; liveToggle.setAttribute('aria-expanded', String(o));
+  store.set('liveOpen', o);
+  shell.setOpen('live', o);
+  liveToggle.setAttribute('aria-expanded', String(o));
 }
-liveToggle.onclick = () => setLiveOpen(!liveOpen);
+liveToggle.onclick = () => setLiveOpen(!shell.isOpen('live'));
 const ui = { render() {
   const ps = [...live.players.values()];
   liveSum.textContent = ps.length ? `${ps[0].code} · ${ps.length} player${ps.length > 1 ? 's' : ''}` : 'Not connected';
   liveToggle.classList.toggle('armed', ps.length > 0);
-  if (ps.length && !liveOpen) setLiveOpen(true);
-  if (!ps.length && liveOpen) { clearTimeout(liveCollapseTimer); liveCollapseTimer = setTimeout(() => { if (!live.players.size) setLiveOpen(false); }, 8000); }
+  shell.setIndicator('live', ps.length > 0);
+  if (ps.length && !shell.isOpen('live')) setLiveOpen(true);
+  if (!ps.length && shell.isOpen('live')) { clearTimeout(liveCollapseTimer); liveCollapseTimer = setTimeout(() => { if (!live.players.size) setLiveOpen(false); }, 8000); }
   liveEl.innerHTML =
     ps.map((p) => `<div class="player"><span class="pcol" style="background:${esc(p.color)}"></span>` +
       `<b title="double-click to rename" data-rn="${esc(p.code)}">${esc(p.name)}</b>` +
@@ -588,7 +626,6 @@ const ui = { render() {
   $('#live-clear', liveEl).onclick = () => live.clearTrails();
 } };
 const live = createLive(map, mapData, ui);
-setLiveOpen(liveOpen);
 ui.render();
 live.restore();
 for (const c of (new URLSearchParams(location.search).get('live') || '').split(',').filter(Boolean)) { try { live.add(c); } catch {} }
@@ -700,25 +737,19 @@ function closePops() {
 $('#help-btn').onclick = (e) => { e.stopPropagation(); togglePop($('#hint3d'), $('#help-btn')); };
 document.addEventListener('click', (e) => { if (!e.target.closest('.pop') && !e.target.closest('#status') && !e.target.closest('#help-btn')) closePops(); });
 
-/* -------------------------------------------------------- mobile sheet --- */
-const DETENTS = ['peek', 'half', 'full'];
-const mobile = () => window.matchMedia('(max-width:760px)').matches;
-function sheet(d) {
-  document.body.classList.remove('sheet-peek', 'sheet-half', 'sheet-full');
-  document.body.classList.add('sheet-' + d);
-  document.body.dataset.sheet = d;
-  setTimeout(() => { map.invalidateSize(); updateHud(); }, 240);
-}
-if (mobile()) sheet('half');
-$('#sheet-grab').onclick = () => sheet(DETENTS[(DETENTS.indexOf(document.body.dataset.sheet || 'half') + 1) % 3]);
-$('#stage').addEventListener('pointerdown', () => { if (mobile() && document.body.dataset.sheet !== 'peek') sheet('peek'); });
-window.addEventListener('resize', () => { if (!mobile()) document.body.classList.remove('sheet-peek', 'sheet-half', 'sheet-full'); else if (!document.body.dataset.sheet) sheet('half'); });
-
 /* ------------------------------------------------------------ keyboard --- */
 document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
   if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); findEl.focus(); findEl.select(); return; }
-  if (e.key === 'Escape') { closePops(); map.closePopup(); quests.closeCard(); if (mobile()) sheet('peek'); return; }
+  if (e.key === 'Escape') {
+    // Peel one layer at a time: popovers and cards, then the transient panel. Pinned workspaces stay.
+    const hadPop = $$('.pop').some((p) => !p.hidden) || !mapMenu.hidden;
+    const hadCard = !$('#quest-card').hidden || !!$('.leaflet-popup') || !resEl.hidden;
+    closePops(); map.closePopup(); quests.closeCard();
+    if (!resEl.hidden) { findEl.value = ''; results = []; resEl.hidden = true; findEl.blur(); }
+    if (!hadPop && !hadCard) shell.closeTransient();
+    return;
+  }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === '/') { e.preventDefault(); findEl.focus(); return; }
   if (e.key === '3') { setView(is3d() ? '2d' : '3d'); return; }
@@ -731,11 +762,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === ']') { if (is3d()) stepFloor(1); return; }
   if (e.key === '+' || e.key === '=') { zoomBy(0.5); return; }
   if (e.key === '-') { zoomBy(-0.5); return; }
-  if (/^[1-6]$/.test(e.key)) {
-    const rows = $$('#layers .row[data-kind]:not([data-kind=""])');
-    const row = rows[Number(e.key) - 1];
-    if (row) { const k = row.dataset.kind; setKind(k, !onKinds.has(k)); }
-  }
+  // Bare 1–6 used to toggle whatever the first six filter rows happened to be — a shortcut whose
+  // meaning changed with the data, and `3` collided with the 2D/3D toggle. Dropped (red team #9);
+  // layer commands come back through the omnibox in step 2.
 });
 
 /* ------------------------------------------------------------ tz API ----- */
@@ -746,6 +775,9 @@ window.tz = {
   get view() { return is3d() ? '3d' : '2d'; },
   setView,
   flyTo,
+  /** The part of the stage nothing floats over — {left, top, right, bottom} in stage CSS px. */
+  safeRect,
+  panel: { open: (n) => shell.open(n), close: (n) => shell.close(n), isOpen: (n) => shell.isOpen(n) },
   quests: {
     /** Select a quest by slug (adds it to the map). Returns false if the slug is unknown. */
     select: (slug) => quests.select(slug),
@@ -772,10 +804,11 @@ assistant = createAssistant({
   mapKey: mapData.key,
   tz: window.tz,
   store,
-  onOpen: (reveal) => { if (mobile() && (reveal || document.body.dataset.sheet === 'peek')) sheet('full'); },
+  panel: { setOpen: (on) => shell.setOpen('ask', on), isOpen: () => shell.isOpen('ask') },
 });
 assistant.init();
 
+booted = true;
 updateHud();
 if (starts3d) setView('3d');
 
