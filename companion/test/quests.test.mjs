@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { QuestTracker, parseNotificationLog, extractAccount, taskIdOf, loadTaskIds, defaultQuestsFile, sessionDate, pushLogFiles } from '../quests.mjs';
+import { QuestTracker, parseNotificationLog, extractAccount, taskIdOf, loadTaskIds, defaultQuestsFile, sessionDate, pushLogFiles, READ_RETRIES } from '../quests.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(here, 'fixtures', 'logs');
@@ -283,6 +283,18 @@ test('a different AccountId wipes the state and replays only the new session', (
   assert.deepEqual(t.state.failed, []);
   assert.equal(t.state.since, '2026-08-09'); // "since" moves to the wipe, not the oldest log
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'companion-quests.json'), 'utf8')).accountId, '20000002');
+});
+
+test('a read failure that never clears is given up on loudly, not pinned forever', () => {
+  const dir = stage(['a', 'b', 'c']);
+  const lines = [];
+  const t = tracker(dir, (l) => lines.push(l));
+  const broken = pushLog(dir, 'b');
+  fs.rmSync(broken); fs.mkdirSync(broken);            // never recovers
+  for (let i = 0; i < READ_RETRIES + 1; i++) t.sync({ rescan: true });
+  assert.equal(lines.filter((l) => l.includes('giving up')).length, 1);
+  assert.ok(t.state.active.includes(FIRSTINLINE));    // session C is read again once B is written off
+  assert.ok(t.state.cursor.file.startsWith(SESSION.c), t.state.cursor.file);
 });
 
 test('the tail tick does no identity detection, and the rescan tick still sees a changed identity', () => {
