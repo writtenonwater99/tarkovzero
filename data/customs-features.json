@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "map": "customs",
+  "features": [
+    {
+      "featureId": "customs.dorms.two_story.main",
+      "match": { "centroid": [230.95, 149.82], "toleranceM": 0.35 },
+      "set": { "featureClass": "building", "name": "Dorms 2-Story", "place": "Dorms 2-Story", "floorCount": 2, "heightM": 7.2, "style": "box" },
+      "assert": { "count": 1, "floorCount": 2, "minHeightM": 7, "maxHeightM": 7.5 },
+      "evidence": { "method": "exact-lock-clusters+named-landmark", "status": "exact-floor-count; shell-needs-survey" }
+    },
+    {
+      "featureId": "customs.water_pump.cooling_towers",
+      "match": {
+        "centroids": [[603.67, -98.19], [618.55, -100], [611.5, -130.15]],
+        "toleranceM": 0.4
+      },
+      "set": {
+        "featureClass": "cooling-tower",
+        "name": "Water Pump Cooling Tower",
+        "place": "Water Pump",
+        "kind": "cooling_tower",
+        "style": "cooling-tower",
+        "floorCount": 1,
+        "heightM": 30,
+        "heightSource": "exact-top-or-fallback",
+        "minimumExactHeightM": 12
+      },
+      "assert": { "count": 3, "floorCount": 1, "minHeightM": 24, "style": "cooling-tower", "kind": "cooling_tower" },
+      "evidence": { "method": "exact-cache-top-when-physical+audit-silhouette", "status": "30m fallback needs first-party survey" }
+    }
+  ],
+  "anchors": [
+    { "name": "Big Red", "position": [-205.9, -114.2] },
+    { "name": "Dorms 2-Story", "position": [230.95, 149.82] },
+    { "name": "Fortress", "position": [203, -128] },
+    { "name": "Old Gas", "position": [330, -177] },
+    { "name": "Water Pump", "position": [603.67, -98.19] },
+    { "name": "Main Bridge", "position": [-71.6, 7] }
+  ]
+}
