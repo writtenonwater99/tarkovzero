@@ -63,9 +63,39 @@ function makeSampler(t, relief = 3) {
   };
 }
 const inPolyXZ = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
-const makeSurfaceSampler = (base, hardRocks = [], relief = 1) => (x, z) => Math.max(base(x, z),
-  ...hardRocks.filter((rock) => inPolyXZ([x, z], rock.poly))
-    .map((rock) => Number.isFinite(rock.surfaceY) ? rock.surfaceY * relief : base(x, z) + rock.height * relief));
+/**
+ * H(x, z) — the canonical ground sampler: the terrain, raised to the top of any hard rock the point
+ * is inside. This is the hottest function in the module (every draped vertex, every tree, every
+ * drop-line, the tooltip; ~1e5 calls in a first paint), so it is written for the common case:
+ *
+ *  - no hard rocks at all (Customs) -> it IS the bicubic sampler, with no wrapper cost;
+ *  - a point nowhere near a rock (almost every point) -> rejected on a precomputed bounding box,
+ *    which is 4 comparisons instead of a point-in-polygon walk. Woods' 7 rocks carry 497 edges
+ *    between them, and the old version ran all of them, plus two array allocations, per call.
+ */
+function makeSurfaceSampler(base, hardRocks = [], relief = 1) {
+  const rocks = (hardRocks ?? []).filter((r) => Array.isArray(r?.poly) && r.poly.length >= 3).map((rock) => {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [px, pz] of rock.poly) {
+      if (px < x0) x0 = px; if (px > x1) x1 = px;
+      if (pz < z0) z0 = pz; if (pz > z1) z1 = pz;
+    }
+    return { poly: rock.poly, x0, x1, z0, z1, surfaceY: Number.isFinite(rock.surfaceY) ? rock.surfaceY * relief : null, lift: rock.height * relief };
+  });
+  if (!rocks.length) return base;
+  return (x, z) => {
+    const ground = base(x, z);
+    let h = ground;
+    for (const r of rocks) {
+      if (x < r.x0 || x > r.x1 || z < r.z0 || z > r.z1) continue;
+      if (!inPolyXZ([x, z], r.poly)) continue;
+      // Each rock is measured from the TERRAIN, never from another rock's roof.
+      const top = r.surfaceY ?? ground + r.lift;
+      if (top > h) h = top;
+    }
+    return h;
+  };
+}
 let VOID_Z = -14;
 function voidRect(limit) { const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]); const m = 60; return [[Math.min(...xs) - m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.max(...zs) + m], [Math.min(...xs) - m, Math.max(...zs) + m]]; }
 const OVERLAY = { depthCompare: 'always', depthWriteEnabled: false };
