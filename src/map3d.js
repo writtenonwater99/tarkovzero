@@ -1002,12 +1002,15 @@ export async function createView3d(container, mapData, src) {
       // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
       ...[true, false].map((isMajor) => new TextLayer({ id: isMajor ? 'labels-major' : 'labels-minor',
         data: labels.filter((d) => major(d) === isMajor && (isMajor || viewState.zoom >= 0.8)).map((d) => ({ p: Pg(d.position, lift(d) + 1.5), t: isMajor ? d.text.toUpperCase() : d.text })),
-        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 6.2 : 4.6, sizeUnits: 'meters', sizeMinPixels: isMajor ? 10 : 8, sizeMaxPixels: isMajor ? 15 : 11,
+        getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 6.2 : 4.6, sizeUnits: 'meters', sizeMinPixels: 10, sizeMaxPixels: isMajor ? 15 : 11,
         getColor: isMajor ? [...C.cream, 255] : [...C.creamDim, minorAlpha()], updateTriggers: { getColor: isMajor ? 0 : minorAlpha() },
         fontFamily: LABEL_FONT(), fontWeight: isMajor ? 700 : 600, fontSettings: LABEL_SDF,
-        // QA D13: the minor tier bottoms out at 8 px of sentence-case type over hillshade, where a
-        // 2 px halo is not enough separation to read the word. Outline only — the size floor
-        // (sizeMinPixels above) is owned by the 3D lane right now and is left alone.
+        // QA D13, both halves. The minor tier used to bottom out at 8 px of sentence-case type over
+        // hillshade, where neither a 2 px halo nor a second grey is enough separation to read the
+        // word — the 2D half of the same defect raised `.place-label` to 12.5/11 px in 32ce1cc, and
+        // leaving 3D at 8 made one defect behave two ways. The floor is 10 px in both tiers now;
+        // the hierarchy is carried by case, weight and colour (and by getSize everywhere above the
+        // floor), which is what this layer pair was built on in the first place.
         outlineWidth: isMajor ? 3.2 : 3, outlineColor: isMajor ? [...C.ink, 252] : [...C.ink, 250],
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
       ...extractNameLayers(markers),
@@ -1161,9 +1164,11 @@ export async function createView3d(container, mapData, src) {
   // forced redraws cost nothing and make the first frame deterministic.
   for (const t of [300, 1200, 3500]) setTimeout(() => { try { deck.redraw('late-upload'); } catch {} }, t);
   // Stage 1 instrumentation: one line, once, after the scene has settled — the plan's "the first
-  // implementation stage must establish the real baseline". `window.tz.renderStats()` re-reads it
-  // on demand and scripts/render-baseline.mjs collects it across both looks and all three maps.
-  setTimeout(() => { try { console.log('[tz] renderStats', JSON.stringify(renderStats())); } catch {} }, 4000);
+  // implementation stage must establish the real baseline". DEV only: `window.tz.renderStats()`
+  // re-reads it on demand and scripts/render-baseline.mjs collects it through that hook, not
+  // through this line, so in a production build the log had no consumer and every visitor got a
+  // ~500-byte dump of texture byte counts and frame timings in their console.
+  if (import.meta.env?.DEV) setTimeout(() => { try { console.log('[tz] renderStats', JSON.stringify(renderStats())); } catch {} }, 4000);
   const diagnostics = () => ({
     relief,
     terrain: terrain?.stats ?? null,

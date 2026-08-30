@@ -510,6 +510,11 @@ function applyLabels() {
   const wantMinor = labelsShown && d === 'all';
   wantMajor ? labelLayers.major.addTo(map) : map.removeLayer(labelLayers.major);
   wantMinor ? labelLayers.minor.addTo(map) : map.removeLayer(labelLayers.minor);
+  // Adding a layer to a Leaflet map raises no map-level event, so nothing else re-runs the safe-rect
+  // clip: the labels Key→All brings in were drawn with no clip pass at all and stayed truncated
+  // under the toolbar/dock/omnibox until the user happened to pan (measured on Customs: 13 labels
+  // with 3 hidden → 32 labels with 3 hidden, the 19 new minors never measured). This is that pass.
+  labelClip?.();
   $$('#label-density .seg-cell').forEach((b) => {
     b.classList.toggle('on', b.dataset.density === density);
     // Auto shows which way it is currently leaning, so the control is never a black box.
