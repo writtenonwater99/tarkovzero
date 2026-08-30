@@ -116,3 +116,27 @@ pairing code) and `.env.local` out of git (already ignored).
   "Quest objectives" is its own toggle row, hidden until a quest is selected. Keyboard: **Q** opens the panel.
 - AI hook: `window.tz.quests.{select,deselect,toggle,markObjective,flyTo,points,selected,all,setVisible,open}`
   plus `window.tz.{map,view,setView,flyTo}`.
+
+## Active quests from the game (companion + relay half, 2026-08-29)
+Spec: `docs/plans/ACTIVE-QUESTS.md`. The site half (`src/quests.js` "My quests" + auto-select on `map`) is
+**not built yet** — the ids are already on the wire.
+- `companion/quests.mjs`: parses `build\Logs\log_*\* push-notifications_000.log` (`Got notification |
+  ChatMessageReceived` header + pretty-printed JSON; `message.type` 10 started / 11 failed / 12 finished, 14
+  = reward mail, ignored). Task id = first token of `templateId`; ids missing from `public/data/quests.json`
+  go to `unknown` and are never published. There is no "current quests" snapshot in the game, so the active
+  set is a **replay** of every `log_*` session oldest→newest in `dt` order (file order only breaks ties),
+  deduped on `message._id`.
+- State + cursor in `companion/companion-quests.json` (git-ignored, next to `companion.json`): `{accountId,
+  profileId, cursor:{file,offset}, active, done, failed, unknown, seen, since, ts}`. A restart resumes from
+  the cursor; an `AccountId`/`ProfileId` change (from `application_000.log`'s
+  `PrepareSelectedProfileLocally ProfileId:<hex> AccountId:<digits>`) wipes the reconstruction and replays
+  only the current session. `--reset-quests` forces that by hand, `--no-quests` disables the feature.
+- Transport: companion `POST <relay http>/quests/CODE` `{active,done,failed,accountId,ts,since}` on change
+  and on every (re)connect; relay caches it per room like the last position and forwards it to `/sub/CODE`
+  (and to late joiners) as **`{type:'quests', …, code, t}`**. The plan doc says `t:'quests'` — that field is
+  already the relay's timestamp on every message, so the discriminator is `type`, like `pos`/`map`/`status`.
+- Tests: `npm run test:quests` (`node --test`, no deps) against `companion/test/fixtures/` — three synthetic
+  log sessions in the game's exact format (one CRLF), ids taken from quests.json plus one id the real logs
+  carry that quests.json does not.
+- Known gap: EFT rotates old log folders, so quests started before the oldest kept log are missing from the
+  replay — hence `since` in the payload and the manual add/remove the site must keep.
