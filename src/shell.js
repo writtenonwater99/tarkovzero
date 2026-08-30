@@ -42,8 +42,13 @@ export function createShell({ store, onLayout } = {}) {
   const saved = store?.get(KEY, null) ?? {};
   const manual = new Set((saved.pinned ?? []).filter((n) => WORKSPACE.has(n)));
   const seen = new Set((saved.seen ?? []).filter((n) => PANELS.includes(n)));
-  const pinned = new Set(manual);      // manual ∪ auto
+  const pinned = new Set(manual);      // manual ∪ (auto − unpinned)
   const auto = new Set();
+  // Panels the user unpinned BY HAND while something was auto-pinning them. "A manual pin always
+  // wins over the automatic one" cuts both ways: without this, unpinning Quests while a quest is
+  // selected is a no-op, because setAutoPin put it back the instant the click let go. Cleared when
+  // the automatic reason goes away, so the next selection is free to pin it again.
+  const unpinned = new Set();
   const open = new Set(pinned);        // invariant: pinned ⊆ open, at most one open non-pinned
 
   const save = () => store?.set(KEY, { pinned: [...manual], seen: [...seen] });
@@ -63,9 +68,14 @@ export function createShell({ store, onLayout } = {}) {
       e.btn?.setAttribute('aria-expanded', String(on));
       e.item?.classList.toggle('unseen', !seen.has(name));
       if (e.pin) {
-        e.pin.setAttribute('aria-pressed', String(manual.has(name)));
-        e.pin.classList.toggle('on', pinned.has(name));
-        e.pin.title = manual.has(name) ? 'Unpin this panel' : 'Keep this panel open';
+        // One meaning for all three: the button is lit iff the panel is pinned, whoever pinned it,
+        // and pressing a lit one unpins. Reading `manual` for the state and `pinned` for the light
+        // is how the control used to end up looking pinned, staying pinned and changing only its
+        // tooltip while an auto-pin held it.
+        const on = pinned.has(name);
+        e.pin.setAttribute('aria-pressed', String(on));
+        e.pin.classList.toggle('on', on);
+        e.pin.title = on ? 'Unpin this panel' : 'Keep this panel open';
       }
     }
     dock.classList.toggle('has-open', open.size > 0);
@@ -85,6 +95,7 @@ export function createShell({ store, onLayout } = {}) {
       if (!seen.has(name)) { seen.add(name); save(); }
     } else {
       open.delete(name);
+      unpinned.delete(name);   // closing it outright resets the pin argument entirely
       if (pinned.has(name)) { pinned.delete(name); manual.delete(name); auto.delete(name); save(); }
     }
     paint();
@@ -96,10 +107,12 @@ export function createShell({ store, onLayout } = {}) {
 
   function setPinned(name, on) {
     if (!WORKSPACE.has(name)) return;
-    if (on) { manual.add(name); pinned.add(name); open.add(name); }
+    if (on) { manual.add(name); unpinned.delete(name); pinned.add(name); open.add(name); }
     else {
       manual.delete(name);
-      if (!auto.has(name)) pinned.delete(name);
+      // Unpin means unpin, even while `auto` still holds the panel — see `unpinned` above.
+      if (auto.has(name)) unpinned.add(name);
+      pinned.delete(name);
       if (open.has(name) && !pinned.has(name)) {          // it is now the one transient slot
         for (const t of [...open]) if (t !== name && !pinned.has(t)) open.delete(t);
       }
@@ -113,12 +126,13 @@ export function createShell({ store, onLayout } = {}) {
     if (!WORKSPACE.has(name)) return;
     if (on) {
       auto.add(name);
-      if (!pinned.has(name)) {
+      if (!pinned.has(name) && !unpinned.has(name)) {
         pinned.add(name);
         open.add(name);
       }
     } else {
       auto.delete(name);
+      unpinned.delete(name);
       if (!manual.has(name)) pinned.delete(name);
       if (open.has(name) && !pinned.has(name)) {
         for (const t of [...open]) if (t !== name && !pinned.has(t)) open.delete(t);
@@ -175,7 +189,7 @@ export function createShell({ store, onLayout } = {}) {
   for (const name of PANELS) {
     const e = el[name];
     e.btn?.addEventListener('click', () => setOpen(name, !open.has(name), { focus: true }));
-    e.pin?.addEventListener('click', () => setPinned(name, !manual.has(name)));
+    e.pin?.addEventListener('click', () => setPinned(name, !pinned.has(name)));
   }
   for (const b of document.querySelectorAll('[data-close]')) {
     b.addEventListener('click', () => setOpen(b.dataset.close, false));
