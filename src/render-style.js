@@ -127,15 +127,18 @@ export const KEY_ELEVATION_DEG = 21;
 export const LIGHT = deepFreeze({
   realistic: {
     ambientColor: '#a8b0ae',
-    ambientIntensity: 1.05,
+    ambientIntensity: 1.18,
     keyColor: '#c8c2b2',
     keyIntensity: 0.85,
     keyAzimuthDeg: KEY_AZIMUTH_DEG,
     keyElevationDeg: KEY_ELEVATION_DEG,
     keyDirection: keyDirection(KEY_AZIMUTH_DEG, KEY_ELEVATION_DEG),
     // Broad overcast bounce; not a second shadow-casting light.
+    // R1.5 raised both the sky dome and the bounce ("overcast skies act as giant softboxes"):
+    // ambient 1.05 -> 1.18 with EXPOSURE dropped to match (net +4.5% on the sky term), and the cool
+    // fill 0.35 -> 0.44 so the side away from the key fills with blue-grey instead of going flat.
     fillColor: '#8f9aa0',
-    fillIntensity: 0.35,
+    fillIntensity: 0.44,
     exposure: 1.0,
     shadowsEnabled: false, // gated on Stage 7
   },
@@ -175,6 +178,14 @@ export const FOG_START_FRACTION = 0.12;
 export const FOG_TARGET_AT = 0.65;
 export const FOG_TARGET_DENSITY = 0.7; // midpoint of the plan's 65-75% band
 export const FOG_HEIGHT_FALLOFF_M = 120;
+
+// R1.5 — aerial perspective. The plan's fog is a COLOUR mix, not an alpha fade: distance first
+// costs a surface its chroma, then takes the sky's cool cast, and only then does it wash toward the
+// far-fog value. `FOG_COOL_TINT` is normalised to luma 1 at the call site, so it shifts hue without
+// changing how bright the fogged fragment is.
+export const FOG_DESATURATION = 0.62;
+export const FOG_COOL_TINT = '#d6e2f0';
+export const FOG_COOL_AMOUNT = 0.4;
 
 export const FOG = deepFreeze({
   realistic: {
@@ -570,6 +581,284 @@ export const MATERIALS = table({
 });
 
 export const MATERIAL_IDS = deepFreeze(Object.keys(MATERIALS));
+
+// ---------------------------------------------------------------------------
+// R1.5 — specular response
+//
+// The plan (Part C, "One material contract") wants surface RESPONSE, not just albedo: "Roads and
+// terrain need a broad, low-roughness specular lobe to reflect the overcast sky, while concrete
+// needs high roughness."
+//
+// deck's Phong material is `{ambient, diffuse, shininess, specularColor}`; there is no roughness
+// input, so a material's `roughnessFactor` above is turned into the two numbers deck does take:
+//   shininess = 1 + SPECULAR_EXPONENT_MAX * (1 - roughness)^2
+//   specularColor = skyColor * strength                    (an overcast lobe is SKY-coloured)
+// The strengths are authored per family rather than derived, because a family's lobe also carries
+// how much of the sky the surface actually sees (a road lies flat under the whole dome, a wall does
+// not). Vector is unlit by contract: every family is zero there.
+//
+// EXPONENT_MAX is 24, not the ~100 a point-light Phong lobe would want, and that is the whole
+// design: the single directional key here stands in for a SKY DOME, so the lobe has to be as wide
+// as the dome. At 96 the wettest road in the contract (roughness 0.34) came out at exponent 42, and
+// under the fixed 21-degree key with a 50-degree camera that is `0.82^42` — 0.02% of the sky, i.e.
+// nothing at all. Measured, then re-fitted; a broad lobe is what "damp, not glossy" looks like.
+// ---------------------------------------------------------------------------
+export const SPECULAR_EXPONENT_MAX = 24;
+
+export const SPECULAR = deepFreeze({
+  realistic: {
+    skyColor: PALETTE.skyFar,
+    families: {
+      water: { roughness: 0.15, strength: 0.62 },
+      road: { roughness: 0.34, strength: 0.5 },   // wet asphalt: the ground shader's road mask
+      roof: { roughness: 0.5, strength: 0.34 },
+      metal: { roughness: 0.55, strength: 0.26 },
+      building: { roughness: 0.86, strength: 0.1 },
+      slabLike: { roughness: 0.85, strength: 0.11 },
+      prop: { roughness: 0.72, strength: 0.16 },
+      rock: { roughness: 0.88, strength: 0.06 },
+      boulder: { roughness: 0.88, strength: 0.06 },
+      ground: { roughness: 0.92, strength: 0.05 },
+      foliage: { roughness: 0.95, strength: 0.03 },
+      trunk: { roughness: 0.93, strength: 0.02 },
+    },
+  },
+  vector: { skyColor: '#ffffff', families: {} },
+});
+
+/**
+ * The `{shininess, specularColor}` half of a deck Phong material for one surface family.
+ * Vector always answers a dead lobe; an unknown family answers the same, never a guess.
+ */
+export function specularFor(mode, family) {
+  const table = SPECULAR[assertMode(mode)];
+  const spec = table.families[family];
+  if (!spec) return { shininess: 1, specularColor: [0, 0, 0] };
+  const gloss = Math.max(0, 1 - spec.roughness);
+  const shininess = Math.max(1, Math.round(1 + SPECULAR_EXPONENT_MAX * gloss * gloss));
+  const sky = rgb255(table.skyColor);
+  return { shininess, specularColor: sky.map((c) => Math.round(c * spec.strength)) };
+}
+
+// ---------------------------------------------------------------------------
+// R1.5 — water
+//
+// Part C, "Water and shore": shallow tea/olive sediment deepening to blue-grey, a Fresnel blend
+// toward the sky at grazing angle, and a soft shore. Depths are REAL game metres measured against
+// the carved bed; alpha is what lets the bed read through near the bank.
+// ---------------------------------------------------------------------------
+export const WATER = deepFreeze({
+  shallow: PALETTE.waterShallow,
+  deep: PALETTE.waterDeep,
+  sky: PALETTE.skyFar,
+  depthMaxMeters: 4.5,
+  shallowAt: 0.08,
+  deepAt: 0.8,
+  reflectBase: 0.28,
+  reflectFresnel: 0.44,
+  fresnelPower: 4,
+  maxAlpha: 0.92,
+  shoreAlpha: 0.22,
+  shoreFade: 0.3,
+  /*
+   * The water surface is drawn UNLIT (its shading is the extension's, not deck's Phong), so it is
+   * the one world surface that never passes through atmosphere.js's EXPOSURE lift. Without this it
+   * renders at the raw authored albedo while every lit surface around it renders at roughly the
+   * authored value — measured on Woods: the lake came back near-black against grass at its own
+   * palette value. This is the same compensation, applied where it belongs, and it is a RENDERER
+   * calibration of the two stops above, not a second art direction.
+   */
+  exposureLift: 1.22,
+  // Realistic only: the vector skin keeps its flat semantic fill (Part C's flip table).
+  vectorEnabled: false,
+});
+
+// ---------------------------------------------------------------------------
+// R1.5 — the backdrop the diorama sits in
+//
+// The void plane is no longer the sky colour exactly. It is a slightly darker ground haze that the
+// world fog carries to the far-fog value with distance, so the frame reads sky at the top and
+// darkens toward the horizon instead of ending on one flat sheet. The skirt is a vertical ramp from
+// its earth value into that haze, so the cut edge feathers instead of floating.
+// ---------------------------------------------------------------------------
+export const BACKDROP = deepFreeze({
+  realistic: {
+    voidColor: BACKGROUND.realistic.ground,
+    voidMarginFactor: 1.4,   // × the map's playable diagonal
+    skirtTop: '#655f54',
+    skirtBottom: '#42403a',
+    skirtFeather: 0.72,      // how far down the skirt the ramp reaches
+    /*
+     * The sky's own vertical ramp, applied in the grade pass.
+     *
+     * The canvas clears to ONE colour (FOG.realistic.color) and a horizontal void plane can never
+     * appear above the horizon, so the band of frame above the skyline had nowhere to get a
+     * gradient from. The grade pass can give it one, because a pixel that already sits at the
+     * far-fog value IS atmosphere — sky, or geometry the fog has fully turned into sky — and
+     * tinting atmosphere by screen height is exactly what a sky gradient is. `tolerance` is how far
+     * from the far-fog value a pixel may be and still count as sky: anything the fog has not
+     * finished (a half-fogged ridge, a label, the map) is further away than that and is untouched.
+     *
+     * The two colours are BACKGROUND.realistic's own zenith and horizon, so the ramp darkens
+     * upward — which is what a real overcast sky does, and the opposite of a UI gradient.
+     */
+    skyZenith: BACKGROUND.realistic.zenith,
+    skyHorizon: BACKGROUND.realistic.horizon,
+    skyTolerance: 0.09,
+    skyStrength: 1,
+  },
+  vector: {
+    voidColor: '#0a0d0c',
+    voidMarginFactor: 0.12,
+    skirtTop: '#0c0e0d',
+    skirtBottom: '#0c0e0d',
+    skirtFeather: 0,
+    skyZenith: PALETTE.vectorBackground,
+    skyHorizon: PALETTE.vectorBackground,
+    skyTolerance: 0,
+    skyStrength: 0,
+  },
+});
+
+// ---------------------------------------------------------------------------
+// R1.5 — terrain macro variation
+//
+// Large-scale autumn die-off / mud splotches laid over the land-cover base (Part C: "break up the
+// flat olive green with large-scale splotches of desaturated yellow, brown, and darker greens").
+// Wavelengths are metres; each patch is a thresholded value-noise field, so nothing here moves a
+// road, a shoreline or a feature boundary.
+// ---------------------------------------------------------------------------
+export const TERRAIN_MACRO = deepFreeze({
+  patches: [
+    { color: '#7d7450', wavelength: 88, threshold: 0.55, gain: 2.1, strength: 0.34, seed: [613, -271] },
+    { color: '#5b4c3a', wavelength: 141, threshold: 0.6, gain: 1.9, strength: 0.3, seed: [-457, 829] },
+    { color: '#3d4736', wavelength: 67, threshold: 0.57, gain: 2.4, strength: 0.26, seed: [271, 419] },
+  ],
+});
+
+// A dirt rim where a paved surface meets the ground: the plan's "edge darkening/dirt blending", as
+// three widening, fading strokes under the road so the boundary is a gradient, not a pixel step.
+export const ROAD_RIM = deepFreeze({
+  color: '#4c4437',
+  widthMeters: 3.6,
+  passes: 3,
+  alpha: 0.62,
+});
+
+// ---------------------------------------------------------------------------
+// R1.5 — contact shading
+//
+// deck's stock shadow is gated on Stage 7, so "soft" is carried by the contact rings under every
+// footprint. Three rings of decreasing opacity approximate a penumbra, and the colour is a cool
+// damp blue-grey rather than ink: an overcast shadow is sky-lit, never black.
+// ---------------------------------------------------------------------------
+export const SHADOW = deepFreeze({
+  realistic: {
+    color: '#42505c',
+    rings: [
+      { meters: 1.0, alpha: 0.3 },
+      { meters: 3.2, alpha: 0.15 },
+      { meters: 6.6, alpha: 0.07 },
+    ],
+  },
+  vector: {
+    // Legible, but never a hole: the vector skin's shadow floor is a dark slate, not #000.
+    color: '#1a2420',
+    rings: [
+      { meters: 1.1, alpha: 0.26 },
+      { meters: 3.2, alpha: 0.12 },
+      { meters: 6.6, alpha: 0.05 },
+    ],
+  },
+});
+
+// ---------------------------------------------------------------------------
+// R1.5 — per-instance foliage variation
+//
+// "Randomize the tree colors slightly toward browns, yellows, and dead greens." Seeded by the
+// instance index, so the same tree is the same colour on every load and in every screenshot.
+// ---------------------------------------------------------------------------
+export const FOLIAGE_VARIATION = deepFreeze({
+  autumn: '#8d7a43',
+  dead: '#5f5b3e',
+  broadleaf: { autumn: 0.55, dead: 0.3, value: 0.24 },
+  // Conifers keep their species colour and stay the darker half of the canopy.
+  conifer: { autumn: 0.13, dead: 0.16, value: 0.15, darken: 0.08 },
+});
+
+// ---------------------------------------------------------------------------
+// R1.5 — deterministic building material classes
+//
+// Part C's resolution order, with no random inference: an explicit landmark override, then the
+// source `kind`, then the form `style`, then a conservative default.
+// ---------------------------------------------------------------------------
+export const BUILDING_MATERIAL = deepFreeze({
+  byPlace: {
+    'Dorms 2-Story': 'building-brick',
+    'Dorms 3-Story': 'building-brick',
+    'Big Red': 'building-brick',
+    Crackhouse: 'building-plaster-timber',
+    'Streamer House': 'building-plaster-timber',
+    Fortress: 'building-bunker',
+    Skeleton: 'building-bunker',
+    'Old Construction': 'building-bunker',
+    Boiler: 'building-corrugated',
+  },
+  byKind: { tank: 'building-steel-tank', powerline_towers: 'building-steel-tank' },
+  byStyle: {
+    box: 'building-concrete-panel',
+    gable: 'building-corrugated',
+    frame: 'building-bunker',
+    canopy: 'building-concrete-panel',
+    tank: 'building-steel-tank',
+    'cooling-tower': 'building-bunker',
+  },
+  fallback: 'building-concrete-panel',
+});
+
+export const ROOF_MATERIAL = deepFreeze({
+  byPlace: {
+    'Dorms 2-Story': 'roof-tile',
+    'Dorms 3-Story': 'roof-tile',
+    'Big Red': 'roof-tile',
+    Crackhouse: 'roof-tile',
+    'Streamer House': 'roof-tile',
+  },
+  byKind: { tank: 'roof-corrugated' },
+  byStyle: {
+    box: 'roof-tar',
+    gable: 'roof-corrugated',
+    frame: 'roof-concrete',
+    canopy: 'roof-corrugated',
+    tank: 'roof-corrugated',
+    'cooling-tower': 'roof-concrete',
+  },
+  fallback: 'roof-tar',
+});
+
+function resolveClass(table, feature) {
+  const place = feature?.place ?? '';
+  const kind = feature?.kind ?? '';
+  const style = feature?.style ?? 'box';
+  return table.byPlace[place] ?? table.byKind[kind] ?? table.byStyle[style] ?? table.fallback;
+}
+
+/** The wall material id for one building feature. Deterministic; never random. */
+export const buildingMaterialId = (feature) => resolveClass(BUILDING_MATERIAL, feature);
+/** The roof material id for one building feature. Deterministic; never random. */
+export const roofMaterialId = (feature) => resolveClass(ROOF_MATERIAL, feature);
+
+/** The specular family a material id belongs to, so a wall and its roof do not share a lobe. */
+export function specularFamilyFor(materialId) {
+  const m = MATERIALS[materialId];
+  if (!m) return 'building';
+  if (m.group === 'water') return 'water';
+  if (m.group === 'vegetation') return materialId === 'bark' ? 'trunk' : 'foliage';
+  if (materialId.startsWith('roof-')) return 'roof';
+  if (m.real.metallicFactor >= 0.3) return 'metal';
+  if (m.group === 'prop') return 'prop';
+  return 'building';
+}
 
 // ---------------------------------------------------------------------------
 // styleFor
