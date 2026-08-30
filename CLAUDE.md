@@ -125,18 +125,35 @@ Spec: `docs/plans/ACTIVE-QUESTS.md`. The site half (`src/quests.js` "My quests" 
   = reward mail, ignored). Task id = first token of `templateId`; ids missing from `public/data/quests.json`
   go to `unknown` and are never published. There is no "current quests" snapshot in the game, so the active
   set is a **replay** of every `log_*` session oldest→newest in `dt` order (file order only breaks ties),
-  deduped on `message._id`.
+  deduped on `message._id`. EFT does log a finish before its own start, and the pair often straddles two
+  250 ms polls, so `state.lastDt` (newest `dt` applied per task) makes the ordering hold across reads —
+  without it the published set depended on poll timing and disagreed with a cold replay of the same bytes.
 - State + cursor in `companion/companion-quests.json` (git-ignored, next to `companion.json`): `{accountId,
-  profileId, cursor:{file,offset}, active, done, failed, unknown, seen, since, ts}`. A restart resumes from
-  the cursor; an `AccountId`/`ProfileId` change (from `application_000.log`'s
-  `PrepareSelectedProfileLocally ProfileId:<hex> AccountId:<digits>`) wipes the reconstruction and replays
-  only the current session. `--reset-quests` forces that by hand, `--no-quests` disables the feature.
+  profileId, cursor:{file,offset}, active, done, failed, unknown, seen, lastDt, since, ts}` (`version` 2).
+  A restart resumes from the cursor. Identity comes from `application_000.log`'s `PrepareSelectedProfileLocally
+  ProfileId:<hex> AccountId:<digits>`: a different **AccountId** wipes the reconstruction and replays only the
+  current session; a different **ProfileId** on the same account only wipes when no quest events follow it
+  (spec §3) — otherwise the reconstruction is kept and the companion says so. `--reset-quests` wipes by hand,
+  `--no-quests` disables the feature.
+- Damaged logs: an unfinished line/JSON block only means "the game is mid-write" on the **newest** file. On an
+  older, closed session it is a permanently truncated tail (EFT killed mid-write) and is logged once and
+  stepped over — otherwise the cursor parks there and every newer session, including the live one, is never
+  read again (silent, survives restarts, `--reset-quests` cannot recover it). A failed read stops the loop and
+  leaves the cursor pinned for the next tick rather than letting a newer file advance past it.
+- Cost: identity detection + the folder walk happen only on the 5 s rescan tick (and are cached against the
+  newest application log), never on the 250 ms tail tick that shares the event loop with the screenshot scan
+  — that path is ~5 ms/tick on /mnt/c, and the two intervals together block the loop ~4% of the time.
 - Transport: companion `POST <relay http>/quests/CODE` `{active,done,failed,accountId,ts,since}` on change
-  and on every (re)connect; relay caches it per room like the last position and forwards it to `/sub/CODE`
-  (and to late joiners) as **`{type:'quests', …, code, t}`**. The plan doc says `t:'quests'` — that field is
-  already the relay's timestamp on every message, so the discriminator is `type`, like `pos`/`map`/`status`.
+  and on every (re)connect (one POST at a time, and never an empty set from a companion that has read no
+  logs); relay caches it per room like the last position and forwards it to `/sub/CODE` (and to late joiners)
+  as **`{type:'quests', …, code, t}`**. The plan doc says `t:'quests'` — that field is already the relay's
+  timestamp on every message, so the discriminator is `type`, like `pos`/`map`/`status`. The relay drops a
+  payload whose `ts` is older than the cached one (POSTs can finish out of order), rejects a body that is not
+  a JSON object (`null` used to crash the process and take every room with it), and caps each id list at 1000
+  — it was 500, below the 517 quests in quests.json.
 - Tests: `npm run test:quests` (`node --test`, no deps) against `companion/test/fixtures/` — three synthetic
   log sessions in the game's exact format (one CRLF), ids taken from quests.json plus one id the real logs
-  carry that quests.json does not.
+  carry that quests.json does not. `npm run test:relay` spawns the relay on an ephemeral port (`PORT=0`);
+  `npm test` runs both.
 - Known gap: EFT rotates old log folders, so quests started before the oldest kept log are missing from the
   replay — hence `since` in the payload and the manual add/remove the site must keep.
