@@ -170,11 +170,13 @@ test('the authored palette matches the plan, value by value', () => {
 });
 
 test('the pinned post and background numerics do not drift', () => {
+  // fxaa false in BOTH looks: the grade pass is full-screen, so a neighbourhood blend lands on the
+  // SDF label/icon/quest/live layers the plan requires to stay crisp. See the note above POST.
   assert.deepEqual({ ...POST.realistic }, {
-    enabled: true, lutAsset: 'overcast-grade-lut', vignette: 0.16, grain: 0.012, fxaa: true,
+    enabled: true, lutAsset: 'overcast-grade-lut', vignette: 0.16, grain: 0.012, fxaa: false,
   });
   assert.deepEqual({ ...POST.vector }, {
-    enabled: false, lutAsset: null, vignette: 0, grain: 0, fxaa: true,
+    enabled: false, lutAsset: null, vignette: 0, grain: 0, fxaa: false,
   });
   assert.deepEqual({ ...BACKGROUND.realistic }, {
     kind: 'gradient', zenith: '#9aa4a6', horizon: PALETTE.skyFar, ground: '#7d817b',

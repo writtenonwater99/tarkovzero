@@ -255,20 +255,39 @@ export const BACKGROUND = deepFreeze({
   },
 });
 
+/*
+ * FXAA is OFF, and this is the reason.
+ *
+ * The plan licenses it conditionally — "acceptable if it materially reduces foliage/rail shimmer" —
+ * against an acceptance rule it cannot be traded off against: "labels, extracts, quests, players,
+ * controls and selection highlights stay crisp". deck's PostProcessEffect is one full-screen colour
+ * pass over the WHOLE framebuffer, so there is no world-only buffer to confine a spatial filter to:
+ * the label, icon, quest and live layers go through it too, and a neighbourhood blend is exactly
+ * what SDF glyphs at 8-13 px cannot survive. Measured at #3.2/203/-128 on Customs: "SKELETON" came
+ * back with holes in its strokes, "OLD GAS STATION - UNDERGROUND" was unreadable where vector was
+ * fully legible, and a cluster badge's "2" was a grey-green smear with the same 8x8 mean as the
+ * crisp digit — a spatial filter, not a colour shift. Dropping only the post effect at runtime
+ * restored the text, so nothing else in the pass is implicated: the LUT, vignette and grain are all
+ * pointwise and cannot put a hole in a stroke.
+ *
+ * That also made it the thing that silently voided the D13/D16 label-legibility fixes, in the
+ * DEFAULT look, for every user. If foliage/rail shimmer needs an answer later it has to be one that
+ * does not touch the text: MSAA on the world pass, or a second Deck whose output is graded alone.
+ */
 export const POST = deepFreeze({
   realistic: {
     enabled: true,
     lutAsset: 'overcast-grade-lut',
     vignette: 0.16,
     grain: 0.012,
-    fxaa: true,
+    fxaa: false,
   },
   vector: {
     enabled: false,
     lutAsset: null,
     vignette: 0,
     grain: 0,
-    fxaa: true,
+    fxaa: false,
   },
 });
 
