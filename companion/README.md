@@ -80,8 +80,10 @@ separately and never published.
 The result lives in `companion-quests.json` next to `companion.json` (git-ignored) together with a cursor
 (`{file, offset}`), so a restart resumes instead of re-reading, and message `_id`s already applied are
 skipped. Your `AccountId` / `ProfileId` come from `application_000.log`
-(`PrepareSelectedProfileLocally ProfileId:… AccountId:…`); when either changes — a wipe or a second profile —
-the reconstruction is thrown away and rebuilt from that session only. `--reset-quests` does the same by hand.
+(`PrepareSelectedProfileLocally ProfileId:… AccountId:…`). A different `AccountId` is a different player: the
+reconstruction is thrown away and rebuilt from that session only. A different `ProfileId` on the same account
+is ambiguous, so it only wipes when no quest events follow it (a fresh character); if the quest log keeps
+going the reconstruction is kept and the companion says so. `--reset-quests` wipes by hand.
 
 On every change and on every relay (re)connect the companion sends
 
@@ -119,4 +121,8 @@ npm run test:quests            # from the repo root — node --test, no dependen
 
 Covers the quest-log parser and the state machine against `test/fixtures/` (three synthetic log sessions in
 the game's exact format — see `test/fixtures/README.md`): replay order, dedupe, finished-removes-active,
-cursor resume and live tailing, wipe/account-change reset, and unknown ids.
+`dt` ordering across separate polls, cursor resume and live tailing, a truncated tail and a read failure in
+an old session, the account- and profile-change resets (one branch each), and unknown ids.
+
+`npm run test:relay` runs the relay's own suite (bad bodies, out-of-order quest posts, list caps), and
+`npm test` runs both.
