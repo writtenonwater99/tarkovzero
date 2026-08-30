@@ -6,6 +6,23 @@
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const smoothstep = (u) => u * u * (3 - 2 * u);
 
+/*
+ * How far the bed takes to reach its authored depth, as a multiple of that depth.
+ *
+ * A body carries ONE `depth` constant, and the carve used to apply it as a flat pan: `bed = level -
+ * depth` everywhere inside the ring, with a vertical wall at the shoreline. Nothing downstream can
+ * recover a shallow from that — the R1.5 water mesh encodes `(surface - bed)` per vertex, and on a
+ * pan that number is the same at the bank as in the middle of the channel (0.267 on Customs, 0.556
+ * on Woods), so the shallow→deep tint and the 0.22→0.92 alpha ramp both resolved to one flat colour
+ * per body and the bed never read through anywhere.
+ *
+ * A real basin has a bank slope. 8 metres of run per metre of drop is a shallow natural shore: it
+ * puts Woods' 2.5 m lakes at a 20 m ramp and Customs' 1.2 m river at ~10 m, which is 8 and 4 cells
+ * of the 2.5 m mesh — enough vertices for the ramp to be a ramp. `depth` still means what it says
+ * (the deepest point of the body), and the carve still only ever LOWERS terrain.
+ */
+export const BED_SLOPE = 8;
+
 export const waterPoly = (water) => Array.isArray(water) ? water : water?.poly || [];
 export const waterHoles = (water) => Array.isArray(water) ? [] : water?.holes || [];
 export const waterRings = (water) => [waterPoly(water), ...waterHoles(water)].filter((ring) => ring.length >= 3);
@@ -104,8 +121,14 @@ export function makeWaterHeightCapper(waters, scale = 1) {
       const level = level0 * scale, inOuter = indexedContains([x, z], outer);
       const hole = inOuter ? holes.find((ring) => indexedContains([x, z], ring)) : null;
       if (inOuter && !hole) {
-        const depth = (Number.isFinite(water.depth) ? water.depth : 1.2) * scale;
-        capped = Math.min(capped, level - depth);
+        // The bed is a basin, not a pan: it drops from the shoreline to the authored depth over
+        // `depth * BED_SLOPE` metres of run. Distance is to whichever edge of the body is nearer —
+        // the outer ring or an island — so a hole gets its own shallow just like the bank does.
+        // The run is in GAME metres (`x`/`z` are unscaled); only the drop carries `scale`.
+        const authored = Number.isFinite(water.depth) ? water.depth : 1.2;
+        const edge = Math.min(indexedDistance([x, z], outer), ...holes.map((ring) => indexedDistance([x, z], ring)));
+        const run = Math.max(1e-6, authored * BED_SLOPE);
+        capped = Math.min(capped, level - authored * scale * smoothstep(clamp(edge / run, 0, 1)));
         continue;
       }
       const distance = indexedDistance([x, z], hole || outer);
