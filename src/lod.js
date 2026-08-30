@@ -25,8 +25,22 @@
  * Hysteresis is ±10% around each boundary: crossing it only changes the tier once you are 10%
  * past it, so panning or a trackpad wheel that dithers across a boundary cannot flicker.
  *
- * Exempt (always drawn full, never clustered): extracts, transits, live players, and the
- * objectives of a selected quest. Those are what the map is FOR — see UI-REWORK.md.
+ * What the tier is allowed to do, by layer — this is the exemption from red-team row 12, written
+ * as what the two renderers actually do rather than as a slogan:
+ *
+ *   extracts (`extract-*`, transits included), live players
+ *       fully exempt. Never clustered, never dimmed to a dot, never resized. They are what the
+ *       map is FOR, and a player looking for the way out is usually zoomed out.
+ *   objectives of a selected quest
+ *       exempt from the two things that lose information: they are never clustered and never
+ *       hidden, at any tier. They DO get quieter below `full` — 30% smaller, and the numbered
+ *       badge gives way to the plain objective glyph (2D: quests.js questIcon; 3D: map3d.js
+ *       questLayers). At fit zoom the gold hexes were bigger than the terrain they point at and
+ *       their numbers were too small to read anyway (Gemini pass, commit 269e9ae); the numbers
+ *       are for reading a checklist against the map, which is a zoomed-in job. Amended into
+ *       UI-REWORK.md row 12 — if you change this, change that row too.
+ *   everything else
+ *       clustered and tiered as above.
  */
 
 /** Coarse to fine. The index in this array is the tier's rank. */
