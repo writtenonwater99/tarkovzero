@@ -4,7 +4,12 @@ import { parseQuestsMessage, mergeQuestSets } from './active-quests.js';
 
 // Live player positions from the relay. One subscription per pairing code; each code gets its own
 // coloured arrow + trail. Designed for several codes at once (you + friends) even though v1 UI is solo.
-const RELAY = new URLSearchParams(location.search).get('relay')
+// `?relay=` is a DEV-ONLY override, for pointing a local site at a local relay. It must never ship:
+// the socket URL is `${RELAY}/sub/${code}`, so a link with someone else's host in it hands them the
+// pairing code — the only thing protecting the feed — in the request path, and then lets them write
+// whatever `pos` and `quests` messages they like into the player's map.
+const relayParam = import.meta.env.DEV ? new URLSearchParams(location.search).get('relay') : null;
+const RELAY = relayParam
   || import.meta.env.VITE_RELAY_URL || (import.meta.env.DEV ? 'ws://localhost:8787' : 'wss://tarkovzero-relay.fly.dev');
 export const COLORS = ['#ff3d3d', '#3d9bff', '#3dff7a', '#ffd23d', '#d63dff', '#3dfff0'];
 const CODE_RE = /^[A-Z0-9]{6}$/;
