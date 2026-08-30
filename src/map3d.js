@@ -658,7 +658,7 @@ export async function createView3d(container, mapData, src) {
    * needed — which is after the same prep, so nothing else moves. `atlasReadyMs` /
    * `firstBadgeMs` in renderStats().timing are what the e2e report measures it with.
    */
-  let atlasReadyMs = null, atlasWaitMs = null, prepMs = null, firstLabelMs = null, firstBadgeMs = null;
+  let atlasReadyMs = null, atlasWaitMs = null, prepMs = null, firstLabelMs = null, firstBadgeMs = null, markersReadyMs = null;
   // Rasterise SVG icons into one canvas atlas (deck's icon loader is unreliable with SVG data URLs).
   async function buildAtlas(entries, cell) {
     const canvas = document.createElement('canvas'); canvas.width = Math.max(1, cell * entries.length); canvas.height = cell;
@@ -676,20 +676,34 @@ export async function createView3d(container, mapData, src) {
   // (QA M3). The number is drawn as text over an EMPTY hexagon instead, which is uncapped, is the
   // same trick `cluster-counts` already uses, and takes 12 glyphs out of the cold-load atlas.
   const QUEST_BLANK = 'quest-objective:blank';
-  const atlasPromises = (() => {
-    const markerEntries = src.markers().filter((m) => KINDS[m.kind]).map((m) => {
-      const isExtract = m.kind.startsWith('extract');
-      return [markerIconKey(m), iconDataUrl(m.kind, 64, isExtract ? extractLetter(m.name) : null, markerLevel(m), null, isExtract ? extractReq(m.name) : null)];
-    });
-    const entries = [...Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), ...markerEntries,
-      [QUEST_BLANK, iconDataUrl('quest-objective', 64, ' ')]]
-      .filter((e, i, all) => all.findIndex((x) => x[0] === e[0]) === i);
-    return {
-      icons: buildAtlas(entries, 64),
-      arrows: buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64),
-      soldiers: buildAtlas(COLORS.map((c) => [c, soldierDataUrl(c, 64)]), 64),
-    };
-  })();
+  /**
+   * The per-marker half of the atlas, which is DATA-DEPENDENT and therefore cannot be settled here.
+   *
+   * `src.markers()` is main.js's marker list, and it is empty until the marker fetch
+   * (`/data/<map>.json`, behind a tarkov.dev GraphQL attempt) resolves in renderMarkers(). While the
+   * atlas build sat below the heightfield/building/tree prep it usually won that race by hundreds of
+   * ms; moving it to the top of createView3d() — the D1 fix — made it lose almost every warm load.
+   * When it loses, the atlas holds only the plain kind names, every lettered/underground key
+   * (`extract-scav:D`, `extract-pmc:OG:underground:flare`, …) is absent from `iconMapping`, and the
+   * IconLayer draws NOTHING for those markers. On Customs, where all 32 extract keys carry a letter,
+   * that is every extract badge on the map gone — under the extract names, which do draw.
+   *
+   * So the atlas is built from whatever markers exist now, and `ensureMarkerIcons()` below rebuilds
+   * it when markers with keys it does not hold turn up. Both halves are needed: building early is
+   * what keeps the cold load fast, rebuilding is what makes it correct.
+   */
+  const markerAtlasEntries = () => src.markers().filter((m) => KINDS[m.kind]).map((m) => {
+    const isExtract = m.kind.startsWith('extract');
+    return [markerIconKey(m), iconDataUrl(m.kind, 64, isExtract ? extractLetter(m.name) : null, markerLevel(m), null, isExtract ? extractReq(m.name) : null)];
+  });
+  const dedupe = (entries) => entries.filter((e, i, all) => all.findIndex((x) => x[0] === e[0]) === i);
+  const iconEntries = () => dedupe([...Object.keys(KINDS).map((k) => [k, iconDataUrl(k, 64)]), ...markerAtlasEntries(),
+    [QUEST_BLANK, iconDataUrl('quest-objective', 64, ' ')]]);
+  const atlasPromises = {
+    icons: buildAtlas(iconEntries(), 64),
+    arrows: buildAtlas(COLORS.map((c) => [c, arrowDataUrl(c, 64)]), 64),
+    soldiers: buildAtlas(COLORS.map((c) => [c, soldierDataUrl(c, 64)]), 64),
+  };
 
   /* --- clip the draped sheets to the playable limit ----------------------------------------
    * QA M2: on Woods, 242 of the water sheet's 1,532 vertices and 15 of the 63 bridge-deck ones sit
@@ -802,14 +816,38 @@ export async function createView3d(container, mapData, src) {
   const treeSet = prepareTrees(data.trees, mapData.key);
   const tAtlas = performance.now();
   prepMs = { ground: Math.round(tBuildings - tGround), buildings: Math.round(tTrees - tBuildings), trees: Math.round(tAtlas - tTrees) };
-  const iconAtlas = await atlasPromises.icons;
+  let iconAtlas = await atlasPromises.icons;
   const arrowAtlas = await atlasPromises.arrows;
   const soldierAtlas = await atlasPromises.soldiers;
   // What the atlas cost ON TOP of the synchronous prep it now overlaps, and when it was ready.
   atlasWaitMs = Math.round(performance.now() - tAtlas);
   atlasReadyMs = Math.round(performance.now() - bootMs);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
-  const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
+  const chipOf = (atlas) => ({ canvas: atlas.canvas, mapping: Object.fromEntries(Object.entries(atlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) });
+  let chipAtlas = chipOf(iconAtlas);
+  /** Marker icon keys the current atlas cannot draw — 0 is the invariant, and renderStats reports it. */
+  const missingIconKeys = () => {
+    const out = new Set();
+    for (const m of src.markers()) if (KINDS[m.kind]) { const k = markerIconKey(m); if (!iconAtlas.mapping[k]) out.add(k); }
+    return out;
+  };
+  /**
+   * Re-cut the icon atlas when markers arrive with keys it does not hold (see markerAtlasEntries).
+   *
+   * Called from `refresh()`, which main.js calls exactly when the marker set can have changed — the
+   * fetch landing, a layer filter, a live tick. One rebuild at a time; a rebuild that finds nothing
+   * missing costs one pass over ~150 markers and returns.
+   */
+  let atlasRebuilding = null;
+  function ensureMarkerIcons() {
+    if (atlasRebuilding || !missingIconKeys().size) return;
+    atlasRebuilding = buildAtlas(iconEntries(), 64).then((next) => {
+      iconAtlas = next;
+      chipAtlas = chipOf(next);
+      atlasRebuilding = null;
+      if (initialised) render();
+    }).catch(() => { atlasRebuilding = null; });
+  }
   let viewState = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -2, maxZoom: 5 };
   /**
    * The ground rect the zoom floor frames: the playable limit's own bbox, in game metres. This is
@@ -1531,8 +1569,12 @@ export async function createView3d(container, mapData, src) {
       if (firstLabelMs == null && drawn('labels-major')) firstLabelMs = t;
       if (firstBadgeMs == null && drawn('markers-extract')) {
         const l = layers.find((x) => x && x.id === 'markers-extract');
-        // an IconLayer with no atlas texture yet draws nothing — that WAS the defect
-        if (l.state?.iconManager?.isLoaded !== false) firstBadgeMs = t;
+        // an IconLayer with no atlas texture yet draws nothing — that WAS the defect. Neither does
+        // one whose per-marker icon KEY is missing from the mapping, which is the same defect wearing
+        // the atlas' clothes: it reported "badges painted, lag 0 ms" on frames with no badge pixel on
+        // them. The milestone is the first frame a badge could actually be drawn in.
+        const painted = l.props.data.some((d) => iconAtlas.mapping[markerIconKey(d)]);
+        if (painted && l.state?.iconManager?.isLoaded !== false) firstBadgeMs = t;
       }
     },
     // Every camera change goes through the tilt clamp — right-drag can lower the eye to the ground
@@ -1721,14 +1763,26 @@ export async function createView3d(container, mapData, src) {
        * `firstLabelMs` IS the defect: the window in which the map showed place names with no
        * marker under them. Null means "has not happened yet in this session".
        */
-      timing: { atlasReadyMs, atlasWaitMs, prepMs, firstLabelMs, firstBadgeMs,
-        badgeLagMs: firstBadgeMs != null && firstLabelMs != null ? firstBadgeMs - firstLabelMs : null },
+      timing: { atlasReadyMs, atlasWaitMs, prepMs, firstLabelMs, firstBadgeMs, markersReadyMs,
+        badgeLagMs: firstBadgeMs != null && firstLabelMs != null ? firstBadgeMs - firstLabelMs : null,
+        /**
+         * The gateable half of D1. `badgeLagMs` measures the badge against the LABELS, and the
+         * labels are drawn from data that is already in the bundle while the badges wait on a
+         * network fetch this branch never touched — so it is a stopwatch on the marker fetch and it
+         * failed 1 run in 4 on an unmodified tree. This one measures the badge against the arrival
+         * of its own data, which is what the atlas work is actually responsible for.
+         */
+        badgeAfterDataMs: firstBadgeMs != null && markersReadyMs != null ? firstBadgeMs - markersReadyMs : null },
+      /** Marker icon keys the atlas cannot draw. Anything but 0 is badges missing from the map. */
+      markerIconMisses: missingIconKeys().size,
       /** Draped vertices this map's limit ring had to pull back inside it (QA M2). */
       clippedVerts,
     };
   }
   const api = {
-    refresh: render,
+    // Every caller of refresh() is a "the marker set may have changed" event, so this is where the
+    // atlas is checked against it — see ensureMarkerIcons().
+    refresh: () => { ensureMarkerIcons(); render(); },
     setFloor: (f) => { floor = f; render(); },
     setNature: (next) => { nature = { ...nature, ...next }; render(); },
     setRelief,
