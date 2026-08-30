@@ -9,6 +9,9 @@
 import L from 'leaflet';
 import { iconHtml } from './icons.js';
 import { currentTier } from './lod.js';
+// "My quests" is fed by the game itself (companion -> relay -> src/live.js). Everything that turns
+// a set of task ids into rows, and decides what auto-select may add, is pure and lives next door.
+import { activeRows, doneRows, autoSelectSlugs, sinceCaveat } from './active-quests.js';
 
 // One hue per selected quest so two quests on screen at once stay readable. Deliberately not the
 // extract greens/oranges: a quest pin must never be mistaken for a way out.
@@ -37,6 +40,12 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   let selected = [];                  // slugs, in selection order (colour = index)
   let done = new Set(store.get('questDone', []));
   let visible = store.get('questsVisible', true) !== false; // the "Quest objectives" filter row
+  // The quest log the game reported, straight off the live socket. Empty until a companion (or
+  // ?quests=) hands one over — the section stays out of the panel until then.
+  let mine = { active: [], done: [], failed: [], since: null, ts: 0 };
+  let autoOn = store.get('questsAuto', true) !== false;
+  const autoApplied = new Set();   // slugs auto-select has already put on the map once this session
+  let mineForced = false;          // `> my quests` on an empty set: show the section and say why
   const layer = L.layerGroup();
   // Quest pins get their own pane, explicitly above the place-label panes (450) — a marker should
   // never be the thing a place name reads THROUGH. Leaflet's default markerPane (600) already sits
@@ -59,6 +68,17 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     vis: document.getElementById('quest-vis'),
     visIco: document.getElementById('quest-vis-ico'),
     visN: document.getElementById('quest-vis-n'),
+    mine: document.getElementById('quest-mine'),
+    mineN: document.getElementById('quest-mine-n'),
+    mineSince: document.getElementById('quest-mine-since'),
+    mineList: document.getElementById('quest-mine-list'),
+    mineOther: document.getElementById('quest-mine-other'),
+    mineOtherN: document.getElementById('quest-mine-other-n'),
+    mineOtherList: document.getElementById('quest-mine-other-list'),
+    mineDone: document.getElementById('quest-mine-done'),
+    mineDoneN: document.getElementById('quest-mine-done-n'),
+    mineDoneList: document.getElementById('quest-mine-done-list'),
+    auto: document.getElementById('quest-auto'),
   };
   el.visIco.innerHTML = iconHtml('quest-objective', 17);
 
@@ -358,6 +378,92 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     for (const c of el.list.querySelectorAll('input[data-qdone]')) c.onchange = () => markObjective(c.dataset.qdone, c.checked);
   }
 
+  /* ---------------------------------------------------------- my quests ---- */
+  // The game's own answer to "what am I on right now". Rows for THIS map come first because that is
+  // the only place their objectives can be drawn; everything else is folded away behind a count so
+  // a 20-quest log does not bury the search field.
+  function mineRowHtml(row, { struck = false } = {}) {
+    const on = selected.includes(row.slug);
+    const badges = struck || row.here ? ''
+      : row.maps.slice(0, 3).map((m) => `<span class="qmap">${esc(m)}</span>`).join('');
+    const label = struck ? 'Show this completed quest on the map' : on ? 'Take this quest off the map' : 'Put this quest on the map';
+    return `<button type="button" class="qmine-row${on ? ' on' : ''}${struck ? ' struck' : ''}" ` +
+        `data-mine="${esc(row.slug)}" aria-pressed="${on}" title="${esc(label)}"` +
+        (on ? ` style="--qc:${esc(colorOf(row.slug))}"` : '') + '>' +
+      `<span class="qmine-nm">${esc(row.name)}</span>` +
+      (row.trader ? `<span class="qmine-tr">${esc(row.trader)}</span>` : '') +
+      badges +
+    `</button>`;
+  }
+  function renderMine() {
+    if (!el.mine) return;
+    const { here, elsewhere } = activeRows(all, mine.active, mapKey);
+    const finished = doneRows(all, mine.done, mapKey);
+    const any = here.length || elsewhere.length || finished.length;
+    el.mine.hidden = !any && !mineForced;
+    if (el.mine.hidden) return;
+
+    el.mineN.textContent = String(here.length + elsewhere.length);
+    el.mineList.innerHTML = here.length
+      ? here.map((r) => mineRowHtml(r)).join('')
+      : `<p class="qmine-empty">${any
+          ? `Nothing active has objectives on ${esc(mapKey)}.`
+          : 'No quest log yet — connect the companion in the Live panel and it fills in from the game.'}</p>`;
+
+    el.mineOther.hidden = !elsewhere.length;
+    el.mineOtherN.textContent = String(elsewhere.length);
+    el.mineOtherList.innerHTML = elsewhere.map((r) => mineRowHtml(r)).join('');
+
+    el.mineDone.hidden = !finished.length;
+    el.mineDoneN.textContent = String(finished.length);
+    el.mineDoneList.innerHTML = finished.map((r) => mineRowHtml(r, { struck: true })).join('');
+
+    // EFT rotates its logs: the companion can only replay as far back as the oldest one it found.
+    const caveat = sinceCaveat(mine.since);
+    el.mineSince.hidden = !caveat;
+    el.mineSince.textContent = caveat;
+
+    el.auto.checked = autoOn;
+    for (const b of el.mine.querySelectorAll('[data-mine]')) b.onclick = () => toggle(b.dataset.mine);
+  }
+  /** Add the active quests that belong on this map. Only ever adds — see autoSelectSlugs(). */
+  function runAutoSelect() {
+    const slugs = autoSelectSlugs({ all, activeIds: mine.active, mapKey, selected, applied: autoApplied, auto: autoOn });
+    const fresh = slugs.filter((s) => bySlug(s) && !selected.includes(s));
+    for (const s of slugs) autoApplied.add(s);
+    if (!fresh.length) return 0;
+    selected = [...selected, ...fresh];
+    sync();                     // one redraw for the whole batch, not one per quest
+    return fresh.length;
+  }
+  /** A new set from the relay (or ?quests=). Called by main.js through live.js's onQuests hook. */
+  function setQuestSet(set) {
+    mine = {
+      active: set?.active ?? [], done: set?.done ?? [], failed: set?.failed ?? [],
+      since: set?.since ?? null, ts: set?.ts ?? Date.now(),
+    };
+    load().then(() => { runAutoSelect(); renderMine(); });
+  }
+  function setAutoSelect(on) {
+    autoOn = !!on;
+    store.set('questsAuto', autoOn);
+    if (el.auto) el.auto.checked = autoOn;
+    // Turning it back on catches up with whatever the game has said since it was off.
+    if (autoOn) load().then(() => { runAutoSelect(); renderMine(); });
+    else renderMine();
+  }
+  /** `> my quests` / the omnibox: open the panel with the section in view, even when it is empty. */
+  function revealMine() {
+    mineForced = true;
+    setOpen(true);
+    load().then(() => {
+      renderMine();
+      el.mine?.scrollIntoView({ block: 'nearest' });
+      el.mine?.classList.add('flash');
+      setTimeout(() => el.mine?.classList.remove('flash'), 1400);
+    });
+  }
+
   let results = [], active = 0;
   function renderResults() {
     if (!el.find.value.trim()) { el.results.hidden = true; return; }
@@ -407,7 +513,7 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     const query = [rest, selected.length ? `quest=${selected.join(',')}` : ''].filter(Boolean).join('&');
     history.replaceState(null, '', url.pathname + (query ? `?${query}` : '') + url.hash);
     if (redraw) { draw2d(); refresh3d?.(); }
-    renderSummary(); renderList();
+    renderSummary(); renderList(); renderMine();
     onSelection?.(selected.length);
   }
   // The panel itself is the shell's — this only asks it to show/hide. #quests stays mounted so the
@@ -417,7 +523,7 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     panel?.setOpen?.(!!open);
     el.toggle.setAttribute('aria-expanded', String(!!open));
     store.set('questsOpen', !!open);
-    if (open) load().then(() => { renderSummary(); renderList(); });
+    if (open) load().then(() => { renderSummary(); renderList(); renderMine(); });
   }
   function select(slug, { open = true } = {}) {
     const q = bySlug(slug);
@@ -465,6 +571,7 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   /* ------------------------------------------------------------------ init -- */
   el.toggle.onclick = () => setOpen(!panelOpen());
   el.vis.querySelector('input').onchange = (e) => setVisible(e.target.checked);
+  if (el.auto) { el.auto.checked = autoOn; el.auto.onchange = (e) => setAutoSelect(e.target.checked); }
   el.find.oninput = () => search(el.find.value);
   el.find.onkeydown = (e) => {
     if (e.key === 'ArrowDown') { active = Math.min(active + 1, results.length - 1); renderResults(); e.preventDefault(); }
@@ -487,6 +594,10 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     await load();
     selected = saved.filter((s) => bySlug(s));
     sync();
+    // A quest set may have landed while quests.json was still in flight (the socket is faster than
+    // a 750 KB fetch): apply it now that the list exists.
+    runAutoSelect();
+    renderMine();
     if (urlQuests.length) setOpen(true);
   }
 
@@ -499,6 +610,12 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     count: () => points().length,
     isSelected: (slug) => selected.includes(slug),
     selectedSlugs: () => [...selected],
+    // --- the game's own quest log ---
+    setQuestSet, setAutoSelect, revealMine,
+    /** Task ids the game says are active — grounding for the assistant (window.tz.quests.active). */
+    activeIds: () => [...mine.active],
+    questSet: () => ({ ...mine, active: [...mine.active], done: [...mine.done], failed: [...mine.failed] }),
+    autoSelectOn: () => autoOn,
     quests: () => all,
     onDeckClick: (obj) => { if (obj?.id) openCardFor(obj.id); },
   };

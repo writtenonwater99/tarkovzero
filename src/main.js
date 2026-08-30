@@ -881,7 +881,12 @@ function renderLivePanel() {
 // where the 3D live-player refresh lives — but tick never touches the add-code/add-name inputs or
 // rebuilds a row, so a position arriving mid-keystroke can't steal focus or the field's value.
 const ui = { render: renderLivePanel, tick: tickLivePanel };
-const live = createLive(map, mapData, ui, { onFollow: (x, z) => { if (is3d()) set3d({ target: [-x, -z, 0] }); } });
+// onQuests: the companion also streams the player's quest log ({t:'quests'}); the Quests panel owns
+// what to do with it (list it, auto-select what belongs on this map). See docs/plans/ACTIVE-QUESTS.md.
+const live = createLive(map, mapData, ui, {
+  onFollow: (x, z) => { if (is3d()) set3d({ target: [-x, -z, 0] }); },
+  onQuests: (set) => quests.setQuestSet(set),
+});
 renderLivePanel();
 live.restore();
 for (const c of (new URLSearchParams(location.search).get('live') || '').split(',').filter(Boolean)) { try { live.add(c); } catch {} }
@@ -1042,10 +1047,29 @@ window.tz = {
   safeRect,
   /** QA hook: which marker tier is on screen and the metres-per-pixel it was decided from. */
   get lod() { return { tier: currentTier(), mpp: metresPerPixel() }; },
-  panel: { open: (n) => shell.open(n), close: (n) => shell.close(n), isOpen: (n) => shell.isOpen(n) },
+  /**
+   * QA hook: the live camera. 3D reports the OrbitView state the walkthrough asserts the oblique
+   * default against (`rotationX` ≈ CAM.rotationX); 2D reports Leaflet's centre and zoom.
+   */
+  get camera() {
+    if (is3d()) return { mode: '3d', target: [...v3.target], zoom: v3.zoom, rotationX: v3.rotationX, rotationOrbit: v3.rotationOrbit };
+    const c = map.getCenter();
+    return { mode: '2d', center: { x: c.lng, z: c.lat }, zoom: map.getZoom() };
+  },
+  /** QA hook: game coords -> stage CSS px in the 3D view (null in 2D or before deck is up). */
+  project: (x, z) => view3d?.project?.(x, z) ?? null,
+  /** QA hook: how many markers the current filter set puts on the map, and the per-kind totals. */
+  markers: () => ({
+    kinds: [...onKinds].filter((k) => layerOf.has(k)).sort(),
+    total: [...onKinds].reduce((n, k) => n + (countOf.get(k) ?? 0), 0),
+    byKind: Object.fromEntries([...countOf].sort()),
+  }),
+  panel: { open: (n) => shell.open(n), close: (n) => shell.close(n), isOpen: (n) => shell.isOpen(n), isPinned: (n) => shell.isPinned(n) },
   live: {
     /** {state:'disconnected'|'connecting'|'streaming'|'stale', lastAt, ageMs, players:[{code,name,map,lastAt}]} */
     state: () => live.state(),
+    /** The quest log the companion reported: {active, done, failed, accountId, ts, since, codes}. */
+    quests: () => live.quests(),
   },
   quests: {
     /** Select a quest by slug (adds it to the map). Returns false if the slug is unknown. */
@@ -1056,13 +1080,27 @@ window.tz = {
     markObjective: (objectiveId, value) => quests.markObjective(objectiveId, value),
     /** Centre the map on an objective and open its card. */
     flyTo: (objectiveId) => quests.flyToObjective(objectiveId),
-    /** Everything currently on the map: [{id, questSlug, objectiveId, badge, position, level}] */
-    points: () => quests.points().map((p) => ({ id: p.id, questSlug: p.questSlug, objectiveId: p.objectiveId, badge: p.badge, text: p.objective.text, position: p.position, level: p.level })),
+    /**
+     * Everything currently on the map: [{id, questSlug, objectiveId, badge, position, pin, level}].
+     * `position` is the exact objective coordinate; `pin` is where the marker is actually drawn
+     * (coincident pins are fanned apart), which is what a click has to aim at.
+     */
+    points: () => quests.points().map((p) => ({ id: p.id, questSlug: p.questSlug, objectiveId: p.objectiveId, badge: p.badge, text: p.objective.text, position: p.position, pin: { x: p.pin.x, z: p.pin.z }, level: p.level })),
     selected: () => quests.selectedSlugs(),
     /** The full quest list (loads it if it has not been fetched yet). */
     all: async () => (await quests.load()),
     setVisible: (on) => quests.setVisible(on),
     open: (on = true) => quests.setOpen(on),
+    /**
+     * The task ids the GAME says are active (companion -> relay -> live.js), already intersected
+     * with nothing — raw ids, in the order they were started. src/assistant.js sends them to
+     * /api/assistant as grounding: "these are the quests this player is actually on".
+     */
+    active: () => quests.activeIds(),
+    /** Everything the quest log said: {active, done, failed, since, ts}. */
+    log: () => quests.questSet(),
+    /** Open the Quests panel with "My quests" in view (the omnibox's `> my quests`). */
+    mine: () => quests.revealMine(),
   },
 };
 
@@ -1119,6 +1157,7 @@ omni = createOmnibox({
     setLabels: (d) => { density = d; store.set('density', density); if (d !== 'off' && !labelsShown) setLabels(true); else applyLabels(); },
     panel: (name, on) => shell.setOpen(name, on),
     pin: (name, on) => shell.setPinned(name, on),
+    myQuests: () => quests.revealMine(),
     clearTrails: () => live.clearTrails(),
     help: () => { shell.open('view'); closePops(); togglePop($('#hint3d'), $('#help-btn')); },
     goMap,

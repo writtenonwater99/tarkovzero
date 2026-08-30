@@ -134,6 +134,29 @@
                   <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
                 <div id="quests">
+                  <!-- My quests: the player's own quest log, streamed by the companion over the
+                       live socket as {t:'quests', active, done, failed, since} and matched against
+                       quests.json by task id (src/active-quests.js). Hidden until a set arrives —
+                       `?quests=<taskId,taskId>` feeds one without a game PC. -->
+                  <section id="quest-mine" class="qmine" aria-label="My quests" hidden>
+                    <div class="qmine-hd">
+                      <span class="qmine-title">My quests</span>
+                      <span class="qmine-n mono" id="quest-mine-n">0</span>
+                      <label class="sw qmine-auto" title="Put active quests on the map as soon as the game reports them">
+                        <input type="checkbox" id="quest-auto" checked><span class="track"></span>Auto-select
+                      </label>
+                    </div>
+                    <p class="qmine-since" id="quest-mine-since" hidden></p>
+                    <div class="qmine-list" id="quest-mine-list"></div>
+                    <details class="qmine-fold" id="quest-mine-other" hidden>
+                      <summary>Other maps (<span id="quest-mine-other-n">0</span>)</summary>
+                      <div class="qmine-list" id="quest-mine-other-list"></div>
+                    </details>
+                    <details class="qmine-fold" id="quest-mine-done" hidden>
+                      <summary>Completed (<span id="quest-mine-done-n">0</span>)</summary>
+                      <div class="qmine-list" id="quest-mine-done-list"></div>
+                    </details>
+                  </section>
                   <div class="find find-quest">
                     <input id="quest-find" type="text" placeholder="Search quests or traders" autocomplete="off" spellcheck="false" aria-label="Search quests" />
                   </div>
