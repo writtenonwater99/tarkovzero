@@ -33,8 +33,10 @@
             </div>
           </div>
           <div class="chip chip-status">
+            <!-- The read-out is built by main.js as icon+value chunks (⏱ 40 MIN | 👤 10–12 PMC |
+                 ☠ 30% PARTISAN) once the raid data lands; until then it is one plain sentence.
+                 Either way the text lives inside .status-text and the state dot beside it. -->
             <button type="button" id="status" class="status" aria-expanded="false" aria-controls="status-pop">
-              <svg class="status-ico" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span class="status-text">Loading raid data…</span>
               <span class="dot" data-state="load"></span>
             </button>

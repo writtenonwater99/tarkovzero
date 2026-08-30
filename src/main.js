@@ -580,9 +580,33 @@ $('#all-off').onclick = () => setAll(false);
 /* ------------------------------------------------------------- status ---- */
 const statusEl = $('#status'), statusPop = $('#status-pop');
 const statusText = $('.status-text', statusEl), statusDot = $('.dot', statusEl);
+/**
+ * The raid read-out, as icon+value chunks rather than one sentence.
+ *
+ * Gemini's read (2026-08-29): "40 MIN · 10-12 PMC · PARTISAN 30%" is a monolithic string that has
+ * to be *read*; a HUD read-out has to be *glanced at*. Each fact now gets its own glyph, its own
+ * number in the mono face, and a hairline divider — so the eye snaps to "how long" or "how many"
+ * without parsing the middle dots. Inline SVG, never emoji: an emoji would be a third typeface,
+ * colour-managed by the OS, at a size where its detail is mud.
+ */
+const STATUS_GLYPH = {
+  time: '<circle cx="12" cy="12" r="8.4"/><path d="M12 7.4V12l3.1 2.1"/>',
+  pmc: '<circle cx="12" cy="7.8" r="3.4"/><path d="M5.4 19.6c0-3.6 2.9-6.2 6.6-6.2s6.6 2.6 6.6 6.2"/>',
+  boss: '<path d="M12 3.4a7.1 7.1 0 0 0-7.1 7.1c0 2.4 1.2 4.2 2.9 5.3v3h8.4v-3c1.7-1.1 2.9-2.9 2.9-5.3A7.1 7.1 0 0 0 12 3.4Z"/><circle cx="9.5" cy="11" r="1.4"/><circle cx="14.5" cy="11" r="1.4"/>',
+};
+const statusChunk = ({ glyph, value, unit }) =>
+  `<span class="st-chunk"><svg class="st-ico" viewBox="0 0 24 24" aria-hidden="true">${STATUS_GLYPH[glyph] ?? ''}</svg>` +
+  `<span class="st-val mono">${esc(value)}</span>${unit ? `<span class="st-unit">${esc(unit)}</span>` : ''}</span>`;
+/** `text` is a plain string (loading / error) or a chunk list built by renderMarkers(). */
 function setStatus(state, text, popHtml) {
   statusDot.dataset.state = state;
-  statusText.textContent = text;
+  if (Array.isArray(text)) {
+    statusText.innerHTML = text.map(statusChunk).join('<i class="st-div" aria-hidden="true"></i>');
+    statusEl.title = text.map((c) => [c.value, c.unit].filter(Boolean).join(' ')).join(' · ');
+  } else {
+    statusText.textContent = text;
+    statusEl.title = text;
+  }
   if (popHtml != null) statusPop.innerHTML = popHtml;
 }
 statusEl.onclick = () => togglePop(statusPop, statusEl);
@@ -606,7 +630,13 @@ function renderMarkers(data, source) {
 
   const bosses = [...(data.bosses ?? [])].sort((a, b) => b.spawnChance - a.spawnChance);
   const top = bosses[0];
-  const meta = `${RAID.minutes} MIN · ${RAID.pmc} PMC${top ? ` · ${top.name.toUpperCase()} ${Math.round(top.spawnChance * 100)}%` : ''}`;
+  // Three chunks: how long the raid is, how many PMCs, and the likeliest boss with its odds. The
+  // boss keeps its name as the chunk's unit — "30%" alone would be a number with no subject.
+  const meta = [
+    { glyph: 'time', value: RAID.minutes, unit: 'min' },
+    { glyph: 'pmc', value: RAID.pmc, unit: 'pmc' },
+    ...(top ? [{ glyph: 'boss', value: `${Math.round(top.spawnChance * 100)}%`, unit: top.name }] : []),
+  ];
   const list = bosses.map((b) => `<div><b>${esc(b.name)}</b> <span class="num">${Math.round(b.spawnChance * 100)}%</span></div>`).join('');
   setStatus(source === 'live' ? 'live' : 'cached',
     meta,
