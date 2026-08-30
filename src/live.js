@@ -1,5 +1,6 @@
 import L from 'leaflet';
 import { pos } from './crs.js';
+import { parseQuestsMessage, mergeQuestSets } from './active-quests.js';
 
 // Live player positions from the relay. One subscription per pairing code; each code gets its own
 // coloured arrow + trail. Designed for several codes at once (you + friends) even though v1 UI is solo.
@@ -91,6 +92,49 @@ export function createLive(map, mapData, ui, hooks = {}) {
     };
   }
 
+  /* ------------------------------------------------------------- quest sets -- */
+  // The companion also streams the player's quest log — one `{t:'quests', active, done, failed,
+  // accountId, ts, since}` per pairing code, on connect and on every change (docs/plans/
+  // ACTIVE-QUESTS.md). This module only keeps and merges them; src/quests.js decides what to draw.
+  const questSets = new Map();   // code -> normalised set (see active-quests.js)
+
+  function onQuests(code, m) {
+    const set = parseQuestsMessage(m);
+    if (!set) return false;
+    questSets.set(code, set);
+    hooks.onQuests?.(quests());
+    return true;
+  }
+  /**
+   * window.tz.live.quests() — the merged sets across every connected code, primary player first.
+   * `{ active:[taskId], done:[…], failed:[…], accountId, ts, since, codes:[…] }`.
+   */
+  function quests() {
+    const pc = primary()?.code;
+    const order = [];
+    if (pc && questSets.has(pc)) order.push(questSets.get(pc));
+    for (const [c, set] of questSets) if (c !== pc) order.push(set);
+    return { ...mergeQuestSets(order), codes: [...questSets.keys()] };
+  }
+
+  // QA without a game PC: `?quests=<taskId,taskId>` (plus optional `quests-done`, `quests-failed`,
+  // `quests-since`) is fed through the exact same parser as a relay message, so a screenshot or a
+  // bug report made this way exercises the real path and not a second one.
+  function applyQaQuests() {
+    const qs = new URLSearchParams(location.search);
+    if (!qs.has('quests')) return;
+    const ids = (v) => (v || '').split(',').map((s) => s.trim()).filter(Boolean);
+    setTimeout(() => onQuests('QA0000', {
+      t: 'quests',
+      active: ids(qs.get('quests')),
+      done: ids(qs.get('quests-done')),
+      failed: ids(qs.get('quests-failed')),
+      since: qs.get('quests-since') || null,
+      accountId: 'qa',
+      ts: Date.now(),
+    }), 0);
+  }
+
   const TELEPORT_UNITS = 300; // a trail jump longer than this (game units) is a teleport / stale replay, not movement
 
   function onPos(p, m) {
@@ -136,6 +180,9 @@ export function createLive(map, mapData, ui, hooks = {}) {
     ws.onmessage = (ev) => {
       const m = JSON.parse(ev.data);
       if (m.type === 'pos') onPos(p, m);
+      // The quest set carries `t`, not `type` — accept either so a relay that normalises the
+      // envelope, and one that forwards the companion's message verbatim, both work.
+      else if ((m.t ?? m.type) === 'quests') onQuests(p.code, m);
       else if (m.type === 'status' || m.type === 'hello') { p.online = m.publishers > 0; if (!p.last) p.status = p.online ? 'companion online' : 'waiting for companion'; ui.render(); }
     };
     ws.onclose = () => { if (players.has(p.code)) { p.status = 'reconnecting…'; ui.render(); setTimeout(() => connect(p), 2000); } };
@@ -157,6 +204,8 @@ export function createLive(map, mapData, ui, hooks = {}) {
     const p = players.get(code); if (!p) return;
     players.delete(code); p.ws?.close(); p.marker?.remove(); p.trail?.remove();
     if (opts.primary === code) opts.primary = null;
+    // Their quest set goes with them — "My quests" must never outlive the code that fed it.
+    if (questSets.delete(code)) hooks.onQuests?.(quests());
     persist(); ui.render();
   }
   function persist() {
@@ -177,6 +226,7 @@ export function createLive(map, mapData, ui, hooks = {}) {
   // over into stale after STALE_MS of silence. ui.tick, when the caller provides it, is the *cheap*
   // path (text/attribute updates only) — ui.render stays reserved for real structural events.
   setInterval(() => { if (players.size || QA_STATE) (ui.tick ?? ui.render)?.(); }, 1000);
+  applyQaQuests();
 
-  return { players, opts, add, remove, rename, restore, clearTrails, relay: RELAY, summary, primary, setPrimary, state };
+  return { players, opts, add, remove, rename, restore, clearTrails, relay: RELAY, summary, primary, setPrimary, state, quests };
 }
