@@ -5,7 +5,9 @@ import { loadMapData } from './api.js';
 import { roadmapLayer } from './roadmap.js';
 import { placeLabelsLayer } from './placeLabels.js';
 import { LABELS } from './labels.js';
-import { KINDS, iconHtml, extractLetter } from './icons.js';
+import { KINDS, iconHtml, extractLetter, extractReq, dotHtml, clusterHtml, EXTRACT_SUB } from './icons.js';
+// One LOD rule for both views: tiers cut on metres per pixel, with hysteresis. See src/lod.js.
+import { updateTier, currentTier, cellFor, clusterPoints } from './lod.js';
 import { createLive, esc } from './live.js';
 import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
@@ -224,6 +226,9 @@ map.on('moveend', () => {
   else { const c = map.getCenter(); history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`); }
 });
 map.on('move zoom', updateHud);
+// The marker tier and the cluster grid follow the zoom, not the pan — so they settle once, at the
+// end of a zoom, instead of on every animation frame.
+map.on('zoomend', () => applyLod());
 
 /* ---------------------------------------------------------------- HUD ---- */
 const coordsEl = $('#coords');
@@ -243,6 +248,7 @@ function metresPerPixel() {
 function updateHud() {
   const mpp = metresPerPixel();
   if (!Number.isFinite(mpp) || mpp <= 0) return;
+  updateTier(mpp);   // keep window.tz.lod live during a zoom; the redraw happens on zoomend
   let m = SNAP[0];
   for (const s of SNAP) if (s / mpp <= 120) m = s;
   scaleCap.textContent = m >= 1000 ? `${m / 1000} km` : `${m} m`;
@@ -269,14 +275,49 @@ const CONTAINER_TYPE = {
   container_pc: 'PC', container_drawer: 'Drawer', container_tool: 'Tool container', container_medcase: 'Medcase', container_medical: 'Medical bag',
   container_ammo: 'Ammo box', container_grenade: 'Grenade box', container_dead: 'Dead body', loot_key: 'Key spawn', loot_loose: 'Marked loose loot', loot_spt: 'SPT loose-loot point',
 };
-const iconFor = (kind, letter = null, level = 'surface') => {
-  const key = `${kind}:${letter ?? ''}:${safeLevel(level)}`;
-  return (icons[key] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter, safeLevel(level)), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
+const iconFor = (kind, letter = null, level = 'surface', req = null) => {
+  const key = `${kind}:${letter ?? ''}:${safeLevel(level)}:${req ?? ''}`;
+  return (icons[key] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter, safeLevel(level), null, req), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
 };
-function marker(p, kind, html, name = null, level = 'surface') {
-  const m = L.marker(pos(p), { icon: iconFor(kind, kind.startsWith('extract') ? extractLetter(name) : null, level) }).bindPopup(html);
-  // Extracts carry their full name on hover — the badge letter alone is a riddle.
-  if (kind.startsWith('extract') && name) m.bindTooltip(esc(name + levelSuffix(level)), { direction: 'top', offset: [0, -13], className: `extract-name ${kind} level-${safeLevel(level)}`, opacity: 1 });
+const dotIcons = {};
+const dotIcon = (kind) => (dotIcons[kind] ??= L.divIcon({ className: '', html: dotHtml(kind, 6), iconSize: [6, 6], iconAnchor: [3, 3], popupAnchor: [0, -4] }));
+/** The requirement line for an extract, or '' — the same text the 3D chip shows on hover. */
+const reqText = (name) => EXTRACT_SUB[(name || '').trim()] ?? '';
+
+/**
+ * One marker point, drawn at the tier the camera is currently in.
+ *
+ *   dot   6 px desaturated dot in the category colour; still clickable, still has its popup
+ *   icon  the badge, no hover label
+ *   full  badge + a hover label
+ *
+ * Extracts and transits ignore the tier entirely (red team #12): they are the thing the map is
+ * for, and a 6 px dot where your way out is would be a worse map, not a cleaner one.
+ */
+function marker(p, kind, html, name = null, level = 'surface', tier = 'full') {
+  const isExtract = kind.startsWith('extract');
+  const t = isExtract ? 'full' : tier;
+  if (t === 'dot') return L.marker(pos(p), { icon: dotIcon(kind) }).bindPopup(html);
+  const req = isExtract ? extractReq(name) : null;
+  const m = L.marker(pos(p), { icon: iconFor(kind, isExtract ? extractLetter(name) : null, level, req) }).bindPopup(html);
+  // Extracts carry their full name on hover — the badge letter alone is a riddle — and now the
+  // requirement rides with it instead of being printed under every badge at every zoom.
+  if (isExtract && name) {
+    const sub = reqText(name);
+    m.bindTooltip(esc(name + levelSuffix(level)) + (sub ? `<i>${esc(sub)}</i>` : ''), { direction: 'top', offset: [0, -13], className: `extract-name ${kind} level-${safeLevel(level)}`, opacity: 1 });
+  } else if (t === 'full' && name) {
+    m.bindTooltip(esc(name + levelSuffix(level)), { direction: 'top', offset: [0, -12], className: 'mk-name', opacity: 1 });
+  }
+  return m;
+}
+/** A grid cluster: one mark plus its count, and a click that zooms in far enough to split it. */
+function clusterMarker(kind, c, tier) {
+  const m = L.marker([c.z, c.x], {
+    icon: L.divIcon({ className: '', html: clusterHtml(kind, c.count, tier), iconSize: [26, 26], iconAnchor: [13, 13] }),
+    riseOnHover: true,
+  });
+  m.bindTooltip(`${c.count} ${esc(KINDS[kind].label.toLowerCase())}`, { direction: 'top', offset: [0, -14], className: 'mk-name', opacity: 1 });
+  m.on('click', () => { autoFit = false; map.setView([c.z, c.x], Math.min(map.getMaxZoom(), map.getZoom() + 1), { animate: true }); });
   return m;
 }
 
@@ -287,7 +328,10 @@ export function classify(d) {
   for (const e of d.extracts) {
     const f = ['pmc', 'scav', 'transit'].includes(e.faction) ? e.faction : 'shared';
     const level = safeLevel(e.level);
-    add('extract-' + f, e.position, `<b>${e.name}${levelSuffix(level)}</b>Extract · ${f} · ${level}${e.note ? `<br><i>${e.note}</i>` : ''}`, e.name, level);
+    // The requirement is a badge corner glyph and a hover line now, so the popup is where the
+    // words live: "REQ: GREEN FLARE" above the wiki note, not a second label on the map.
+    const req = EXTRACT_SUB[(e.name || '').trim()];
+    add('extract-' + f, e.position, `<b>${e.name}${levelSuffix(level)}</b>Extract · ${f} · ${level}${req ? `<br><b class="mk-req">${esc(req)}</b>` : ''}${e.note ? `<br><i>${e.note}</i>` : ''}`, e.name, level);
   }
   for (const s of d.spawns) {
     const isBoss = s.categories.includes('boss');
@@ -315,6 +359,53 @@ export function classify(d) {
 let markerPoints = [];
 const layerOf = new Map();  // kind -> L.layerGroup
 const countOf = new Map();  // kind -> n
+const pointsOf = new Map(); // kind -> points[] (the layer is rebuilt from these on every tier change)
+
+/* ---------------------------------------------------------------- LOD ---- */
+// Which kinds ignore the zoom tier, and which ones collapse into counted clusters. Extracts and
+// transits are exempt by decision (red team #12); live players and selected-quest objectives are
+// exempt by construction — they are drawn by live.js and quests.js, which never ask about a tier.
+const clustered = (kind) => kind.startsWith('spawn-');
+let lodState = { tier: null, cell: 0 };
+
+/** Refill one kind's layer group at the current tier. Cheap: ~200 points on Customs. */
+function fillMarkerLayer(kind) {
+  const layer = layerOf.get(kind);
+  if (!layer) return;
+  layer.clearLayers();
+  const pts = pointsOf.get(kind) ?? [];
+  const t = kind.startsWith('extract') ? 'full' : lodState.tier ?? 'full';
+  if (t !== 'full' && clustered(kind)) {
+    for (const c of clusterPoints(pts, lodState.cell)) {
+      if (c.count === 1) layer.addLayer(marker(c.points[0].position, kind, c.points[0].html, c.points[0].name, c.points[0].level, t));
+      else layer.addLayer(clusterMarker(kind, c, t));
+    }
+    return;
+  }
+  for (const p of pts) layer.addLayer(marker(p.position, kind, p.html, p.name, p.level, t));
+}
+const rebuildMarkerLayers = () => { for (const kind of layerOf.keys()) fillMarkerLayer(kind); };
+
+/**
+ * Fold the current metres-per-pixel into the shared tier and redraw whatever depends on it.
+ *
+ * Called on zoomend rather than on every zoom frame: the tier only changes at a boundary, the
+ * cluster grid is in world units (panning cannot move it), and rebuilding mid-animation would
+ * throw away work Leaflet is about to re-render anyway.
+ */
+function applyLod(force = false) {
+  const mpp = metresPerPixel();
+  if (!Number.isFinite(mpp) || mpp <= 0) return;
+  const t = updateTier(mpp);
+  const cell = cellFor(mpp);
+  const tierChanged = t !== lodState.tier;
+  // Reclustering on a small zoom change inside one tier keeps the counts honest without redrawing
+  // on every wheel notch.
+  if (!force && !tierChanged && Math.abs(cell - lodState.cell) < lodState.cell * 0.15) return;
+  lodState = { tier: t, cell };
+  if (!is3d()) rebuildMarkerLayers();
+  if (tierChanged) applyLabels();
+}
 
 /* ------------------------------------------------------------- labels ---- */
 // Two panes so major/minor place names can be styled apart in 2D, and the same
@@ -323,18 +414,28 @@ const SURFACE_LABELS = mapLabels.filter((l) => l.floor !== 'U');
 const MAJOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) >= 100);
 const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
 const labelLayers = { major: placeLabelsLayer(map, MAJOR), minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor' }) };
-let density = store.get('density', 'all');
+// Density "Auto" is the default (step 4): Key at fit zoom — where the map should read as extracts
+// and place names — and All from one tier in, where there is room for the minor names. Off/Key/All
+// stay as explicit overrides, and an explicit choice always wins.
+let density = store.get('density', 'auto');
 let labelsShown = store.get('labels', true);
+const effectiveDensity = () => (density !== 'auto' ? density : currentTier() === 'dot' ? 'key' : 'all');
 function labelSet() {
-  if (!labelsShown || density === 'off') return [];
-  return density === 'key' ? mapLabels.filter((l) => (l.size ?? 100) >= 100) : mapLabels;
+  const d = effectiveDensity();
+  if (!labelsShown || d === 'off') return [];
+  return d === 'key' ? mapLabels.filter((l) => (l.size ?? 100) >= 100) : mapLabels;
 }
 function applyLabels() {
-  const wantMajor = labelsShown && density !== 'off';
-  const wantMinor = labelsShown && density === 'all';
+  const d = effectiveDensity();
+  const wantMajor = labelsShown && d !== 'off';
+  const wantMinor = labelsShown && d === 'all';
   wantMajor ? labelLayers.major.addTo(map) : map.removeLayer(labelLayers.major);
   wantMinor ? labelLayers.minor.addTo(map) : map.removeLayer(labelLayers.minor);
-  $$('#label-density .seg-cell').forEach((b) => b.classList.toggle('on', b.dataset.density === density));
+  $$('#label-density .seg-cell').forEach((b) => {
+    b.classList.toggle('on', b.dataset.density === density);
+    // Auto shows which way it is currently leaning, so the control is never a black box.
+    b.classList.toggle('auto-on', density === 'auto' && b.dataset.density === d);
+  });
   view3d?.refresh();
 }
 $$('#label-density .seg-cell').forEach((b) => (b.onclick = () => { density = b.dataset.density; store.set('density', density); applyLabels(); }));
@@ -480,13 +581,14 @@ statusEl.onclick = () => togglePop(statusPop, statusEl);
 const CACHE_KEY = `tarkovzero:${mapData.key}`;
 function renderMarkers(data, source) {
   markerPoints = classify(data);
-  layerOf.clear(); countOf.clear();
+  layerOf.clear(); countOf.clear(); pointsOf.clear();
   for (const m of markerPoints) {
     if (!KINDS[m.kind]) continue;
-    if (!layerOf.has(m.kind)) layerOf.set(m.kind, L.layerGroup());
-    layerOf.get(m.kind).addLayer(marker(m.position, m.kind, m.html, m.name, m.level));
+    if (!layerOf.has(m.kind)) { layerOf.set(m.kind, L.layerGroup()); pointsOf.set(m.kind, []); }
+    pointsOf.get(m.kind).push(m);
     countOf.set(m.kind, (countOf.get(m.kind) ?? 0) + 1);
   }
+  applyLod(true);   // fills every layer group at the tier the camera is already in
   fillRows();
   for (const [kind, layer] of layerOf) if (onKinds.has(kind)) layer.addTo(map);
   view3d?.refresh();
@@ -682,6 +784,8 @@ async function setView(mode) {
   } else {
     // #map was display:none while 3D drove it — remeasure before Leaflet draws again.
     map.invalidateSize({ animate: false });
+    // 3D moved the shared LOD tier while it was on screen; rebuild the Leaflet layers to match.
+    applyLod(true);
   }
   // The quest card is a Leaflet popup in 2D and a floating HTML card in 3D — neither survives the
   // switch, so close it rather than leave a card pinned to nothing.
@@ -789,6 +893,8 @@ window.tz = {
   flyTo,
   /** The part of the stage nothing floats over — {left, top, right, bottom} in stage CSS px. */
   safeRect,
+  /** QA hook: which marker tier is on screen and the metres-per-pixel it was decided from. */
+  get lod() { return { tier: currentTier(), mpp: metresPerPixel() }; },
   panel: { open: (n) => shell.open(n), close: (n) => shell.close(n), isOpen: (n) => shell.isOpen(n) },
   quests: {
     /** Select a quest by slug (adds it to the map). Returns false if the slug is unknown. */
