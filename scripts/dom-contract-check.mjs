@@ -49,18 +49,30 @@ export const CONTRACT = {
   ],
   'view panel (main.js)': [
     '#base-toggle', '#base-toggle .seg-cell[data-base=satellite]', '#base-toggle .seg-cell[data-base=map]',
-    '#relief-toggle', '#relief-toggle .seg-cell[data-relief=1]', '#relief-toggle .seg-cell[data-relief=3]',
+    '#relief-toggle', '#relief-toggle .seg-cell[data-relief=1]', '#relief-toggle .seg-cell[data-relief=2]',
+    '#relief-toggle .seg-cell[data-relief=3]',
     '#trees-toggle', '#trees-toggle .seg-cell[data-trees=1]', '#trees-toggle .seg-cell[data-trees=0]',
     '#rocks-toggle', '#rocks-toggle .seg-cell[data-rocks=1]', '#rocks-toggle .seg-cell[data-rocks=0]',
     '#label-density', '#label-density .seg-cell[data-density=auto]', '#label-density .seg-cell[data-density=off]',
     '#label-density .seg-cell[data-density=key]', '#label-density .seg-cell[data-density=all]',
     '#help-btn', '#hint3d',
   ],
+  // Every floor cell, not a sample: setFloor() hides the ones this map has no floors for, so a
+  // missing cell is invisible until someone opens the one map that needed it.
   'floors (main.js — toolbar stack in 3D)': [
     '#floors', '#floors .seg-cell[data-floor=all]', '#floors .seg-cell[data-floor=0]',
+    '#floors .seg-cell[data-floor=1]', '#floors .seg-cell[data-floor=2]',
+    '#floors .seg-cell[data-floor=3]', '#floors .seg-cell[data-floor=4]',
     '#floors .seg-cell[data-floor=U]',
   ],
-  'live panel (main.js + live.js)': ['#live-block', '#live', '#live-toggle', '#live-sum', '#live-dot'],
+  // #tb-live is the toolbar's GPS indicator. It is dereferenced with no null guard on the BOOT path
+  // (main.js updateLiveToolbar -> tbLive.dataset), before window.tz exists, so losing it is not the
+  // silent no-op this contract usually guards — it is a blank page. The [data-panel-btn=live] entry
+  // above matches the same element by a different attribute and would not have caught an id rename.
+  'live panel (main.js + live.js)': [
+    '#live-block', '#live', '#live-toggle', '#live-sum', '#live-dot', '#tb-live',
+    '.tb-item[data-tb=live] .tb-tip',
+  ],
   // #ask-log / #ask-chips / #ask-form / #ask-input MOVED out of #panel-ask into #ask-card in step 2:
   // the assistant answers over the map now, and assistant.js binds them by id wherever they sit.
   'ask panel — hidden mount (assistant.js)': ['#panel-ask', '#ask-block', '#ask-toggle', '#ask'],
@@ -69,8 +81,10 @@ export const CONTRACT = {
     '#ask-history', '#ask-card-x',
   ],
   'omnibox (omnibox.js)': ['#omnibox', '#find', '#find-kbd', '#find-results'],
+  // `#hud-north svg` is the compass needle: main.js binds it at module scope and writes its --rot on
+  // every updateHud(), un-guarded, so the inner element is as load-bearing as the button around it.
   'hud (main.js)': [
-    '#hud-zin', '#hud-zout', '#hud-north', '#hud-fit',
+    '#hud-zin', '#hud-zout', '#hud-north', '#hud-north svg', '#hud-fit',
     '#coords', '#scale', '#scale .scale-cap', '#scale .scale-line i',
   ],
 };
