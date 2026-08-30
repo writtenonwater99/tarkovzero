@@ -85,7 +85,15 @@ function shadeColors(mode) {
   return { shade: a(0), shadeSoft: a(1), shadeWide: a(2) };
 }
 
-/** Metric radii of the contact rings, widest first, for one look. */
+/**
+ * Metric radii of the contact rings for one look, NARROWEST FIRST — the order `SHADOW[look].rings`
+ * is authored in (realistic: 1.0, 3.2, 6.6), and the order map3d.js indexes: `[0]` is `shade`,
+ * `[1]` is `shade-soft`, `[2]` is `shade-wide`.
+ *
+ * The docstring here used to say "widest first". Reversing the indices to match it inverts the
+ * penumbra — the 6.6 m ring at 30% opacity painted on top of the 1.0 m ring at 7% — and nothing
+ * about the change would look like a bug in the diff. atmosphere-test pins the ascending order.
+ */
 export const shadowRings = (look) => SHADOW[resolveLook(look)].rings.map((ring) => ring.meters);
 
 /*
