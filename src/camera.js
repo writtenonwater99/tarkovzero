@@ -89,6 +89,30 @@ export function fitZoom({ width, depth, viewportWidth, viewportHeight, rotationX
   return Number.isFinite(zoom) ? zoom : null;
 }
 
+/**
+ * How far past `contain` the camera is allowed to zoom OUT — the floor under every zoom.
+ *
+ * Fit is cover, so a fitted map fills the frame; nothing else in the app ever asks for a zoom
+ * below it. A permalink can (`#1.4/-209/-280` on Woods is 1.5 zoom levels under contain) and so
+ * can a wheel, and what you get is the diorama as a small slab floating in the void with the
+ * terrain mesh's underside/skirt on show along the bottom — the one framing the renderer was never
+ * built for. The floor is `contain` minus a small margin: contain still leaves the corner wedges
+ * the oblique rhombus cannot fill, the margin gives the map a little air inside the frame, and one
+ * more zoom level out is where the underside starts to appear.
+ */
+export const MIN_ZOOM_MARGIN = 0.12;
+/**
+ * The lowest zoom that still keeps the whole ground rect inside the viewport, minus the margin.
+ * Same inputs as fitZoom(); returns null when they cannot produce a finite answer.
+ */
+export function minFitZoom({ width, depth, viewportWidth, viewportHeight, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, margin = MIN_ZOOM_MARGIN }) {
+  const { w, d } = projectedGroundExtent(width, depth, rotationX, rotationOrbit);
+  if (!(w > 0) || !(d > 0) || !(viewportWidth > 0) || !(viewportHeight > 0)) return null;
+  const contain = Math.min(viewportWidth / w, viewportHeight / d);
+  const zoom = Math.log2(contain) - margin;
+  return Number.isFinite(zoom) ? zoom : null;
+}
+
 /** deck's OrbitView eye distance in world units for a zoom and a viewport height in px. */
 export function eyeDistance(zoom, viewportHeight, fovy = CAM.fovy) {
   const scale = Math.pow(2, Number(zoom) || 0);
@@ -115,4 +139,42 @@ export function clampTilt(viewState, floor = CAM.minRotationX) {
   const min = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, floor));
   const rotationX = Math.min(CAM.maxRotationX, Math.max(min, viewState.rotationX ?? CAM.rotationX));
   return rotationX === viewState.rotationX ? viewState : { ...viewState, rotationX };
+}
+
+/**
+ * THE clamp. Every camera move in the 3D view goes through this one function — the controller's
+ * drags and wheel via `onViewStateChange`, and every programmatic move via the view's `setView`.
+ *
+ * It composes the module's two floors in the order they depend on each other:
+ *
+ *  1. the ZOOM floor (`minFitZoom`), which needs the tilt, because the projected footprint the map
+ *     has to fit inside is a rhombus whose depth is `sin(tilt)`;
+ *  2. the TILT floor (`groundFloorAngle`), which needs the zoom, because the eye distance it
+ *     measures its clearance against is a function of it.
+ *
+ * Zoom first, then tilt: lifting the zoom SHORTENS the eye distance, so the tilt floor computed
+ * after the lift is the one that actually holds. Doing it the other way round lets a below-floor
+ * permalink pick its tilt floor at an eye distance the camera never ends up at.
+ *
+ * `extent` is the ground rect being framed (`{width, depth}` in game metres); pass nothing for it
+ * and the zoom floor is skipped and this is exactly `clampTilt`, which is what a caller with no
+ * map loaded wants.
+ */
+export function clampCamera(viewState, {
+  width, depth, viewportWidth, viewportHeight = 800, ground = 0, clearance = 3,
+} = {}) {
+  const floor = minFitZoom({
+    width, depth, viewportWidth, viewportHeight,
+    rotationX: viewState.rotationX ?? CAM.rotationX,
+    rotationOrbit: viewState.rotationOrbit ?? CAM.rotationOrbit,
+  });
+  const zoom = viewState.zoom ?? 0;
+  const lifted = floor != null && zoom < floor ? { ...viewState, zoom: floor } : viewState;
+  return clampTilt(lifted, groundFloorAngle({
+    zoom: lifted.zoom ?? 0,
+    ground,
+    targetZ: lifted.target?.[2] ?? 0,
+    viewportHeight,
+    clearance,
+  }));
 }

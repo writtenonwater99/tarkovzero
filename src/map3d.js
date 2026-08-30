@@ -9,7 +9,7 @@ import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
 import { makeWaterHeightCapper, waterLevelAt, waterRings, waterSurfaceAt } from './water.js';
-import { CAM, clampTilt, groundFloorAngle, minFitZoom } from './camera.js';
+import { CAM, clampCamera } from './camera.js';
 import {
   resolveLook, DEFAULT_LOOK, paletteFor, lightingFor, backgroundFor, backgroundCss,
   fogExtensionFor, limitDiagonal, fogParams, postFor, surfaceMaterial, referenceGroundMeters,
@@ -667,14 +667,33 @@ export async function createView3d(container, mapData, src) {
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
   const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
   let viewState = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -2, maxZoom: 5 };
-  /** The tilt floor for a view state: never under the horizon, never inside the hill it orbits. */
-  const tiltFloor = (v) => groundFloorAngle({
-    zoom: v.zoom ?? 0,
-    ground: (() => { try { return H(-(v.target?.[0] ?? 0), -(v.target?.[1] ?? 0)) ?? 0; } catch { return 0; } })(),
-    targetZ: v.target?.[2] ?? 0,
+  /**
+   * The ground rect the zoom floor frames: the playable limit's own bbox, in game metres. This is
+   * the same box main.js's fit3dZoom() covers (it reads the Leaflet bounds, which are the same
+   * span), so the floor sits below the fit on every map and a fitted camera is never touched.
+   */
+  const groundExtent = (() => {
+    const ring = data.limit;
+    if (!Array.isArray(ring) || ring.length < 3) return {};
+    const xs = ring.map((p) => p[0]), zs = ring.map((p) => p[1]);
+    return { width: Math.max(...xs) - Math.min(...xs), depth: Math.max(...zs) - Math.min(...zs) };
+  })();
+  /**
+   * Every camera move — dragged or programmatic — goes through camera.js's one clamp: the eye never
+   * goes under the map, AND the map never shrinks to a slab in the void.
+   *
+   * The zoom floor is the half that used to be missing. A permalink (`#1.4/-209/-280` on Woods),
+   * the wheel and the `-` key could all take the camera a zoom level and a half under `contain`,
+   * where the diorama is a small rectangle centred in grey haze with the terrain mesh's black
+   * underside on show along its lower edge. `minFitZoom()` is the floor that stops it, and this is
+   * its only call site — a floor that is never called is not a floor.
+   */
+  const clampView = (v) => clampCamera(v, {
+    ...groundExtent,
+    viewportWidth: container.clientWidth || 1200,
     viewportHeight: container.clientHeight || 800,
+    ground: (() => { try { return H(-(v.target?.[0] ?? 0), -(v.target?.[1] ?? 0)) ?? 0; } catch { return 0; } })(),
   });
-  const clampView = (v) => clampTilt(v, tiltFloor(v));
   let hover = null;
   let fontsReady = false, initialised = false;
   // atlas is keyed on fontFamily: use the fallback stack until the webfont is confirmed, then switch (forces a fresh atlas)
