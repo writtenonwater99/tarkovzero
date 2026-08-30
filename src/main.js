@@ -245,6 +245,8 @@ let liveTelemetryActive = false;
 map.on('mousemove', (e) => { if (!liveTelemetryActive) showCoords(e.latlng.lng, e.latlng.lat); });
 map.on('mouseout', () => { if (!liveTelemetryActive) idleCoords(); });
 
+/** Set once the 2D place-label layers exist; re-clips them against the safe rect. */
+let labelClip = null;
 const SNAP = [10, 25, 50, 100, 200, 500, 1000, 2000];
 function metresPerPixel() {
   if (is3d()) return 1 / Math.pow(2, v3.zoom ?? 0);
@@ -260,6 +262,7 @@ function updateHud() {
   const w = Math.round(m / mpp) + 'px';
   scaleBar.style.width = w; scaleBar.parentElement.style.width = w;
   compass.style.setProperty('--rot', `${-(v3.rotationOrbit ?? 0)}deg`);
+  labelClip?.();
 }
 
 /* ------------------------------------------------------------ markers ---- */
@@ -422,7 +425,13 @@ function applyLod(force = false) {
 const SURFACE_LABELS = mapLabels.filter((l) => l.floor !== 'U');
 const MAJOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) >= 100);
 const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
-const labelLayers = { major: placeLabelsLayer(map, MAJOR), minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor' }) };
+const labelLayers = {
+  major: placeLabelsLayer(map, MAJOR, { safeRect }),
+  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect }),
+};
+// The chrome can move without the map moving at all (a dock panel opens), so the label clip has to
+// be re-run from the layout hook too — see updateHud().
+labelClip = () => { labelLayers.major.reclip(); labelLayers.minor.reclip(); };
 // Density "Auto" is the default (step 4): Key at fit zoom — where the map should read as extracts
 // and place names — and All from one tier in, where there is room for the minor names. Off/Key/All
 // stay as explicit overrides, and an explicit choice always wins.
