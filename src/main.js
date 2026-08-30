@@ -306,6 +306,10 @@ function fit3dBox(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) 
     fitDepth: footprint.z1 - footprint.z0,
     viewportWidth: Math.max(1, r.right - r.left),
     viewportHeight: Math.max(1, r.bottom - r.top),
+    // The DECK CANVAS, not the safe rect: the perspective term in fitZoom() is about how close the
+    // eye stands, and that is set by the canvas the view state is applied to. The box we frame into
+    // is the safe rect above; the two are ~140 px apart vertically at the shipped chrome.
+    containerHeight: Math.max(1, stageEl.getBoundingClientRect().height),
     rotationX, rotationOrbit,
   };
 }
