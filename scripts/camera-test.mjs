@@ -187,10 +187,11 @@ test('the perspective fit is TIGHTER than the affine one it replaced, and only n
 });
 
 test('the fit contains the map inside the SAFE RECT, not merely inside the canvas', () => {
-  // The app frames the safe rect (the part of the stage nothing floats over) inside a TALLER
-  // canvas, and the perspective term belongs to the canvas — it is about how close the eye stands,
-  // and that is set by the surface deck renders onto, not by the sub-rect we chose to fill.
-  const SAFE = { viewportWidth: 1338, viewportHeight: 867, containerHeight: 985 };
+  // The app frames the safe rect (the stage minus the top chip band and the omnibox band) inside a
+  // TALLER canvas, and the perspective term belongs to the canvas — it is about how close the eye
+  // stands, and that is set by the surface deck renders onto, not by the sub-rect we chose to fill.
+  // The rect is the stage's FULL WIDTH: panels float over the map and are not a fit inset (QA H4).
+  const SAFE = { viewportWidth: 1400, viewportHeight: 867, containerHeight: 985 };
   for (const m of Object.values(MAPS)) {
     const box = { ...footprintOf(m), ...SAFE };
     const zoom = fitZoom(box);
@@ -241,7 +242,9 @@ test('a wider window never shows less map', () => {
 // cut off. main.js's containZoom() is Leaflet arithmetic and cannot be imported here, so the rule
 // is restated against the same shipped numbers: m/px = 1 / (|transform[0]| * 2^zoom2d).
 test('every map can reach its own 2D contain fit — the Leaflet zoom floor is under it', () => {
-  const CHROME = { w: 62, h: 118 };   // the safe rect's inset from the stage at the reference window
+  // The fit rect's inset from the stage at the reference window. The width inset is ZERO by
+  // construction: only the chip band and the omnibox band are fit insets, and both span the stage.
+  const CHROME = { w: 0, h: 118 };
   for (const [viewportWidth, viewportHeight] of [[1200, 800], [1400, 985], [1920, 1165]]) {
     for (const m of Object.values(MAPS)) {
       const box = footprintOf(m);
@@ -345,7 +348,7 @@ test('minFitZoom is the fit minus the margin, on whatever box the fit framed', (
 // registers the box it framed; the floor is then the fit minus the margin by construction.
 test('the registered fit box is the box the floor is measured from', () => {
   const woods = footprintOf(MAPS.woods);
-  const safe = { viewportWidth: 1338, viewportHeight: 867 };   // a stage minus the toolbar/chips/omnibox
+  const safe = { viewportWidth: 1400, viewportHeight: 867 };   // a stage minus the chip band and the omnibox
   try {
     setFitBox({ ...woods, ...safe });
     assert.deepEqual(getFitBox(), { width: woods.width, depth: woods.depth, fitWidth: woods.fitWidth, fitDepth: woods.fitDepth, ...safe, containerHeight: safe.viewportHeight });
@@ -392,7 +395,7 @@ test('the Woods #1.4 permalink is honoured verbatim, and a far wilder one still 
   // The permalink zoom is a 2D zoom; the 3D one is zoom2d - zoomOffsetFor(woods).
   const woods = MAPS.woods;
   const zoom3d = 1.4 - zoomOffsetFor(woods);
-  const box = { ...footprintOf(woods), viewportWidth: 1338, viewportHeight: 867 };
+  const box = { ...footprintOf(woods), viewportWidth: 1400, viewportHeight: 867 };
   try {
     setFitBox(box);
     const fit = fitZoom(box), floor = minFitZoom(box);
