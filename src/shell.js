@@ -16,7 +16,9 @@
  */
 
 const KEY = 'shell';
-export const PANELS = ['layers', 'quests', 'view', 'live', 'ask'];
+// 'ask' is deliberately absent: the assistant is the omnibox card, not a dock panel (step 2).
+// #panel-ask stays in the DOM, permanently hidden, because assistant.js binds ids inside it.
+export const PANELS = ['layers', 'quests', 'view', 'live'];
 const WORKSPACE = new Set(['layers', 'quests']);
 
 /**
