@@ -1,6 +1,32 @@
 {
   "schemaVersion": 1,
   "map": "reserve",
+  "markerDuplicateWhitelist": [
+    { "kind": "lock", "name": "5d8e0e0e86f774321140eb56", "count": 2 },
+    { "kind": "lock", "name": "5d95d6be86f77424444eb3a7", "count": 2 },
+    { "kind": "lock", "name": "5d80cb3886f77440556dbf09", "count": 2 },
+    { "kind": "hazard", "name": "Sniper", "count": 3 },
+    { "kind": "lootContainer", "name": "Duffle bag", "count": 178 },
+    { "kind": "lootContainer", "name": "Drawer", "count": 268 },
+    { "kind": "lootContainer", "name": "Ration supply crate", "count": 27 },
+    { "kind": "lootContainer", "name": "Medical supply crate", "count": 10 },
+    { "kind": "lootContainer", "name": "Technical supply crate", "count": 9 },
+    { "kind": "lootContainer", "name": "Dead Scav", "count": 8 },
+    { "kind": "lootContainer", "name": "Jacket", "count": 31 },
+    { "kind": "lootContainer", "name": "PC block", "count": 15 },
+    { "kind": "lootContainer", "name": "Weapon box", "count": 136 },
+    { "kind": "lootContainer", "name": "Safe", "count": 4 },
+    { "kind": "lootContainer", "name": "Grenade box", "count": 62 },
+    { "kind": "lootContainer", "name": "Medbag SMU06", "count": 10 },
+    { "kind": "lootContainer", "name": "Toolbox", "count": 124 },
+    { "kind": "lootContainer", "name": "Wooden crate", "count": 102 },
+    { "kind": "lootContainer", "name": "Wooden ammo box", "count": 3 },
+    { "kind": "lootContainer", "name": "Medcase", "count": 4 },
+    { "kind": "lootContainer", "name": "Sports Bag", "count": 8 },
+    { "kind": "looseLoot", "name": "Loose loot", "count": 766 },
+    { "kind": "stationaryWeapon", "name": "NSV Utyos 12.7x108 heavy machine gun", "count": 5 },
+    { "kind": "stationaryWeapon", "name": "AGS-30 30x29mm automatic grenade launcher", "count": 3 }
+  ],
   "features": [
     {
       "featureId": "reserve.white_pawn.main",

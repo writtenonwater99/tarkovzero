@@ -4,7 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { carveWaterHeightfield, makeWaterHeightCapper } from '../src/water.js';
-import { loadExactMap, stableStringify } from './lib/exact-map-primitives.mjs';
+import {
+  assertMarkerNameUniqueness, loadExactMap, normalizeMarkerName, reconcileMarkerRows, stableStringify,
+} from './lib/exact-map-primitives.mjs';
 
 const MAPS = ['customs', 'reserve', 'woods'];
 const BASELINE = process.argv.find((argument) => argument.startsWith('--baseline='))?.slice('--baseline='.length) || 'HEAD';
@@ -68,7 +70,15 @@ function surfaceSampler(document, relief = 1) {
   };
 }
 function baselineFile(path) {
-  return execFileSync('git', ['show', `${BASELINE}:${path}`], { maxBuffer: 64 * 1024 * 1024 });
+  try {
+    return execFileSync('git', ['show', `${BASELINE}:${path}`], { maxBuffer: 64 * 1024 * 1024 });
+  } catch (error) {
+    // Some managed sandboxes return the completed stdout with status 0 while
+    // wrapping the child-process call in EPERM. The bytes are still the exact
+    // git object; only accept this narrow successful-output case.
+    if (error?.status === 0 && error.stdout?.length) return error.stdout;
+    throw error;
+  }
 }
 function markerRows(markers, collection) {
   const target = {
@@ -82,9 +92,92 @@ const SOURCE_KIND = {
   spawns: 'spawn', extracts: 'extract', transits: 'transit', locks: 'lock', switches: 'switch', hazards: 'hazard',
   lootContainers: 'lootContainer', lootLoose: 'looseLoot', stationaryWeapons: 'stationaryWeapon', btrStops: 'btrStop', artilleryZones: 'artilleryZone',
 };
+const EXPECTED_MARKER_COUNTS = {
+  customs: { extract: 28, transit: 4, lock: 62, switch: 1, hazard: 5, lootContainer: 619, looseLoot: 416, spawn: 283, stationaryWeapon: 7, btrStop: 0, artilleryZone: 2 },
+  reserve: { extract: 11, transit: 3, lock: 33, switch: 5, hazard: 4, lootContainer: 1002, looseLoot: 766, spawn: 167, stationaryWeapon: 8, btrStop: 0, artilleryZone: 2 },
+  woods: { extract: 20, transit: 4, lock: 5, switch: 0, hazard: 64, lootContainer: 437, looseLoot: 387, spawn: 368, stationaryWeapon: 2, btrStop: 8, artilleryZone: 2 },
+};
+const EXPECTED_ANCHOR_HEIGHTS = {
+  customs: { 'Big Red': 1.81, 'Dorms 2-Story': 0.75, Fortress: 1.74, 'Old Gas': 2.03, 'Water Pump': 1.18, 'Main Bridge': -6.68 },
+  reserve: { 'White Pawn': -1.25, Helipad: -5.09, 'White Queen / Dome': 19.54, 'D-2': 15.60, 'White Rook / Train Station': -6.25, 'Bunker Hermetic Door': -0.35 },
+  woods: { 'Sniper Mountain Summit': 77.52, 'Upper Mountain': 64.62, 'Mountain Flank': 52.27, 'Train Depot': 9.05, 'USEC Camp': 24.57, Sawmill: -2.83 },
+};
+const EXPECTED_OUTPUT_HASHES = {
+  'public/data/customs.json': 'fe49b31cd7791ab8a46201180d9f019efabc35f0f9a73d656d27c09aa2ed2257',
+  'public/data/customs-3d.json': '2fc39043aeb7627d8ba46d7e0ed353a0ce0cc19d9bec8b02505f247a9ec1306c',
+  'public/data/reserve.json': '0dc4ceeca5228ea7012f0c52f0d37aa425a32433886c0f7e28ae01a128178036',
+  'public/data/reserve-3d.json': '81d67bf8a6b845e40cc8c4b4ed9d82fa70399b1096cda9338b2f0259829d1bbf',
+  'public/data/woods.json': '95dfe4fd6e67e4af980cc48c853f01f886c38b9b97d2029b9741d6b7f52dadbd',
+  'public/data/woods-3d.json': '375a7359c772991b48a7b0ebeeda202fdcdf4c704993b1486750619160265702',
+};
+
+// A small contract fixture catches matcher-order and exact-geometry regressions
+// even when a particular live cache happens not to exercise every branch.
+const mergerFixture = reconcileMarkerRows([
+  { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'exact-fixture', id: 'dev-fixture', name: 'Railroad Passage (Flare)', faction: 'pmc', level: 'surface', position: { x: 1, y: 9, z: 2 }, size: { x: 3 }, outline: [{ x: 0, y: 9, z: 2 }], top: 10, bottom: 8 },
+], [
+  { source: 'eft-wiki', sourceKind: 'extract', sourceId: 'wiki-fixture', name: 'railroad passage', faction: 'pmc', level: 'underground', position: { x: 500, z: 500 }, description: 'Wiki description', requirementText: 'Fire flare' },
+]);
+assert(normalizeMarkerName(' Railroad Passage (Flare) ') === 'railroadpassage', 'marker-name normalization contract failed');
+assert(mergerFixture.rows.length === 1 && mergerFixture.stats[0].byName === 1, 'name-first marker reconciliation contract failed');
+assert(stableStringify(mergerFixture.rows[0].position) === stableStringify({ x: 1, y: 9, z: 2 })
+  && mergerFixture.rows[0].level === 'surface' && mergerFixture.rows[0].top === 10 && mergerFixture.rows[0].description === 'Wiki description',
+'exact geometry / Wiki enrichment reconciliation contract failed');
+const priorityFixture = reconcileMarkerRows([
+  { source: 'tarkov.dev-json', sourceKind: 'lock', sourceId: 'exact-id', name: 'ID target', position: { x: 0, y: 1, z: 0 } },
+  { source: 'tarkov.dev-json', sourceKind: 'lock', sourceId: 'exact-name', name: 'Name target', position: { x: 100, y: 2, z: 0 } },
+], [
+  { source: 'eft-wiki', sourceKind: 'lock', sourceId: 'wiki', tarkovDevId: 'exact-id', name: 'Name target', position: { x: 100, z: 0 } },
+], { maxDistance: 25 });
+assert(priorityFixture.stats[0].byId === 1
+  && priorityFixture.rows[0].corroboratedBy.includes('eft-wiki:wiki')
+  && !priorityFixture.rows[1].corroboratedBy,
+'ID-first matcher priority contract failed');
+const multiWitnessFixture = reconcileMarkerRows([
+  { source: 'tarkov.dev-json', sourceKind: 'spawn', sourceId: 'exact-spawn', position: { x: 0, y: 1, z: 0 } },
+], [
+  { source: 'spt-4.1.2', sourceKind: 'spawn', sourceId: 'spt-a', position: { x: 1, y: 1, z: 0 } },
+  { source: 'spt-4.1.2', sourceKind: 'spawn', sourceId: 'spt-b', position: { x: 2, y: 1, z: 0 } },
+], { nameOf: () => '' });
+assert(multiWitnessFixture.rows.length === 1 && multiWitnessFixture.stats[0].byDistance === 2
+  && multiWitnessFixture.rows[0].corroboratedBy.length === 3,
+'multiple-secondary-witness reconciliation contract failed');
+const duplicateFixture = [{
+  rows: [
+    { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'checkpoint-a', name: 'Scav Checkpoint', faction: 'scav' },
+    { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'checkpoint-b', name: 'Scav Checkpoint (Co-op)', faction: 'scav' },
+  ],
+  kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction,
+}];
+let duplicateRejected = false;
+try { assertMarkerNameUniqueness('fixture', duplicateFixture); } catch { duplicateRejected = true; }
+assert(duplicateRejected, 'unwhitelisted duplicate marker contract failed');
+assert(assertMarkerNameUniqueness('fixture', duplicateFixture, [
+  { kind: 'extract', name: 'Scav Checkpoint', faction: 'scav', count: 2 },
+]).length === 1, 'duplicate marker whitelist contract failed');
 function sourcePosition(collection, raw) {
   if (collection === 'btrStops') return { x: raw.x, y: raw.y, z: raw.z };
   return raw.position;
+}
+function semanticMarkerCollections(markers) {
+  return [
+    { rows: markers.extracts, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction },
+    { rows: markers.locks, kindOf: (row) => row.sourceKind, nameOf: (row) => row.key?.name },
+    { rows: markers.switches, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+    { rows: markers.hazards, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+    { rows: markers.containers, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+    { rows: markers.spawns, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+    { rows: markers.stationaryWeapons, kindOf: (row) => row.sourceKind, nameOf: (row) => row.stationaryWeapon?.name },
+    { rows: markers.btrStops, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  ];
+}
+function markerKindCounts(markers) {
+  const rows = [
+    ...markers.extracts, ...markers.locks, ...markers.switches, ...markers.hazards,
+    ...markers.containers, ...markers.spawns, ...markers.stationaryWeapons, ...markers.btrStops,
+  ];
+  return Object.fromEntries(Object.keys(EXPECTED_MARKER_COUNTS.customs)
+    .map((kind) => [kind, rows.filter((row) => row.sourceKind === kind).length]));
 }
 function assertFeatureResults(map, document) {
   const assignments = document.features.assignments;
@@ -107,11 +200,17 @@ function assertFeatureResults(map, document) {
 const anchorRows = [], hashRows = [];
 for (const map of MAPS) {
   const markerPath = `public/data/${map}.json`, geometryPath = `public/data/${map}-3d.json`;
-  const [markerBytes, geometryBytes] = await Promise.all([readFile(markerPath), readFile(geometryPath)]);
+  const [markerBytes, geometryBytes, featureBytes] = await Promise.all([
+    readFile(markerPath), readFile(geometryPath), readFile(`data/${map}-features.json`),
+  ]);
   const markers = JSON.parse(markerBytes), document = JSON.parse(geometryBytes);
+  const featureManifest = JSON.parse(featureBytes);
   const oldMarkerBytes = baselineFile(markerPath), oldGeometryBytes = baselineFile(geometryPath);
   const oldDocument = JSON.parse(oldGeometryBytes);
-  hashRows.push([markerPath, sha256(oldMarkerBytes), sha256(markerBytes)], [geometryPath, sha256(oldGeometryBytes), sha256(geometryBytes)]);
+  const markerHash = sha256(markerBytes), geometryHash = sha256(geometryBytes);
+  assert(markerHash === EXPECTED_OUTPUT_HASHES[markerPath], `${map}: marker output hash drifted`);
+  assert(geometryHash === EXPECTED_OUTPUT_HASHES[geometryPath], `${map}: 3D output hash drifted`);
+  hashRows.push([markerPath, sha256(oldMarkerBytes), markerHash], [geometryPath, sha256(oldGeometryBytes), geometryHash]);
 
   assert(document.canonicalScale === 1 && document.terrain.units?.scale === 1, `${map}: canonical output is not 1x`);
   const reliefKeys = [];
@@ -127,8 +226,11 @@ for (const map of MAPS) {
   for (const anchor of document.features.anchors) {
     const [x, z] = anchor.position, before = oldSurface(x, z), after = surface1(x, z);
     close(surface3(x, z), after * 3, 1e-4, `${map}/${anchor.name}: 3x sampler is not a pure view skin`);
+    assert(Object.hasOwn(EXPECTED_ANCHOR_HEIGHTS[map], anchor.name), `${map}/${anchor.name}: unexpected verification anchor`);
+    close(after, EXPECTED_ANCHOR_HEIGHTS[map][anchor.name], 0.015, `${map}/${anchor.name}: canonical anchor height drifted`);
     anchorRows.push([map, anchor.name, x, z, before, after, after - before]);
   }
+  assert(document.features.anchors.length === Object.keys(EXPECTED_ANCHOR_HEIGHTS[map]).length, `${map}: expected anchor count drifted`);
   assert(heightHash === sha256(Buffer.from(JSON.stringify(document.terrain.heights))), `${map}: sampler mutated canonical heights`);
 
   const exactSource = await loadExactMap(map);
@@ -144,7 +246,23 @@ for (const map of MAPS) {
         assert(projected.position.x === exactPosition.x && projected.position.y === exactPosition.y && projected.position.z === exactPosition.z,
           `${map}: ${collection}/${sourceItem.sourceId} lost exact position precision`);
       }
+      for (const field of ['size', 'outline']) if (sourceItem.raw[field] != null) {
+        assert(stableStringify(projected[field]) === stableStringify(sourceItem.raw[field]), `${map}: ${collection}/${sourceItem.sourceId} lost exact ${field}`);
+      }
+      if (Number.isFinite(sourceItem.raw.top)) assert(projected.top === sourceItem.raw.top, `${map}: ${collection}/${sourceItem.sourceId} lost exact top`);
+      if (Number.isFinite(sourceItem.raw.bottom ?? sourceItem.raw.botom)) {
+        assert(projected.bottom === (sourceItem.raw.bottom ?? sourceItem.raw.botom), `${map}: ${collection}/${sourceItem.sourceId} lost exact bottom`);
+      }
     }
+  }
+  assert(stableStringify(markerKindCounts(markers)) === stableStringify(EXPECTED_MARKER_COUNTS[map]), `${map}: reconciled marker counts drifted`);
+  assertMarkerNameUniqueness(map, semanticMarkerCollections(markers), featureManifest.markerDuplicateWhitelist ?? []);
+  for (const group of ['extracts', 'locks', 'switches', 'stationaryWeapons', 'containers', 'spawns']) for (const row of markers[group] || []) {
+    if (!row.corroboratedBy?.length) continue;
+    const ownWitness = `${row.source}:${row.sourceId ?? row.id}`;
+    assert(row.corroboratedBy.includes(ownWitness), `${map}: ${group}/${row.sourceId} corroboration omits authoritative source`);
+    assert(row.corroboratedBy.some((witness) => witness !== ownWitness), `${map}: ${group}/${row.sourceId} corroboration has no secondary source`);
+    assert(new Set(row.corroboratedBy).size === row.corroboratedBy.length, `${map}: ${group}/${row.sourceId} repeats a corroboration source`);
   }
   for (const group of ['extracts', 'locks', 'switches', 'stationaryWeapons', 'containers']) for (const row of markers[group] || []) {
     if (row.source === 'eft-wiki') {
