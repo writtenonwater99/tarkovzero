@@ -120,7 +120,43 @@ let VOID_Z = -14;
 // R1.5: the margin is a parameter, because the realistic void plane is no longer a 60 m apron under
 // the map — it is the ground haze the diorama sits in, and it has to reach far enough past the
 // limit that the world fog can carry it all the way to the far-fog value before it runs out.
-function voidRect(limit, m = 60) { const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]); return [[Math.min(...xs) - m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.max(...zs) + m], [Math.min(...xs) - m, Math.max(...zs) + m]]; }
+/*
+ * The backdrop plane, as a GRID of quads rather than one rectangle.
+ *
+ * The fog is written per VERTEX (`vs:DECKGL_FILTER_GL_POSITION` in src/atmosphere.js) and
+ * interpolated across the primitive. A rectangle has four vertices, all of them out past
+ * `1.4 x map diagonal`, and all four clamp to `FOG.realistic.maxDensity` — and a varying
+ * interpolated between four identical values is a CONSTANT. So the whole backdrop, including the
+ * band just outside the limit where the true fog value is 0.00-0.05, rendered at a uniform
+ * `mix(ground haze, far fog, 0.92)`: 8% of the darker ground colour survived and the near-dark →
+ * far-haze ramp the plane exists for never appeared anywhere on it. (The horizon gradient visible
+ * in the frames is the grade pass's screen-space `skyness` ramp — a different mechanism, above the
+ * horizon, doing nothing for this.)
+ *
+ * Breaks are square-law from each limit edge outward, so the vertices are dense where the fog
+ * curve bends hardest (just past the limit) and sparse where it has already flattened at
+ * maxDensity. 900 quads, one draw call, and no change to the plane's colour, height or extent.
+ * `outward = 12` is where the worst linear-interpolation error against the true exponential drops
+ * under 0.035 on all three maps (it is 0.069 on Reserve at 8, and 16 only buys another 0.005).
+ */
+function voidGrid(limit, m = 60, outward = 12, across = 6) {
+  const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]);
+  const breaks = (lo, hi) => {
+    const b = [];
+    for (let i = outward; i >= 1; i--) b.push(lo - m * (i / outward) ** 2);
+    for (let i = 0; i <= across; i++) b.push(lo + ((hi - lo) * i) / across);
+    for (let i = 1; i <= outward; i++) b.push(hi + m * (i / outward) ** 2);
+    return b;
+  };
+  const bx = breaks(Math.min(...xs), Math.max(...xs)), bz = breaks(Math.min(...zs), Math.max(...zs));
+  const quads = [];
+  for (let j = 0; j + 1 < bz.length; j++) {
+    for (let i = 0; i + 1 < bx.length; i++) {
+      quads.push([[bx[i], bz[j]], [bx[i + 1], bz[j]], [bx[i + 1], bz[j + 1]], [bx[i], bz[j + 1]]]);
+    }
+  }
+  return quads;
+}
 const OVERLAY = { depthCompare: 'always', depthWriteEnabled: false };
 // One instance, reused: a fresh LayerExtension every render() makes deck rebuild the shader.
 const dashExt = new PathStyleExtension({ dash: true });
@@ -836,8 +872,11 @@ export async function createView3d(container, mapData, src) {
        * distance fog every world layer takes washes it to the far-fog value on its way out. The
        * frame reads sky at the top, haze at the horizon, and the two meet in a gradient rather
        * than at an edge.
+       *
+       * It is a GRID of quads, not one rectangle — see voidGrid(): a four-vertex plane cannot
+       * carry a per-vertex fog gradient at all.
        */
-      new SolidPolygonLayer({ id: 'void', shadowEnabled: false, data: [voidRect(data.limit, voidMargin(look, mapDiagonal))], getPolygon: (d) => d.map(([x, z]) => P([x, z], VOID_Z)), getFillColor: C.oob, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+      new SolidPolygonLayer({ id: 'void', shadowEnabled: false, data: voidGrid(data.limit, voidMargin(look, mapDiagonal)), getPolygon: (d) => d.map(([x, z]) => P([x, z], VOID_Z)), getFillColor: C.oob, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     ] : []),
     ...(terrain
       ? terrain.layers(look, { fogExtension: fogExt, groundExtension: groundExt })
