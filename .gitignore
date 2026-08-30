@@ -7,3 +7,6 @@ companion/companion.json
 companion/elevation-*.jsonl
 # quest-layer build inputs: crawled/downloaded, re-fetched by scripts/build-quests.mjs
 scripts/data/tasks/
+# Versioned tarkov.dev JSON responses are reproducible local build caches. The
+# small URL/date/hash manifest beside this directory is committed.
+scripts/data/tarkov-dev-exact/
