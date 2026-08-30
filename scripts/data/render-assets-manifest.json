@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "stage": 1,
+  "plan": "docs/plans/RENDER-REALISM.md",
+  "description": "Stage 1 render-asset set: the Ground106 ground-detail subset, the Autumn Crossing 1K HDRI reduced to a sky/ambient reference, and two self-authored generated maps. Regenerate with `npm run prepare-render-assets`.",
+  "cacheRoot": ".cache/render-assets",
+  "outputRoot": "public/assets/3d",
+  "shippedBudgetBytes": 12582912,
+  "detailSize": 512,
+  "skyPreviewWidth": 256,
+  "licenses": {
+    "CC0-1.0": {
+      "name": "Creative Commons Zero v1.0 Universal (public domain dedication)",
+      "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "note": "Attribution is not required by CC0. TarkovZero records author and source anyway, per the plan's hard licensing gate."
+    }
+  },
+  "licenseChecks": [
+    {
+      "source": "ambientCG",
+      "pageUrl": "https://docs.ambientcg.com/license/",
+      "expect": "CC0",
+      "verifiedAt": "2026-08-29",
+      "verifiedQuote": "All files and previews downloadable on ambientCG.com are published under the Creative Commons CC0 1.0 Universal License."
+    },
+    {
+      "source": "Poly Haven",
+      "pageUrl": "https://polyhaven.com/license",
+      "expect": "CC0",
+      "verifiedAt": "2026-08-29",
+      "verifiedQuote": "All assets on Poly Haven are licensed as CC0, which is the same as public domain."
+    },
+    {
+      "source": "Quaternius",
+      "pageUrl": "https://quaternius.com/faq.html",
+      "expect": "CC0",
+      "verifiedAt": "2026-08-29",
+      "verifiedQuote": "All my models are CC0, which means you can use them for anything.",
+      "usedInStage1": false
+    },
+    {
+      "source": "Kenney",
+      "pageUrl": "https://kenney.nl/support",
+      "expect": "CC0",
+      "verifiedAt": "2026-08-29",
+      "verifiedQuote": "All assets on the asset pages are licensed as Creative Commons Zero (CC0).",
+      "usedInStage1": false
+    }
+  ],
+  "sources": [
+    {
+      "id": "ground106",
+      "provider": "ambientCG",
+      "assetPage": "https://ambientcg.com/a/Ground106",
+      "sourceUrl": "https://ambientcg.com/get?file=Ground106_1K-PNG.zip",
+      "cacheFile": "Ground106_1K-PNG.zip",
+      "author": "ambientCG (Lennart Demes)",
+      "license": "CC0-1.0",
+      "licensePage": "https://docs.ambientcg.com/license/",
+      "purpose": "Stage 1 ground detail subset: wet soil / forest floor / muddy shore surface frequency for the terrain macro treatment. The plan's named pick for Stage 1.",
+      "variantNote": "1K-PNG chosen over the smaller 1K-JPG so the pipeline needs no JPEG decoder and no lossy-recompression step; the ZIP is cache-only and never shipped.",
+      "sourceBytes": 20293422,
+      "sourceSha256": "dfec3bf5bc0a92f6fb41c019157197149a45f66488ce4f434cb2d4c08d827944"
+    },
+    {
+      "id": "autumn-crossing",
+      "provider": "Poly Haven",
+      "assetPage": "https://polyhaven.com/a/autumn_crossing",
+      "sourceUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/autumn_crossing_1k.hdr",
+      "cacheFile": "autumn_crossing_1k.hdr",
+      "author": "Greg Zaal",
+      "license": "CC0-1.0",
+      "licensePage": "https://polyhaven.com/license",
+      "purpose": "Stage 1 environment: overcast, low-contrast autumn IBL/sky reference. Reduced to SH irradiance + hemisphere colours + a tone-mapped preview; the raw HDR is never shipped.",
+      "variantNote": "1K HDR is the plan's pick. Poly Haven publishes md5 c0f556c01d12120169b916b0b4c3efc1 for this file; the pipeline additionally pins sha256.",
+      "sourceBytes": 1889442,
+      "sourceSha256": "3cd13dc94041aa3f94c4d7ba4898d5924da2d2193476851557387cbd170a084e"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "ground106-albedo",
+      "path": "materials/ground106-albedo-512.png",
+      "from": "ground106",
+      "zipEntry": "Ground106_1K-PNG_Color.png",
+      "kind": "material",
+      "colorSpace": "srgb",
+      "channels": "rgb",
+      "purpose": "Terrain ground-detail base colour, tiled in world space. Muted by the material table's baseColor factor, not baked in.",
+      "bytes": 498642,
+      "sha256": "9129e2112174781456b3163d3427ae420896a4e02ae370c84a0c0bc080e42e2a"
+    },
+    {
+      "id": "ground106-normal",
+      "path": "materials/ground106-normal-512.png",
+      "from": "ground106",
+      "zipEntry": "Ground106_1K-PNG_NormalGL.png",
+      "kind": "material",
+      "colorSpace": "linear",
+      "channels": "rgb",
+      "purpose": "Terrain ground-detail normal (OpenGL +Y convention, matching deck.gl/luma.gl). Supplies surface frequency without runtime displacement.",
+      "bytes": 554465,
+      "sha256": "5ef97b01869452f10fc554a7392a3f7a72b2bd13624e52222615361f1300567d"
+    },
+    {
+      "id": "ground106-orm",
+      "path": "materials/ground106-orm-512.png",
+      "from": "ground106",
+      "zipEntry": "Ground106_1K-PNG_AmbientOcclusion.png+Ground106_1K-PNG_Roughness.png",
+      "kind": "material",
+      "colorSpace": "linear",
+      "channels": "rgb",
+      "purpose": "Packed occlusion/roughness/metalness. R = AO, G = roughness, B = metalness (constant 0 for ground). One sampler instead of three.",
+      "bytes": 445101,
+      "sha256": "060e727f2ef4ccf09415546bd5c51cb6e5a942111898933f071e8e39b9afdc02"
+    },
+    {
+      "id": "autumn-crossing-sky",
+      "path": "environment/autumn-crossing-sky-256.png",
+      "from": "autumn-crossing",
+      "kind": "environment",
+      "colorSpace": "srgb",
+      "channels": "rgb",
+      "purpose": "Tone-mapped equirectangular sky/ambient reference for the realistic background and for eyeballing the environment tint. Not a runtime IBL source.",
+      "bytes": 64046,
+      "sha256": "9d84bc296cdabbfc83d7d44328976053dfc3a4d1ce9bda314d48847654236f37"
+    },
+    {
+      "id": "autumn-crossing-gradient",
+      "path": "environment/autumn-crossing-gradient.png",
+      "from": "autumn-crossing",
+      "kind": "environment",
+      "colorSpace": "srgb",
+      "channels": "rgb",
+      "purpose": "8x128 vertical strip of the HDRI's average colour per elevation band; drop-in background gradient texture, zenith at the top.",
+      "bytes": 391,
+      "sha256": "956bb6f0b3d9f057ed8256073643d9f6cb2bc161d27254a945d8d752bba54714"
+    },
+    {
+      "id": "autumn-crossing-light",
+      "path": "environment/autumn-crossing-light.json",
+      "from": "autumn-crossing",
+      "kind": "environment",
+      "colorSpace": "linear",
+      "channels": "data",
+      "purpose": "9 SH irradiance coefficients, hemisphere/zenith/horizon averages, and the estimated dominant-light direction. Ambient reference only: the key light stays pinned by src/render-style.js.",
+      "bytes": 1970,
+      "sha256": "f827e9a05a33aa259e3d8960ec2bf988c4ae7a7344598143b5b84f05cabe7a6f"
+    },
+    {
+      "id": "macro-noise",
+      "path": "materials/macro-noise-256.png",
+      "from": "generated",
+      "kind": "material",
+      "colorSpace": "linear",
+      "channels": "rgba",
+      "purpose": "Self-authored seamless breakup tile. R = low-frequency macro tint (hides 1K repetition across Woods), G = mid-frequency wetness/grime mask, B = high-frequency detail, A = 16x16 Bayer dither threshold for LOD cross-fades.",
+      "bytes": 149744,
+      "sha256": "5143d269dc3ea7fd6383669ffe68ba75408e8ab0ee27bbe0449fc23fbe3983b1"
+    },
+    {
+      "id": "overcast-grade-lut",
+      "path": "environment/overcast-grade-lut-16.png",
+      "from": "generated",
+      "kind": "environment",
+      "colorSpace": "srgb",
+      "channels": "rgb",
+      "purpose": "Self-authored 16x16x16 colour-grade LUT (256x16 horizontal strip, blue slices left to right) for the combined post pass: desaturate, cool the shadows toward the fog colour, warm the highlights slightly.",
+      "bytes": 3470,
+      "sha256": "b08c5d63a3405fb4ea91c49d941fd9cfbdc2953d8313c5b7069d3139167d0bc1"
+    }
+  ],
+  "toolchain": {
+    "node": "24.18.0",
+    "zlib": "1.3.1-e00f703",
+    "zlibVernum": 4880,
+    "deflateLevel": 9,
+    "encoder": "scripts/lib/imageio.mjs (dependency-free PNG/ZIP/HDR codecs)",
+    "textureFormat": "PNG",
+    "textureFormatTodo": "TODO(stage-1-renderer): switch the material set to KTX2/Basis once the renderer carries a transcoder. Measured with `--ktx2-report` using ktx2-encoder@0.6.0 (pure wasm, no native build, byte-identical across runs): the three 512px ground maps drop from 1.43 MiB PNG to 0.45 MiB KTX2 (69% smaller) — albedo 487->72 KiB ETC1S, normal 542->323 KiB UASTC+zstd, ORM 435->66 KiB ETC1S. Not shipped now because nothing in this checkout can decode KTX2 at runtime; wiring @loaders.gl/textures plus a basis transcoder is a renderer change owned by the Stage 1 renderer branch, not by the asset pipeline."
+  },
+  "totals": {
+    "sourceBytes": 22182864,
+    "shippedBytes": 1722128,
+    "shippedBudgetBytes": 12582912
+  }
+}
