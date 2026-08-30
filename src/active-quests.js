@@ -15,8 +15,17 @@
  * scripts/active-quests-test.mjs exercises. See docs/plans/ACTIVE-QUESTS.md for the full spec.
  */
 
-/** A quest set from a stranger's relay room is untrusted input: cap what we will look at. */
-export const MAX_IDS = 500;
+/**
+ * A quest set from a stranger's relay room is untrusted input: cap what we will look at.
+ *
+ * 1000, the same number as the relay's own ID_CAP (relay/server.mjs) and for the same reason: the
+ * cap has to sit well above the quest count. public/data/quests.json carries 517 quests, so the old
+ * 500 truncated a late-game player's `done` list — up to 17 finished quests never reached
+ * "Completed", and because parseQuestsMessage() filters `active` against the truncated `done` set,
+ * a quest the game had reported finished stayed in "My quests" and kept selecting itself onto the
+ * map. mergeQuestSets() re-normalises the flattened lists, so two paired companions hit it sooner.
+ */
+export const MAX_IDS = 1000;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Trim, drop anything that isn't an id-shaped string, dedupe, keep the incoming order. */

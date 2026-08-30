@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  normalizeIds, parseQuestsMessage, mergeQuestSets,
+  MAX_IDS, normalizeIds, parseQuestsMessage, mergeQuestSets,
   activeRows, doneRows, autoSelectSlugs, sinceLabel, sinceCaveat,
 } from '../src/active-quests.js';
 
@@ -51,7 +51,7 @@ same('trims', normalizeIds([' a1 ']), ['a1']);
 same('drops non-strings and empties', normalizeIds(['a1', 3, null, '', {}, ['b2']]), ['a1']);
 same('drops ids with markup or spaces in them', normalizeIds(['<img src=x>', 'a b', 'ok_id-1']), ['ok_id-1']);
 same('not an array is an empty list', normalizeIds('a1'), []);
-eq('caps a flood', normalizeIds(Array.from({ length: 900 }, (_, i) => `id${i}`)).length, 500);
+eq('caps a flood', normalizeIds(Array.from({ length: 1400 }, (_, i) => `id${i}`)).length, MAX_IDS);
 
 /* -------------------------------------------------------- message parsing */
 console.log('parseQuestsMessage');
@@ -161,9 +161,12 @@ console.log('against public/data/quests.json');
     autoSelectSlugs({ all, activeIds: ids, mapKey: 'customs' }), customs.slice(0, 3).map((q) => q.slug));
   eq('a non-task id is dropped, not drawn', rows.unknown.length, 1);
   // Every id in the file must survive normalisation, or a real quest would silently never match.
-  // (Checked in batches because normalizeIds caps a single call at MAX_IDS.)
   const kept = all.map((q) => q.id).filter((id) => normalizeIds([id]).length === 1).length;
   eq('every quest id in the file survives normalisation', kept, all.length);
+  // …and they must survive it TOGETHER. The cap is what a player's `done` list runs into at the end
+  // of the game: at 500, against 517 quests, finished quests were dropped and came back as active.
+  eq('the whole quest list fits under the id cap in one call', normalizeIds(all.map((q) => q.id)).length, all.length);
+  check('the cap leaves headroom over the quest count', MAX_IDS >= all.length * 1.5, `${MAX_IDS} vs ${all.length}`);
 }
 
 /* -------------------------------------------------------------- summary */

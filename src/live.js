@@ -28,8 +28,10 @@ export const STALE_MS = 10_000;
 const QA_STATE = ['connecting', 'streaming', 'stale'].includes(new URLSearchParams(location.search).get('livestate'))
   ? new URLSearchParams(location.search).get('livestate') : null;
 const QA_AGE_MS = { connecting: 0, streaming: 2000, stale: 15000 };
+/** The one synthetic pairing code. Never persisted, and stripped on restore if an old build wrote it. */
+export const QA_CODE = 'QA0000';
 const qaPlayer = () => ({
-  code: 'QA0000', name: 'QA test', color: COLORS[0], map: null, status: 'QA',
+  code: QA_CODE, name: 'QA test', color: COLORS[0], map: null, status: 'QA',
   last: { x: 12.3, z: -45.6, yaw: 214 }, lastAt: Date.now() - QA_AGE_MS[QA_STATE], ws: { readyState: 1 },
 });
 // The walk the QA player arrives on. Feeding these through onPos() — the same function a relay
@@ -158,7 +160,12 @@ export function createLive(map, mapData, ui, hooks = {}) {
   function applyQaLive() {
     if (!QA_STATE || players.size) return;
     const p = {
-      code: 'QA0000', name: 'QA test', nameOverride: false, color: COLORS[0],
+      // `qa` is what keeps that promise: persist() serialises the whole roster, and five shipping
+      // paths call it (add, rename, remove, setPrimary, and onPos's companion-name branch), so any
+      // real use of the Live panel during a `?livestate=` visit used to write QA0000 into
+      // localStorage. restore() then re-added it on the next ordinary load and opened a socket to
+      // /sub/QA0000 — a room nobody paired with, stuck reconnecting, with no hint where it came from.
+      code: QA_CODE, qa: true, name: 'QA test', nameOverride: false, color: COLORS[0],
       status: '', last: null, lastAt: null, map: null, resume: true, ws: { readyState: 1 },
     };
     players.set(p.code, p);
@@ -228,7 +235,10 @@ export function createLive(map, mapData, ui, hooks = {}) {
     const code = normCode(codeRaw);
     if (!CODE_RE.test(code)) throw new Error('Code must be 6 letters/numbers, e.g. K7P3QX');
     if (players.has(code)) return;
-    const p = { code, name: (name || '').trim().slice(0, 24) || code, nameOverride: override && !!name, color: COLORS[players.size % COLORS.length], status: '', last: null, lastAt: null, map: null };
+    // Colour index counts REAL players: with the QA player holding slot 0, the first real player
+    // came out blue through `?livestate=` and red without it, so a QA screenshot and a real session
+    // disagreed about the trail colour.
+    const p = { code, name: (name || '').trim().slice(0, 24) || code, nameOverride: override && !!name, color: COLORS[real().length % COLORS.length], status: '', last: null, lastAt: null, map: null };
     players.set(code, p); connect(p); persist();
   }
   function rename(code, name) {
@@ -244,16 +254,26 @@ export function createLive(map, mapData, ui, hooks = {}) {
     if (questSets.delete(code)) hooks.onQuests?.(quests());
     persist(); ui.render();
   }
+  /** The roster minus anything synthetic — what storage, colours and the code count are about. */
+  const real = () => [...players.values()].filter((p) => !p.qa);
   function persist() {
-    try { localStorage.setItem('tarkovzero:live', JSON.stringify({ players: [...players.values()].map((p) => ({ code: p.code, name: p.name, override: p.nameOverride })), primary: opts.primary })); }
+    try { localStorage.setItem('tarkovzero:live', JSON.stringify({ players: real().map((p) => ({ code: p.code, name: p.name, override: p.nameOverride })), primary: opts.primary })); }
     catch {}
   }
   function restore() {
     try {
       const raw = JSON.parse(localStorage.getItem('tarkovzero:live') || '[]');
       const list = Array.isArray(raw) ? raw : (raw.players ?? []); // migrate from the old bare-array format
-      for (const e of list) { if (typeof e === 'string') add(e); else add(e.code, e.name !== e.code ? e.name : '', { override: !!e.override }); }
+      let dropped = false;
+      for (const e of list) {
+        const code = normCode(typeof e === 'string' ? e : e?.code);
+        // A build before this one could write the QA player into storage; drop it on sight rather
+        // than open a socket to a room the player never paired with.
+        if (code === QA_CODE) { dropped = true; continue; }
+        if (typeof e === 'string') add(e); else add(e.code, e.name !== e.code ? e.name : '', { override: !!e.override });
+      }
       if (!Array.isArray(raw) && raw.primary && players.has(raw.primary)) opts.primary = raw.primary;
+      if (dropped) persist();
     } catch {}
   }
   function clearTrails() { for (const p of players.values()) p.trail?.setLatLngs([]); }
@@ -264,7 +284,7 @@ export function createLive(map, mapData, ui, hooks = {}) {
   setInterval(() => {
     // The QA player is a still life: hold its age at the one the forced state describes, or a
     // screenshot taken 20 s into a settle reads "streaming · 20s ago" past STALE_MS.
-    if (QA_STATE) { const p = players.get('QA0000'); if (p?.lastAt) p.lastAt = Date.now() - QA_AGE_MS[QA_STATE]; }
+    if (QA_STATE) { const p = players.get(QA_CODE); if (p?.lastAt) p.lastAt = Date.now() - QA_AGE_MS[QA_STATE]; }
     if (players.size || QA_STATE) (ui.tick ?? ui.render)?.();
   }, 1000);
   applyQaQuests();
