@@ -644,6 +644,28 @@ function viewCone(last, r, fovDeg) {
   for (let i = 0; i <= 14; i++) { const a = yaw - half + (2 * half * i) / 14; pts.push([last.x + r * Math.sin(a), last.z + r * Math.cos(a)]); }
   return pts;
 }
+/*
+ * How long the live player's cone is, in metres.
+ *
+ * A fixed 32 m cone is ~29 px at the default Customs framing and about half that once the 32°
+ * tilt foreshortens it along the view axis — QA H2 measured the whole live marker as a 14x8 px
+ * hollow ellipse and called it the least visible thing on the map, on the frame the Live panel is
+ * open for. So the cone has a SCREEN-SPACE FLOOR: it is 32 m of real ground wherever 32 m is
+ * already big enough to read, and grows toward MIN_CONE_PX pixels when it is not. The cap keeps a
+ * far-out camera from painting a wedge across the whole map.
+ */
+const CONE_M = 32, MIN_CONE_PX = 52, MAX_CONE_M = 190;
+export function coneMetresFor(zoom) {
+  const pxPerM = Math.pow(2, Number(zoom) || 0);
+  if (!(pxPerM > 0)) return CONE_M;
+  return Math.min(MAX_CONE_M, Math.max(CONE_M, MIN_CONE_PX / pxPerM));
+}
+/** The vertical beacon's height, on the same screen-space floor as the cone. */
+export function beaconMetresFor(zoom) {
+  const pxPerM = Math.pow(2, Number(zoom) || 0);
+  if (!(pxPerM > 0)) return 9;
+  return Math.min(70, Math.max(9, 30 / pxPerM));
+}
 const box = ([x, y], w) => [[x - w / 2, y - w / 2], [x + w / 2, y - w / 2], [x + w / 2, y + w / 2], [x - w / 2, y + w / 2]];
 
 export async function createView3d(container, mapData, src) {
@@ -1245,6 +1267,8 @@ export async function createView3d(container, mapData, src) {
   // M10: Woods place labels bottomed out at 10 px, ≈7 px of cap height — shapes, not words, on the
   // physically largest map. The floor is the one number that decides the smallest map's type.
   const MAJOR_MIN_PX = 12, MINOR_MIN_PX = 11;
+  // The live marker's own screen footprint (ring + dot), and the name plate that hangs off it.
+  const PLAYER_MARK_PX = 30, PLAYER_NAME_PX = 13, PLAYER_NAME_GAP = 15;
   /*
    * How wide a label's ink actually is, MEASURED — not estimated.
    *
@@ -1317,7 +1341,7 @@ export async function createView3d(container, mapData, src) {
    *   TextLayer applies; rows that could not be seated are simply absent. With no viewport yet
    *   (the very first frame) both lists come back unculled — drawing every name beats drawing none.
    */
-  function textLayout(labelRows, markers, questPts) {
+  function textLayout(labelRows, markers, questPts, players = []) {
     const z = viewState.zoom ?? 0;
     const full = z >= 0.6;
     const place = labelRows
@@ -1408,6 +1432,44 @@ export async function createView3d(container, mapData, src) {
       d.shift = [dx, dy];
       taken.push([b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy]);
     }
+    // 2b. live players, after the badges so a name plate never lands on an extract. The marker is
+    //     the whole reason the Live panel is open: its box is reserved so a place name moves off
+    //     it, and its NAME is seated like every other word on the map — it used to print through
+    //     RUAF ROADBLOCK with both unreadable (QA H2). A player's name is never DROPPED, only
+    //     moved: it goes right of the marker, else left of it, else back to the plain offset.
+    const player = new Map();
+    const playerConeM = coneMetresFor(z);
+    for (const p of players) {
+      const at = project(P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.3));
+      if (!at) continue;
+      // Reserve the ring AND the projected cone, and remember which way the cone points: a name
+      // plate parked on the wedge hides the one thing the wedge is for, and a name walked four
+      // rungs down the ladder to escape it is a caption nothing ties to the marker any more. So
+      // the plate is offered the side AWAY from the heading first, and only then the near side.
+      const mark = [at[0] - PLAYER_MARK_PX / 2, at[1] - PLAYER_MARK_PX / 2, at[0] + PLAYER_MARK_PX / 2, at[1] + PLAYER_MARK_PX / 2];
+      let cx = 0, cy = 0, n = 0;
+      for (const q of viewCone(p.last, playerConeM, 60)) {
+        const c = project(Pg(q, 0.7));
+        if (!c) continue;
+        mark[0] = Math.min(mark[0], c[0]); mark[1] = Math.min(mark[1], c[1]);
+        mark[2] = Math.max(mark[2], c[0]); mark[3] = Math.max(mark[3], c[1]);
+        cx += c[0]; cy += c[1]; n++;
+      }
+      taken.push(mark);
+      const w = inkWidth(p.name || '', PLAYER_NAME_PX, 700) + 12;   // + the plate's own padding
+      const h = PLAYER_NAME_PX * 1.18 + 6;
+      const reach = PLAYER_MARK_PX / 2 + PLAYER_NAME_GAP + w / 2;
+      const away = n && cx / n < at[0] ? 1 : -1;   // the cone leans left -> the name goes right
+      // seat() answers in box-centre space; the layer anchors the text's LEFT edge at the offset.
+      const offFor = (centreX, s) => [centreX + s[0] - at[0] - w / 2, s[1]];
+      let off = null;
+      for (const side of [away, -away]) {
+        const centreX = at[0] + side * reach;
+        const s = seat(centreX, at[1], w, h, true);
+        if (s) { off = offFor(centreX, s); break; }
+      }
+      player.set(p.code, off ?? [PLAYER_MARK_PX / 2 + PLAYER_NAME_GAP, 0]);
+    }
     // 3. major place names, longest first so the landmark that needs the room asks for it first.
     //    upFirst: a quest pin under the name pushes the NAME up, which is the D6 fix.
     const seatPlace = (rows) => rows.filter((e) => {
@@ -1447,7 +1509,7 @@ export async function createView3d(container, mapData, src) {
     const placedMinor = seatPlace(place.filter((e) => !e.major));
     const seated = placedMajor.length + placedMinor.length;
     layoutStats = { bail: null, seated, hidden: place.length - seated, rect };
-    return { place: [...placedMajor, ...placedMinor], extract: placedExtract, badge };
+    return { place: [...placedMajor, ...placedMinor], extract: placedExtract, badge, player };
   }
 
   // --- TRACK C: extract names in 3D -----------------------------------------------------
@@ -1619,7 +1681,9 @@ export async function createView3d(container, mapData, src) {
     // One screen-space pass decides where every word goes — see textLayout(). The quest points it
     // lays out around are the same ones questLayers() draws, filtered the same way.
     const questPts = ((src.quests?.() ?? null)?.points ?? []).filter((d) => inLimit(d.position.x, d.position.z));
-    const laid = textLayout(labels, markers, questPts);
+    const laid = textLayout(labels, markers, questPts, players);
+    const coneM = coneMetresFor(viewState.zoom);
+    const beaconM = beaconMetresFor(viewState.zoom);
     // A place name that was hidden takes its ping with it: a beam pointing at nothing is worse
     // clutter than the label was (QA L2 — twelve of them out-contrast the buildings they mark).
     return [
@@ -1655,16 +1719,33 @@ export async function createView3d(container, mapData, src) {
       ...extractNameLayers(laid.extract),
       ...questLayers(),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.6)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      // live player: field-of-view cone on the ground (direction = the cone) + beacon
-      new SolidPolygonLayer({ id: 'player-cone', data: players, getPolygon: (p) => viewCone(p.last, 32, 60).map((q) => Pg(q, 0.7)), getFillColor: (p) => hex(p.color, 70), pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPolygon: players.map((p) => p.last) } }),
-      new SolidPolygonLayer({ id: 'player-cone-inner', data: players, getPolygon: (p) => viewCone(p.last, 12, 60).map((q) => Pg(q, 0.75)), getFillColor: (p) => hex(p.color, 120), pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPolygon: players.map((p) => p.last) } }),
+      // Live player: a field-of-view cone on the ground (the direction IS the cone), an outline
+      // that survives whatever it is drawn over, a ring, and the vertical beacon. The cone and the
+      // beacon are on a screen-space floor — see coneMetresFor() — because the marker the Live
+      // panel exists for was the least visible thing on the map (QA H2).
+      new SolidPolygonLayer({ id: 'player-cone', data: players, getPolygon: (p) => viewCone(p.last, coneM, 60).map((q) => Pg(q, 0.7)), getFillColor: (p) => hex(p.color, 96), pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPolygon: [players.map((p) => p.last), coneM] } }),
+      new SolidPolygonLayer({ id: 'player-cone-inner', data: players, getPolygon: (p) => viewCone(p.last, coneM * 0.42, 60).map((q) => Pg(q, 0.75)), getFillColor: (p) => hex(p.color, 165), pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPolygon: [players.map((p) => p.last), coneM] } }),
+      // The keyline is what makes a translucent wedge read as a heading over bright terrain.
+      new PathLayer({ id: 'player-cone-edge', data: players, getPath: (p) => { const c = viewCone(p.last, coneM, 60); return [...c, c[0]].map((q) => Pg(q, 0.8)); }, getColor: (p) => hex(p.color, 235), getWidth: 2, widthUnits: 'pixels', widthMinPixels: 2, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPath: [players.map((p) => p.last), coneM] } }),
       new SolidPolygonLayer({ id: 'player-piece', data: players.flatMap((p) => { const g = Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)); return [
           { p, poly: circle(p.last.x, p.last.z, 1.4, 20), z: g + 0.05, h: 0.5, k: 1 }, { p, poly: circle(p.last.x, p.last.z, 0.75, 16), z: g + 0.55, h: 1.7, k: 1.1 }, { p, poly: circle(p.last.x, p.last.z, 0.55, 14), z: g + 2.25, h: 0.7, k: 1.25 } ]; }),
         getPolygon: (d) => ringAt(d.poly, d.z), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => hex(d.p.color, 255).map((v, i) => (i < 3 ? Math.min(255, v * d.k) : v)), pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: surfaceMaterial(look, 'player'), updateTriggers: { getPolygon: players.map((p) => p.last) } }),
-      new ScatterplotLayer({ id: 'player-ring', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.45), getRadius: 2.6, radiusUnits: 'meters', radiusMinPixels: 8, stroked: true, filled: false, getLineColor: (p) => hex(p.color, 220), lineWidthMinPixels: 2, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last) } }),
-      new LineLayer({ id: 'player-beacon', data: players, getSourcePosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.5), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 9), getColor: (p) => hex(p.color, 150), getWidth: 3, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getSourcePosition: players.map((p) => p.last), getTargetPosition: players.map((p) => p.last) } }),
+      new ScatterplotLayer({ id: 'player-ring', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.45), getRadius: 2.6, radiusUnits: 'meters', radiusMinPixels: 11, stroked: true, filled: false, getLineColor: (p) => hex(p.color, 235), lineWidthMinPixels: 2.5, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last) } }),
+      // The one solid mark that says "this exact point". The ring around it is 22 px across, so
+      // the pair reads at the fit zoom without hiding the terrain the player is standing on.
+      new ScatterplotLayer({ id: 'player-dot', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.5), getRadius: 1.1, radiusUnits: 'meters', radiusMinPixels: 4.5, stroked: true, filled: true, getFillColor: (p) => hex(p.color, 255), getLineColor: [10, 14, 12, 235], lineWidthMinPixels: 1.5, pickable: false, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: players.map((p) => p.last) } }),
+      new LineLayer({ id: 'player-beacon', data: players, getSourcePosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.5), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + beaconM), getColor: (p) => hex(p.color, 195), getWidth: 3.5, widthUnits: 'pixels', parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getSourcePosition: players.map((p) => p.last), getTargetPosition: [players.map((p) => p.last), beaconM] } }),
       new LineLayer({ id: 'drop', data: players, getSourcePosition: (p) => Pg([p.last.x, p.last.z], 0), getTargetPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.2), getColor: (p) => hex(p.color, 160), getWidth: 2, updateTriggers: { getSourcePosition: heightEpoch, getTargetPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.3), getText: (p) => p.name, getPixelOffset: [22, 0], getTextAnchor: 'start', getSize: 14, getColor: C.cream, outlineWidth: 4, outlineColor: [14, 18, 15, 240], fontFamily: LABEL_FONT(), fontSettings: { sdf: true }, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, updateTriggers: { getPosition: relief } })]),
+      // The live name goes through textLayout()'s seating pass like everything else with words in
+      // it — it used to print straight through RUAF ROADBLOCK — and it wears the player's own
+      // colour as a keyline, so the plate and the marker read as one object (QA H2).
+      ...([new TextLayer({ id: 'player-names', data: players, getPosition: (p) => P([p.last.x, p.last.z], Math.max(p.last.y ?? 0, H(p.last.x, p.last.z)) + 0.3), getText: (p) => p.name,
+        getPixelOffset: (p) => laid.player?.get(p.code) ?? [PLAYER_NAME_GAP, 0], getTextAnchor: 'start', getSize: PLAYER_NAME_PX, sizeUnits: 'pixels',
+        getColor: [...C.cream, 255], outlineWidth: 3, outlineColor: [14, 18, 15, 240],
+        background: true, getBackgroundColor: [10, 14, 12, 226], backgroundPadding: [5, 2, 5, 2],
+        getBorderColor: (p) => hex(p.color, 240), getBorderWidth: 1.2,
+        fontFamily: LABEL_FONT(), fontSettings: LABEL_SDF, fontWeight: 700, billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+        updateTriggers: { getPosition: relief, getPixelOffset: laid.player } })]),
     ];
   };
   const hex = (h, a = 255) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];

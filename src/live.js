@@ -49,10 +49,34 @@ export function createLive(map, mapData, ui, hooks = {}) {
   const pane = 'live';
   map.createPane(pane); map.getPane(pane).style.zIndex = 650;
 
+  /*
+   * The live marker: a 44 px vision cone whose apex is the player's exact position, a solid centre
+   * dot inside a ring, and a beacon pulse around it.
+   *
+   * It used to be a 120x120 SVG inside a 30x30 box, which produced two defects at once. The ink
+   * was ~14 px of hollow ellipse — the least visible thing on a map whose Live panel was open for
+   * it (QA H2) — and `transform-origin: center` resolved to the 30 px box's centre (15, 15), which
+   * is not the SVG's apex (60, 60), so turning the heading swung the whole cone off the player.
+   * The art is authored at its real size now: one 48-unit viewBox, apex at its centre, drawn at
+   * 48 px, anchored at 24, so the box centre, the apex and the rotation origin are the same point.
+   */
+  const CONE = { r: 21, half: 30 };   // px from the apex, and half the 60° field of view
+  const conePath = (() => {
+    const rad = (d) => (d * Math.PI) / 180;
+    const x = (s) => (24 + CONE.r * Math.sin(rad(s))).toFixed(2);
+    const y = (s) => (24 - CONE.r * Math.cos(rad(s))).toFixed(2);
+    return `M24 24 L${x(-CONE.half)} ${y(-CONE.half)} A${CONE.r} ${CONE.r} 0 0 1 ${x(CONE.half)} ${y(CONE.half)} Z`;
+  })();
   const arrowIcon = (color) => L.divIcon({
     className: '',
-    html: `<div class="player-arrow" style="--c:${color}"><svg viewBox="0 0 120 120" width="120" height="120"><defs><radialGradient id="pg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="${color}" stop-opacity=".55"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></radialGradient></defs><path d="M60 60 L26 6 A62 62 0 0 1 94 6 Z" fill="url(#pg)"/><path d="M60 60 L26 6 A62 62 0 0 1 94 6" fill="none" stroke="${color}" stroke-opacity=".7" stroke-width="1.2"/><circle cx="60" cy="60" r="7" fill="${color}" stroke="#0a0e0c" stroke-width="2"/><circle cx="60" cy="60" r="11" fill="none" stroke="${color}" stroke-opacity=".8" stroke-width="1.5"/></svg></div>`,
-    iconSize: [120, 120], iconAnchor: [60, 60],
+    html: `<div class="player-mk" style="--c:${color}"><span class="pb"></span><span class="pb pb2"></span>`
+      + `<div class="player-arrow"><svg viewBox="0 0 48 48" width="48" height="48">`
+      + `<path d="${conePath}" fill="${color}" fill-opacity=".34"/>`
+      + `<path d="${conePath}" fill="none" stroke="${color}" stroke-opacity=".95" stroke-width="1.6" stroke-linejoin="round"/>`
+      + `<circle cx="24" cy="24" r="8" fill="none" stroke="${color}" stroke-opacity=".9" stroke-width="2"/>`
+      + `<circle cx="24" cy="24" r="4.2" fill="${color}" stroke="#0a0e0c" stroke-width="1.6"/>`
+      + `</svg></div></div>`,
+    iconSize: [48, 48], iconAnchor: [24, 24],
   });
 
   function setHeading(p, yaw) {
@@ -195,7 +219,11 @@ export function createLive(map, mapData, ui, hooks = {}) {
     p.lastAt = Date.now(); // this is a usable position for THIS map — mark it fresh before anything below reads state
     const ll = pos(m);
     if (!p.marker) {
-      p.marker = L.marker(ll, { icon: arrowIcon(p.color), pane, interactive: true }).addTo(map).bindTooltip(esc(p.name), { permanent: true, direction: 'right', offset: [14, 0], className: 'player-tip' });
+      p.marker = L.marker(ll, { icon: arrowIcon(p.color), pane, interactive: true }).addTo(map).bindTooltip(esc(p.name), { permanent: true, direction: 'right', offset: [26, 0], className: 'player-tip' });
+      // The name plate wears the player's own colour, so it reads as this marker's label and not
+      // as one more place name (QA H2). The tooltip lives in the pane, not inside the icon, so it
+      // cannot inherit `--c` — it is set on the element once the permanent tooltip is open.
+      p.marker.getTooltip()?.getElement()?.style.setProperty('--c', p.color);
       p.trail = L.polyline([], { color: p.color, weight: 3, opacity: 0.8, pane }).addTo(map);
     } else p.marker.setLatLng(ll);
     setHeading(p, m.yaw);
