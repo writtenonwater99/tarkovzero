@@ -269,22 +269,28 @@ export function createOmnibox(deps = {}) {
     if (r.kind === 'extract') return `<span class="badge">${esc(r.badge || '·')}</span>`;
     return `<span class="badge">${esc((r.label?.[0] || '·').toUpperCase())}</span>`;
   }
+  /**
+   * The Enter keycap belongs to the row Enter would actually act on — nowhere else.
+   * It used to be printed on the "Ask AI" row unconditionally, so a list whose highlighted row was
+   * "Dorms V-Ex" still advertised Enter three rows below it (QA D7).
+   */
+  const enterKey = (on) => (on ? `<kbd class="res-enter">enter</kbd>` : '');
   function rowHtml(row, i) {
     const on = i === state.index;
     if (row.type === 'empty') return `<div class="res-empty">${esc(row.label)}</div>`;
     if (row.type === 'ask') {
       return `<div class="res res-ask${on ? ' act' : ''}" data-i="${i}" role="option" aria-selected="${on}">` +
         `${chipFor(row)}<span class="rn">Ask AI: <em>${esc(row.label)}</em></span>` +
-        `<span class="rk">${row.text ? 'enter' : 'type a question'}</span></div>`;
+        `<span class="rk">${row.text ? '' : 'type a question'}</span>${enterKey(on)}</div>`;
     }
     if (row.type === 'command') {
       return `<div class="res res-command${on ? ' act' : ''}" data-i="${i}" role="option" aria-selected="${on}">` +
         `${chipFor(row)}<span class="rn mono">${esc(row.label)}` +
         (row.sub ? `<em class="res-arg">${esc(row.sub)}</em>` : '') +
-        `</span><span class="rk">${esc(row.hint ?? '')}</span></div>`;
+        `</span><span class="rk">${esc(row.hint ?? '')}</span>${enterKey(on)}</div>`;
     }
     return `<div class="res res-${esc(row.item?.kind ?? 'hit')}${on ? ' act' : ''}" data-i="${i}" role="option" aria-selected="${on}">` +
-      `${chipFor(row)}<span class="rn">${esc(row.label)}</span><span class="rk">${esc(row.sub ?? '')}</span></div>`;
+      `${chipFor(row)}<span class="rn">${esc(row.label)}</span><span class="rk">${esc(row.sub ?? '')}</span>${enterKey(on)}</div>`;
   }
   function render() {
     // The card, once open, answers the query it was opened for — the row list beneath it (the
