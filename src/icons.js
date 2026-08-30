@@ -1,5 +1,19 @@
-// Marker icons: white stroke glyphs on a coloured badge. Badge shape encodes the category —
-// extracts = rounded square, spawns = circle, utilities = diamonds, loot = compact chips.
+// Marker icons: a two-tone stencil. The badge carries the category COLOUR and its shape; the
+// game-icons glyph on top is always the same near-white, never tinted (step 4, UI-REWORK.md).
+//
+// Before this pass the badge was three tones — a coloured fill, an ink keyline AND a cream inner
+// rule — and the spawn glyphs broke the rule outright by painting the glyph itself in the category
+// colour on a bare dark disc. At 22 px that reads as noise: the eye has to decode the artwork to
+// learn the category. Now colour = category, shape = family, glyph = what the thing is:
+//
+//   sq  rounded square   extracts / transits / stashes
+//   sh  shield           spawns (people)
+//   ci  circle           loot containers
+//   dia diamond          utilities (switches, locks, hazards, stationary weapons)
+//   hex hexagon          quest objectives (nothing else uses it)
+//
+// The glyph SET is unchanged — that was the founder's art decision, and Gemini's "trash the icons"
+// stays declined.
 const S = 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"';
 import { ART } from './icon-art.js';
 const A = (k) => `<g transform='scale(0.046875)'><path d='${ART[k]}'/></g>`; // 512 -> 24
@@ -34,10 +48,10 @@ export const KINDS = {
   'extract-scav':    { label: 'Scav extracts',      glyph: 'gi_exit',  color: '#E0872B', shape: 'sq'  },
   'extract-shared':  { label: 'Shared extracts',    glyph: 'gi_exit',      color: '#2DBE6C', color2: '#E0872B', shape: 'sq' },
   'extract-transit': { label: 'Transits',           glyph: 'gi_transit',   color: '#3A96BA', shape: 'sq'  },
-  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'gi_gasmask',   color: '#7fa0b4', shape: 'fig' },
-  'spawn-scav':      { label: 'Scav spawns',        glyph: 'gi_hood',   color: '#c9a463', shape: 'fig' },
-  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'gi_crosshair',     color: '#e2793f', shape: 'fig' },
-  'spawn-boss':      { label: 'Boss spawns',        glyph: 'gi_crownskull',   color: '#d24a4a', shape: 'fig' },
+  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'gi_gasmask',   color: '#7fa0b4', shape: 'sh' },
+  'spawn-scav':      { label: 'Scav spawns',        glyph: 'gi_hood',   color: '#c9a463', shape: 'sh' },
+  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'gi_crosshair',     color: '#e2793f', shape: 'sh' },
+  'spawn-boss':      { label: 'Boss spawns',        glyph: 'gi_crownskull',   color: '#d24a4a', shape: 'sh' },
   'stash':           { label: 'Stashes',            glyph: 'gi_lockedchest', color: '#77845A', shape: 'sq' },
   'loot-weapon':     { label: 'Weapon boxes',       glyph: 'gi_ammobox',     color: '#707875', shape: 'ci' },
   'loot-crate':      { label: 'Crates & bags',      glyph: 'gi_cargocrate',  color: '#81735E', shape: 'ci' },
@@ -58,38 +72,120 @@ export const KINDS = {
 export const EXTRACT_LETTER = { 'Dorms V-Ex': 'D', 'Crossroads': 'C', 'Trailer Park': 'TP', 'Old Gas Station': 'OG', 'RUAF Roadblock': 'R', "Smugglers' Boat": 'SB', 'ZB-1011': '11', 'Smugglers\' Bunker (ZB-1012)': '12', 'ZB-013': '13', 'Railroad to Tarkov': 'R2', 'Railroad to Port': 'R1', 'Railroad to Military Base': 'R3', 'Sniper Roadblock': 'N', 'Old Road Gate': 'O', 'Passage Between Rocks': 'P', 'Military Base CP': 'M', 'Scav Checkpoint': 'S', 'Administration Gate': 'A', 'Factory Far Corner': 'F', 'Warehouse 4': '4', 'Factory Shacks': 'Y', 'Old Gas Station Gate': 'L', 'Warehouse 17': '17', "Trailer Park Workers' Shack": 'I', 'Boiler Room Basement (Co-op)': 'Z', 'Railroad Passage (Flare)': 'W', 'Transit to Factory': 'H', 'Transit to Reserve': 'V', 'Transit to Interchange': 'G', 'Transit to Shoreline': 'E' };
 export const extractLetter = (name) => EXTRACT_LETTER[(name || '').trim()] ?? null;
 
-// badge key line + cream inner rule; both come straight from the TRACK C palette (ink / cream)
+/* ------------------------------------------------- extract requirements --- */
+// What an extract asks of you, short enough to be a HUD chip. The raw notes are sentences
+// ("Requires lever activation in warehouse #4 and Factory emergency exit key"), so these are
+// hand-written. Lives here rather than in map3d.js because 2D shows the same text in the popup
+// and the hover tooltip, and both views share the corner glyph keyed off `EXTRACT_REQ`.
+export const EXTRACT_SUB = {
+  'Old Gas Station': 'REQ: GREEN FLARE', 'Railroad Passage (Flare)': 'REQ: GREEN FLARE',
+  "Smugglers' Boat": 'REQ: VORON NOTE', "Smugglers' Bunker (ZB-1012)": 'REQ: VORON NOTE',
+  'Dorms V-Ex': 'REQ: 20K ROUBLES', 'ZB-013': 'REQ: LEVER + KEY',
+  'RUAF Roadblock': 'PVE ONLY', 'Boiler Room Basement (Co-op)': 'CO-OP · PMC + SCAV',
+};
+export const SUB_BY_KIND = { 'extract-pmc': 'PMC ONLY', 'extract-scav': 'SCAV ONLY', 'extract-shared': 'PMC + SCAV', 'extract-transit': 'TRANSIT · 1 MIN' };
+/** The requirement line for one extract marker ({kind, name}). */
+export const subText = (m) => EXTRACT_SUB[(m?.name || '').trim()] ?? SUB_BY_KIND[m?.kind] ?? '';
+/**
+ * The requirement CLASS, drawn as a corner glyph on the badge. The full line only appears on
+ * hover/selection now (step 4) — a permanent second line under every extract at every zoom was
+ * half the marker soup — so the badge itself has to say "this one costs you something".
+ */
+export const EXTRACT_REQ = {
+  'Old Gas Station': 'flare', 'Railroad Passage (Flare)': 'flare',
+  "Smugglers' Boat": 'key', "Smugglers' Bunker (ZB-1012)": 'key', 'ZB-013': 'key',
+  'Dorms V-Ex': 'cash', 'Boiler Room Basement (Co-op)': 'coop',
+};
+export const extractReq = (name) => EXTRACT_REQ[(name || '').trim()] ?? null;
+
+// badge key line; ink and cream come straight from the TRACK C palette
 const KEY = '#0E1211', CREAM = '#E6E3D7';
-const HEX = 'M12 1.6 21.1 6.8v10.4L12 22.4 2.9 17.2V6.8z', HEX_IN = 'M12 3.4 19.6 7.8v8.4L12 20.6 4.4 16.2V7.8z';
-function badgeSvg(k0, letter, level = 'surface', tint = null) {
+// The one glyph tone. Near-white, not pure white: at 22 px pure white on a mid-value badge blooms.
+const STENCIL = '#F2F0E7';
+const HEX = 'M12 1.6 21.1 6.8v10.4L12 22.4 2.9 17.2V6.8z';
+const SHIELD = 'M12 1.7 21.2 5v7.4c0 4.7-4.3 7.9-9.2 9.9-4.9-2-9.2-5.2-9.2-9.9V5z';
+// Corner marks. ~8 px square in the badge's bottom-left, ink plate + one near-white stroke, so a
+// requirement reads as "there is a condition" at icon size and as which one when you lean in.
+const REQ_MARK = {
+  flare: `<path d='M5.8 15.5v5.4M3.5 16.9l4.6 2.6M8.1 16.9l-4.6 2.6' fill='none' stroke='${STENCIL}' stroke-width='1.15' stroke-linecap='round'/>`,
+  key: `<circle cx='4.7' cy='17.1' r='1.55' fill='none' stroke='${STENCIL}' stroke-width='1.1'/><path d='M5.8 18.2 8.4 20.8M7.1 19.5l-.9.9' fill='none' stroke='${STENCIL}' stroke-width='1.1' stroke-linecap='round'/>`,
+  cash: `<path d='M4.6 15.5v5.4M4.6 15.5h2a1.6 1.6 0 0 1 0 3.2h-2M3.4 19.7h3.5' fill='none' stroke='${STENCIL}' stroke-width='1.1' stroke-linecap='round'/>`,
+  coop: `<circle cx='4.6' cy='18.1' r='1.5' fill='none' stroke='${STENCIL}' stroke-width='1.05'/><circle cx='7.1' cy='18.1' r='1.5' fill='none' stroke='${STENCIL}' stroke-width='1.05'/>`,
+};
+// Where the glyph sits inside each shape. A shield's usable area is higher and narrower than a
+// circle's, so one shared transform would push the spawn art through the point.
+const GLYPH_FIT = { sq: 'translate(4.6 4.6) scale(.62)', ci: 'translate(4.6 4.6) scale(.62)', hex: 'translate(4.9 4.9) scale(.59)', dia: 'translate(5.2 5.2) scale(.57)', sh: 'translate(4.9 3.9) scale(.59)' };
+function badgeSvg(k0, letter, level = 'surface', tint = null, req = null) {
   const k = tint ? { ...k0, color: tint, color2: null } : k0;
-  if (k.shape === 'fig') return `<circle cx='12' cy='12' r='11' fill='#0a0e0c' fill-opacity='.45'/><g fill='${k.color}' transform='translate(2.6 2.6) scale(.78)'>${GLYPH[k.glyph]}</g>`; // one-colour art glyph on a faint disc
+  const path = k.shape === 'hex' ? HEX : k.shape === 'sh' ? SHIELD : null;
   const shape = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='${k.color}'/>`
     : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='${k.color}'/>`
-    : k.shape === 'hex' ? `<path d='${HEX}' fill='${k.color}'/>`
+    : path ? `<path d='${path}' fill='${k.color}'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='${k.color}'/>`;
+  // Shared extracts are the one two-colour badge: half PMC green, half scav orange.
   const split = k.color2 ? `<clipPath id='c'><rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5'/></clipPath><path d='M1.8 22.2 22.2 1.8v20.4z' fill='${k.color2}' clip-path='url(#c)'/>` : '';
-  const key = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='none' stroke='${KEY}' stroke-width='1.6'/><circle cx='12' cy='12' r='9.5' fill='none' stroke='${CREAM}' stroke-width='1'/>`
-    : k.shape === 'hex' ? `<path d='${HEX}' fill='none' stroke='${KEY}' stroke-width='1.6'/><path d='${HEX_IN}' fill='none' stroke='${CREAM}' stroke-width='1'/>`
-    : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='none' stroke='${KEY}' stroke-width='1.6'/><rect x='2.8' y='2.8' width='18.4' height='18.4' rx='4.2' fill='none' stroke='${CREAM}' stroke-width='1'/>`
-    : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='none' stroke='${KEY}' stroke-width='1.6'/>`;
+  // One keyline, in ink — it is what holds the badge together over a bright satellite tile. The
+  // cream inner rule that used to sit inside it was a third tone and pure noise below ~20 px.
+  const key = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='none' stroke='${KEY}' stroke-width='1.5'/>`
+    : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='none' stroke='${KEY}' stroke-width='1.5'/>`
+    : path ? `<path d='${path}' fill='none' stroke='${KEY}' stroke-width='1.5'/>`
+    : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='none' stroke='${KEY}' stroke-width='1.5'/>`;
   const ring = k.ring ? `<circle cx='12' cy='12' r='11.6' fill='none' stroke='${CREAM}' stroke-width='0.8'/>` : '';
-  const inner = letter ? `<text x='12' y='16.6' text-anchor='middle' font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${letter.length > 2 ? 9 : letter.length > 1 ? 11 : 13}' fill='${CREAM}'>${letter}</text>` : `<g fill='#fff' transform='translate(4.6 4.6) scale(.62)'>${GLYPH[k.glyph]}</g>`;
+  const inner = letter
+    ? `<text x='12' y='16.6' text-anchor='middle' font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${letter.length > 2 ? 9 : letter.length > 1 ? 11 : 13}' fill='${STENCIL}'>${letter}</text>`
+    : `<g fill='${STENCIL}' transform='${GLYPH_FIT[k.shape] ?? GLYPH_FIT.sq}'>${GLYPH[k.glyph]}</g>`;
   // An underground badge must remain recognisable even when its colour is muted by
   // the marker-opacity setting: dashed extract outline + a universal down/stairs cue.
   const underground = level === 'underground'
     ? `${k.shape === 'sq' ? `<rect x='2.8' y='2.8' width='18.4' height='18.4' rx='4.2' fill='none' stroke='#FFD28A' stroke-width='1.2' stroke-dasharray='2.3 1.7'/>` : ''}<g><rect x='14.1' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='#FFD28A' stroke-width='.7'/><path d='M18.2 15.8v4.5m-1.7-1.7 1.7 1.7 1.7-1.7' fill='none' stroke='#FFD28A' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/></g>`
     : '';
-  return `${shape}${split}${key}${ring}${inner}${underground}`;
+  // Bottom-LEFT, because the underground cue already owns the bottom-right corner and an extract
+  // can easily be both (Smugglers' Bunker is underground and needs the Voron note).
+  const reqMark = REQ_MARK[req]
+    ? `<g><rect x='1.7' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='${STENCIL}' stroke-width='.7' stroke-opacity='.8'/>${REQ_MARK[req]}</g>`
+    : '';
+  return `${shape}${split}${key}${ring}${inner}${underground}${reqMark}`;
 }
-export function iconHtml(kind, size = 24, letter = null, level = 'surface', tint = null) {
+export function iconHtml(kind, size = 24, letter = null, level = 'surface', tint = null, req = null) {
   const k = KINDS[kind];
-  return `<div class="mk ${k.shape} level-${level}" style="width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level, tint)}</svg></div>`;
+  return `<div class="mk ${k.shape} level-${level}" style="width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level, tint, req)}</svg></div>`;
 }
-export function iconDataUrl(kind, size = 48, letter = null, level = 'surface', tint = null) {
+export function iconDataUrl(kind, size = 48, letter = null, level = 'surface', tint = null, req = null) {
   const k = KINDS[kind];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level, tint)}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">${badgeSvg(k, letter, level, tint, req)}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+/* ---------------------------------------------------------------- dot tier --- */
+// Above ~0.33 m/px a badge is a lie: it claims 22 px of importance for a loose-loot point you
+// cannot even walk to yet. The dot tier keeps the CATEGORY (its colour) and drops everything else.
+const rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+/** Pull a category colour toward its own grey and darken it a touch. */
+export function desaturate(hex, amount = 0.55, dim = 0.92) {
+  const [r, g, b] = rgbOf(hex);
+  const l = 0.299 * r + 0.587 * g + 0.114 * b;
+  const mix = (c) => (c + (l - c) * amount) * dim;
+  return `#${hex2(mix(r))}${hex2(mix(g))}${hex2(mix(b))}`;
+}
+/** The dot colour for a kind, as CSS hex / as an RGB array for deck.gl. */
+export const dotColor = (kind) => desaturate(KINDS[kind]?.color ?? '#808682');
+export const dotRgb = (kind) => rgbOf(dotColor(kind));
+/** 6 px desaturated dot in the category colour — no glyph, no letter, no label. */
+export function dotHtml(kind, size = 6) {
+  return `<div class="mk-dot" style="width:${size}px;height:${size}px;background:${dotColor(kind)}"></div>`;
+}
+
+/* -------------------------------------------------------------- clustering --- */
+/** How a count is written on a cluster: 3-digit crowds become "99+" rather than blowing the bubble. */
+export const clusterCount = (n) => (n > 99 ? '99+' : String(n));
+/**
+ * One cluster marker: the tier's own mark (dot or badge) plus a count bubble. Clicking it zooms
+ * one step in, which is what splits it — see main.js / map3d.js.
+ */
+export function clusterHtml(kind, count, tier = 'dot') {
+  const mark = tier === 'dot' ? dotHtml(kind, 8) : iconHtml(kind, 20);
+  return `<div class="mk-cluster mk-cluster-${tier}">${mark}<span class="mk-count mono">${clusterCount(count)}</span></div>`;
 }
 export const soldierDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><circle cx="12" cy="12" r="11.5" fill="#0a0e0c" fill-opacity=".55"/><g fill="${color}" transform="translate(2.6 2.6) scale(.78)">${GLYPH.gi_gasmask}</g></svg>`);
 export const arrowDataUrl = (color, size = 64) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M12 2 20 21l-8-4-8 4z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`);
