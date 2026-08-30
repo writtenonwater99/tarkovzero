@@ -44,6 +44,71 @@ export const COMMANDS = [
   { name: 'help', hint: 'controls and shortcuts' },
 ];
 
+/**
+ * Run one `>` command against a set of action handles. Returns the toast line.
+ *
+ * Module-level and exported on purpose: the switch below is the wire between a highlighted row and
+ * something happening, and it used to be a closure nothing could reach. scripts/omnibox-routing-test
+ * calls it with stub actions, and asserts that every name in COMMANDS has a case here — a command
+ * added to the vocabulary but not to the switch renders a selectable row and then does nothing.
+ *
+ * @param {{name:string}} cmd     the matched command
+ * @param {string} rawArg         everything typed after the command name
+ * @param {object} actions        the handles main.js supplies (see createOmnibox's `actions`)
+ */
+export function runCommand(cmd, rawArg, actions = {}) {
+  const a = actions;
+  const arg = String(rawArg ?? '').trim();
+  const q = arg.toLowerCase();
+  const onOff = (dflt) => (['off', '0', 'no', 'hide'].includes(q) ? false : ['on', '1', 'yes', 'show'].includes(q) ? true : dflt);
+  switch (cmd?.name) {
+    case '3d': a.setView?.('3d'); return '3D view';
+    case '2d': a.setView?.('2d'); return '2D view';
+    case 'fit': a.fit?.(); return 'Fitted the map';
+    case 'north': a.north?.(); return 'Compass reset';
+    case 'live': a.panel?.('live', true); return 'Live panel';
+    case 'quests': a.panel?.('quests', true); return 'Quests panel';
+    case 'my quests': a.myQuests?.(); return 'My quests';
+    case 'help': a.help?.(); return 'Controls';
+    case 'clear trails': a.clearTrails?.(); return 'Trails cleared';
+    case 'pin': { const n = q.startsWith('l') ? 'layers' : 'quests'; a.pin?.(n, true); return `Pinned ${n}`; }
+    case 'map': {
+      // A bare `> map` must never navigate: k.startsWith('') is true for every key, so without this
+      // guard the first map in the registry won a match nobody typed — and a map switch is a full
+      // page reload that drops the camera, the selection, the transcript and the live sockets.
+      // `> m` ranks `map` above `my quests`, so this is one keystroke away from being an accident.
+      const keys = a.mapKeys?.() ?? [];
+      if (!q) return `Which map? ${keys.join(', ')}`;
+      const key = keys.find((k) => k.startsWith(q) || q.startsWith(k));
+      if (!key) return `No map called “${arg}”`;
+      a.goMap?.(key); return `Loading ${key}…`;
+    }
+    case 'floor': {
+      const f = q === 'u' ? 'U' : q === 'all' || !q ? 'all' : String(Number(q));
+      if (!a.setFloor?.(f)) return `No floor “${arg}”`;
+      return `Floor ${f}`;
+    }
+    case 'relief': { const n = Number(q) || 3; a.setRelief?.(n); return `Relief ${n}×`; }
+    case 'trees': case 'rocks': { const on = onOff(false); a.setNature?.(cmd.name, on); return `${cmd.name} ${on ? 'on' : 'off'}`; }
+    case 'labels': {
+      const d = ['off', 'key', 'all'].find((x) => x.startsWith(q)) ?? 'all';
+      a.setLabels?.(d); return `Labels: ${d}`;
+    }
+    case 'layers': case 'show': case 'hide': {
+      if (!arg) { a.panel?.('layers', true); return 'Layers panel'; }
+      const n = a.setLayers?.(arg, cmd.name !== 'hide') ?? 0;
+      return n ? `${cmd.name === 'hide' ? 'Hid' : 'Showed'} ${n} layer${n > 1 ? 's' : ''} matching “${arg}”` : `No layer matches “${arg}”`;
+    }
+    default: return '';
+  }
+}
+
+/** Every command name `runCommand` actually handles — the test asserts this covers COMMANDS. */
+export const HANDLED = [
+  '3d', '2d', 'fit', 'north', 'live', 'quests', 'my quests', 'help', 'clear trails',
+  'pin', 'map', 'floor', 'relief', 'trees', 'rocks', 'labels', 'layers', 'show', 'hide',
+];
+
 /** Is `needle` a subsequence of `hay`? ("flr" -> "floor") */
 export function subsequence(needle, hay) {
   if (!needle) return false;
@@ -260,7 +325,7 @@ export function createOmnibox(deps = {}) {
     if (!row?.selectable) return;
     if (row.type === 'ask') { clear(); return void sendToAssistant(row.text); }
     if (row.type === 'command') {
-      const note = runCommand(row.cmd, row.arg);
+      const note = runCommand(row.cmd, row.arg, deps.actions ?? {});
       clear();
       if (note) deps.toast?.(note);
       return;
@@ -276,48 +341,6 @@ export function createOmnibox(deps = {}) {
     if (r.kind === 'layer') { deps.actions?.setKind?.(r.mk, true); return; }
     if (r.mk) deps.actions?.setKind?.(r.mk, true);
     deps.flyTo?.(r.x, r.z);
-  }
-
-  /** Run one `>` command. Returns the toast line. */
-  function runCommand(cmd, rawArg) {
-    const a = deps.actions ?? {};
-    const arg = String(rawArg ?? '').trim();
-    const q = arg.toLowerCase();
-    const onOff = (dflt) => (['off', '0', 'no', 'hide'].includes(q) ? false : ['on', '1', 'yes', 'show'].includes(q) ? true : dflt);
-    switch (cmd.name) {
-      case '3d': a.setView?.('3d'); return '3D view';
-      case '2d': a.setView?.('2d'); return '2D view';
-      case 'fit': a.fit?.(); return 'Fitted the map';
-      case 'north': a.north?.(); return 'Compass reset';
-      case 'live': a.panel?.('live', true); return 'Live panel';
-      case 'quests': a.panel?.('quests', true); return 'Quests panel';
-      case 'my quests': a.myQuests?.(); return 'My quests';
-      case 'help': a.help?.(); return 'Controls';
-      case 'clear trails': a.clearTrails?.(); return 'Trails cleared';
-      case 'pin': { const n = q.startsWith('l') ? 'layers' : 'quests'; a.pin?.(n, true); return `Pinned ${n}`; }
-      case 'map': {
-        const key = a.mapKeys?.().find((k) => k.startsWith(q) || q.startsWith(k));
-        if (!key) return `No map called “${arg}”`;
-        a.goMap?.(key); return `Loading ${key}…`;
-      }
-      case 'floor': {
-        const f = q === 'u' ? 'U' : q === 'all' || !q ? 'all' : String(Number(q));
-        if (!a.setFloor?.(f)) return `No floor “${arg}”`;
-        return `Floor ${f}`;
-      }
-      case 'relief': { const n = Number(q) || 3; a.setRelief?.(n); return `Relief ${n}×`; }
-      case 'trees': case 'rocks': { const on = onOff(false); a.setNature?.(cmd.name, on); return `${cmd.name} ${on ? 'on' : 'off'}`; }
-      case 'labels': {
-        const d = ['off', 'key', 'all'].find((x) => x.startsWith(q)) ?? 'all';
-        a.setLabels?.(d); return `Labels: ${d}`;
-      }
-      case 'layers': case 'show': case 'hide': {
-        if (!arg) { a.panel?.('layers', true); return 'Layers panel'; }
-        const n = a.setLayers?.(arg, cmd.name !== 'hide') ?? 0;
-        return n ? `${cmd.name === 'hide' ? 'Hid' : 'Showed'} ${n} layer${n > 1 ? 's' : ''} matching “${arg}”` : `No layer matches “${arg}”`;
-      }
-      default: return '';
-    }
   }
 
   /* ----------------------------------------------------------- assistant -- */
