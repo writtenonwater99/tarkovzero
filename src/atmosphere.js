@@ -41,7 +41,7 @@ import {
 
 // ---------------------------------------------------------------------------- look state
 export const LOOKS = ['realistic', 'vector'];
-export const DEFAULT_LOOK = DEFAULT_MODE; // 'realistic'
+export const DEFAULT_LOOK = DEFAULT_MODE; // 'vector' (see render-style.js)
 /** Coerce anything (query string, localStorage, an API call) to a supported look. */
 export const resolveLook = (value) => (isStyleMode(value) ? value : DEFAULT_LOOK);
 

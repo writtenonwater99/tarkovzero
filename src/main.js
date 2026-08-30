@@ -183,8 +183,8 @@ setRelief(relief, false);
 // the persisted choice for one visit without rewriting it.
 const looks = new Set(['realistic', 'vector']);
 const lookQuery = new URLSearchParams(location.search).get('look');
-let look = looks.has(lookQuery) ? lookQuery : String(store.get('look', 'realistic'));
-if (!looks.has(look)) look = 'realistic';
+let look = looks.has(lookQuery) ? lookQuery : String(store.get('look', 'vector'));
+if (!looks.has(look)) look = 'vector';
 function setLook(next, persist = true) {
   next = looks.has(next) ? next : 'realistic';
   look = next;
