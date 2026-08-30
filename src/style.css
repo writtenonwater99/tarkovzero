@@ -256,7 +256,12 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .pop-title{font:600 var(--fs-cap)/1 var(--f-display);text-transform:uppercase;letter-spacing:var(--ls-cap);color:var(--text-mute);margin-bottom:6px}
 .pop b{color:var(--text);font-weight:600}
 .pop .num{font-family:var(--f-mono);font-size:11px;color:var(--text)}
-.pop-help{bottom:calc(100% + 8px);right:0;width:236px}
+/* Opens DOWNWARD from the View panel's footer. It used to open upward (`bottom:100%`), which was
+   right when the ? button lived in a full-height left rail's footer — from there "up" was into the
+   window. The dock is top-anchored now, so up is off the top of the screen: 5 of the 13 shortcut
+   rows were unreadable at every viewport height. main.js's clampPop() slides it back in if the
+   window is too short for the whole list below the panel. */
+.pop-help{top:calc(100% + 8px);right:0;width:236px}
 .keys{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0}
 .keys dt{font-family:var(--f-mono);font-size:10.5px;color:var(--text-mute);white-space:nowrap}
 .keys dt b{color:var(--text);background:var(--panel-hi);border:1px solid var(--line);border-radius:3px;padding:0 4px;font-weight:500}
