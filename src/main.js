@@ -573,9 +573,29 @@ function applyLod(force = false) {
 const SURFACE_LABELS = mapLabels.filter((l) => l.floor !== 'U');
 const MAJOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) >= 100);
 const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
+// A quest pin and an extract badge own their pixels; a place name is moved off one rather than
+// printed through it (QA D6 — a pin centred on CRACKHOUSE, an extract badge eating "OLD GAS").
+// Lazy on purpose — `quests` and `markerPoints` are created further down, and a label clip only
+// ever runs after boot. The 3D view runs the same de-confliction in map3d.js's textLayout().
+const EXTRACT_BADGE_PX = 26;
+function labelObstacles() {
+  const out = [];
+  try { out.push(...quests.pinBoxes()); } catch {}
+  try {
+    const on = visibleKinds();
+    for (const m of markerPoints) {
+      if (!m.kind.startsWith('extract') || !on.has(m.kind)) continue;
+      const q = map.latLngToContainerPoint([m.position.z, m.position.x]);
+      if (!Number.isFinite(q?.x)) continue;
+      out.push({ left: q.x - EXTRACT_BADGE_PX / 2, top: q.y - EXTRACT_BADGE_PX / 2,
+        right: q.x + EXTRACT_BADGE_PX / 2, bottom: q.y + EXTRACT_BADGE_PX / 2 });
+    }
+  } catch {}
+  return out;
+}
 const labelLayers = {
-  major: placeLabelsLayer(map, MAJOR, { safeRect }),
-  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect }),
+  major: placeLabelsLayer(map, MAJOR, { safeRect, obstacles: labelObstacles }),
+  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect, obstacles: labelObstacles }),
 };
 // The chrome can move without the map moving at all (a dock panel opens), so the label clip has to
 // be re-run from the layout hook too — see updateHud().
@@ -936,6 +956,7 @@ const quests = createQuests({
   // map and lets go when the last is dropped — unless the user pinned it by hand.
   onSelection: (n) => { shell.setAutoPin('quests', n > 0); shell.setIndicator('quests', n > 0); },
   safeRect,
+  afterDraw: () => labelClip?.(),
 });
 quests.layer.addTo(map);
 quests.init();
@@ -1153,6 +1174,10 @@ async function setView(mode) {
         players: () => [...live.players.values()],
         quests: () => quests.deckData(),
         onQuestClick: (obj) => quests.onDeckClick(obj),
+        // The 3D labels are seated in screen space against the same rect the 2D ones are, so the
+        // diorama's names are pushed out from under the toolbar/dock/omnibox instead of drawn
+        // under them (QA D3/D4). Handed as a function: the dock moves without the map moving.
+        safeRect,
         onViewChange: (v) => {
           v3 = { ...v3, ...v };
           mirror2d();
