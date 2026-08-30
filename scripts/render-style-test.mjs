@@ -496,7 +496,12 @@ test('the backdrop is a ground haze under a sky, not a second sheet of the sky',
   const b = BACKDROP.realistic;
   // Darker than the far fog, or the frame is one flat value again and the diorama floats.
   assert.ok(luma(b.voidColor) < luma(FOG.realistic.color) - 8, 'the void plane must read darker than the fog it fades into');
-  assert.ok(luma(b.skirtBottom) < luma(b.skirtTop), 'the skirt must darken downward into the haze');
+  // The skirt ramps INTO the backdrop. The bottom of the ramp is the colour of the plane the
+  // bottom of the skirt sits on, or the "feather" is a ramp away from it and the cut edge is
+  // still a cut edge — which is what `#42403a` under a `#7d817b` plane was.
+  assert.equal(b.skirtBottom, b.voidColor, 'the skirt must ramp to the colour of the void it meets');
+  assert.ok(Math.abs(luma(b.skirtBottom) - luma(b.voidColor)) < Math.abs(luma(b.skirtTop) - luma(b.voidColor)),
+    'the ramp must move the skirt toward the backdrop, not away from it');
   assert.ok(b.skirtFeather > 0 && b.skirtFeather <= 1);
   assert.ok(b.voidMarginFactor >= 1, 'the haze must outrun the fog ramp, not stop 60 m past the limit');
   // The sky ramp comes from the contract's own gradient, and an overcast zenith is DARKER.

@@ -17,7 +17,7 @@ import {
   groundDetailExtensionFor, waterExtensionFor, surfaceMaterial, materialTint, shadowRings,
   voidMargin, skirtRamp,
 } from '../src/atmosphere.js';
-import { FOG, POST, PALETTE, WATER, BACKDROP, FOG_DESATURATION, FOG_COOL_AMOUNT, specularFor } from '../src/render-style.js';
+import { FOG, POST, PALETTE, WATER, BACKDROP, FOG_DESATURATION, FOG_COOL_AMOUNT, specularFor, rgb255 } from '../src/render-style.js';
 
 const CUSTOMS_DIAGONAL = 1223;
 /** The vertex-stage injection the fog extension compiles into every world layer. */
@@ -210,8 +210,12 @@ test('the contact rings widen, and the backdrop margin outruns the fog', () => {
   const customsDiagonal = 1223;
   assert.ok(voidMargin('realistic', customsDiagonal) > fogParams('realistic', customsDiagonal).targetMeters);
   assert.equal(voidMargin('realistic', 0), Math.max(60, BACKDROP.realistic.voidMarginFactor * 1000));
-  // The skirt ramp darkens downward in realistic and is a no-op in vector.
+  // The skirt ramp closes on the void colour in realistic and is a no-op in vector.
   const ramp = skirtRamp('realistic');
-  assert.ok(ramp.bottom[0] < ramp.top[0] && ramp.feather > 0);
+  assert.ok(ramp.feather > 0);
+  const voidRgb = rgb255(BACKDROP.realistic.voidColor);
+  const gap = (c) => Math.hypot(c[0] - voidRgb[0], c[1] - voidRgb[1], c[2] - voidRgb[2]);
+  assert.ok(gap(ramp.bottom) < gap(ramp.top), 'the skirt ramp must end nearer the backdrop than it starts');
+  assert.deepEqual(ramp.bottom, voidRgb, 'the ramp ends ON the void plane colour');
   assert.deepEqual(skirtRamp('vector').top, skirtRamp('vector').bottom);
 });
