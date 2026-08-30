@@ -960,7 +960,27 @@ export async function createView3d(container, mapData, src) {
     diagnostics,
     // sidebar hover/click can pin an extract's name in 3D (name+kind key, or null to clear)
     focusExtract: (name, kind) => { pinnedExtract = name ? (name + '|' + (kind ?? 'extract-pmc')) : null; render(); },
-    setView: ({ target, zoom }) => { viewState = clampView({ ...viewState, target, zoom }); deck.setProps({ viewState }); },
+    /**
+     * Move the camera from outside — main.js's set3d(), which is every fly, fit, zoom key, HUD
+     * button, compass reset and live-follow in the app.
+     *
+     * Two rules, and they are the reason this is the ONLY way in (main.js must never push a
+     * viewState at `deck` itself):
+     *  1. a programmatic move goes through exactly the clamp a right-drag goes through, so
+     *     camera.js's guarantee — the eye never goes under the map — is about the camera and not
+     *     about which code moved it;
+     *  2. what was actually applied is handed back, so the caller's mirror of the view state cannot
+     *     drift from deck's own. The view's zoom limits are applied here too, for the same reason.
+     */
+    setView: (patch = {}) => {
+      const next = { ...viewState };
+      for (const k of ['target', 'zoom', 'rotationX', 'rotationOrbit']) if (patch[k] !== undefined) next[k] = patch[k];
+      const z = Number(next.zoom);
+      next.zoom = Math.min(next.maxZoom ?? 5, Math.max(next.minZoom ?? -2, Number.isFinite(z) ? z : 0));
+      viewState = clampView(next);
+      deck.setProps({ viewState });
+      return { ...viewState };
+    },
     // game coords -> screen pixels, so main.js can pin an HTML card to a 3D point
     project: (x, z, dy = 0.7) => { try { const vp = deck.getViewports?.()[0]; return vp ? vp.project(Pg([x, z], dy)) : null; } catch { return null; } },
     deck,
