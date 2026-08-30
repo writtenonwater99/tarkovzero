@@ -13,6 +13,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
+import { createHash } from 'node:crypto';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { BACKGROUND, POST } from '../src/render-style.js';
 
 import {
   crc32,
@@ -563,4 +569,80 @@ test('the sRGB transfer functions are exact inverses across the range', () => {
 test('crc32 matches the known IEEE check value', () => {
   assert.equal(crc32(Buffer.from('123456789', 'ascii')), 0xcbf43926);
   assert.equal(crc32(Buffer.alloc(0)), 0);
+});
+
+// ---------------------------------------------------------------------------
+// The SHIPPED asset set
+//
+// Everything above tests the generators. Nothing tested the output: the whole of
+// public/assets/3d could be deleted and `npm test` stayed green, `npm run e2e`
+// stayed green (armRenderAssets swallows the failure into a console warn, and the
+// e2e console gate only records `error`), and the page still drew — with no ground
+// detail and no grade. The branch's headline deliverable was ungated. These read
+// the committed manifest against the committed bytes.
+// ---------------------------------------------------------------------------
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const ASSET_DIR = join(ROOT, 'public/assets/3d');
+const MANIFEST = join(ASSET_DIR, 'render-assets.json');
+// The ids src/atmosphere.js fetches at runtime. A rename on either side is a silent
+// downgrade to the base bake, so it is spelled out here rather than derived.
+const RUNTIME_IDS = ['ground106-albedo', 'ground106-normal', 'ground106-orm', 'macro-noise', 'overcast-grade-lut'];
+const SHIPPED_BUDGET_BYTES = 12 * 1024 * 1024;   // prepare-render-assets.mjs shippedBudgetBytes
+
+test('the shipped render-asset manifest is present and well formed', () => {
+  assert.ok(existsSync(MANIFEST), 'public/assets/3d/render-assets.json is missing');
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  assert.equal(manifest.stage, 1);
+  assert.ok(Array.isArray(manifest.assets) && manifest.assets.length > 0, 'the manifest lists no assets');
+  for (const a of manifest.assets) {
+    assert.match(a.id, /^[a-z0-9-]+$/, `bad asset id ${JSON.stringify(a.id)}`);
+    assert.ok(a.path && !a.path.includes('..'), `bad asset path for ${a.id}`);
+    assert.ok(a.source?.license, `${a.id} ships without a licence`);
+  }
+});
+
+test('every asset the manifest lists exists, at the size and hash it claims', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  let total = 0;
+  for (const a of manifest.assets) {
+    const file = join(ASSET_DIR, a.path);
+    assert.ok(existsSync(file), `${a.id}: ${a.path} is not in the tree`);
+    const bytes = readFileSync(file);
+    total += bytes.length;
+    assert.equal(bytes.length, a.bytes, `${a.id}: ${bytes.length} bytes on disk, ${a.bytes} in the manifest`);
+    if (a.sha256) assert.equal(createHash('sha256').update(bytes).digest('hex'), a.sha256, `${a.id}: sha256 mismatch`);
+  }
+  // The budget gate only ran when someone regenerated; a hand-added PNG was ungated.
+  const onDisk = ['materials', 'environment'].flatMap((d) => manifest.assets.filter((a) => a.path.startsWith(d)));
+  assert.equal(onDisk.length, manifest.assets.length, 'an asset lives outside materials/ and environment/');
+  assert.ok(total <= SHIPPED_BUDGET_BYTES, `shipped assets are ${(total / 1048576).toFixed(2)} MiB, over the ${SHIPPED_BUDGET_BYTES / 1048576} MiB budget`);
+});
+
+test('the ids the renderer asks for at runtime are all in the manifest', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const byId = new Map(manifest.assets.map((a) => [a.id, a]));
+  for (const id of RUNTIME_IDS) {
+    const a = byId.get(id);
+    assert.ok(a, `src/atmosphere.js fetches "${id}" and the manifest does not ship it`);
+    assert.ok(statSync(join(ASSET_DIR, a.path)).size > 0, `${id} is an empty file`);
+  }
+  // The grade LUT the post block names, and the environment reference the background block names,
+  // both have to resolve — BACKGROUND.realistic.environmentAsset is the provenance of the frozen
+  // light and palette, so it must stay in the shipped, licence-bearing manifest even though nothing
+  // downloads it at runtime.
+  assert.ok(byId.has(POST.realistic.lutAsset), `POST names a LUT the manifest does not carry`);
+  assert.ok(byId.has(BACKGROUND.realistic.environmentAsset), `BACKGROUND names an environment the manifest does not carry`);
+  assert.equal(RUNTIME_IDS.includes(BACKGROUND.realistic.environmentAsset), false,
+    'the environment asset is not fetched at runtime — if that changes, teach loadRenderAssets about it');
+});
+
+test('the grade LUT is the 16³ strip the shader indexes', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const lut = manifest.assets.find((a) => a.id === POST.realistic.lutAsset);
+  const img = decodePng(readFileSync(join(ASSET_DIR, lut.path)));
+  // src/atmosphere.js: x = b*16 + r over a 256x16 strip. A LUT of another shape grades garbage.
+  assert.equal(img.width, 256, 'the LUT strip must be 16*16 wide');
+  assert.equal(img.height, 16, 'the LUT strip must be 16 tall');
+  assert.equal(img.width, lut.width);
+  assert.equal(img.height, lut.height);
 });
