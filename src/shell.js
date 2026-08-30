@@ -159,36 +159,60 @@ export function createShell({ store, onLayout } = {}) {
   function setIndicator(name, on) { el[name]?.btn?.classList.toggle('armed', !!on); }
 
   /* -------------------------------------------------------------- safe rect -- */
-  // The part of the stage nothing floats over: used for 2D fit/fly padding and for parking the 3D
-  // quest card. All values are CSS px in the stage's own coordinate space.
+  /*
+   * TWO rects, because the two questions they answer are not the same one (QA H4).
+   *
+   *   safeRect()  — the box a FIT frames the map into. Panels FLOAT over the map: opening one may
+   *                 not shrink the map, and it may not move the camera. So this rect is the full
+   *                 stage WIDTH minus only the chrome that spans it — the chip band along the top
+   *                 and the omnibox along the bottom. The dock and the toolbar are NOT insets
+   *                 here. They used to be, and a 360 px panel that is 285 px tall then cost the
+   *                 map a 439 px column for the whole 985 px height: the contain fit letterboxes
+   *                 a 2:1 raster inside the near-square remainder, so the width the panel took was
+   *                 paid a second time in height (measured: 67 % of the window with no panel,
+   *                 35 % with the quests panel open).
+   *   avoidRect() — the part of the stage nothing floats over. Fly-to targets, the 3D quest card
+   *                 and the label seating pass all want the box the reader can actually see, so
+   *                 that one keeps the toolbar and dock insets.
+   *
+   * Both are CSS px in the stage's own coordinate space, and neither ever moves the camera by
+   * itself: nothing here calls back into a fit (see `onLayout`, which only repaints the HUD).
+   */
   const GAP = 10;
-  function safeRect() {
-    const s = stage.getBoundingClientRect();
-    const rect = { left: 0, top: 0, right: s.width, bottom: s.height };
-    const box = (node) => {
-      if (!node || node.hidden || !node.getClientRects().length) return null;
-      const r = node.getBoundingClientRect();
-      if (!r.width || !r.height) return null;
-      return { left: r.left - s.left, top: r.top - s.top, right: r.right - s.left, bottom: r.bottom - s.top };
-    };
-    for (const sel of ['.chipbar-tl', '.chipbar-tr']) {
-      const b = box(document.querySelector(sel));
-      if (b) rect.top = Math.max(rect.top, b.bottom + GAP);
-    }
-    // The toolbar's own box includes the hover/first-run labels, which come and go; the buttons are
-    // the part that is always there, so they set the inset.
-    for (const btn of document.querySelectorAll('#toolbar .tb-btn')) {
-      const b = box(btn);
-      if (b) rect.right = Math.min(rect.right, b.left - GAP);
-    }
-    if (open.size) { const b = box(dock); if (b) rect.right = Math.min(rect.right, b.left - GAP); }
-    const omni = box(document.getElementById('omnibox'));
-    if (omni) rect.bottom = Math.min(rect.bottom, omni.top - GAP);
-
-    // Never hand back an inverted or silly-small rect — callers divide by its size.
+  const boxOf = (node, s) => {
+    if (!node || node.hidden || !node.getClientRects().length) return null;
+    const r = node.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    return { left: r.left - s.left, top: r.top - s.top, right: r.right - s.left, bottom: r.bottom - s.top };
+  };
+  /** Never hand back an inverted or silly-small rect — callers divide by its size. */
+  const sane = (rect, s) => {
     if (rect.right - rect.left < 120) rect.right = Math.min(s.width, rect.left + 120);
     if (rect.bottom - rect.top < 120) rect.bottom = Math.min(s.height, rect.top + 120);
     return rect;
+  };
+  function safeRect() {
+    const s = stage.getBoundingClientRect();
+    const rect = { left: 0, top: 0, right: s.width, bottom: s.height };
+    for (const sel of ['.chipbar-tl', '.chipbar-tr']) {
+      const b = boxOf(document.querySelector(sel), s);
+      if (b) rect.top = Math.max(rect.top, b.bottom + GAP);
+    }
+    const omni = boxOf(document.getElementById('omnibox'), s);
+    if (omni) rect.bottom = Math.min(rect.bottom, omni.top - GAP);
+    return sane(rect, s);
+  }
+  function avoidRect() {
+    const s = stage.getBoundingClientRect();
+    const rect = safeRect();
+    // The toolbar's own box includes the hover/first-run labels, which come and go; the buttons are
+    // the part that is always there, so they set the inset.
+    for (const btn of document.querySelectorAll('#toolbar .tb-btn')) {
+      const b = boxOf(btn, s);
+      if (b) rect.right = Math.min(rect.right, b.left - GAP);
+    }
+    if (open.size) { const b = boxOf(dock, s); if (b) rect.right = Math.min(rect.right, b.left - GAP); }
+    return sane(rect, s);
   }
 
   /* ------------------------------------------------------------------ wire -- */
@@ -216,7 +240,7 @@ export function createShell({ store, onLayout } = {}) {
     setPinned, setAutoPin,
     closeTransient,
     setIndicator,
-    safeRect,
+    safeRect, avoidRect,
     anyOpen: () => open.size > 0,
   };
 }

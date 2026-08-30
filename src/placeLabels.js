@@ -4,8 +4,9 @@ import L from 'leaflet';
 //
 // The HUD floats over an edge-to-edge map, so a label whose ink lands under the right toolbar, the
 // dock column, the top chips or the omnibox is not "behind glass" — it is a word the reader sees
-// truncated ("BIG RED" reading as "BIG", QA D5). `safeRect` is the same rect fit()/fly() pad
-// against (src/shell.js): after every move, and whenever the chrome itself moves, each label is
+// truncated ("BIG RED" reading as "BIG", QA D5). `safeRect` here is shell.js's AVOID rect — the
+// part of the stage nothing floats over, dock included, which is not the rect a fit frames into
+// (that one is full width; QA H4): after every move, and whenever the chrome itself moves, each label is
 // measured and either nudged back inside the rect — a small slide only, so the word stays on its
 // landmark — or hidden until the camera or the chrome gives it room again.
 const NUDGE_MAX = 22;   // px a label may slide to escape the chrome before it is dropped instead

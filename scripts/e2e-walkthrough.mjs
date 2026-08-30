@@ -332,14 +332,16 @@ async function main() {
       // The flown-to point, projected back to the screen, has to land where nothing floats over it.
       const x = -after[0], z = -after[1];
       const proj = await page.evaluate(`window.tz.project(${x}, ${z})`);
-      const safe = await page.evaluate('window.tz.safeRect()');
+      // The AVOID rect, not the fit rect: a fly-to owes the reader a point the dock is not over.
+      // safeRect() is deliberately the full stage width now (QA H4) and would be a weaker test.
+      const safe = await page.evaluate('window.tz.avoidRect()');
       const stage = await page.evaluate(`(() => { const r = document.getElementById('stage').getBoundingClientRect(); return { w: r.width, h: r.height }; })()`);
       assert(proj && Number.isFinite(proj[0]), 'the 3D view could not project the flown-to point');
-      // Guard against a vacuous test: the safe rect must actually be inset from the stage.
+      // Guard against a vacuous test: the avoid rect must actually be inset from the stage.
       assert(safe.right < stage.w - 1 || safe.bottom < stage.h - 1 || safe.top > 1,
-        `safeRect ${JSON.stringify(safe)} is the whole stage — containment would be vacuous`);
-      assert(inside(proj, safe), `projected target [${proj.map((n) => n.toFixed(0))}] is outside the safe rect ${JSON.stringify(safe)}`);
-      return { picked: act.label, rows: rows.length, moved: Number(moved.toFixed(1)), projected: proj.map((n) => Math.round(n)), safeRect: safe };
+        `avoidRect ${JSON.stringify(safe)} is the whole stage — containment would be vacuous`);
+      assert(inside(proj, safe), `projected target [${proj.map((n) => n.toFixed(0))}] is outside the avoid rect ${JSON.stringify(safe)}`);
+      return { picked: act.label, rows: rows.length, moved: Number(moved.toFixed(1)), projected: proj.map((n) => Math.round(n)), avoidRect: safe };
     });
 
     /* -- 3 ------------------------------------- '> quests' + panel search → auto-pinned -- */
@@ -433,12 +435,12 @@ async function main() {
         return { left: r.left - s.left, top: r.top - s.top, right: r.right - s.left, bottom: r.bottom - s.top,
                  text: (c.querySelector('.qcard-t, b')?.textContent ?? '').trim(), imgs: c.querySelectorAll('img').length };
       })()`);
-      const safe = await page.evaluate('window.tz.safeRect()');
+      const safe = await page.evaluate('window.tz.avoidRect()');
       assert(card.right - card.left > 40 && card.bottom - card.top > 40, `the card has no size: ${JSON.stringify(card)}`);
       for (const [corner, pt] of [['top-left', [card.left, card.top]], ['bottom-right', [card.right, card.bottom]]]) {
-        assert(inside(pt, safe, 1), `the card's ${corner} corner [${pt.map((n) => Math.round(n))}] is outside the safe rect ${JSON.stringify(safe)}`);
+        assert(inside(pt, safe, 1), `the card's ${corner} corner [${pt.map((n) => Math.round(n))}] is outside the avoid rect ${JSON.stringify(safe)}`);
       }
-      return { clickedAt: hitAt, badge: p.badge, card, safeRect: safe };
+      return { clickedAt: hitAt, badge: p.badge, card, avoidRect: safe };
     });
 
     /* -- 6 ------------------------------------------------------------ ']' steps a floor -- */
@@ -457,12 +459,28 @@ async function main() {
 
     /* -- 7 --------------------------------------------- Esc peels transient, keeps pinned -- */
     await step(page, '7. Esc chain — card, then the transient panel; the pinned workspace stays', 'esc-chain', async () => {
+      // QA H4: a panel FLOATS over the map. Opening one may not move the camera and may not take a
+      // column out of the box the fit frames into — the fit rect is the stage's full width, always.
+      const camBefore = await page.evaluate('window.tz.camera');
       await omni(page, '> live');                       // a transient panel, alongside pinned Quests
       await blur(page);
       await sleep(400);
       const opened = await page.evaluate(`({ live: window.tz.panel.isOpen('live'), quests: window.tz.panel.isOpen('quests'), pinned: window.tz.panel.isPinned('quests'), card: !document.getElementById('quest-card').hidden })`);
       assert(opened.live, 'the Live panel did not open');
       assert(opened.quests && opened.pinned, 'the pinned Quests workspace was closed by opening a transient panel');
+
+      const float = await page.evaluate(`(() => {
+        const s = document.getElementById('stage').getBoundingClientRect();
+        return { stage: [s.width, s.height], fit: window.tz.safeRect(), avoid: window.tz.avoidRect() };
+      })()`);
+      assert(float.fit.left <= 1 && float.fit.right >= float.stage[0] - 1,
+        `with two panels open the fit rect is ${float.fit.left}..${float.fit.right} of ${float.stage[0]} px — a panel is shrinking the map`);
+      assert(float.avoid.right < float.fit.right - 20,
+        `avoidRect ${JSON.stringify(float.avoid)} does not step around the open dock — fly-to and the card would land behind it`);
+      const camAfter = await page.evaluate('window.tz.camera');
+      assert(near(camAfter.zoom, camBefore.zoom, 1e-6)
+        && near(camAfter.target[0], camBefore.target[0], 0.01) && near(camAfter.target[1], camBefore.target[1], 0.01),
+        `opening a panel moved the camera: ${JSON.stringify(camBefore)} → ${JSON.stringify(camAfter)}`);
 
       const peeled = [];
       if (opened.card) {                                 // Esc #1 — the card comes off first
@@ -484,7 +502,10 @@ async function main() {
       await sleep(300);
       const s3 = await page.evaluate(`({ quests: window.tz.panel.isOpen('quests'), pinned: window.tz.panel.isPinned('quests') })`);
       assert(s3.quests && s3.pinned, 'a third Esc unpinned the workspace');
-      return { peeled, cardWasOpen: opened.card, questsStillPinned: s3.pinned };
+      const camEnd = await page.evaluate('window.tz.camera');
+      assert(near(camEnd.zoom, camBefore.zoom, 1e-6),
+        `closing the panels re-fitted the camera: ${camBefore.zoom} → ${camEnd.zoom}`);
+      return { peeled, cardWasOpen: opened.card, questsStillPinned: s3.pinned, fitRect: float.fit, avoidRect: float.avoid };
     });
 
     /* -- 8 ---------------------------------------------------------- '3' round-trips 2D -- */

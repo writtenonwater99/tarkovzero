@@ -39,14 +39,22 @@ let v3 = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: 
 let booted = false;   // the map exists and the HUD can be measured
 const shell = createShell({ store, onLayout: () => { if (booted) updateHud(); } });
 const stageEl = $('#stage');
-/** The rect nothing floats over, in stage CSS px. */
+/**
+ * The rect a FIT frames into: the full stage width minus the top chip band and the omnibox band.
+ * A docked panel floats OVER the map and is deliberately not an inset here (QA H4, shell.js).
+ */
 const safeRect = () => shell.safeRect();
-/** How far the safe rect's centre sits from the stage centre, in px. */
-function safeOffset() {
+/** The rect nothing floats over — fly-to targets, the quest card and the label seating pass. */
+const avoidRect = () => shell.avoidRect();
+/** How far a rect's centre sits from the stage centre, in px. */
+function offsetOf(r) {
   const s = stageEl.getBoundingClientRect();
-  const r = safeRect();
   return L.point((r.left + r.right) / 2 - s.width / 2, (r.top + r.bottom) / 2 - s.height / 2);
 }
+/** The recentring a fit owes the chrome bands. Horizontal is 0 by construction: the bands span. */
+const safeOffset = () => offsetOf(safeRect());
+/** The recentring a fly owes the reader: land the point where the dock is not covering it. */
+const avoidOffset = () => offsetOf(avoidRect());
 
 const requestedMap = new URLSearchParams(location.search).get('map');
 const mapData = selectMap(requestedMap);
@@ -671,8 +679,8 @@ function labelObstacles() {
   return out;
 }
 const labelLayers = {
-  major: placeLabelsLayer(map, MAJOR, { safeRect, obstacles: labelObstacles }),
-  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect, obstacles: labelObstacles }),
+  major: placeLabelsLayer(map, MAJOR, { safeRect: avoidRect, obstacles: labelObstacles }),
+  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect: avoidRect, obstacles: labelObstacles }),
 };
 // The chrome can move without the map moving at all (a dock panel opens), so the label clip has to
 // be re-run from the layout hook too — see updateHud().
@@ -963,9 +971,11 @@ function matchLayers(query) {
 }
 
 /**
- * The 3D orbit target that lands the game point (x, z) in the middle of the SAFE rect.
+ * The 3D orbit target that lands the game point (x, z) in the middle of the AVOID rect — the part
+ * of the stage no panel is floating over. The FIT rect deliberately ignores the dock (QA H4); a
+ * fly-to must not, or the thing you asked for by name lands behind the panel that answered you.
  *
- * The 2D branch of a fly just subtracts safeOffset() in screen px, because Leaflet's screen is the
+ * The 2D branch of a fly just subtracts avoidOffset() in screen px, because Leaflet's screen is the
  * ground plane. In 3D the ground is rotated by the orbit and foreshortened by the tilt, so the same
  * pixel offset is a different world offset. deck's OrbitView puts one common-space unit on one
  * screen pixel at the target, with the ground turned through `rotationOrbit` and squashed by
@@ -978,7 +988,7 @@ function matchLayers(query) {
  * over a half-dock offset that is a few pixels, against the ~215 px of not doing it at all.)
  */
 function target3dFor(x, z, zoom, rotationX = v3.rotationX, rotationOrbit = v3.rotationOrbit) {
-  const off = safeOffset();
+  const off = avoidOffset();
   const scale = Math.pow(2, Number(zoom) || 0);
   const tilt = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, Number(rotationX) || CAM.rotationX));
   const sin = Math.sin((tilt * Math.PI) / 180);
@@ -1000,13 +1010,13 @@ function target3dFor(x, z, zoom, rotationX = v3.rotationX, rotationOrbit = v3.ro
 const FLY_MPP = 0.14;
 function flyTo(x, z) {
   const z2 = Math.max(map.getZoom(), -Math.log2(Math.abs(mapData.transform[0]) * FLY_MPP));
-  // Land the target in the middle of the *safe* rect, not the middle of the window: with a panel
+  // Land the target in the middle of the *avoid* rect, not the middle of the window: with a panel
   // docked on the right, the geometric centre is behind it. Both views owe the player that.
   if (is3d()) {
     const zoom = z2 - zOff();
     set3d({ target: target3dFor(x, z, zoom), zoom });
   } else {
-    const centre = map.unproject(map.project([z, x], z2).subtract(safeOffset()), z2);
+    const centre = map.unproject(map.project([z, x], z2).subtract(avoidOffset()), z2);
     map.setView(centre, z2, { animate: true });
   }
   ping(x, z);
@@ -1032,7 +1042,8 @@ const quests = createQuests({
   // A selected quest is a working session, not a lookup: the panel pins itself while one is on the
   // map and lets go when the last is dropped — unless the user pinned it by hand.
   onSelection: (n) => { shell.setAutoPin('quests', n > 0); shell.setIndicator('quests', n > 0); },
-  safeRect,
+  // The card is chrome, not map: it is parked in the box nothing floats over.
+  safeRect: avoidRect,
   afterDraw: () => labelClip?.(),
 });
 quests.layer.addTo(map);
@@ -1262,7 +1273,7 @@ async function setView(mode) {
         // The 3D labels are seated in screen space against the same rect the 2D ones are, so the
         // diorama's names are pushed out from under the toolbar/dock/omnibox instead of drawn
         // under them (QA D3/D4). Handed as a function: the dock moves without the map moving.
-        safeRect,
+        safeRect: avoidRect,
         onViewChange: (v) => {
           v3 = { ...v3, ...v };
           mirror2d();
@@ -1443,8 +1454,10 @@ window.tz = {
   renderFx: (key) => { if (key !== undefined) setFx(key); return { ...fx }; },
   /** QA hook: draw count, GPU/CPU frame time and texture bytes for the live 3D frame. */
   renderStats: () => view3d?.renderStats?.() ?? null,
-  /** The part of the stage nothing floats over — {left, top, right, bottom} in stage CSS px. */
+  /** QA hook: the box a fit frames into — the stage minus the chip band and the omnibox band. */
   safeRect,
+  /** QA hook: the part of the stage nothing floats over (safeRect minus the toolbar and dock). */
+  avoidRect,
   /** QA hook: which marker tier is on screen and the metres-per-pixel it was decided from. */
   get lod() { return { tier: currentTier(), mpp: metresPerPixel() }; },
   /**
