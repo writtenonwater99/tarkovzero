@@ -15,7 +15,7 @@ import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
 // zOff() is the 2D↔3D zoom relation; it depends on the camera tilt, so both directions ask for it
 // rather than hard-coding the old 2.06 that only held at 62°.
-import { CAM, zoomOffset as zOff } from './camera.js';
+import { CAM, zoomOffset as zOff, fitZoom } from './camera.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -200,6 +200,37 @@ function fit() {
   map.setView(centre, z, { animate: false });
 }
 
+/**
+ * The 3D fit, computed in 3D — not borrowed from the 2D one.
+ *
+ * The old path was `coverZoom() - zOff(tilt)`, which fits a map by its *unrotated* pixel box and
+ * then subtracts a constant tuned on Customs. Two things break: the constant secretly carries
+ * Customs' CRS scale (2.06 = -log2(0.239)), so every other map lands at the wrong scale; and a 2D
+ * cover on a near-square map is decided by its width, while the 3D frame is decided by the depth of
+ * the rhombus the tilt makes of it. Woods (1407 x 1356 m) therefore opened ~2.1x too close, with a
+ * wider window making it worse. Now the fit asks the projected footprint at the tilt we are actually
+ * going to use, and covers the stage with it — the corners under the chips and the toolbar stay map,
+ * exactly as the 2D fit intends, while the map's middle lands in the middle of the safe rect.
+ */
+function fit3dZoom(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) {
+  const s = stageEl.getBoundingClientRect();
+  const off = safeOffset();
+  return fitZoom({
+    width: Math.abs(bounds.getEast() - bounds.getWest()),
+    depth: Math.abs(bounds.getNorth() - bounds.getSouth()),
+    viewportWidth: s.width + 2 * Math.abs(off.x),
+    viewportHeight: s.height + 2 * Math.abs(off.y),
+    rotationX, rotationOrbit,
+  });
+}
+/** Restore the default 3D framing: cover zoom at the oblique default, centred on the safe rect. */
+function fit3d() {
+  const zoom = fit3dZoom(CAM.rotationX, CAM.rotationOrbit);
+  if (zoom == null) return;
+  const c = bounds.getCenter();
+  set3d({ target: target3dFor(c.lng, c.lat, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
+}
+
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
 const hash = location.hash.slice(1).split('/').map(Number);
 // 3D is the site's default view (founder, 2026-08-29): with no ?view= and nothing remembered we
@@ -211,6 +242,7 @@ let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
   ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - zOff(CAM.rotationX) }
   : null;
 let autoFit = true; // refit on window resize only until the user navigates (or arrived via a permalink)
+let framed3d = false; // the 3D camera has been framed once; later 2D->3D switches hand the view over
 if (hash.length === 3 && hash.every(Number.isFinite)) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
 else fit();
 // Remember what "fit" means while the 2D map is measurable — #map is display:none in 3D.
@@ -220,7 +252,10 @@ const rememberFit = () => {
   fitState = { center: bounds.getCenter(), zoom: coverZoom() };
 };
 rememberFit();
-window.addEventListener('resize', () => { if (autoFit) fit(); rememberFit(); updateHud(); });
+// A resize changes the frame the fit was computed for, in both views: 2D refits its cover zoom and
+// 3D refits its projected one (the 3D fit depends on the viewport aspect, so a wider window used to
+// leave the diorama framed for the old one).
+window.addEventListener('resize', () => { if (autoFit) { fit(); if (is3d()) fit3d(); } rememberFit(); updateHud(); });
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
 map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
 map.on('moveend', () => {
@@ -977,7 +1012,13 @@ async function setView(mode) {
       try { view3d.deck?.setProps({ onHover: (i) => { const c = i?.coordinate; Array.isArray(c) ? showCoords(-c[0], -c[1]) : idleCoords(); } }); } catch {}
     }
     if (initial3dHash) { const direct = initial3dHash; initial3dHash = null; set3d(direct); }
+    // The FIRST time 3D opens without a permalink it is a fit, not a hand-off: the frame is computed
+    // in 3D (fit3d) instead of inheriting a 2D cover zoom through zOff(), which carries Customs' CRS
+    // scale and fits by width. Every later 2D->3D switch picks the 2D view up where it was left, so
+    // a 3D -> 2D -> 3D round trip still lands on the same camera.
+    else if (!framed3d && autoFit) fit3d();
     else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - zOff(v3.rotationX) }); }
+    framed3d = true;
     view3d.refresh();
   } else {
     // #map was display:none while 3D drove it — remeasure before Leaflet draws again.
@@ -1021,10 +1062,7 @@ $('#hud-zout').onclick = () => zoomBy(-0.5);
 $('#hud-fit').onclick = () => {
   // Fit in 3D also restores the default framing: cover zoom, oblique tilt, the diorama's near
   // corner — centred on the safe rect, exactly as the 2D fit() is.
-  if (is3d()) {
-    const zoom = fitState.zoom - zOff(CAM.rotationX);
-    set3d({ target: target3dFor(fitState.center.lng, fitState.center.lat, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
-  }
+  if (is3d()) fit3d();
   else { autoFit = true; fit(); }
 };
 $('#hud-north').onclick = () => {
