@@ -8,6 +8,7 @@
 // deck takes [-x, -z, y]. This module never converts — it hands raw {x, y, z} to both views.
 import L from 'leaflet';
 import { iconHtml } from './icons.js';
+import { currentTier } from './lod.js';
 
 // One hue per selected quest so two quests on screen at once stay readable. Deliberately not the
 // extract greens/oranges: a quest pin must never be mistaken for a way out.
@@ -249,12 +250,19 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
 
   /* ------------------------------------------------------------- 2D layer --- */
   function questIcon(p) {
+    // The pin rides the shared marker LOD (src/lod.js), like everything else on the map: below the
+    // `full` tier it loses 30% of its size and shows the objective glyph instead of its number.
+    // Gemini, 2026-08-29: at fit zoom the gold hexes were "disproportionate to the terrain" and
+    // overlapped each other, and the numbers inside them were too small to read anyway. main.js
+    // calls draw2d() again on every tier change, so this is re-evaluated when the camera crosses one.
+    const small = currentTier() !== 'full';
+    const box = small ? 24 : 34;
     return L.divIcon({
       className: '',
       // gold hexagon + numbered badge, with the quest's colour on the ring behind it — the same
       // split the 3D layer uses, so a pin looks like itself in both views
-      html: `<div class="qpin${done.has(p.objectiveId) ? ' qdone' : ''}" style="--qc:${p.color}">${iconHtml('quest-objective', 24, p.badge, p.level)}</div>`,
-      iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -17],
+      html: `<div class="qpin${small ? ' qpin-sm' : ''}${done.has(p.objectiveId) ? ' qdone' : ''}" style="--qc:${p.color}">${iconHtml('quest-objective', small ? 17 : 24, small ? null : p.badge, p.level)}</div>`,
+      iconSize: [box, box], iconAnchor: [box / 2, box / 2], popupAnchor: [0, -box / 2],
     });
   }
   function draw2d() {

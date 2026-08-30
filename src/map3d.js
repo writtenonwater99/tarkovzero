@@ -4,7 +4,7 @@ import { Deck, OrbitView, LightingEffect, AmbientLight, DirectionalLight, COORDI
 import { SolidPolygonLayer, PathLayer, IconLayer, TextLayer, LineLayer, ScatterplotLayer } from '@deck.gl/layers';
 import { PathStyleExtension } from '@deck.gl/extensions';
 import { KINDS, iconDataUrl, arrowDataUrl, soldierDataUrl, extractLetter, extractReq, subText, dotRgb, clusterCount } from './icons.js';
-import { updateTier, cellFor, clusterPoints } from './lod.js';
+import { updateTier, currentTier, cellFor, clusterPoints, countsVisible } from './lod.js';
 import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
@@ -690,7 +690,7 @@ export async function createView3d(container, mapData, src) {
         const boxes = [], out = [];
         for (const d of [...cand.filter((x) => x.lit), ...rest]) {
           const w = d.text.length * 5.6 * (d.size / 12), h = d.size * 1.15;
-          const b = [d.px - w / 2 - 4, d.py + 9 - h / 2 - 4, d.px + w / 2 + 4, d.py + 9 + h / 2 + 4 + (d.sub ? 15 : 0)];
+          const b = [d.px - w / 2 - 4, d.py + 8 - h / 2 - 4, d.px + w / 2 + 4, d.py + 8 + h / 2 + 4 + (d.sub ? 14 : 0)];
           if (boxes.some((o) => b[0] < o[2] && o[0] < b[2] && b[1] < o[3] && o[1] < b[3])) continue;
           boxes.push(b); out.push(d);
         }
@@ -698,20 +698,26 @@ export async function createView3d(container, mapData, src) {
       }
     } catch {}
     const trig = [pinnedExtract, hoverExtract, full];
-    const text = (id, data, get, size, color, offset, chip) => new TextLayer({
+    // Unboxed, like the place names (Gemini, 2026-08-29: the black plate with an orange keyline
+    // "clashes completely with the sleek HUD aesthetic" next to SKELETON / CRACKHOUSE floating in
+    // clean type). The plate was doing two jobs: legibility over a bright tile, and carrying the
+    // faction colour on its border. Legibility moves to a heavier ink outline — the same trick the
+    // place labels use — and the colour moves into the type itself, lifted 45% toward cream so a
+    // PMC green still reads as green without being a 45%-luminance word on grass.
+    const toneOf = (rgb) => rgb.map((c, i) => Math.round(c + (C.cream[i] - c) * 0.55));
+    const nameColor = (d) => [...toneOf(markerLevel(d.m) === 'underground' ? [255, 176, 48] : EXTRACT_ACCENT[d.m.kind] ?? C.accentExtractNeutral), 255];
+    const text = (id, data, get, size, color, offset, weight) => new TextLayer({
       id, data, getPosition: (d) => d.pos, getText: get, characterSet: EXTRACT_CHARS,
-      getSize: (d) => size(d), sizeUnits: 'pixels', sizeMinPixels: chip ? 10 : 9, sizeMaxPixels: chip ? 15 : 12,
+      getSize: (d) => size(d), sizeUnits: 'pixels', sizeMinPixels: weight === 700 ? 10 : 9, sizeMaxPixels: weight === 700 ? 15 : 12,
       getColor: color, getTextAnchor: 'middle', getPixelOffset: offset,
-      fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF,
-      outlineWidth: chip ? 3 : 2.5, outlineColor: [...C.ink, 240],
-      background: chip, getBackgroundColor: [10, 14, 12, 190], backgroundPadding: [5, 2, 5, 2],
-      getBorderColor: (d) => markerLevel(d.m) === 'underground' ? [255, 176, 48] : EXTRACT_ACCENT[d.m.kind] ?? C.accentExtractNeutral, getBorderWidth: chip ? 1 : 0,
+      fontFamily: LABEL_FONT(), fontWeight: weight, fontSettings: LABEL_SDF,
+      outlineWidth: weight === 700 ? 3.4 : 2.5, outlineColor: [...C.ink, 245],
       billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-      updateTriggers: { getText: trig, getSize: trig, getPixelOffset: trig },
+      updateTriggers: { getText: trig, getSize: trig, getPixelOffset: trig, getColor: trig },
     });
     return [
-      text('extract-names', cand, (d) => d.text, (d) => d.size, [...C.cream, 255], [0, 9], true),
-      text('extract-sub', cand.filter((d) => d.sub), (d) => d.sub, () => 10, [...C.creamDim, 255], [0, 24], false),
+      text('extract-names', cand, (d) => d.text, (d) => d.size, nameColor, [0, 8], 700),
+      text('extract-sub', cand.filter((d) => d.sub), (d) => d.sub, () => 10, [...C.creamDim, 255], [0, 22], 600),
     ];
   }
   // --- quest layer -----------------------------------------------------------------------
@@ -722,13 +728,19 @@ export async function createView3d(container, mapData, src) {
     if (!q || (!q.points?.length && !q.zones?.length)) return [];
     const zones = (q.zones ?? []).filter((d) => d.outline?.length >= 3);
     const pts = (q.points ?? []).filter((d) => inLimit(d.position.x, d.position.z));
-    const iconKey = (d) => (iconAtlas.mapping[`quest-objective:${d.badge}`] ? `quest-objective:${d.badge}` : 'quest-objective');
+    // Quest pins ride the shared LOD tier too (Gemini, 2026-08-29: at fit zoom the gold hexes were
+    // bigger than the terrain features they point at, and their numbers were unreadable anyway).
+    // Below `full` the hex loses 30% of its size and drops the number for the plain objective
+    // glyph — the numbers are for reading a checklist against the map, which is a zoomed-in job.
+    // lodMarkerLayers() has already folded this frame's m/px into the shared tier.
+    const small = currentTier() !== 'full';
+    const iconKey = (d) => (!small && iconAtlas.mapping[`quest-objective:${d.badge}`] ? `quest-objective:${d.badge}` : 'quest-objective');
     return [
       new SolidPolygonLayer({ id: 'quest-zone-fill', shadowEnabled: false, data: zones, getPolygon: (d) => ringG(d.outline, 0.5), getFillColor: (d) => [...d.color, d.level === 'underground' ? 45 : 70], parameters: OVERLAY, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       new PathLayer({ id: 'quest-zone-line', shadowEnabled: false, data: zones, getPath: (d) => ringG([...d.outline, d.outline[0]], 0.55), getColor: (d) => [...d.color, 235], getWidth: 2, widthUnits: 'pixels', getDashArray: [5, 4], dashJustified: false, extensions: [new PathStyleExtension({ dash: true })], parameters: OVERLAY, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
       // the per-quest colour lives on a ground ring, so the hexagon badge can stay one readable gold
-      new ScatterplotLayer({ id: 'quest-ring', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.62), getRadius: 3.4, radiusUnits: 'meters', radiusMinPixels: 10, radiusMaxPixels: 26, stroked: true, filled: true, getFillColor: (d) => [...d.color, 40], getLineColor: (d) => [...d.color, d.done ? 110 : 235], lineWidthMinPixels: 2, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getLineColor: pts.map((d) => d.done) }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-      new IconLayer({ id: 'quest-markers', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: iconKey, getSize: 30, sizeUnits: 'pixels', sizeMinPixels: 22, sizeMaxPixels: 40, billboard: true, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getIcon: pts.map((d) => d.badge) }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      new ScatterplotLayer({ id: 'quest-ring', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.62), getRadius: small ? 2.4 : 3.4, radiusUnits: 'meters', radiusMinPixels: small ? 7 : 10, radiusMaxPixels: small ? 18 : 26, stroked: true, filled: true, getFillColor: (d) => [...d.color, 40], getLineColor: (d) => [...d.color, d.done ? 110 : 235], lineWidthMinPixels: 2, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getRadius: small, getLineColor: pts.map((d) => d.done) }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      new IconLayer({ id: 'quest-markers', data: pts, getPosition: (d) => Pg([d.pin.x, d.pin.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: iconKey, getSize: small ? 21 : 30, sizeUnits: 'pixels', sizeMinPixels: small ? 15 : 22, sizeMaxPixels: small ? 28 : 40, billboard: true, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getSize: small, getIcon: [small, pts.map((d) => d.badge)] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         onClick: (i) => { if (!i.object) return false; src.onQuestClick?.(i.object); return true; } }),
     ];
   }
@@ -793,10 +805,12 @@ export async function createView3d(container, mapData, src) {
         : new IconLayer({ id: 'cluster-marks', data: clusters, getPosition: anchor, iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => d.kind, getSize: 24, sizeUnits: 'pixels', sizeMinPixels: 18, sizeMaxPixels: 32, billboard: true,
           pickable: true, onClick: (i) => { if (!i.object) return false; zoomIntoCluster(i.object); return true; },
           parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }));
-      // The count bubble. A TextLayer with a background is the whole bubble — no second atlas, and
-      // the character set is 11 glyphs, so it costs nothing.
-      out.push(new TextLayer({ id: 'cluster-counts', data: clusters, getPosition: anchor, getText: (d) => clusterCount(d.count), characterSet: COUNT_CHARS,
-        getSize: 10, sizeUnits: 'pixels', sizeMinPixels: 9, sizeMaxPixels: 12, getPixelOffset: t === 'dot' ? [8, -8] : [11, -12],
+      // The count bubble, from the `icon` tier in. A TextLayer with a background is the whole
+      // bubble — no second atlas, and the character set is 11 glyphs, so it costs nothing. At `dot`
+      // there is no bubble at all (lod.js `countsVisible`): the 4.5 px cluster mark against its
+      // 3 px neighbours is the whole message, and the exact count is on the hover tooltip.
+      if (countsVisible(t)) out.push(new TextLayer({ id: 'cluster-counts', data: clusters, getPosition: anchor, getText: (d) => clusterCount(d.count), characterSet: COUNT_CHARS,
+        getSize: 10, sizeUnits: 'pixels', sizeMinPixels: 9, sizeMaxPixels: 12, getPixelOffset: [11, -12],
         getColor: [...C.cream, 255], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF,
         background: true, getBackgroundColor: [10, 14, 12, 235], backgroundPadding: [3, 1, 3, 1],
         getBorderColor: [...C.creamDim, 140], getBorderWidth: 1,

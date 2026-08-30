@@ -544,6 +544,10 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
      a place label (e.g. Customs' Crackhouse) — it stays intentionally readable as "pin over label" */
   box-shadow:0 0 0 2px var(--qc), 0 0 0 5px rgba(10,14,12,.9), 0 0 7px 5px rgba(10,14,12,.55);
   filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+/* below the `full` tier the pin is 30% smaller and shows the glyph instead of its number — the
+   halo shrinks with it so the ring stays a ring and not a blob (see questIcon() in quests.js) */
+.qpin-sm{width:24px;height:24px;
+  box-shadow:0 0 0 1.5px var(--qc), 0 0 0 3.5px rgba(10,14,12,.9), 0 0 5px 3px rgba(10,14,12,.55)}
 .qpin.qdone{opacity:.5}
 .qtip{background:rgba(11,15,13,.95)!important;border:1px solid var(--line)!important;color:var(--text-dim)!important;
   font:400 12px/1.4 var(--f-body)!important;max-width:230px;box-shadow:var(--shadow-hud)!important}
