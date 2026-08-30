@@ -16,7 +16,9 @@
 //     source and derivative hashes, so `git status` after a second run is the
 //     determinism gate.
 //   * Nothing is written unless every declared output was produced, every
-//     source hash matched, and the shipped total is inside the budget.
+//     source hash matched, and the shipped total is inside the budget. Every one
+//     of those gates runs while the outputs are still only in memory, so a run
+//     that fails any of them leaves the working tree exactly as it found it.
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -336,36 +338,20 @@ const missing = manifest.outputs.filter((o) => !produced.has(o.id)).map((o) => o
 if (missing.length) fail(`declared outputs never produced: ${missing.join(', ')}`);
 
 // ---------------------------------------------------------------------------
-// Write / verify
+// Size / hash everything IN MEMORY first.
+//
+// Nothing below this point may touch the filesystem until every gate has passed:
+// the header contract promises that a run which busts the budget leaves the
+// working tree exactly as it found it.
 // ---------------------------------------------------------------------------
-let drift = 0;
 let shipped = 0;
 const rows = [];
 for (const decl of manifest.outputs) {
   const buf = produced.get(decl.id);
-  const abs = path.join(OUT_DIR, decl.path);
-  const hash = sha256(buf);
-  shipped += buf.length;
-
-  let existing = null;
-  try {
-    existing = await readFile(abs);
-  } catch { /* not written yet */ }
-
-  if (CHECK) {
-    const same = existing && existing.equals(buf);
-    if (!same) {
-      drift++;
-      console.log(`  DRIFT ${decl.path} (${existing ? 'differs' : 'missing'})`);
-    }
-  } else {
-    await mkdir(path.dirname(abs), { recursive: true });
-    if (!existing || !existing.equals(buf)) await writeFile(abs, buf);
-  }
-
   decl.bytes = buf.length;
-  decl.sha256 = hash;
-  rows.push([decl.id, decl.path, buf.length, hash]);
+  decl.sha256 = sha256(buf);
+  shipped += buf.length;
+  rows.push([decl.id, decl.path, decl.bytes, decl.sha256]);
 }
 
 // Attribution + asset index that actually ships next to the assets.
@@ -392,21 +378,6 @@ const attribution = {
 const attributionBuf = Buffer.from(`${JSON.stringify(attribution, null, 2)}\n`, 'utf8');
 const attributionPath = path.join(OUT_DIR, 'render-assets.json');
 shipped += attributionBuf.length;
-{
-  let existing = null;
-  try {
-    existing = await readFile(attributionPath);
-  } catch { /* not written yet */ }
-  if (CHECK) {
-    if (!existing || !existing.equals(attributionBuf)) {
-      drift++;
-      console.log(`  DRIFT render-assets.json (${existing ? 'differs' : 'missing'})`);
-    }
-  } else {
-    await mkdir(OUT_DIR, { recursive: true });
-    if (!existing || !existing.equals(attributionBuf)) await writeFile(attributionPath, attributionBuf);
-  }
-}
 
 // Toolchain record. Deliberately holds no timestamp: reruns must be byte-identical.
 manifest.toolchain = {
@@ -430,10 +401,6 @@ manifest.totals = {
   shippedBudgetBytes: manifest.shippedBudgetBytes,
 };
 
-if (!CHECK) {
-  await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
-}
-
 // ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
@@ -447,8 +414,53 @@ console.log(
     `of ${mib(manifest.shippedBudgetBytes)} budget (${((shipped / manifest.shippedBudgetBytes) * 100).toFixed(1)}%)`,
 );
 
+// ---------------------------------------------------------------------------
+// Gate, THEN write
+// ---------------------------------------------------------------------------
 if (shipped > manifest.shippedBudgetBytes) {
-  fail(`shipped weight ${mib(shipped)} exceeds the Stage 1 budget of ${mib(manifest.shippedBudgetBytes)}`);
+  fail(
+    `shipped weight ${mib(shipped)} exceeds the Stage 1 budget of ${mib(manifest.shippedBudgetBytes)}\n` +
+      '  nothing was written; the working tree is unchanged.',
+  );
+}
+
+let drift = 0;
+for (const decl of manifest.outputs) {
+  const buf = produced.get(decl.id);
+  const abs = path.join(OUT_DIR, decl.path);
+  let existing = null;
+  try {
+    existing = await readFile(abs);
+  } catch { /* not written yet */ }
+
+  if (CHECK) {
+    if (!existing || !existing.equals(buf)) {
+      drift++;
+      console.log(`  DRIFT ${decl.path} (${existing ? 'differs' : 'missing'})`);
+    }
+  } else {
+    await mkdir(path.dirname(abs), { recursive: true });
+    if (!existing || !existing.equals(buf)) await writeFile(abs, buf);
+  }
+}
+{
+  let existing = null;
+  try {
+    existing = await readFile(attributionPath);
+  } catch { /* not written yet */ }
+  if (CHECK) {
+    if (!existing || !existing.equals(attributionBuf)) {
+      drift++;
+      console.log(`  DRIFT render-assets.json (${existing ? 'differs' : 'missing'})`);
+    }
+  } else {
+    await mkdir(OUT_DIR, { recursive: true });
+    if (!existing || !existing.equals(attributionBuf)) await writeFile(attributionPath, attributionBuf);
+  }
+}
+
+if (!CHECK) {
+  await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 if (KTX2_REPORT) await ktx2Report();
