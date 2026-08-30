@@ -3,8 +3,15 @@
 // The plan (RENDER-REALISM.md Part C / Stage 1) wants the "Autumn Crossing" HDRI
 // used as an ambient environment reference with a separate authored key light.
 // Shipping the 1.8 MiB .hdr to browsers for that is waste, so this module
-// reduces it to: 9 spherical-harmonic irradiance coefficients, hemisphere
+// reduces it to: 9 spherical-harmonic RADIANCE coefficients, hemisphere
 // averages, an estimated dominant-light direction, and a tone-mapped preview.
+//
+// The SH coefficients are the plain projection L_lm = integral L(w) Y_lm(w) dw.
+// They are NOT irradiance: a consumer that wants a Lambertian irradiance
+// environment must convolve with the cosine lobe first by scaling each band by
+// SH_LAMBERT_A[l] (Ramamoorthi/Hanrahan). The name says radiance for exactly
+// that reason — the two differ per band, which is the kind of error that looks
+// like a plausible lighting choice rather than a bug.
 //
 // Conventions (documented because the numbers are meaningless without them):
 //   * Equirectangular, row 0 = zenith, row H-1 = nadir.
@@ -16,6 +23,22 @@ import { linearToSrgb, makeImage } from './imageio.mjs';
 
 const LUM = [0.2126, 0.7152, 0.0722];
 const luminance = (r, g, b) => r * LUM[0] + g * LUM[1] + b * LUM[2];
+
+/**
+ * Lambertian cosine-lobe convolution factors per SH band (Ramamoorthi/Hanrahan
+ * "An Efficient Representation for Irradiance Environment Maps", 2001):
+ * A_0 = pi, A_1 = 2pi/3, A_2 = pi/4. Multiply a radiance coefficient of band l
+ * by SH_LAMBERT_A[l] to get the irradiance coefficient.
+ */
+export const SH_LAMBERT_A = Object.freeze([Math.PI, (2 * Math.PI) / 3, Math.PI / 4]);
+
+/** Band index (0, 1 or 2) of each of the 9 coefficients, in emission order. */
+export const SH_BANDS = Object.freeze([0, 1, 1, 1, 2, 2, 2, 2, 2]);
+
+/** Convolve radiance SH coefficients with the Lambertian cosine lobe. */
+export function shRadianceToIrradiance(sh) {
+  return sh.map((c, k) => c.map((v) => v * SH_LAMBERT_A[SH_BANDS[k]]));
+}
 
 function direction(x, y, width, height) {
   const theta = ((y + 0.5) / height) * Math.PI;
@@ -35,6 +58,7 @@ export function dirToAzEl(d) {
 
 /**
  * Project an equirect radiance map onto 9 SH bands and gather hemisphere stats.
+ * `shRadiance` is the unconvolved projection — see SH_LAMBERT_A above.
  * Returns plain numbers only, ready to be JSON-serialised.
  */
 export function analyzeEquirect(img) {
@@ -130,7 +154,7 @@ export function analyzeEquirect(img) {
 
   return {
     meanLuminance,
-    shIrradiance: sh,
+    shRadiance: sh,
     upperHemisphere: norm(upper, upperW),
     lowerHemisphere: norm(lower, lowerW),
     zenith: norm(zenith, zenithW),

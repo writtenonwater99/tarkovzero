@@ -34,7 +34,7 @@ import {
   takeChannels,
 } from './lib/imageio.mjs';
 import { gradeLut, macroNoise } from './lib/imagegen.mjs';
-import { analyzeEquirect, autoExposure, linearToHex, skyGradientStrip, tonemapToSrgb } from './lib/skylight.mjs';
+import { SH_LAMBERT_A, analyzeEquirect, autoExposure, linearToHex, skyGradientStrip, tonemapToSrgb } from './lib/skylight.mjs';
 import { LIGHT, PALETTE } from '../src/render-style.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -225,11 +225,18 @@ function buildEnvironment(hdrBuf) {
       equirect: 'row 0 = zenith; theta = polar angle from +Y; phi = azimuth',
       shBasis: 'real SH, bands 0..2, order [0, y, z, x, xy, yz, 3y^2-1, xz, x^2-z^2]',
       units: 'linear radiance from the HDRI, before tone mapping',
+      shConvolution:
+        'shRadiance holds the UNCONVOLVED projection L_lm. For a Lambertian ' +
+        'irradiance environment multiply band l by A_l = [pi, 2pi/3, pi/4] ' +
+        '(Ramamoorthi/Hanrahan) — i.e. coefficient 0 by A_0, coefficients 1..3 ' +
+        'by A_1, coefficients 4..8 by A_2. Skipping this makes the ambient both ' +
+        'too dark and too directional.',
+      shLambertA: SH_LAMBERT_A.map((v) => round(v)),
     },
     sourceSize: [hdr.width, hdr.height],
     meanLuminance: round(analysis.meanLuminance),
     previewExposure: round(exposure),
-    shIrradiance: analysis.shIrradiance.map((c) => c.map((v) => round(v))),
+    shRadiance: analysis.shRadiance.map((c) => c.map((v) => round(v))),
     upperHemisphere: analysis.upperHemisphere.map((v) => round(v)),
     lowerHemisphere: analysis.lowerHemisphere.map((v) => round(v)),
     zenith: analysis.zenith.map((v) => round(v)),
@@ -320,7 +327,7 @@ console.log('\nprocessing');
 const ground = buildGroundDetail(groundZip);
 console.log(`  ground detail   ${ground.sourceSize}px source -> ${ground.detailSize}px, box-filtered in the correct space`);
 const env = buildEnvironment(hdrBuf);
-console.log(`  environment     ${env.light.sourceSize.join('x')} HDRI -> SH9 + ${SKY_W}px preview, exposure ${env.light.previewExposure}`);
+console.log(`  environment     ${env.light.sourceSize.join('x')} HDRI -> SH9 radiance + ${SKY_W}px preview, exposure ${env.light.previewExposure}`);
 buildGenerated();
 console.log('  generated       macro-noise 256px tile, 16^3 overcast grade LUT');
 

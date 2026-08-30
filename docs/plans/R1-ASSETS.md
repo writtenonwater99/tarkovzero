@@ -17,14 +17,22 @@ noise/LUT. Nothing here changes map data, geometry, feature IDs, or picking.
 | `ground106-orm` | `materials/ground106-orm-512.png` | 445,101 | Packed R=AO, G=roughness, B=metalness(0) — one sampler, not three |
 | `macro-noise` | `materials/macro-noise-256.png` | 149,744 | Seamless breakup tile: macro tint / wetness mask / detail / Bayer dither |
 | `autumn-crossing-sky` | `environment/autumn-crossing-sky-256.png` | 64,046 | Tone-mapped equirect sky/ambient reference |
-| `autumn-crossing-light` | `environment/autumn-crossing-light.json` | 1,970 | SH9 irradiance, hemisphere colours, dominant-light estimate |
+| `autumn-crossing-light` | `environment/autumn-crossing-light.json` | 2,372 | SH9 **radiance** (unconvolved), hemisphere colours, dominant-light estimate |
 | `overcast-grade-lut` | `environment/overcast-grade-lut-16.png` | 3,470 | 16³ colour-grade LUT (256×16 strip) for the combined post pass |
 | `autumn-crossing-gradient` | `environment/autumn-crossing-gradient.png` | 391 | 8×128 background gradient strip, zenith at top |
 | `render-assets.json` | `render-assets.json` | 4,299 | Shipped asset index + attribution |
 | **Total** | | **1,722,128 (1.64 MiB)** | **13.7% of the 12 MiB Stage 1 budget** |
 
 Nothing was dropped for budget. The budget is enforced in the script, not just documented:
-the run fails if the shipped total exceeds it.
+the run is aborted **before anything is written** if the shipped total would exceed it.
+
+`autumn-crossing-light.json` ships `shRadiance`, not irradiance: it is the plain projection
+`L_lm = ∫ L(ω) Y_lm(ω) dω`, with no Lambertian convolution. A renderer that wants an
+irradiance environment must scale band *l* by `A_l = [π, 2π/3, π/4]` (Ramamoorthi/Hanrahan)
+first — the factors differ per band, so skipping them gives an ambient that is both too dark
+and too directional while still looking plausible. The file carries the factors and the
+instruction in its `conventions.shConvolution` / `conventions.shLambertA` fields, and
+`scripts/lib/skylight.mjs` exports `shRadianceToIrradiance()`.
 
 ### Sizes before and after
 

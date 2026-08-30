@@ -72,7 +72,7 @@
       "author": "Greg Zaal",
       "license": "CC0-1.0",
       "licensePage": "https://polyhaven.com/license",
-      "purpose": "Stage 1 environment: overcast, low-contrast autumn IBL/sky reference. Reduced to SH irradiance + hemisphere colours + a tone-mapped preview; the raw HDR is never shipped.",
+      "purpose": "Stage 1 environment: overcast, low-contrast autumn IBL/sky reference. Reduced to SH radiance + hemisphere colours + a tone-mapped preview; the raw HDR is never shipped.",
       "variantNote": "1K HDR is the plan's pick. Poly Haven publishes md5 c0f556c01d12120169b916b0b4c3efc1 for this file; the pipeline additionally pins sha256.",
       "sourceBytes": 1889442,
       "sourceSha256": "3cd13dc94041aa3f94c4d7ba4898d5924da2d2193476851557387cbd170a084e"
@@ -144,9 +144,9 @@
       "kind": "environment",
       "colorSpace": "linear",
       "channels": "data",
-      "purpose": "9 SH irradiance coefficients, hemisphere/zenith/horizon averages, and the estimated dominant-light direction. Ambient reference only: the key light stays pinned by src/render-style.js.",
-      "bytes": 1970,
-      "sha256": "f827e9a05a33aa259e3d8960ec2bf988c4ae7a7344598143b5b84f05cabe7a6f"
+      "purpose": "9 SH radiance coefficients (unconvolved projection L_lm — multiply band l by A_l = [pi, 2pi/3, pi/4] for Lambertian irradiance), hemisphere/zenith/horizon averages, and the estimated dominant-light direction. Ambient reference only: the key light stays pinned by src/render-style.js.",
+      "bytes": 2372,
+      "sha256": "6fd17c32d2b37d93dfcced9ecd422b1cae19f2768865de0356f6ab987182d42f"
     },
     {
       "id": "macro-noise",
@@ -182,7 +182,7 @@
   },
   "totals": {
     "sourceBytes": 22182864,
-    "shippedBytes": 1721835,
+    "shippedBytes": 1722237,
     "shippedBudgetBytes": 12582912
   }
 }
