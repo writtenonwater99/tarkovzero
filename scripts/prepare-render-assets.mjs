@@ -11,7 +11,9 @@
 //   * Raw downloads land in a git-ignored cache and are never shipped.
 //   * Every processed byte written under public/assets/3d is a pure function of
 //     (cached source bytes, this script, src/render-style.js). No timestamps,
-//     no randomness, no locale- or path-dependent output.
+//     no randomness, no locale- or path-dependent output. The manifest holds one
+//     date per source, `retrievedAt`, and it is written only when that source is
+//     actually downloaded — a cache hit never touches it.
 //   * scripts/data/render-assets-manifest.json is rewritten in place with the
 //     source and derivative hashes, so `git status` after a second run is the
 //     determinism gate.
@@ -245,6 +247,12 @@ async function download(source) {
   await mkdir(CACHE_DIR, { recursive: true });
   await writeFile(partial, buf);
   await rename(partial, cached);
+  // The acquisition date is the field a future auditor needs to reconstruct
+  // provenance ("recheck and hash at acquisition; upstream catalogs can
+  // change"). It is the one date in this file, it is written ONLY when bytes
+  // actually came off the network, and a cache hit leaves it alone — so the
+  // manifest stays byte-stable across reruns.
+  source.retrievedAt = new Date().toISOString().slice(0, 10);
   return buf;
 }
 
@@ -290,6 +298,10 @@ async function fetchSource(source) {
   }
   source.sourceSha256 = hash;
   source.sourceBytes = buf.length;
+  source.retrievedAt ??= null;
+  if (source.retrievedAt === null) {
+    console.log(`  note: ${source.id} has no recorded retrievedAt; it will be filled in the next time the file is fetched`);
+  }
   console.log(`  ${source.id.padEnd(16)} ${mib(buf.length).padStart(9)}  ${hash.slice(0, 16)}...  ${fresh ? 'fetched' : 'cached'}`);
   return buf;
 }
@@ -532,8 +544,15 @@ const attribution = {
       bytes: o.bytes,
       sha256: o.sha256,
       source: src
-        ? { provider: src.provider, author: src.author, license: src.license, assetPage: src.assetPage, licensePage: src.licensePage }
-        : { provider: 'TarkovZero', author: 'TarkovZero', license: 'CC0-1.0', assetPage: null, licensePage: null },
+        ? {
+            provider: src.provider,
+            author: src.author,
+            license: src.license,
+            assetPage: src.assetPage,
+            licensePage: src.licensePage,
+            retrievedAt: src.retrievedAt ?? null,
+          }
+        : { provider: 'TarkovZero', author: 'TarkovZero', license: 'CC0-1.0', assetPage: null, licensePage: null, retrievedAt: null },
     };
   }),
 };
