@@ -3,16 +3,33 @@ import { pos } from './crs.js';
 
 // Live player positions from the relay. One subscription per pairing code; each code gets its own
 // coloured arrow + trail. Designed for several codes at once (you + friends) even though v1 UI is solo.
-const RELAY = import.meta.env.VITE_RELAY_URL || (import.meta.env.DEV ? 'ws://localhost:8787' : 'wss://tarkovzero-relay.fly.dev');
+const RELAY = new URLSearchParams(location.search).get('relay')
+  || import.meta.env.VITE_RELAY_URL || (import.meta.env.DEV ? 'ws://localhost:8787' : 'wss://tarkovzero-relay.fly.dev');
 export const COLORS = ['#ff3d3d', '#3d9bff', '#3dff7a', '#ffd23d', '#d63dff', '#3dfff0'];
 const CODE_RE = /^[A-Z0-9]{6}$/;
 export const normCode = (c) => (c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 // Names/status can come from anyone publishing to a code — always escape before rendering as HTML.
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-export function createLive(map, mapData, ui) {
+// -------------------------------------------------------------------- state machine (red team #11) --
+// disconnected (no code) -> connecting (socket opening / no position yet) -> streaming (position within
+// the last STALE_MS) -> stale (last position older than that, socket still open) -> back to connecting
+// the moment the socket actually drops and a new one is opened.
+export const STALE_MS = 10_000;
+
+// ?livestate=connecting|streaming|stale forces every player into that state for QA screenshots without
+// a real companion — the toolbar/panel/telemetry chip can be exercised on demand. Dev-only, kept for CI.
+const QA_STATE = ['connecting', 'streaming', 'stale'].includes(new URLSearchParams(location.search).get('livestate'))
+  ? new URLSearchParams(location.search).get('livestate') : null;
+const QA_AGE_MS = { connecting: 0, streaming: 2000, stale: 15000 };
+const qaPlayer = () => ({
+  code: 'QA0000', name: 'QA test', color: COLORS[0], map: null, status: 'QA',
+  last: { x: 12.3, z: -45.6, yaw: 214 }, lastAt: Date.now() - QA_AGE_MS[QA_STATE], ws: { readyState: 1 },
+});
+
+export function createLive(map, mapData, ui, hooks = {}) {
   const players = new Map();
-  const opts = { follow: true, trail: true };
+  const opts = { follow: true, trail: true, primary: null };
   const pane = 'live';
   map.createPane(pane); map.getPane(pane).style.zIndex = 650;
 
@@ -28,6 +45,52 @@ export function createLive(map, mapData, ui) {
     if (el) el.style.transform = `rotate(${(yaw ?? 0) + (mapData.coordinateRotation ?? 0)}deg)`;
   }
 
+  /** One player's state — QA_STATE overrides everything so the HUD can be screenshotted on demand. */
+  function playerState(p) {
+    if (QA_STATE) return QA_STATE;
+    if (!p.ws || p.ws.readyState !== 1) return 'connecting';
+    if (!p.lastAt) return 'connecting';
+    return (Date.now() - p.lastAt) < STALE_MS ? 'streaming' : 'stale';
+  }
+  /** The real roster, or a single synthetic QA player when forced and nothing real is connected. */
+  function allPlayers() {
+    const list = [...players.values()];
+    return (QA_STATE && !list.length) ? [qaPlayer()] : list;
+  }
+  /** Enriched per-player rows for the panel / telemetry chip / window.tz.live.state(). */
+  function summary() {
+    return allPlayers().map((p) => {
+      const state = playerState(p);
+      const lastAt = p.lastAt ?? null;
+      return { code: p.code, name: p.name, map: p.map, color: p.color, status: p.status, last: p.last, state, lastAt, ageMs: lastAt != null ? Date.now() - lastAt : null };
+    });
+  }
+  /** The player everything else (follow, telemetry chip, raid-switch toast) is grounded on: a manual
+   *  pick if it still exists, else the first streaming player, else the first player of any state. */
+  function primary() {
+    const list = summary();
+    if (!list.length) return null;
+    if (opts.primary) { const m = list.find((s) => s.code === opts.primary); if (m) return m; }
+    return list.find((s) => s.state === 'streaming') ?? list[0];
+  }
+  function setPrimary(code) {
+    const c = normCode(code);
+    opts.primary = players.has(c) ? c : null;
+    persist(); ui.render();
+  }
+  /** window.tz.live.state() — one summary number for "is live position usable right now". */
+  function state() {
+    const list = summary();
+    if (!list.length) return { state: 'disconnected', lastAt: null, ageMs: null, players: [] };
+    const rank = { streaming: 3, stale: 2, connecting: 1 };
+    let best = list[0];
+    for (const s of list) if ((rank[s.state] ?? 0) > (rank[best.state] ?? 0)) best = s;
+    return {
+      state: best.state, lastAt: best.lastAt, ageMs: best.ageMs,
+      players: list.map(({ code, name, map, lastAt }) => ({ code, name, map, lastAt })),
+    };
+  }
+
   const TELEPORT_UNITS = 300; // a trail jump longer than this (game units) is a teleport / stale replay, not movement
 
   function onPos(p, m) {
@@ -37,8 +100,12 @@ export function createLive(map, mapData, ui) {
       p.marker?.setTooltipContent(esc(p.name));
       persist();
     }
-    if (m.map && m.map !== mapData.key) { p.map = m.map; p.status = `on ${String(m.map).slice(0, 32)} (not ${mapData.key})`; ui.render(); return; }
+    // A position (matched map or not) is high-frequency — every screenshot the companion takes — so it
+    // always goes through the cheap tick path, never the full panel rebuild: rebuilding the add-code /
+    // add-name inputs on every incoming position would blow away whatever the player is mid-typing.
+    if (m.map && m.map !== mapData.key) { p.map = m.map; p.status = `on ${String(m.map).slice(0, 32)} (not ${mapData.key})`; (ui.tick ?? ui.render)?.(); return; }
     p.map = m.map ?? mapData.key;
+    p.lastAt = Date.now(); // this is a usable position for THIS map — mark it fresh before anything below reads state
     const ll = pos(m);
     if (!p.marker) {
       p.marker = L.marker(ll, { icon: arrowIcon(p.color), pane, interactive: true }).addTo(map).bindTooltip(esc(p.name), { permanent: true, direction: 'right', offset: [14, 0], className: 'player-tip' });
@@ -54,9 +121,12 @@ export function createLive(map, mapData, ui) {
     else p.trail.addLatLng(ll);
     p.resume = false;
     p.last = m;
-    if (opts.follow && [...players.values()].indexOf(p) === 0) map.panTo(ll, { animate: true, duration: 0.4 });
+    if (opts.follow && primary()?.code === p.code) {
+      map.panTo(ll, { animate: true, duration: 0.4 });
+      hooks.onFollow?.(m.x, m.z);
+    }
     p.status = `x ${m.x.toFixed(0)} z ${m.z.toFixed(0)}`;
-    ui.render();
+    (ui.tick ?? ui.render)?.();
   }
 
   function connect(p) {
@@ -75,7 +145,7 @@ export function createLive(map, mapData, ui) {
     const code = normCode(codeRaw);
     if (!CODE_RE.test(code)) throw new Error('Code must be 6 letters/numbers, e.g. K7P3QX');
     if (players.has(code)) return;
-    const p = { code, name: (name || '').trim().slice(0, 24) || code, nameOverride: override && !!name, color: COLORS[players.size % COLORS.length], status: '', last: null, map: null };
+    const p = { code, name: (name || '').trim().slice(0, 24) || code, nameOverride: override && !!name, color: COLORS[players.size % COLORS.length], status: '', last: null, lastAt: null, map: null };
     players.set(code, p); connect(p); persist();
   }
   function rename(code, name) {
@@ -85,17 +155,28 @@ export function createLive(map, mapData, ui) {
   }
   function remove(code) {
     const p = players.get(code); if (!p) return;
-    players.delete(code); p.ws?.close(); p.marker?.remove(); p.trail?.remove(); persist(); ui.render();
+    players.delete(code); p.ws?.close(); p.marker?.remove(); p.trail?.remove();
+    if (opts.primary === code) opts.primary = null;
+    persist(); ui.render();
   }
-  function persist() { try { localStorage.setItem('tarkovzero:live', JSON.stringify([...players.values()].map((p) => ({ code: p.code, name: p.name, override: p.nameOverride })))); } catch {} }
+  function persist() {
+    try { localStorage.setItem('tarkovzero:live', JSON.stringify({ players: [...players.values()].map((p) => ({ code: p.code, name: p.name, override: p.nameOverride })), primary: opts.primary })); }
+    catch {}
+  }
   function restore() {
     try {
-      for (const e of JSON.parse(localStorage.getItem('tarkovzero:live') || '[]')) {
-        if (typeof e === 'string') add(e); else add(e.code, e.name !== e.code ? e.name : '', { override: !!e.override });
-      }
+      const raw = JSON.parse(localStorage.getItem('tarkovzero:live') || '[]');
+      const list = Array.isArray(raw) ? raw : (raw.players ?? []); // migrate from the old bare-array format
+      for (const e of list) { if (typeof e === 'string') add(e); else add(e.code, e.name !== e.code ? e.name : '', { override: !!e.override }); }
+      if (!Array.isArray(raw) && raw.primary && players.has(raw.primary)) opts.primary = raw.primary;
     } catch {}
   }
   function clearTrails() { for (const p of players.values()) p.trail?.setLatLngs([]); }
 
-  return { players, opts, add, remove, rename, restore, clearTrails, relay: RELAY };
+  // 1 Hz ticker: nothing new has to arrive for "3s ago" to become "4s ago", or for streaming to tip
+  // over into stale after STALE_MS of silence. ui.tick, when the caller provides it, is the *cheap*
+  // path (text/attribute updates only) — ui.render stays reserved for real structural events.
+  setInterval(() => { if (players.size || QA_STATE) (ui.tick ?? ui.render)?.(); }, 1000);
+
+  return { players, opts, add, remove, rename, restore, clearTrails, relay: RELAY, summary, primary, setPrimary, state };
 }
