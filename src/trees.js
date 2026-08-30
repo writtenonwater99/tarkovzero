@@ -140,14 +140,13 @@ export function treeLayers({ treeSet, H, zoom, relief, look, fogExtension }) {
   };
   // Realistic overcast: a lower base ambient and more directional response than vector, so a canopy
   // has a lit side; atmosphere.js's EXPOSURE puts the overall value back where the palette says.
-  const foliageMaterial = mode === 'realistic'
-    ? foliageMaterialFor('realistic')
-    : { ambient: 0.72, diffuse: 0.58, shininess: 1, specularColor: [8, 10, 7] };
+  // Vector's numbers are the pre-Stage-1 ones, unchanged.
+  const foliageMaterial = foliageMaterialFor(mode);
   return [
     new SimpleMeshLayer({
       ...common, id: 'tree-trunks', data: source, mesh: TRUNK_MESH, getColor: C.trunk,
       getScale: (d) => [d.trunkRadius / 0.2, d.trunkRadius / 0.2, d.trunkHeight / 2.5],
-      material: mode === 'realistic' ? trunkMaterialFor('realistic') : { ambient: 0.48, diffuse: 0.72, shininess: 0 },
+      material: trunkMaterialFor(mode),
     }),
     // Retain the historical `trees` id on the dominant canopy layer for integrations/tests.
     new SimpleMeshLayer({
