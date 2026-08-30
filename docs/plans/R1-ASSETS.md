@@ -212,7 +212,9 @@ background for a kilometre-wide map.
 - **512² is a judgement call, not a measurement.** The plan starts repeating terrain
   materials at 1K. 512 was chosen because PNG at 1K roughly quadruples to ~6 MiB and the
   detail map is tiled every 2–2.5 m, where 512 is ample. Re-evaluate when KTX2 lands: at
-  that point 1K costs about what 512 costs today. Change `detailSize` in the manifest and
-  re-run — the pipeline handles it, since 1024 is the source resolution.
+  that point 1K costs about what 512 costs today. To change it: set `detailSize` in the
+  manifest **and rename the three `-512.png` output paths to match**. The resolution lives
+  in the filename, so the run refuses to write until the two agree — `-512.png` holding
+  1024² pixels used to pass silently, and `--check` afterwards still printed green.
 - **GPU residency, draw calls and frame time** are untouched — the plan's Stage 1 estimates
   (+6–10 MiB VRAM, +0.4–1.1 ms) remain estimates until the renderer branch measures them.

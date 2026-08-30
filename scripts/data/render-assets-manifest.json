@@ -89,7 +89,9 @@
       "channels": "rgb",
       "purpose": "Terrain ground-detail base colour, tiled in world space. Muted by the material table's baseColor factor, not baked in.",
       "bytes": 498642,
-      "sha256": "9129e2112174781456b3163d3427ae420896a4e02ae370c84a0c0bc080e42e2a"
+      "sha256": "9129e2112174781456b3163d3427ae420896a4e02ae370c84a0c0bc080e42e2a",
+      "width": 512,
+      "height": 512
     },
     {
       "id": "ground106-normal",
@@ -101,7 +103,9 @@
       "channels": "rgb",
       "purpose": "Terrain ground-detail normal (OpenGL +Y convention, matching deck.gl/luma.gl). Supplies surface frequency without runtime displacement.",
       "bytes": 554465,
-      "sha256": "5ef97b01869452f10fc554a7392a3f7a72b2bd13624e52222615361f1300567d"
+      "sha256": "5ef97b01869452f10fc554a7392a3f7a72b2bd13624e52222615361f1300567d",
+      "width": 512,
+      "height": 512
     },
     {
       "id": "ground106-orm",
@@ -113,7 +117,9 @@
       "channels": "rgb",
       "purpose": "Packed occlusion/roughness/metalness. R = AO, G = roughness, B = metalness (constant 0 for ground). One sampler instead of three.",
       "bytes": 445101,
-      "sha256": "060e727f2ef4ccf09415546bd5c51cb6e5a942111898933f071e8e39b9afdc02"
+      "sha256": "060e727f2ef4ccf09415546bd5c51cb6e5a942111898933f071e8e39b9afdc02",
+      "width": 512,
+      "height": 512
     },
     {
       "id": "autumn-crossing-sky",
@@ -124,7 +130,9 @@
       "channels": "rgb",
       "purpose": "Tone-mapped equirectangular sky/ambient reference for the realistic background and for eyeballing the environment tint. Not a runtime IBL source.",
       "bytes": 64046,
-      "sha256": "9d84bc296cdabbfc83d7d44328976053dfc3a4d1ce9bda314d48847654236f37"
+      "sha256": "9d84bc296cdabbfc83d7d44328976053dfc3a4d1ce9bda314d48847654236f37",
+      "width": 256,
+      "height": 128
     },
     {
       "id": "autumn-crossing-gradient",
@@ -135,7 +143,9 @@
       "channels": "rgb",
       "purpose": "8x128 vertical strip of the HDRI's average colour per elevation band; drop-in background gradient texture, zenith at the top.",
       "bytes": 391,
-      "sha256": "956bb6f0b3d9f057ed8256073643d9f6cb2bc161d27254a945d8d752bba54714"
+      "sha256": "956bb6f0b3d9f057ed8256073643d9f6cb2bc161d27254a945d8d752bba54714",
+      "width": 8,
+      "height": 128
     },
     {
       "id": "autumn-crossing-light",
@@ -146,7 +156,9 @@
       "channels": "data",
       "purpose": "9 SH radiance coefficients (unconvolved projection L_lm — multiply band l by A_l = [pi, 2pi/3, pi/4] for Lambertian irradiance), hemisphere/zenith/horizon averages, and the estimated dominant-light direction. Ambient reference only: the key light stays pinned by src/render-style.js.",
       "bytes": 2372,
-      "sha256": "6fd17c32d2b37d93dfcced9ecd422b1cae19f2768865de0356f6ab987182d42f"
+      "sha256": "6fd17c32d2b37d93dfcced9ecd422b1cae19f2768865de0356f6ab987182d42f",
+      "width": null,
+      "height": null
     },
     {
       "id": "macro-noise",
@@ -157,7 +169,9 @@
       "channels": "rgba",
       "purpose": "Self-authored seamless breakup tile. R = low-frequency macro tint (hides 1K repetition across Woods), G = mid-frequency wetness/grime mask, B = high-frequency detail, A = 16x16 Bayer dither threshold for LOD cross-fades.",
       "bytes": 149744,
-      "sha256": "5143d269dc3ea7fd6383669ffe68ba75408e8ab0ee27bbe0449fc23fbe3983b1"
+      "sha256": "5143d269dc3ea7fd6383669ffe68ba75408e8ab0ee27bbe0449fc23fbe3983b1",
+      "width": 256,
+      "height": 256
     },
     {
       "id": "overcast-grade-lut",
@@ -168,7 +182,9 @@
       "channels": "rgb",
       "purpose": "Self-authored 16x16x16 colour-grade LUT (256x16 horizontal strip, blue slices left to right) for the combined post pass: desaturate, cool the shadows toward the fog colour, warm the highlights slightly.",
       "bytes": 3177,
-      "sha256": "0b37497d6d2b57d7de6f1db1d185c3465099666cda9a37be048faaa591e31690"
+      "sha256": "0b37497d6d2b57d7de6f1db1d185c3465099666cda9a37be048faaa591e31690",
+      "width": 256,
+      "height": 16
     }
   ],
   "toolchain": {
@@ -182,7 +198,7 @@
   },
   "totals": {
     "sourceBytes": 22182864,
-    "shippedBytes": 1722237,
+    "shippedBytes": 1722564,
     "shippedBudgetBytes": 12582912
   }
 }

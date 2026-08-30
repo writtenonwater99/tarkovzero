@@ -9,6 +9,8 @@
       "kind": "material",
       "colorSpace": "srgb",
       "channels": "rgb",
+      "width": 512,
+      "height": 512,
       "bytes": 498642,
       "sha256": "9129e2112174781456b3163d3427ae420896a4e02ae370c84a0c0bc080e42e2a",
       "source": {
@@ -25,6 +27,8 @@
       "kind": "material",
       "colorSpace": "linear",
       "channels": "rgb",
+      "width": 512,
+      "height": 512,
       "bytes": 554465,
       "sha256": "5ef97b01869452f10fc554a7392a3f7a72b2bd13624e52222615361f1300567d",
       "source": {
@@ -41,6 +45,8 @@
       "kind": "material",
       "colorSpace": "linear",
       "channels": "rgb",
+      "width": 512,
+      "height": 512,
       "bytes": 445101,
       "sha256": "060e727f2ef4ccf09415546bd5c51cb6e5a942111898933f071e8e39b9afdc02",
       "source": {
@@ -57,6 +63,8 @@
       "kind": "environment",
       "colorSpace": "srgb",
       "channels": "rgb",
+      "width": 256,
+      "height": 128,
       "bytes": 64046,
       "sha256": "9d84bc296cdabbfc83d7d44328976053dfc3a4d1ce9bda314d48847654236f37",
       "source": {
@@ -73,6 +81,8 @@
       "kind": "environment",
       "colorSpace": "srgb",
       "channels": "rgb",
+      "width": 8,
+      "height": 128,
       "bytes": 391,
       "sha256": "956bb6f0b3d9f057ed8256073643d9f6cb2bc161d27254a945d8d752bba54714",
       "source": {
@@ -89,6 +99,8 @@
       "kind": "environment",
       "colorSpace": "linear",
       "channels": "data",
+      "width": null,
+      "height": null,
       "bytes": 2372,
       "sha256": "6fd17c32d2b37d93dfcced9ecd422b1cae19f2768865de0356f6ab987182d42f",
       "source": {
@@ -105,6 +117,8 @@
       "kind": "material",
       "colorSpace": "linear",
       "channels": "rgba",
+      "width": 256,
+      "height": 256,
       "bytes": 149744,
       "sha256": "5143d269dc3ea7fd6383669ffe68ba75408e8ab0ee27bbe0449fc23fbe3983b1",
       "source": {
@@ -121,6 +135,8 @@
       "kind": "environment",
       "colorSpace": "srgb",
       "channels": "rgb",
+      "width": 256,
+      "height": 16,
       "bytes": 3177,
       "sha256": "0b37497d6d2b57d7de6f1db1d185c3465099666cda9a37be048faaa591e31690",
       "source": {
