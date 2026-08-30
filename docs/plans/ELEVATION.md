@@ -1,6 +1,6 @@
 # Terrain elevation data and survey runs
 
-TarkovZero keeps terrain geometry at true game scale. The 5 m surface is fitted from three evidence classes, in priority order: companion survey positions, SPT ground spawns, and SPT loose-loot positions. Hand-authored terrain features fill sparse areas only; they do not override dense evidence.
+TarkovZero keeps terrain geometry at true game scale. The 5 m surface is fitted from the `ground` view of one shared evidence pipeline: exact tarkov.dev positions, SPT spawns/loose loot, and optional companion surveys. Hand-authored terrain features fill sparse areas only; they do not override dense ground evidence.
 
 ## Stored SPT evidence
 
@@ -16,9 +16,9 @@ Only compact positions are checked in:
 | Reserve | `SPT_Runtime/SPT_Data/database/locations/rezervbase/looseLoot.json` | 4,148 |
 | Woods | `SPT_Runtime/SPT_Data/database/locations/woods/looseLoot.json` | 1,720 |
 
-They live at `scripts/data/<map>/loose-loot-samples.json`. `scripts/ingest-elevation.mjs` combines them with each map's SPT `SpawnPointParams` and any survey logs, prefers survey over spawn over loot inside the same 2 m cell, and writes `scripts/data/<map>/elevation-samples.json` deterministically.
+They live at `scripts/data/<map>/loose-loot-samples.json`. `scripts/ingest-elevation.mjs` preserves every full-precision input point in `points`, then emits a separate compatibility `samples` view that prefers survey over spawn over loot inside the same 2 m cell. It writes `scripts/data/<map>/elevation-samples.json` deterministically.
 
-The terrain builder discards loose loot inside mapped buildings, rocks, and underground shapes, then rejects samples more than 2.5 m above or below their local robust median. This removes rooftops, shelves, rock tops, and underground clusters before the multi-scale fit.
+The terrain builder never discards a finite vertical observation. It assigns every point to `ground`, `rock`, `floor`, `roof`, or `underground`, retaining provider/source ID, exact `(x,y,z)`, and reason codes in `terrain.evidence.buckets`. Only the 2 m-deduped trusted `ground` view feeds the single-valued heightfield. Rock points feed hard-rock geometry; floor/roof/underground points feed `floorSurfaces`. The full route is therefore auditable even when an observation must not deform walkable ground.
 
 ## Customs survey run
 
@@ -49,4 +49,4 @@ Pass multiple JSONL files to merge multiple runs. Use `--elevation-log <file>` t
 
 ## Review diagnostics
 
-The builder prints input/accepted/rejection counts and the fitted range. For Customs without a user survey it currently retains 470 of 1,227 deduped evidence cells; dense loose-loot evidence raises the Powerline Tower pylon base from the old synthetic 4.45 m surface to 15.25 m. Sniper Hill remains supported by the authored sparse-area fallback until a survey crosses it.
+The builder prints total input, bucket counts, ground-fit cells, and the fitted range. Fix pass 10 routes 3,439 Customs observations into 1,001 ground / 3 rock / 2,159 floor / 80 roof / 196 underground; Reserve routes 6,332 into 857 / 2 / 2,824 / 576 / 2,073; Woods routes 3,302 into 1,935 / 272 / 874 / 168 / 53. The fit uses 598 / 432 / 1,048 deduped ground cells respectively. Woods' separate hard-rock surface restores the reviewed central-mountain tops without contaminating the walkable-ground fit.

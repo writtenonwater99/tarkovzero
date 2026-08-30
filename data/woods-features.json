@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "map": "woods",
+  "features": [
+    {
+      "featureId": "woods.train_depot.structures",
+      "match": { "centroids": [[-690, 105.1], [-707.6, 113.1], [-708.75, 138.75], [-683.23, 158.28], [-658.8, 182.2]], "toleranceM": 0.35 },
+      "set": { "featureClass": "building", "name": "Train Depot Structure", "place": "Train Depot" },
+      "assert": { "count": 5, "notPlace": "Railway Bridge to Tarkov" },
+      "evidence": { "method": "source-footprint-centroids+audit", "status": "identity corrected; archetypes need survey" }
+    },
+    {
+      "featureId": "woods.train_depot.freight_cars",
+      "match": { "centroids": [[-739.08, 122.05], [-709.75, 127.85], [-691.35, 131.6], [-674.98, 134.93], [-658.5, 138.3], [-633.3, 123.72]], "toleranceM": 0.35 },
+      "set": { "featureClass": "railcar", "name": "Train Depot Freight Car", "place": "Train Depot", "emitAsProp": "railcar", "heightM": 3.8 },
+      "assert": { "count": 6, "notPlace": "Railway Bridge to Tarkov", "emitAsProp": "railcar" },
+      "evidence": { "method": "source-footprint-centroids+audit", "status": "semantic class exact; pose needs survey" }
+    },
+    {
+      "featureId": "woods.train_depot.cargo",
+      "match": { "centroids": [[-646.42, 120.87], [-651.03, 117.85], [-656.7, 118.65], [-659.55, 115.8], [-660.7, 111.75], [-663.08, 112.92], [-667.55, 113.7], [-657.1, 128.5], [-645.7, 158.5], [-643.8, 157.2]], "toleranceM": 0.35 },
+      "set": { "featureClass": "cargo", "name": "Train Depot Cargo", "place": "Train Depot", "emitAsProp": "container", "heightM": 2.6 },
+      "assert": { "count": 10, "notPlace": "Railway Bridge to Tarkov", "emitAsProp": "container" },
+      "evidence": { "method": "source-footprint-centroids+audit", "status": "semantic class exact; item identity needs survey" }
+    }
+  ],
+  "hardRocks": [
+    {
+      "featureId": "woods.sniper_mountain.central_mass",
+      "name": "Sniper Mountain Central Mass",
+      "contactCenter": [-194.85, -259.18],
+      "contactRadiusM": 74,
+      "contactRiseM": 12,
+      "shoulderRadiusM": 24,
+      "summitRadiusM": 9,
+      "anchors": [
+        { "name": "Sniper Mountain Summit", "position": [-209.22, -279.78], "topY": 77.52, "sourceId": "quest-zone:q14_8_2" },
+        { "name": "Upper Mountain", "position": [-219.23, -224.43], "topY": 64.62, "sourceId": "quest-zone:NosQuests_8_wood_place" },
+        { "name": "Mountain Flank", "position": [-156.09, -273.32], "topY": 52.27, "sourceId": "quest-zone:meh_45_radio_area_mark_2" }
+      ],
+      "evidence": { "method": "exact-task-zones+exact-cache-loot+SPT-high-rock", "status": "exact tops; parametric contact mass needs survey" }
+    }
+  ],
+  "anchors": [
+    { "name": "Sniper Mountain Summit", "position": [-209.22, -279.78] },
+    { "name": "Upper Mountain", "position": [-219.23, -224.43] },
+    { "name": "Mountain Flank", "position": [-156.09, -273.32] },
+    { "name": "Train Depot", "position": [-615, 140] },
+    { "name": "USEC Camp", "position": [290, -475] },
+    { "name": "Sawmill", "position": [25, 0] }
+  ]
+}

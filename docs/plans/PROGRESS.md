@@ -358,3 +358,62 @@ Final deterministic data hashes:
 ```
 
 No deploy, push, or commit was performed.
+
+## Fix pass 10 — exact-data ingest and elevation routing
+
+### Changed
+
+- Added an explicit, optional fetcher for `https://json.tarkov.dev/regular/maps` and `maps_en`. The ignored raw files are date/version/hash named under `scripts/data/tarkov-dev-exact/`; the committed `scripts/data/tarkov-dev-exact-manifest.json` records the 2026-08-29 URLs and SHA-256 values (`e9e411d572ae54938f23f79b6e46dc3f1eece74335e64d5cbcdb914b70637db7` maps; `a1d400843b10f8677eabe59acb4833716506fb571d7f27e73bd550cb7c25a21e` maps_en). Both builders are cache-only for these endpoints: they validate both hashes before parsing and fail with the exact fetch command if a file is missing or changed.
+- Embedded one immutable raw `exact` layer in each `<map>-3d.json`, rather than adding three more public files. That keeps raw geometry/elevation evidence and its renderer consumers in one canonical map-world request and preserves the established six-file regression gate. Every source object is retained under a stable source ID, including exact `position`, `size`, `outline`, `top`, `bottom` (and artillery's source-spelled `botom`), loot/container identity, weapons, BTR stops, and artillery zones.
+- Renderer marker data is now exact-first. Exact extracts/transits, spawns, locks, switches, hazards, loot containers/loose loot, stationary weapons, BTR stops, and artillery are projected at source precision; SPT/Wiki rows only corroborate by source identity/spatial distance or survive as additions. Wiki-only rows carry `visualApproximate: true` and omit `y`; no synthetic `y=0` is emitted. Reserve retains all 33 exact locks. Hazards are 7 / 6 / 66 on Customs / Reserve / Woods instead of empty arrays, including two artillery zones per map.
+- Replaced vertical rejection with an exhaustive typed route. The 3,439 / 6,332 / 3,302 finite observations on Customs / Reserve / Woods are all serialized once in `ground`, `rock`, `floor`, `roof`, or `underground`, with provider, exact source ID/Y, and reason codes. Bucket counts are Customs `1,001 / 3 / 2,159 / 80 / 196`, Reserve `857 / 2 / 2,824 / 576 / 2,073`, and Woods `1,935 / 272 / 874 / 168 / 53`. Only 598 / 432 / 1,048 trusted 2 m ground cells feed the 5 m heightfields; roof/underground observations produce 120 / 125 / 215 floor-classification records.
+- Woods' routed rock evidence now feeds a distinct seven-form hard-rock surface. A broad contact mass and three shoulder/summit pairs reconstruct the central mountain without forcing rock-top Y into a single-valued ground field. Eleven overlapping legacy decorative forms are removed so they cannot stack on the new surface. The three audited exact tops are sampler assertions: 77.52 m, 64.62 m, and 52.27 m.
+- Added small reviewed feature manifests for all three maps. The builder aborts on target drift or count/floor/height/style/kind/label contradictions. Customs enforces two floors on Dorms 2-Story and three tall `cooling-tower` cylinders (30 m manifest fallback because no qualifying exact primitive top occurs inside those footprints). Reserve enforces five-floor White Pawn and the 4 m Helipad service footprint. Woods relabels five Train Depot buildings and converts six freight cars plus ten cargo footprints from buildings into typed props, so none inherit “Railway Bridge to Tarkov.”
+- Canonical generated geometry is explicitly 1× metres (`canonicalScale: 1`, terrain unit scale 1). Hard-rock top Y is canonical too. Relief is absent from generated JSON and is applied only by the runtime sampler/layer at 1×/2×/3×; the permanent verifier proves every named 3× sample is exactly three times its 1× counterpart without mutating the height array.
+
+### Anchor heights
+
+The table uses the same conditioned, water-capped canonical 1× sampler as the renderer. “Before” reads `HEAD`; “after” reads this worktree's ground plus hard-rock surface.
+
+| Map | Anchor | X | Z | Before m | After m | Delta m |
+|---|---|---:|---:|---:|---:|---:|
+| Customs | Big Red | -205.90 | -114.20 | 1.47 | 1.81 | +0.34 |
+| Customs | Dorms 2-Story | 230.95 | 149.82 | 1.05 | 0.75 | -0.30 |
+| Customs | Fortress | 203.00 | -128.00 | 1.76 | 1.74 | -0.02 |
+| Customs | Old Gas | 330.00 | -177.00 | 2.00 | 2.03 | +0.02 |
+| Customs | Water Pump | 603.67 | -98.19 | 0.26 | 1.18 | +0.91 |
+| Customs | Main Bridge | -71.60 | 7.00 | -1.20 | -6.68 | -5.48 |
+| Reserve | White Pawn | -103.40 | 93.55 | 3.17 | -1.25 | -4.42 |
+| Reserve | Helipad | -96.18 | 36.60 | -6.02 | -5.09 | +0.93 |
+| Reserve | White Queen / Dome | -10.30 | 175.30 | 15.20 | 19.54 | +4.34 |
+| Reserve | D-2 | -82.00 | 157.00 | 19.17 | 15.60 | -3.57 |
+| Reserve | White Rook / Train Station | 161.10 | -151.10 | -5.37 | -6.25 | -0.87 |
+| Reserve | Bunker Hermetic Door | 48.00 | -184.00 | -3.04 | -0.35 | +2.68 |
+| Woods | Sniper Mountain Summit | -209.22 | -279.78 | 23.83 | 77.52 | +53.69 |
+| Woods | Upper Mountain | -219.23 | -224.43 | 27.60 | 64.62 | +37.02 |
+| Woods | Mountain Flank | -156.09 | -273.32 | 22.16 | 52.27 | +30.11 |
+| Woods | Train Depot | -615.00 | 140.00 | 9.11 | 9.05 | -0.06 |
+| Woods | USEC Camp | 290.00 | -475.00 | 24.52 | 24.57 | +0.05 |
+| Woods | Sawmill | 25.00 | 0.00 | -2.93 | -2.83 | +0.10 |
+
+### Public-data hashes
+
+| File | Before SHA-256 | After SHA-256 | Why |
+|---|---|---|---|
+| `public/data/customs.json` | `8027b339b3c99bdda988dd2ccfed813d89caeaa06211a41a35aa33d308fef393` | `3bf55ae78c28f1a83e8798f5756a6dfdd2ef7dee624b9cab15d6b00664763f26` | exact-first complete markers, hazards/artillery, provenance, no fabricated Wiki Y |
+| `public/data/customs-3d.json` | `9de71f7e59994de5c60c6cb6f3bfbc656a5c40d1832b51245bb491a83fccbeee` | `7459ddacb5305724021a4e3ac1faaf7a6c2f6653c512a17c0f5ee778e2631e44` | raw exact layer, typed evidence/floors, reviewed Dorms/cooling towers, 1× contract |
+| `public/data/reserve.json` | `1c9882595d7e74948f8238ea150f14b9f9c4716168976f739ca75ac6ba5ac597` | `d7639c45b3027862788849b215906070a417d6060b7aa6906a629b967f693e21` | all exact locks plus complete exact markers/hazards/artillery and provenance |
+| `public/data/reserve-3d.json` | `2d8ca348deaffa4fbd80643ce91cc997ec67910699c999099bc0179502608348` | `dbc86472612d725e1d0ce298079adf9a36d6ee9a2f4ae34aed0be8827a01f885` | raw exact layer, typed evidence/floors, White Pawn/Helipad assertions, 1× contract |
+| `public/data/woods.json` | `9e184a26860983f135273f7b705a6a2024626d279887e8795810982ec9e1a73b` | `2781606c4837beaa8e0cdf2ec3cccd74be4c7f5a2ac5e179547fe7b45cb24648` | complete exact markers including 64 hazards, artillery and eight BTR stops |
+| `public/data/woods-3d.json` | `00606d0791b92c6cb9129c35955f45afd4cec334cd68052a33685300c4d50645` | `5bde13721589f075079dbf39be031b6ed6aca27eb2358b93e09869820fb4fd21` | raw exact layer, typed evidence/floors, non-stacked central hard rock, depot identity/props, 1× contract |
+
+### Verified
+
+- Two complete consecutive runs of both builders for all three maps were byte-identical at the six after-hashes above while preserving `builtAt`.
+- `node scripts/verify-map-pipeline.mjs --baseline=HEAD` passes all raw-cache projection, exact-coordinate/source-ID, Wiki approximation/Y, typed-bucket accounting, floor/hard-rock consumer, reviewed-feature, six-anchor-per-map, and 1×/3× assertions.
+- `npm run build` passes (968 modules; only Vite's existing >500 kB chunk-size advisory remains).
+- `node --check` passes for every edited JavaScript file, all changed/generated JSON parses, and `git diff --check` passes.
+- A forced missing-cache check aborts immediately with the exact `node scripts/fetch-map-primitives.mjs --date YYYY-MM-DD` recovery command; no fallback path is taken. The restored raw cache is confirmed ignored by Git.
+- No screenshot/headless-browser verification was attempted in this worktree; the orchestrator owns the visual gate.
+
+No deploy, push, or commit was performed.
