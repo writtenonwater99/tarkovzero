@@ -13,7 +13,9 @@
     "build-3d": "node scripts/build-3d.mjs",
     "build-quests": "node scripts/build-quests.mjs",
     "prepare-render-assets": "node scripts/prepare-render-assets.mjs",
-    "test:render-style": "node --test scripts/render-style-test.mjs"
+    "test": "node --test scripts/render-style-test.mjs scripts/render-assets-test.mjs",
+    "test:render-style": "node --test scripts/render-style-test.mjs",
+    "test:render-assets": "node --test scripts/render-assets-test.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.11",
