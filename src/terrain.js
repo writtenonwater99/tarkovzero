@@ -683,33 +683,73 @@ export function buildTerrain(data, relief = 3, options = {}) {
   const waterStats = { verts: 0, tris: 0 };
   if (waterBodies.length) {
     const depthMax = Math.max(0.1, waterTuning().depthMaxMeters);
+    let padCells = 2;
     const specs = waterBodies.map((w) => {
       const ring = waterPoly(w), holes = waterHoles(w), bank = Number.isFinite(w.bank) ? w.bank : 5;
       const pad = Math.max(bank, cw * 2, ch * 2);
+      padCells = Math.max(padCells, Math.ceil(pad / Math.min(cw, ch)));
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
       for (const [x, z] of ring) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
       return { w, ring, holes, x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad };
     });
     const level = new Float32Array(NV), inside = new Uint8Array(NV), covered = new Uint8Array(NV);
+    /*
+     * A vertex takes the surface level of a body that CONTAINS it — never of one whose padded
+     * bounding box merely reaches it.
+     *
+     * The bbox version of this loop flooded Woods: body #9 (level 9.91) has a bbox of roughly
+     * x[-851,174] z[-949,252], i.e. most of the map, so every vertex of the southern lake (#10,
+     * level -13.07) north of z=252 took 9.91 and the sheet sat up to 23 m above its own shoreline,
+     * with a vertical tear along z=252 where that bbox stopped. `waterLevelAt()` answers for any
+     * point, so a bbox test is not a containment test; only `pointInRing` is. This is the same rule
+     * `waterSurfaceAt()` in src/water.js has always used for everything else that asks for a level.
+     */
+    const q = [];
     for (let j = 0; j < NVZ; j++) {
       const gz = Z0 + j * ch;
       for (let i = 0; i < NVX; i++) {
         const gx = X0 + i * cw, k = j * NVX + i;
-        let best = null, isIn = 0;
+        let best = null;
         for (const s of specs) {
           if (gx < s.x0 || gx > s.x1 || gz < s.z0 || gz > s.z1) continue;
+          if (!pointInRing([gx, gz], s.ring) || s.holes.some((hole) => pointInRing([gx, gz], hole))) continue;
           const l = waterLevelAt(s.w, gx, gz);
           if (l == null) continue;
           if (best == null || l > best) best = l;
-          if (pointInRing([gx, gz], s.ring) && !s.holes.some((hole) => pointInRing([gx, gz], hole))) isIn = 1;
         }
         if (best == null) continue;
-        covered[k] = 1; level[k] = best; inside[k] = isIn;
+        covered[k] = 1; level[k] = best; inside[k] = 1; q.push(k);
+      }
+    }
+    /*
+     * The shore pad: `padCells` rings of vertices grown OUTWARD from the wet ones, each carrying
+     * the level of the wet vertex it grew from. That is the "nearest containing body" fallback the
+     * bank needs, done on the grid the mesh is already made of — so a pad vertex can only ever
+     * inherit a level from across ~5 m of shoreline, and never from a body on the far side of the
+     * map. `inside` stays 0 out here, which is what makes the 2.5 m interpolation across the
+     * boundary cell the soft shore (see the COLOR_0 note above).
+     */
+    for (let ring = 0, head = 0; ring < padCells; ring++) {
+      const end = q.length;
+      for (; head < end; head++) {
+        const k = q[head], i = k % NVX, j = (k - i) / NVX;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = i + di, nj = j + dj;
+          if (ni < 0 || nj < 0 || ni >= NVX || nj >= NVZ) continue;
+          const nk = nj * NVX + ni;
+          if (covered[nk]) continue;
+          covered[nk] = 1; level[nk] = level[k]; q.push(nk);
+        }
       }
     }
     const waterIdx = [], remap = new Map();
     const use = (k) => { let n = remap.get(k); if (n === undefined) { n = remap.size; remap.set(k, n); } return n; };
     for (let j = 0; j < NCZ; j++) for (let i = 0; i < NCX; i++) {
+      // Clipped to the playable limit exactly like the ground mesh (`full[]` above). A water ring
+      // may cross the boundary — 242 of Woods' 1532 ring points do — and an unclipped sheet is
+      // emitted past the terrain silhouette, floating over the void plane and overhanging the cliff
+      // skirt. The old flat fill had the same footprint but no Fresnel sky term to make it obvious.
+      if (!full[j * NCX + i]) continue;
       const a = j * NVX + i, b = a + 1, c = a + NVX + 1, d = a + NVX;
       if (!(covered[a] && covered[b] && covered[c] && covered[d])) continue;
       if (!(inside[a] || inside[b] || inside[c] || inside[d])) continue;
