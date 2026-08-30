@@ -181,6 +181,33 @@ test('tailing the live file picks up an appended block without a rescan', () => 
   assert.ok(t.state.cursor.offset > before);
 });
 
+test('an out-of-order finish/start pair lands the same way however the polls fall', () => {
+  // EFT really does log a finish before its own start (fixture session B). The intra-batch dt sort only
+  // covers the case where both blocks are read at once; the live file is tailed every 250 ms, so the
+  // pair regularly straddles two reads.
+  const fin = block('6a72c0000000000000000101', 12, 1785906000, SHOOTER);
+  const sta = block('6a72c0000000000000000102', 10, 1785905000, SHOOTER);
+  const oneDir = stage(['a']), splitDir = stage(['a']);
+  const one = tracker(oneDir), split = tracker(splitDir);
+  one.sync({ rescan: true }); split.sync({ rescan: true });
+  assert.ok(one.state.active.includes(SHOOTER));
+
+  fs.appendFileSync(pushLog(oneDir, 'a'), fin + sta); one.sync();      // both blocks in one read
+  fs.appendFileSync(pushLog(splitDir, 'a'), fin); split.sync();        // the poll lands between them
+  fs.appendFileSync(pushLog(splitDir, 'a'), sta); split.sync();
+
+  assert.equal(one.state.done.includes(SHOOTER), true);
+  assert.equal(one.state.active.includes(SHOOTER), false);
+  assert.deepEqual(sorted(split.snapshot().active), sorted(one.snapshot().active));
+  assert.deepEqual(sorted(split.snapshot().done), sorted(one.snapshot().done));
+
+  // and the persisted state is a function of the logs: a cold replay of the same bytes agrees
+  const fresh = new QuestTracker({ logsDir: splitDir, statePath: path.join(splitDir, 'fresh.json'), questsFile: defaultQuestsFile() });
+  fresh.sync({ rescan: true });
+  assert.deepEqual(sorted(fresh.snapshot().active), sorted(split.snapshot().active));
+  assert.deepEqual(sorted(fresh.snapshot().done), sorted(split.snapshot().done));
+});
+
 // ---- damaged / unreadable logs ---------------------------------------------------------------------
 
 test('a truncated tail in a closed session is stepped over, not parked on forever', () => {

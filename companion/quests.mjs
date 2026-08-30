@@ -26,7 +26,7 @@ export const STARTED = 10, FAILED = 11, FINISHED = 12;
 const QUEST_TYPES = new Set([STARTED, FAILED, FINISHED]);
 const SEEN_CAP = 4000;      // ids kept for de-duplication (a full wipe's worth is ~100)
 const UNKNOWN_CAP = 200;
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2; // v2 added lastDt (per-task ordering across polls); a bump forces one replay
 
 // ---- log-block parsing -------------------------------------------------------------------------
 
@@ -171,19 +171,24 @@ function readFrom(file, offset) {
 // ---- state -------------------------------------------------------------------------------------
 
 export function emptyState() {
-  return { version: STATE_VERSION, accountId: null, profileId: null, cursor: { file: null, offset: 0 }, active: [], done: [], failed: [], unknown: [], seen: [], since: null, ts: 0 };
+  return { version: STATE_VERSION, accountId: null, profileId: null, cursor: { file: null, offset: 0 }, active: [], done: [], failed: [], unknown: [], seen: [], lastDt: {}, since: null, ts: 0 };
 }
 
 function normalizeState(s) {
   const e = emptyState();
   if (!s || typeof s !== 'object' || s.version !== STATE_VERSION) return e;
   const arr = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+  const dts = (v) => {
+    const o = {};
+    if (v && typeof v === 'object' && !Array.isArray(v)) for (const [k, n] of Object.entries(v)) if (Number.isFinite(Number(n))) o[k] = Number(n);
+    return o;
+  };
   return {
     version: STATE_VERSION,
     accountId: s.accountId ? String(s.accountId) : null,
     profileId: s.profileId ? String(s.profileId) : null,
     cursor: { file: s.cursor?.file ? String(s.cursor.file) : null, offset: Number(s.cursor?.offset) || 0 },
-    active: arr(s.active), done: arr(s.done), failed: arr(s.failed), unknown: arr(s.unknown), seen: arr(s.seen),
+    active: arr(s.active), done: arr(s.done), failed: arr(s.failed), unknown: arr(s.unknown), seen: arr(s.seen), lastDt: dts(s.lastDt),
     since: s.since ? String(s.since) : null,
     ts: Number(s.ts) || 0,
   };
@@ -193,13 +198,18 @@ const capTail = (set, cap) => (set.size <= cap ? [...set] : [...set].slice(set.s
 
 /**
  * Apply quest events to `state` (mutates). Events are sorted by `dt` (file order breaks ties) so a
- * log that records a finish before the matching start still reconstructs correctly.
+ * log that records a finish before the matching start still reconstructs correctly. The sort alone
+ * only covers a pair that lands in the same read; the live file is tailed every 250 ms and the pair
+ * routinely straddles two polls, so `state.lastDt` remembers the newest `dt` applied per task and an
+ * event older than it is ignored. Without that, the same bytes on disk give a different published set
+ * depending on poll timing — and a quest just handed in gets republished as active.
  * @returns {{applied:number, skipped:number, unknown:number, setsChanged:boolean}}
  */
 export function applyEvents(state, events, taskIds, log) {
   const seen = new Set(state.seen);
   const active = new Set(state.active), done = new Set(state.done), failed = new Set(state.failed);
   const unknown = new Set(state.unknown);
+  const lastDt = { ...(state.lastDt || {}) };
   let applied = 0, skipped = 0, unknownCount = 0, setsChanged = false;
   const ordered = events.map((e, i) => [e, i]).sort((a, b) => (a[0].dt - b[0].dt) || (a[1] - b[1])).map((x) => x[0]);
   for (const ev of ordered) {
@@ -212,6 +222,9 @@ export function applyEvents(state, events, taskIds, log) {
       if (!unknown.has(id)) { unknown.add(id); unknownCount++; }
       continue;
     }
+    const prev = lastDt[id];
+    if (prev !== undefined && ev.dt < prev) { skipped++; continue; }   // a stale transition from an earlier poll
+    lastDt[id] = ev.dt;
     const before = `${active.has(id)}${done.has(id)}${failed.has(id)}`;
     if (ev.type === STARTED) { active.add(id); done.delete(id); failed.delete(id); }
     else if (ev.type === FINISHED) { active.delete(id); done.add(id); failed.delete(id); }
@@ -222,6 +235,9 @@ export function applyEvents(state, events, taskIds, log) {
   state.seen = capTail(seen, SEEN_CAP);
   state.active = [...active]; state.done = [...done]; state.failed = [...failed];
   state.unknown = capTail(unknown, UNKNOWN_CAP);
+  const tracked = Object.keys(lastDt);
+  for (const k of tracked.slice(0, Math.max(0, tracked.length - SEEN_CAP))) delete lastDt[k];
+  state.lastDt = lastDt;
   return { applied, skipped, unknown: unknownCount, setsChanged };
 }
 
