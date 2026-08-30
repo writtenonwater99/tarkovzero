@@ -657,7 +657,7 @@ export function buildTerrain(data, relief = 3, options = {}) {
     const v = cliffVerts[i], src = v * 3, top = i * 3, bottom = (i + cliffVerts.length) * 3;
     cliffPos.set([positions[src], positions[src + 1], positions[src + 2]], top);
     cliffPos.set([positions[src], positions[src + 1], voidZ], bottom);
-    cliffNrm.set([0, 0, 1], top); cliffNrm.set([0, 0, 1], bottom); // ignored by material:false
+    cliffNrm.set([0, 0, 1], top); cliffNrm.set([0, 0, 1], bottom); // placeholders: the layer is material:{unlit:true}
     cliffCol.set([1, 1, 1], top); cliffCol.set(rampK, bottom);
   }
   for (let i = 0; i < cliffEdges.length; i++) {
@@ -818,7 +818,21 @@ export function buildTerrain(data, relief = 3, options = {}) {
     id: 'cliff', data: [{ p: [0, 0, 0] }], getPosition: (d) => d.p, mesh: cliffMesh,
     // Realistic: the skirt is the far edge of the world, so it takes the void value, which is
     // itself the far-fog colour darkened — the map stops at atmosphere, not at a black band.
-    getColor: paletteFor(mode).cliff.slice(0, 3), sizeScale: 1, material: false, shadowEnabled: false, pickable: false,
+    /*
+     * `material: { unlit: true }`, NOT `material: false`.
+     *
+     * simple-mesh-layer-fragment.glsl calls `lighting_getLightColor` unconditionally, and
+     * LightingEffect hands `layer.props.material` straight to luma's phongMaterial module, whose
+     * `getUniforms(props)` is `{...defaults, ...props}` — spreading `false` yields the DEFAULTS
+     * (ambient 0.35, diffuse 0.6, unlit false). So `material: false` did not turn lighting off; it
+     * lit the skirt with deck's stock material, which has nothing to do with the frozen contract.
+     * Measured: a flat-up skirt face came back at 0.50 of its authored colour, so the ramp's far
+     * end landed at (57,59,55) against the (114,117,112) void plane it is supposed to disappear
+     * into — the "feather" was still a step, whatever colour the contract named. `unlit` is the one
+     * uniform that makes the function return the surface colour, which is what this layer wants:
+     * its normals are (0,0,1) placeholders and its shading is the COLOR_0 ramp plus the fog.
+     */
+    getColor: paletteFor(mode).cliff.slice(0, 3), sizeScale: 1, material: { unlit: true }, shadowEnabled: false, pickable: false,
     parameters: { cullMode: 'none' }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
     extensions: extra.fogExtension ? [extra.fogExtension] : [],
   });
