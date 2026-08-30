@@ -285,6 +285,23 @@ test('a different AccountId wipes the state and replays only the new session', (
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'companion-quests.json'), 'utf8')).accountId, '20000002');
 });
 
+test('the tail tick does no identity detection, and the rescan tick still sees a changed identity', () => {
+  const dir = stage(['a']);
+  const t = tracker(dir);
+  t.sync({ rescan: true });
+  let calls = 0;
+  const real = t.detectAccount.bind(t);
+  t.detectAccount = () => { calls++; return real(); };
+  t.sync(); t.sync(); t.sync();                       // the 250 ms tail: only the live file is read
+  assert.equal(calls, 0);
+  t.sync({ rescan: true });
+  assert.equal(calls, 1);
+  // the detectAccount cache is keyed on the newest application log, so an edited one is still noticed
+  setIdentity(dir, 'a', 'aaaa1111bbbb2222cccc3333', '30000003');
+  t.sync({ rescan: true });
+  assert.equal(t.state.accountId, '30000003');
+});
+
 // Fixture session C changes AccountId *and* ProfileId, so the two reset branches shadow each other in
 // the test above. These three pin one branch each.
 
