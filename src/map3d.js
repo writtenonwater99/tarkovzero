@@ -3,7 +3,8 @@
 import { Deck, OrbitView, LightingEffect, AmbientLight, DirectionalLight, COORDINATE_SYSTEM } from '@deck.gl/core';
 import { SolidPolygonLayer, PathLayer, IconLayer, TextLayer, LineLayer, ScatterplotLayer } from '@deck.gl/layers';
 import { PathStyleExtension } from '@deck.gl/extensions';
-import { KINDS, iconDataUrl, arrowDataUrl, soldierDataUrl, extractLetter } from './icons.js';
+import { KINDS, iconDataUrl, arrowDataUrl, soldierDataUrl, extractLetter, extractReq, subText, dotRgb, clusterCount } from './icons.js';
+import { updateTier, cellFor, clusterPoints } from './lod.js';
 import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
@@ -67,24 +68,19 @@ function voidRect(limit) { const xs = limit.map((p) => p[0]), zs = limit.map((p)
 const OVERLAY = { depthCompare: 'always', depthWriteEnabled: false };
 // One SDF recipe for every TextLayer so glyph weight is identical across major/minor/extract text.
 const LABEL_SDF = { sdf: true, fontSize: 64, buffer: 8, radius: 12 };
-// The requirement line under an extract name. Hand-written because the raw notes are sentences
-// ("Requires lever activation in warehouse #4 and Factory emergency exit key") and a HUD chip is not a paragraph.
-const EXTRACT_SUB = {
-  'Old Gas Station': 'REQ: GREEN FLARE', 'Railroad Passage (Flare)': 'REQ: GREEN FLARE',
-  "Smugglers' Boat": 'REQ: VORON NOTE', "Smugglers' Bunker (ZB-1012)": 'REQ: VORON NOTE',
-  'Dorms V-Ex': 'REQ: 20K ROUBLES', 'ZB-013': 'REQ: LEVER + KEY',
-  'RUAF Roadblock': 'PVE ONLY', 'Boiler Room Basement (Co-op)': 'CO-OP · PMC + SCAV',
-};
-const SUB_BY_KIND = { 'extract-pmc': 'PMC ONLY', 'extract-scav': 'SCAV ONLY', 'extract-shared': 'PMC + SCAV', 'extract-transit': 'TRANSIT · 1 MIN' };
-const subText = (m) => EXTRACT_SUB[(m.name || '').trim()] ?? SUB_BY_KIND[m.kind] ?? '';
+// The requirement line under an extract name now lives in icons.js — the 2D popup, the 2D hover
+// chip and the 3D chip all quote the same string, and the badge's corner glyph is keyed off the
+// same table. It is no longer drawn permanently: only on hover or selection (step 4).
 // short form = full name minus any parenthetical: "Smugglers' Bunker (ZB-1012)" -> "SMUGGLERS' BUNKER"
 const shortName = (n) => (n || '').replace(/\s*\([^)]*\)\s*/g, ' ').trim().toUpperCase();
 const EXTRACT_ACCENT = { 'extract-pmc': C.accentExtract, 'extract-scav': C.accentExtractScav, 'extract-transit': C.accentExtractTransit, 'extract-shared': C.accentExtractNeutral };
 const markerLevel = (m) => ['surface', 'underground', 'rooftop', 'upper'].includes(m?.level) ? m.level : 'surface';
 const levelSuffix = (m) => markerLevel(m) === 'surface' ? '' : ` · ${markerLevel(m).toUpperCase()}`;
 const markerIconKey = (m) => {
-  const letter = m.kind.startsWith('extract') ? extractLetter(m.name) : null;
-  return `${m.kind}${letter ? `:${letter}` : ''}${markerLevel(m) === 'surface' ? '' : `:${markerLevel(m)}`}`;
+  const isExtract = m.kind.startsWith('extract');
+  const letter = isExtract ? extractLetter(m.name) : null;
+  const req = isExtract ? extractReq(m.name) : null;
+  return `${m.kind}${letter ? `:${letter}` : ''}${markerLevel(m) === 'surface' ? '' : `:${markerLevel(m)}`}${req ? `:${req}` : ''}`;
 };
 
 // icons/labels always on top of geometry
@@ -537,7 +533,10 @@ export async function createView3d(container, mapData, src) {
     })));
     return { canvas, mapping };
   }
-  const markerEntries = src.markers().filter((m) => KINDS[m.kind]).map((m) => [markerIconKey(m), iconDataUrl(m.kind, 64, m.kind.startsWith('extract') ? extractLetter(m.name) : null, markerLevel(m))]);
+  const markerEntries = src.markers().filter((m) => KINDS[m.kind]).map((m) => {
+    const isExtract = m.kind.startsWith('extract');
+    return [markerIconKey(m), iconDataUrl(m.kind, 64, isExtract ? extractLetter(m.name) : null, markerLevel(m), null, isExtract ? extractReq(m.name) : null)];
+  });
   // Quest pins carry their sequence number inside the hexagon (1..12 covers every quest in the
   // data; anything beyond falls back to the plain flag).
   const QUEST_BADGES = Array.from({ length: 12 }, (_, i) => String(i + 1));
@@ -670,8 +669,11 @@ export async function createView3d(container, mapData, src) {
     const full = z >= 0.6;
     let cand = markers.filter((m) => m.kind.startsWith('extract') && m.name).map((m) => {
       const k = eKey(m), lit = pinnedExtract === k || hoverExtract === k;
+      // The requirement is on the badge as a corner glyph now. Printing "REQ. GREEN FLARE" under
+      // every extract at every zoom was half the marker soup, so the words only appear for the
+      // one extract you are pointing at or have pinned.
       return { m, k, lit, text: (full || lit ? (m.name || '').toUpperCase() : shortName(m.name)) + levelSuffix(m),
-        sub: full || lit ? subText(m) : '', size: lit ? 13.5 : 12,
+        sub: lit ? subText(m) : '', size: lit ? 13.5 : 12,
         pos: Pg([m.position.x, m.position.z], 0.7),
         // Collision ranking uses the real-height field so changing visual relief cannot thin names.
         rankPos: P([m.position.x, m.position.z], H(m.position.x, m.position.z) / relief + 0.7) };
@@ -731,19 +733,84 @@ export async function createView3d(container, mapData, src) {
     ];
   }
 
+  /* --- marker LOD ------------------------------------------------------------------------
+   * The 3D view reads the same rule as the 2D map (src/lod.js): the tier is decided by metres per
+   * pixel, which in an OrbitView is 1 / 2^zoom. Extracts stay exempt and keep their own layer with
+   * its hover/pin behaviour; everything else is a dot, a badge, or a counted cluster.
+   */
+  const zoomIntoCluster = (c) => {
+    viewState = clampView({ ...viewState, target: [-c.x, -c.z, 0], zoom: Math.min(viewState.maxZoom ?? 5, (viewState.zoom ?? 0) + 1) });
+    deck.setProps({ viewState });
+    src.onViewChange?.(viewState);
+    render();
+  };
+  const COUNT_CHARS = [...'0123456789+'];
+  function lodMarkerLayers(markers) {
+    const mpp = 1 / Math.pow(2, viewState.zoom ?? 0);
+    const t = updateTier(mpp);
+    const rest = markers.filter((d) => !d.kind.startsWith('extract'));
+    let singles = rest, clusters = [];
+    if (t !== 'full') {
+      // Cluster inside a kind, never across kinds: merging a boss spawn into a scav count would
+      // throw away the one thing the colour is carrying.
+      const cell = cellFor(mpp);
+      singles = rest.filter((d) => !d.kind.startsWith('spawn-'));
+      const spawns = rest.filter((d) => d.kind.startsWith('spawn-'));
+      for (const kind of [...new Set(spawns.map((d) => d.kind))].sort()) {
+        for (const c of clusterPoints(spawns.filter((d) => d.kind === kind), cell)) {
+          if (c.count === 1) singles.push(c.points[0]);
+          else clusters.push({ ...c, kind, id: `${kind}:${c.key}` });
+        }
+      }
+    }
+    const dotColour = (d) => [...dotRgb(d.kind), 235];
+    const out = [];
+    if (t === 'dot') {
+      // 6 px across, no glyph: the category survives as colour, the clutter does not.
+      out.push(new ScatterplotLayer({ id: 'markers-dots', data: singles, getPosition: (d) => Pg([d.position.x, d.position.z], 0.65),
+        getRadius: 3, radiusUnits: 'pixels', radiusMinPixels: 3, radiusMaxPixels: 3,
+        stroked: true, lineWidthUnits: 'pixels', getLineWidth: 1, getLineColor: [...C.ink, 200], getFillColor: dotColour,
+        pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }));
+    } else {
+      out.push(new IconLayer({ id: 'markers-spawn', data: singles.filter((d) => d.kind.startsWith('spawn-')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: 26, sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }));
+      // everything else lies flat on the ground like chips on a table
+      out.push(new IconLayer({ id: 'markers-chips', data: singles.filter((d) => !d.kind.startsWith('spawn-')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.65), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: markerIconKey, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }));
+    }
+    if (clusters.length) {
+      const anchor = (d) => Pg([d.x, d.z], t === 'dot' ? 0.65 : 0.7);
+      out.push(t === 'dot'
+        ? new ScatterplotLayer({ id: 'cluster-marks', data: clusters, getPosition: anchor, getRadius: 4.5, radiusUnits: 'pixels', radiusMinPixels: 4.5, radiusMaxPixels: 4.5,
+          stroked: true, lineWidthUnits: 'pixels', getLineWidth: 1, getLineColor: [...C.ink, 220], getFillColor: dotColour,
+          pickable: true, onClick: (i) => { if (!i.object) return false; zoomIntoCluster(i.object); return true; },
+          parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })
+        : new IconLayer({ id: 'cluster-marks', data: clusters, getPosition: anchor, iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => d.kind, getSize: 24, sizeUnits: 'pixels', sizeMinPixels: 18, sizeMaxPixels: 32, billboard: true,
+          pickable: true, onClick: (i) => { if (!i.object) return false; zoomIntoCluster(i.object); return true; },
+          parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }));
+      // The count bubble. A TextLayer with a background is the whole bubble — no second atlas, and
+      // the character set is 11 glyphs, so it costs nothing.
+      out.push(new TextLayer({ id: 'cluster-counts', data: clusters, getPosition: anchor, getText: (d) => clusterCount(d.count), characterSet: COUNT_CHARS,
+        getSize: 10, sizeUnits: 'pixels', sizeMinPixels: 9, sizeMaxPixels: 12, getPixelOffset: t === 'dot' ? [8, -8] : [11, -12],
+        getColor: [...C.cream, 255], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF,
+        background: true, getBackgroundColor: [10, 14, 12, 235], backgroundPadding: [3, 1, 3, 1],
+        getBorderColor: [...C.creamDim, 140], getBorderWidth: 1,
+        billboard: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch, getPixelOffset: t }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }));
+    }
+    return out;
+  }
+
   const dynamicLayers = () => {
     const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z) && (floor !== 'U' || markerLevel(m) === 'underground'));
     const labels = src.labels().filter((d) => inLimit(d.position[0], d.position[1])
       && (floor === 'U' ? d.floor === 'U' || d.floor === 'both' : d.floor !== 'U'));
     const players = src.players().filter((p) => p.last);
     return [
-      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract') || d.kind.startsWith('spawn-')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      // Extracts are exempt from the LOD tier: they are what the map is for.
+      new IconLayer({ id: 'markers-extract', data: markers.filter((d) => d.kind.startsWith('extract')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.7), iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: markerIconKey, getSize: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? 30 : 26), sizeUnits: 'pixels', sizeMinPixels: 20, sizeMaxPixels: 36, billboard: true, pickable: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPixelOffset: (d) => (eKey(d) === hoverExtract || eKey(d) === pinnedExtract ? [0, -4] : [0, 0]),
         updateTriggers: { getPosition: heightEpoch, getSize: [hoverExtract, pinnedExtract], getPixelOffset: [hoverExtract, pinnedExtract] },
         onHover: (i) => { const k = i.object && i.object.kind.startsWith('extract') ? eKey(i.object) : null; if (k !== hoverExtract) { hoverExtract = k; render(); } },
         onClick: (i) => { if (!i.object || !i.object.kind.startsWith('extract')) return false; const k = eKey(i.object); pinnedExtract = pinnedExtract === k ? null : k; render(); return true; } }),
-      // everything else lies flat on the ground like chips on a table
-      new IconLayer({ id: 'markers-chips', data: markers.filter((d) => !d.kind.startsWith('extract') && !d.kind.startsWith('spawn-')), getPosition: (d) => Pg([d.position.x, d.position.z], 0.65), iconAtlas: chipAtlas.canvas, iconMapping: chipAtlas.mapping, getIcon: markerIconKey, getSize: 18, sizeUnits: 'pixels', sizeMinPixels: 10, sizeMaxPixels: 20, billboard: false, pickable: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+      ...lodMarkerLayers(markers),
       ...pingLayers(labels),
       // TRACK C typography: majors are UPPERCASE/700, minors Title Case/600 — case, not a second grey,
       // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
@@ -792,7 +859,8 @@ export async function createView3d(container, mapData, src) {
       if (layer.id === 'roofs') return { html: `<b>${esc(object.b.place ?? object.b.name ?? object.b.kind)}</b><br>${object.b.floors} floor${object.b.floors > 1 ? 's' : ''} · ${object.b.height} m`, className: 'deck-tooltip' };
       if (layer.id === 'props') return { html: `<b>${esc(object.p.name ?? object.p.type)}</b>`, className: 'deck-tooltip' };
       if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
-      if (layer.id === 'markers-extract' || layer.id === 'markers-chips') return { html: object.html, className: 'deck-tooltip' };
+      if (layer.id.startsWith('cluster-')) return { html: `<b>${object.count} ${esc((KINDS[object.kind]?.label ?? 'markers').toLowerCase())}</b>click to zoom in`, className: 'deck-tooltip' };
+      if (layer.id.startsWith('markers-')) return object.html ? { html: object.html, className: 'deck-tooltip' } : null;
       if (layer.id === 'quest-markers') return { html: object.html, className: 'deck-tooltip' };
       if (layer.id === 'players' || layer.id === 'player-ring' || layer.id === 'player-piece') { if (layer.id === 'player-piece') object = object.p; const y = object.last.y ?? 0, g = H(object.last.x, object.last.z) / relief, rel = y - g; const fl = rel < -1.5 ? 'underground' : rel < 2.6 ? 'ground' : `floor ${Math.floor(rel / 3.3) + 1}`; const note = relief === 1 ? '' : `<br>Relief ${relief}× · ground height visually exaggerated`; return { html: `<b>${esc(object.name)}</b><br>${fl} · x ${object.last.x} z ${object.last.z} y ${y}${note}`, className: 'deck-tooltip' }; }
       return null;
