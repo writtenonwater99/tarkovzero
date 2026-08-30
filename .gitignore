@@ -6,6 +6,7 @@ dist
 .e2e
 .env*
 companion/companion.json
+companion/companion-quests.json
 companion/elevation-*.jsonl
 # quest-layer build inputs: crawled/downloaded, re-fetched by scripts/build-quests.mjs
 scripts/data/tasks/

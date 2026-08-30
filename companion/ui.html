@@ -60,6 +60,7 @@
   .check .lbl { margin: 0; color: var(--ink); font-size: 14px; }
 
   .kv { display: grid; grid-template-columns: 56px 1fr; gap: 6px 10px; font-family: var(--mono); font-size: 14px; }
+  .kv.wide { grid-template-columns: 72px 1fr; }
   .kv dt { color: var(--faint); font-size: 12px; align-self: center; }
   .kv dd { margin: 0; }
   .stale { color: var(--faint); }
@@ -85,6 +86,7 @@
     <span class="pill" id="relayPill"><span class="dot" id="relayDot"></span><span id="relayText">…</span></span>
     <span class="pill" id="gamePill"><span class="dot" id="gameDot"></span><span id="gameText">…</span></span>
     <span class="pill">map <b id="mapText" style="color:var(--ink)">…</b></span>
+    <span class="pill" id="questPill">quests <b id="questText" style="color:var(--ink)">…</b></span>
     <span class="spacer"></span>
     <span class="pill" id="sentPill">sent <b id="sentText" style="color:var(--ink)">0</b></span>
   </header>
@@ -112,6 +114,19 @@
         <dt>name</dt><dd id="pname">—</dd>
         <dt>ago</dt><dd id="pago" class="stale">no position yet</dd>
       </dl>
+    </section>
+
+    <section class="card">
+      <h2>Active quests</h2>
+      <dl class="kv wide">
+        <dt>active</dt><dd id="qActive">—</dd>
+        <dt>done</dt><dd id="qDone">—</dd>
+        <dt>failed</dt><dd id="qFailed">—</dd>
+        <dt>unknown</dt><dd id="qUnknown">—</dd>
+        <dt>since</dt><dd id="qSince">—</dd>
+        <dt>sent</dt><dd id="qSent">—</dd>
+      </dl>
+      <p class="hint" id="qNote" style="margin:12px 0 0"></p>
     </section>
 
     <section class="card">
@@ -237,6 +252,21 @@
     $('dirAuto').style.display = auto ? '' : 'none';
     $('dirState').textContent = s.simulate ? 'simulation mode — folder not watched'
       : s.dirExists ? 'folder exists' : 'not created yet — EFT makes it on the first screenshot';
+
+    const q = s.quests;
+    $('questText').textContent = q ? String(q.active) : 'off';
+    $('questPill').title = q ? ((q.ids || []).join('\n') || 'no active quests seen in the EFT logs yet')
+      : 'quest tracking is off (--no-quests)';
+    $('qActive').textContent = q ? q.active : '—';
+    $('qDone').textContent = q ? q.done : '—';
+    $('qFailed').textContent = q ? q.failed : '—';
+    $('qUnknown').textContent = q ? q.unknown : '—';
+    $('qSince').textContent = (q && q.since) || '—';
+    $('qSent').textContent = q ? q.sent : '—';
+    $('qNote').textContent = !q ? 'Quest tracking is off (--no-quests).'
+      : q.since ? 'Replayed from the EFT quest messages since ' + q.since + '. Quests started before your'
+          + ' oldest kept log are missing — add them by hand on the site.'
+      : 'No EFT log sessions found yet — set the logs folder with --logs.';
 
     const p = s.lastPos;
     lastPosAt = p ? p.t : null;

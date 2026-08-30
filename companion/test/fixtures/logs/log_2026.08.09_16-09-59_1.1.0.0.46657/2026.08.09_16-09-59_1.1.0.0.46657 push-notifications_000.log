@@ -1,0 +1,35 @@
+2026-08-09 16:10:12.118|1.1.0.0.46657|Info|push-notifications|NotificationManager: new params received url:  ws:wss://wsn-pvp-season-02.escapefromtarkov.com/push/notifier/getwebsocket/2222222222222222222222222222222222222222222222222222222222222222
+2026-08-09 16:11:33.902|1.1.0.0.46657|Info|push-notifications|LongPollingWebSocketRequest result Count:321 MessageType:Text
+2026-08-09 16:11:33.902|1.1.0.0.46657|Info|push-notifications|LongPollingWebSocketRequest received:321
+2026-08-09 16:11:33.904|1.1.0.0.46657|Info|push-notifications|Got notification | ChatMessageReceived
+{
+  "type": "new_message",
+  "eventId": "6a7a41d5cc0e8b7a2f0b1e44",
+  "dialogId": "54cb57776803fa99248b456e",
+  "message": {
+    "_id": "6a7a41d5a19c40b7d3072f10",
+    "type": 10,
+    "dt": 1786385493,
+    "templateId": "657315ddab5a49b71f098853 description",
+    "hasRewards": false,
+    "maxStorageTime": 1209600
+  }
+}
+2026-08-09 16:11:33.904|1.1.0.0.46657|Info|push-notifications|NotificationManager.ProcessMessage | Received notification: Type: ChatMessageReceived, Time: 0, Duration: Default, ShowNotification: False
+2026-08-09 16:11:35.470|1.1.0.0.46657|Info|push-notifications|LongPollingWebSocketRequest result Count:321 MessageType:Text
+2026-08-09 16:11:35.470|1.1.0.0.46657|Info|push-notifications|LongPollingWebSocketRequest received:321
+2026-08-09 16:11:35.472|1.1.0.0.46657|Info|push-notifications|Got notification | ChatMessageReceived
+{
+  "type": "new_message",
+  "eventId": "6a7a41d7f6a0b1cc5e0e7712",
+  "dialogId": "54cb57776803fa99248b456e",
+  "message": {
+    "_id": "6a7a41d70cb5f4a2860d1b93",
+    "type": 10,
+    "dt": 1786385495,
+    "templateId": "596a0e1686f7741ddf17dbee description",
+    "hasRewards": false,
+    "maxStorageTime": 1209600
+  }
+}
+2026-08-09 16:11:35.472|1.1.0.0.46657|Info|push-notifications|NotificationManager.ProcessMessage | Received notification: Type: ChatMessageReceived, Time: 0, Duration: Default, ShowNotification: False

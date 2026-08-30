@@ -25,6 +25,8 @@ A small local page on **http://127.0.0.1:4173** (opened automatically at startup
 - settings you can change while it runs — username, screenshots folder, map override, delete-after-3 s,
   auto-screenshot interval — applied and saved to `companion.json` on **Save**;
 - the last position (x / y / z / yaw / map / seconds ago), live;
+- **Active quests** — how many quests you have started / finished / failed, the date the reconstruction
+  starts from, and how many quest sets have been sent (the header pill lists the ids on hover);
 - a live log of everything the companion prints;
 - a **Quit** button.
 
@@ -49,6 +51,8 @@ Options (persisted in `companion.json`):
 | `--code <CODE>` / `--newcode` | random | pairing code |
 | `--keep` | delete PNGs after 3 s | keep screenshots |
 | `--auto <ms>` | off | auto-press the screenshot key every N ms (input automation; your call). Key is read from the EFT log (`MakeScreenshot` binding, default PrintScreen) |
+| `--no-quests` | — | don't read the quest log at all (nothing about quests leaves the PC) |
+| `--reset-quests` | — | throw away `companion-quests.json` and rebuild it from the logs on this run |
 | `--verbose` | — | print each filename and log-detection details |
 | `--simulate` | — | no game: walks a fake player around Customs |
 | `--port <n>` | `4173` | UI port; if it's busy the next 20 ports are tried |
@@ -63,7 +67,38 @@ The folder is polled every 250 ms rather than `fs.watch`ed (fs.watch is silent o
 EFT embeds position + rotation in every screenshot filename. The companion watches the folder, parses the
 filename, and sends `{x, y, z, yaw, map}` to the relay under your code. If a username is set it rides along in
 every position message as `name` (the site reads `m.name` and labels your arrow with it instead of the code).
-Nothing else leaves your PC.
+
+## Active quests
+
+EFT logs a chat message every time a quest is started (`type: 10`), failed (`11`) or finished (`12`) —
+`build\Logs\log_*\* push-notifications_000.log`, a header line followed by pretty-printed JSON. There is no
+"current quests" snapshot anywhere, so `quests.mjs` **replays** those messages across every `log_*` session,
+oldest first, in `dt` order: started adds, finished/failed removes. The first token of `templateId` is the
+task id that `public/data/quests.json` is keyed on; ids that file doesn't know (trader mail) are counted
+separately and never published.
+
+The result lives in `companion-quests.json` next to `companion.json` (git-ignored) together with a cursor
+(`{file, offset}`), so a restart resumes instead of re-reading, and message `_id`s already applied are
+skipped. Your `AccountId` / `ProfileId` come from `application_000.log`
+(`PrepareSelectedProfileLocally ProfileId:… AccountId:…`). A different `AccountId` is a different player: the
+reconstruction is thrown away and rebuilt from that session only. A different `ProfileId` on the same account
+is ambiguous, so it only wipes when no quest events follow it (a fresh character); if the quest log keeps
+going the reconstruction is kept and the companion says so. `--reset-quests` wipes by hand.
+
+On every change and on every relay (re)connect the companion sends
+
+```
+POST <relay over http>/quests/<CODE>
+{"active":[taskId…],"done":[…],"failed":[…],"accountId":"…","ts":1788056390936,"since":"2026-08-04"}
+```
+
+and the relay forwards it to the site as `{"type":"quests", …}` (also cached for late joiners, exactly like
+the last position). So besides your position, what leaves the PC is: the quest ids you have started/finished/
+failed and your numeric EFT account id (it is what tells the site "this is still the same profile"). Nothing
+else — no names, no items, no chat text. `--no-quests` switches the whole thing off.
+
+**Caveat:** EFT rotates old log folders away, so quests you started before your oldest kept log are invisible
+to the replay. The UI shows the "since" date; add anything missing by hand on the site.
 
 ## Local HTTP API
 
@@ -72,8 +107,22 @@ Same-origin, 127.0.0.1 only, token required (`X-TZ-Token` header, or `?t=` for t
 | route | meaning |
 |---|---|
 | `GET /` | the UI page |
-| `GET /api/state` | full state: code, name, folders, map, relay status, `sent`, `lastPos`, last 100 log lines, version |
+| `GET /api/state` | full state: code, name, folders, map, relay status, `sent`, `lastPos`, `quests` (counts + `since` + active ids), last 100 log lines, version |
 | `POST /api/config` | `{ name, dir, map, deleteScreenshots, autoMs, relay }` — any subset; applied immediately and persisted |
 | `POST /api/newcode` | new pairing code + relay reconnect |
 | `POST /api/quit` | stops the companion |
 | `GET /api/events` | Server-Sent Events: every log line, plus `{"state":true}` hints to refetch state |
+
+## Tests
+
+```
+npm run test:quests            # from the repo root — node --test, no dependencies
+```
+
+Covers the quest-log parser and the state machine against `test/fixtures/` (three synthetic log sessions in
+the game's exact format — see `test/fixtures/README.md`): replay order, dedupe, finished-removes-active,
+`dt` ordering across separate polls, cursor resume and live tailing, a truncated tail and a read failure in
+an old session, the account- and profile-change resets (one branch each), and unknown ids.
+
+`npm run test:relay` runs the relay's own suite (bad bodies, out-of-order quest posts, list caps), and
+`npm test` runs both.
