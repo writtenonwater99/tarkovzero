@@ -37,6 +37,8 @@ export const COMMANDS = [
   { name: 'north', hint: 'reset the compass (3D)' },
   { name: 'live', hint: 'open the Live panel' },
   { name: 'quests', hint: 'open the Quests panel' },
+  // Two words, like `clear trails`, so `> quests` keeps meaning the panel and `> my` means the log.
+  { name: 'my quests', hint: 'the quests the game says you are on', aliases: ['active quests'] },
   { name: 'pin', arg: 'quests | layers', hint: 'keep a panel open' },
   { name: 'clear trails', hint: 'wipe the live trails' },
   { name: 'help', hint: 'controls and shortcuts' },
@@ -289,6 +291,7 @@ export function createOmnibox(deps = {}) {
       case 'north': a.north?.(); return 'Compass reset';
       case 'live': a.panel?.('live', true); return 'Live panel';
       case 'quests': a.panel?.('quests', true); return 'Quests panel';
+      case 'my quests': a.myQuests?.(); return 'My quests';
       case 'help': a.help?.(); return 'Controls';
       case 'clear trails': a.clearTrails?.(); return 'Trails cleared';
       case 'pin': { const n = q.startsWith('l') ? 'layers' : 'quests'; a.pin?.(n, true); return `Pinned ${n}`; }
