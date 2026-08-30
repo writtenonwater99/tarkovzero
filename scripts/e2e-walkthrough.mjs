@@ -201,7 +201,7 @@ async function main() {
   const t0 = Date.now();
   try {
     /* -- 1 ------------------------------------------------- default view is the diorama -- */
-    await step(page, "1. load default → 3D diorama, oblique camera", 'load-3d', async () => {
+    await step(page, "1. load default → 3D diorama, oblique camera, render assets armed", 'load-3d', async () => {
       await page.navigate(URL);
       await page.waitFor('!!window.tz', { timeout: 30_000, label: 'window.tz' });
       await page.waitFor('window.tz.markers().total > 0', { timeout: 30_000, label: 'marker data' });
@@ -228,7 +228,21 @@ async function main() {
       assert(near(cam.rotationX, 32, 0.5), `camera rotationX is ${cam.rotationX}, expected ≈ 32`);
       const cell = await page.evaluate('document.querySelector("#view-toggle .seg-cell.on")?.dataset.view');
       assert(cell === '3d', `the 2D/3D control shows "${cell}" as active`);
-      return { view, rotationX: cam.rotationX, rotationOrbit: cam.rotationOrbit, frameMean: Number(stats.mean.toFixed(1)), blackFrameRetry: retried };
+
+      // The Stage 1 render assets are the branch's headline deliverable and nothing could see them:
+      // armRenderAssets() catches every failure by design, and a `dist` with public/assets/3d
+      // deleted walked this whole chain green with `ready:false`, no ground detail and no grade.
+      // The frame stays up either way — this is the check that says whether the look shipped.
+      await page.waitFor('window.tz.renderStats()?.assets?.ready === true', { timeout: 25_000, label: 'the Stage 1 render assets' });
+      const rs = await page.evaluate('window.tz.renderStats()');
+      assert(rs.look === 'realistic', `the default look is "${rs.look}", expected "realistic"`);
+      assert(rs.groundDetail === true, 'the realistic terrain is drawing without its ground-detail material');
+      assert(rs.post.enabled && rs.post.armed, `the grade pass is not armed (${JSON.stringify(rs.post)})`);
+      assert(rs.post.fxaa === false, 'FXAA is back on in a full-screen pass — it eats every label');
+      assert(rs.textureBytes.groundDetail > 0 && rs.textureBytes.gradeLut > 0,
+        `no asset bytes uploaded: ${JSON.stringify(rs.textureBytes)}`);
+      return { view, rotationX: cam.rotationX, rotationOrbit: cam.rotationOrbit, frameMean: Number(stats.mean.toFixed(1)), blackFrameRetry: retried,
+        assets: { ready: rs.assets.ready, sourceBytes: rs.assets.sourceBytes, groundDetail: rs.textureBytes.groundDetail, gradeLut: rs.textureBytes.gradeLut } };
     });
 
     /* -- 2 ---------------------------------------------- omnibox lookup flies the camera -- */

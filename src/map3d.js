@@ -1201,7 +1201,11 @@ export async function createView3d(container, mapData, src) {
       assetsReady = true;
     } catch (e) {
       assetsError = String(e?.message ?? e);
-      console.warn('render assets unavailable; ground detail and grade are off', e);
+      // console.ERROR, not warn: the frame stays up (that is the point of catching), but the look
+      // the branch ships is not on screen, and a warn is invisible to every gate we have — the e2e
+      // console check records `error`/`exception` only, so the whole Stage 1 asset set could go
+      // missing and every check stayed green.
+      console.error('render assets unavailable; ground detail and grade are off', e);
     }
   }
   render();
