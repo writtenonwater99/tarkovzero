@@ -305,6 +305,15 @@ export function decodeHdr(buf) {
 
   const rgbe = new Uint8Array(width * height * 4);
   const row = new Uint8Array(width * 4);
+  // Every read past the end of the buffer is a hard error. Without this a
+  // truncated file decodes `undefined` as a run length, `x` never advances, and
+  // the `while (x < width)` loops spin forever with no output — the build hangs
+  // instead of failing. A zero-length run does the same thing, so it is rejected
+  // as well.
+  const byteAt = (i) => {
+    if (i >= buf.length) throw new Error('truncated .hdr: scanline data ends mid-run');
+    return buf[i];
+  };
   for (let y = 0; y < height; y++) {
     if (width >= 8 && width < 0x8000 && buf[pos] === 2 && buf[pos + 1] === 2 &&
         ((buf[pos + 2] << 8) | buf[pos + 3]) === width) {
@@ -313,13 +322,15 @@ export function decodeHdr(buf) {
       for (let c = 0; c < 4; c++) {
         let x = 0;
         while (x < width) {
-          let count = buf[pos++];
+          let count = byteAt(pos++);
+          const run = count > 128 ? count - 128 : count;
+          if (run === 0) throw new Error('malformed .hdr: zero-length RLE run');
+          if (x + run > width) throw new Error('malformed .hdr: RLE run overruns the scanline');
           if (count > 128) {
-            count -= 128;
-            const v = buf[pos++];
-            for (let i = 0; i < count; i++) row[(x++) * 4 + c] = v;
+            const v = byteAt(pos++);
+            for (let i = 0; i < run; i++) row[(x++) * 4 + c] = v;
           } else {
-            for (let i = 0; i < count; i++) row[(x++) * 4 + c] = buf[pos++];
+            for (let i = 0; i < run; i++) row[(x++) * 4 + c] = byteAt(pos++);
           }
         }
       }
@@ -328,10 +339,15 @@ export function decodeHdr(buf) {
       let x = 0;
       let shift = 0;
       while (x < width) {
-        const r = buf[pos], g = buf[pos + 1], b = buf[pos + 2], e = buf[pos + 3];
+        const r = byteAt(pos), g = byteAt(pos + 1), b = byteAt(pos + 2), e = byteAt(pos + 3);
         pos += 4;
         if (r === 1 && g === 1 && b === 1) {
+          // A repeat marker copies the PREVIOUS pixel, so there has to be one.
+          if (x === 0) throw new Error('malformed .hdr: RLE run at the start of a scanline');
+          // `shift` extends a long run across consecutive markers, so a zero
+          // high byte is legal here; only an overrun is not.
           const count = e << shift;
+          if (x + count > width) throw new Error('malformed .hdr: RLE run overruns the scanline');
           const base = (x - 1) * 4;
           for (let i = 0; i < count; i++, x++) {
             row[x * 4] = row[base]; row[x * 4 + 1] = row[base + 1];
