@@ -370,7 +370,7 @@ export function buildTerrain(data, relief = 3) {
   ctx.putImageData(img, 0, 0);
 
   // (g) contours, drawn into the same canvas — perfectly smooth at any zoom, zero layers, no z-fighting
-  drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax);
+  drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax, relief);
   // Roads/rail/pavement are last so map symbols cover contours exactly as they would on a printed
   // topographic sheet. This is still the terrain's one texture, not a second draped surface.
   drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz);
@@ -567,12 +567,17 @@ export function buildTerrain(data, relief = 3) {
 // ---------------------------------------------------------------- contours (baked, not a layer)
 // marching squares on the fine bicubic field, Chaikin-smoothed twice, stroked straight onto the texture.
 // 2 m minors / 10 m index lines: at 1 m the 11 m range draws concentric bullseyes around every dome.
-function drawContours(ctx, fine, gw, gh, hmin, hmax) {
+// The interval is 2 REAL metres, so it is stepped by `relief` — the field handed in here is already
+// exaggerated. Without that, 3x relief drew a line every 67 cm of real ground: three times the ink
+// the map wants, and on Woods (a 145 m exaggerated range) 73 marching-squares passes over a 2048px
+// raster instead of 24, which was the largest single cost in a Woods first paint.
+function drawContours(ctx, fine, gw, gh, hmin, hmax, relief = 1) {
   const SS = 4;                                   // sample every 4th texel
+  const step = 2 * (relief > 0 ? relief : 1), major = 10 * (relief > 0 ? relief : 1);
   const nx = Math.floor(gw / SS), nz = Math.floor(gh / SS);
   const at = (i, j) => fine[Math.min(gh - 1, j * SS) * gw + Math.min(gw - 1, i * SS)];
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (let lv = Math.ceil(hmin / 2) * 2; lv <= hmax; lv += 2) {
+  for (let lv = Math.ceil(hmin / step) * step; lv <= hmax; lv += step) {
     const segs = [];
     for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
       const v = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
@@ -588,9 +593,9 @@ function drawContours(ctx, fine, gw, gh, hmin, hmax) {
       else if (pts.length === 4) { segs.push([pts[0], pts[1]]); segs.push([pts[2], pts[3]]); }
     }
     if (!segs.length) continue;
-    const major = lv % 10 === 0;
-    ctx.strokeStyle = major ? 'rgba(20,32,20,0.38)' : 'rgba(26,42,26,0.20)';
-    ctx.lineWidth = major ? 1.45 : 0.9;
+    const isIndex = Math.abs(lv % major) < 1e-6;
+    ctx.strokeStyle = isIndex ? 'rgba(20,32,20,0.38)' : 'rgba(26,42,26,0.20)';
+    ctx.lineWidth = isIndex ? 1.45 : 0.9;
     ctx.beginPath();
     for (const s of joinSegments(segs)) {
       const p = chaikin(chaikin(s));
