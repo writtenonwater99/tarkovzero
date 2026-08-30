@@ -18,10 +18,10 @@ noise/LUT. Nothing here changes map data, geometry, feature IDs, or picking.
 | `macro-noise` | `materials/macro-noise-256.png` | 149,744 | Seamless breakup tile: macro tint / wetness mask / detail / Bayer dither |
 | `autumn-crossing-sky` | `environment/autumn-crossing-sky-256.png` | 64,046 | Tone-mapped equirect sky/ambient reference |
 | `autumn-crossing-light` | `environment/autumn-crossing-light.json` | 2,372 | SH9 **radiance** (unconvolved), hemisphere colours, dominant-light estimate |
-| `overcast-grade-lut` | `environment/overcast-grade-lut-16.png` | 3,470 | 16³ colour-grade LUT (256×16 strip) for the combined post pass |
+| `overcast-grade-lut` | `environment/overcast-grade-lut-16.png` | 3,177 | 16³ colour-grade LUT (256×16 strip) for the combined post pass |
 | `autumn-crossing-gradient` | `environment/autumn-crossing-gradient.png` | 391 | 8×128 background gradient strip, zenith at top |
-| `render-assets.json` | `render-assets.json` | 4,299 | Shipped asset index + attribution |
-| **Total** | | **1,722,128 (1.64 MiB)** | **13.7% of the 12 MiB Stage 1 budget** |
+| `render-assets.json` | `render-assets.json` | 4,906 | Shipped asset index + attribution (now with `width`/`height` and `retrievedAt`) |
+| **Total** | | **1,722,844 (1.64 MiB)** | **13.7% of the 12 MiB Stage 1 budget** |
 
 Nothing was dropped for budget. The budget is enforced in the script, not just documented:
 the run is aborted **before anything is written** if the shipped total would exceed it.
@@ -39,9 +39,9 @@ instruction in its `conventions.shConvolution` / `conventions.shLambertA` fields
 | Source | Downloaded | Shipped derivative | Reduction |
 |---|---:|---:|---:|
 | `Ground106_1K-PNG.zip` (11 files, 1024²) | 20,293,422 | 1,498,208 (3 maps at 512²) | 92.6% |
-| `autumn_crossing_1k.hdr` (1024×512 HDR) | 1,889,442 | 66,407 (preview + gradient + SH JSON) | 96.5% |
-| generated (no download) | 0 | 153,214 | — |
-| **Total** | **22,182,864 (21.16 MiB)** | **1,722,128 (1.64 MiB)** | **92.2%** |
+| `autumn_crossing_1k.hdr` (1024×512 HDR) | 1,889,442 | 66,809 (preview + gradient + SH JSON) | 96.5% |
+| generated (no download) | 0 | 152,921 | — |
+| **Total** | **22,182,864 (21.16 MiB)** | **1,722,844 (1.64 MiB)** | **92.2%** |
 
 Source packs stay in the git-ignored cache and are never committed or served.
 
@@ -77,7 +77,7 @@ node scripts/prepare-render-assets.mjs --check             # verify, write nothi
 node scripts/prepare-render-assets.mjs --offline           # fail instead of downloading
 node scripts/prepare-render-assets.mjs --verify-licenses   # re-check all four licence pages
 node scripts/prepare-render-assets.mjs --ktx2-report        # measure the KTX2 alternative
-npm run test:render-style                  # unit tests for the style contract
+npm test                                   # 60 unit tests (style contract + codecs)
 ```
 
 First run downloads ~21 MiB into `.cache/render-assets/` (git-ignored). Later runs are
@@ -95,10 +95,10 @@ run 1 and run 2 sha256 over public/assets/3d/** + the manifest: identical
 060e727f2ef4ccf09415546bd5c51cb6e5a942111898933f071e8e39b9afdc02  ground106-orm-512.png
 9d84bc296cdabbfc83d7d44328976053dfc3a4d1ce9bda314d48847654236f37  autumn-crossing-sky-256.png
 956bb6f0b3d9f057ed8256073643d9f6cb2bc161d27254a945d8d752bba54714  autumn-crossing-gradient.png
-f827e9a05a33aa259e3d8960ec2bf988c4ae7a7344598143b5b84f05cabe7a6f  autumn-crossing-light.json
+6fd17c32d2b37d93dfcced9ecd422b1cae19f2768865de0356f6ab987182d42f  autumn-crossing-light.json
 5143d269dc3ea7fd6383669ffe68ba75408e8ab0ee27bbe0449fc23fbe3983b1  macro-noise-256.png
-b08c5d63a3405fb4ea91c49d941fd9cfbdc2953d8313c5b7069d3139167d0bc1  overcast-grade-lut-16.png
-d077ecf749cd7b7207756584d800c8b59347f9907c535552139b22aa539e1bbb  render-assets.json
+0b37497d6d2b57d7de6f1db1d185c3465099666cda9a37be048faaa591e31690  overcast-grade-lut-16.png
+de8a6fa6e55b02e85d020be32257b7df55a0d54db98142ead6d12829b1d055b9  render-assets.json
 ```
 
 What makes that hold:
@@ -108,9 +108,16 @@ What makes that hold:
   is no transitive encoder that can change output under us.
 - **Pinned deflate.** Every PNG is written with one fixed level/strategy/windowBits/memLevel;
   the zlib version is recorded in the manifest's `toolchain` block.
-- **No timestamps.** No `tIME` chunk, no `generatedAt` field, no mtime in any output.
-- **Pinned sources.** Each download is checked against its recorded sha256; a changed
-  upstream file fails the run with both hashes rather than silently reprocessing.
+- **No timestamps.** No `tIME` chunk, no `generatedAt` field, no mtime in any output. The
+  manifest holds exactly one date per source, `retrievedAt`, and it is written only when
+  bytes actually come off the network — a cache hit never touches it.
+- **Pinned sources.** Each download is checked against its recorded sha256. Downloads land
+  in a `.part` file and are renamed into place, so an interrupted run cannot leave a
+  truncated cache entry; a mismatch on a *cached* file is treated as a damaged local copy
+  and re-fetched once, and only a mismatch on freshly downloaded bytes is reported as an
+  upstream change needing a licence review.
+- **The filename cannot lie.** Every produced image is checked against the resolution its
+  declared path advertises, and `width`/`height` ship in the asset index.
 - **Integer-ratio resampling only.** Box filters refuse a non-integer ratio, so a resolution
   change can never silently become a different filter. Colour is averaged in linear light,
   normals are averaged then renormalised, and linear data (AO/roughness) is averaged as-is.
@@ -213,8 +220,15 @@ background for a kilometre-wide map.
 
 - Fetcher run twice → byte-identical outputs (hashes above); `--check` passes against the
   committed tree.
-- `--verify-licenses` → all four licence pages fetched, all still CC0.
-- `npm run test:render-style` → 20/20 pass.
+- `--verify-licenses` → all four licence pages fetched, each still containing the exact
+  sentence recorded in the manifest.
+- `npm test` → 60/60 pass.
+- Failure paths exercised in a sandbox copy (never in the worktree): an over-budget run
+  leaves the tree untouched; `detailSize` bumped to 1024 is refused rather than shipped
+  under a `-512.png` name; an undeclared file under the output root fails `--check`; a
+  truncated cache entry is named as a local problem under `--offline` and self-heals
+  online; an unreachable licence page reports a network failure, not a licence change;
+  a broken download URL and a malformed manifest both fail with their own message.
 - `npm run build` → passes (968 modules, built in 35.8s). `public/` is copied verbatim by
   Vite; the shipped PNGs land in `dist/assets/3d/` with identical sha256, so no bundler
   transform touches them.
