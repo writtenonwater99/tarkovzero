@@ -130,7 +130,12 @@ let ws = null, sent = 0, lastPos = null, reconnectTimer = null;
 function connect() {
   const target = `${cfg.relay}/pub/${cfg.code}`;
   const mine = ws = new WebSocket(target);
-  ws.on('open', () => { if (ws === mine) { log('connected to relay'); stateChanged(); postQuests('connect', { force: true }); } });
+  ws.on('open', () => {
+    if (ws !== mine) return;
+    log('connected to relay'); stateChanged();
+    if (questsKnown()) postQuests('connect', { force: true });
+    else if (quests && verbose) log('quests: nothing reconstructed yet — not publishing an empty set');
+  });
   ws.on('close', () => {
     if (ws !== mine) return; // superseded by a newer socket (code/relay change)
     log('relay disconnected, retrying…'); stateChanged();
@@ -244,14 +249,16 @@ function rememberPos(msg) {
 // replays every log session and keeps the result in companion-quests.json. The set is POSTed to
 // the relay (HTTP, same host as the websocket) whenever it moves and on every (re)connect.
 const questsEnabled = !args['no-quests'] && String(args.quests ?? '').toLowerCase() !== 'off';
-let quests = null, questsSent = 0, lastQuestsJson = null, fetchWarned = false;
+let quests = null, questsSent = 0, lastQuestsJson = null, fetchWarned = false, questPostBusy = false, questPostAgain = null;
 if (questsEnabled) {
   quests = new QuestTracker({ logsDir, statePath: QUEST_STATE, questsFile: path.join(here, '..', 'public', 'data', 'quests.json'), log });
   if (args['reset-quests']) quests.reset('--reset-quests');
 }
 const relayHttp = () => String(cfg.relay).replace(/^ws/i, 'http').replace(/\/+$/, '');
-async function postQuests(reason, { force = false } = {}) {
-  if (!quests) return;
+// True once the tracker has actually read a log: without this a companion pointed at a missing/wrong
+// logs folder would publish an empty set on connect and wipe the relay's cached one for that code.
+const questsKnown = () => !!quests && !!(quests.state.since || quests.state.active.length || quests.state.done.length || quests.state.failed.length);
+async function sendQuests(reason, force) {
   const body = JSON.stringify(quests.snapshot());
   if (!force && body === lastQuestsJson) return;
   if (typeof fetch !== 'function') { if (!fetchWarned) { fetchWarned = true; log('quests: this Node has no fetch (needs Node 18+) — quest sync disabled'); } return; }
@@ -262,6 +269,20 @@ async function postQuests(reason, { force = false } = {}) {
     if (verbose || reason === 'connect') log(`quests: sent ${quests.state.active.length} active to the relay (${reason})`);
     stateChanged();
   } catch (e) { log('quests: could not reach the relay: ' + e.message); }
+}
+// One POST at a time: these are fired and forgotten from a 250 ms interval, and two in flight can finish
+// out of order — the older body would then win both the dedupe key here and the room cache on the relay.
+// A post asked for while one is running is collapsed into a single follow-up with the newest snapshot.
+async function postQuests(reason, { force = false } = {}) {
+  if (!quests) return;
+  if (questPostBusy) { questPostAgain = { reason, force: force || !!questPostAgain?.force }; return; }
+  questPostBusy = true;
+  try { await sendQuests(reason, force); }
+  finally {
+    questPostBusy = false;
+    const next = questPostAgain; questPostAgain = null;
+    if (next) postQuests(next.reason, { force: next.force });
+  }
 }
 function syncQuests(rescan = false, reason = 'change') {
   if (!quests) return;
