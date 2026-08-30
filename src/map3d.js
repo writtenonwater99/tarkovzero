@@ -693,7 +693,17 @@ export async function createView3d(container, mapData, src) {
    * top is a lift above the ground it stands on, and stays draped, which is what H() says too.
    */
   const hardRockTop = (d) => (Number.isFinite(d.surfaceY) ? d.surfaceY * RELIEF : rockGround(d).hi + (d.height ?? 1.2) * RELIEF);
+  /** The extrusion of a MEASURED mass: it is drawn from a base buried under its lowest ground. */
   const hardRockLift = (d) => Math.max(0.1, hardRockTop(d) - rockGround(d).lo);
+  /**
+   * How tall the mass actually stands above the ground it stands on — its own height, not its lift.
+   *
+   * For a draped mass this is exactly `height * RELIEF` (it is drawn draped, so that is its height
+   * over every point of its footprint); for a measured one it is the lid minus the highest ground
+   * under it. The two differ by the ground drop across the footprint, which on Woods' widest mass
+   * (17,199 m², 49 m of drop at relief 3) is more than the mass is tall.
+   */
+  const hardRockHeight = (d) => Math.max(0.1, hardRockTop(d) - rockGround(d).hi);
   /**
    * Talus steps under every hard rock.
    *
@@ -702,27 +712,58 @@ export async function createView3d(container, mapData, src) {
    * placed from H(). What read as a "giant untextured grey slab" was the SIDE: one prism per mass is
    * a vertical curtain from the grass to the lid, 170 m of it once relief exaggerates the field. So
    * each mass also gets a short flight of outward, downward steps: the silhouette slopes into a
-   * talus, the faces catch different light, and no step ever reaches the mass's own top, so H() and
-   * everything standing on it are untouched.
+   * talus, the faces catch different light, and no step reaches the mass's own top.
+   *
+   * Each step is a DRAPED prism — its base follows the terrain — so its height above the ground it
+   * stands on is its elevation, and scaling that elevation by the mass's *lift* was wrong: the lift
+   * carries the whole ground drop across the footprint on top of the real height. Woods' hardRocks[0]
+   * is 48 m tall and lifted 97 m, so its innermost step stood 75.7 m over the grass, 27.7 m proud of
+   * the summit it was supposed to buttress. Two numbers fix it: the step keeps a fraction of the
+   * mass's own HEIGHT, and it is additionally capped by the headroom under the mass's top at the
+   * highest ground its own ring crosses — so `groundᵢ + elevation <= ringHi + headroom = rockTop`
+   * holds at every vertex, on any slope, for measured and draped masses alike.
    */
   const TALUS = [0.78, 0.56, 0.34, 0.16];   // fraction of the mass's own height each step keeps
+  /** How far the foot of the slope spreads: about half the rise, never more than three footprints. */
+  const talusReach = (d) => Math.min(Math.max(2, hardRockHeight(d) * 0.55), Math.sqrt(Math.max(1, polyArea(d.poly))) * 3);
+  const groundCeiling = (poly) => { let hi = -Infinity; for (const [x, z] of poly) { const h = BASE_H(x, z); if (h > hi) hi = h; } return hi; };
   let talusEpoch = -1, talusRows = [];
   const talusData = () => {
     if (talusEpoch === heightEpoch) return talusRows;
     talusEpoch = heightEpoch;
     talusRows = hardRocks.flatMap((d) => {
-      const foot = Math.sqrt(Math.max(1, polyArea(d.poly)));
-      // How far the foot of the slope spreads: about half the rise (so it shrinks with relief), but
-      // never more than three footprints out, so a wide low mass gains a skirt rather than a plain.
-      const reach = Math.min(Math.max(2, hardRockLift(d) * 0.55), foot * 3);
-      return TALUS.map((keep, i) => ({
-        rock: d, keep,
-        poly: expand(d.poly, (reach * (i + 1)) / TALUS.length),
-        color: mul(d.color ? liftTone(d.color, 0.08) : C.rock, 0.95 - i * 0.045),
-      }));
+      const reach = talusReach(d), rise = hardRockHeight(d), top = hardRockTop(d);
+      return TALUS.map((keep, i) => {
+        const poly = expand(d.poly, (reach * (i + 1)) / TALUS.length);
+        return {
+          rock: d, keep, poly,
+          height: Math.max(0.1, Math.min(rise, top - groundCeiling(poly)) * keep),
+          color: mul(d.color ? liftTone(d.color, 0.08) : C.rock, 0.95 - i * 0.045),
+        };
+      });
     });
     return talusRows;
   };
+  /**
+   * Trees standing in the talus band are inside solid rock: the steps are drawn OUTSIDE the mass's
+   * polygon, where H() is still bare terrain, so nothing placed from H() knows they are there
+   * (markers escape only because they draw with depthCompare 'always'). 118 of Woods' 2,307 trees
+   * were inside prisms taller than any conifer. A scree slope has no trees on it anyway.
+   *
+   * The band is measured at relief 3 whatever the current relief is, because tree DENSITY must not
+   * change with a display preference (src/trees.js: "Relief changes placement, never density").
+   */
+  if (hardRocks.length) {
+    const bands = hardRocks.map((d) => {
+      const poly = expand(d.poly, talusReach(d) * (3 / (RELIEF || 3)));
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (const [x, z] of poly) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+      return { poly, x0, x1, z0, z1 };
+    });
+    const inTalus = (t) => bands.some((b) => t.x >= b.x0 && t.x <= b.x1 && t.z >= b.z0 && t.z <= b.z1 && inPolyXZ([t.x, t.z], b.poly));
+    treeSet.all = treeSet.all.filter((t) => !inTalus(t));
+    treeSet.far = treeSet.far.filter((t) => !inTalus(t));
+  }
   // A "rock" wider than ~40 m across is a landform, not a boulder. Extruding one as a flat-lidded
   // prism is what turned Reserve's 22,000 m² southern cliff mass into a grey slab with a hard edge
   // straight across half the map; those are draped as rocky ground instead, so the relief the
@@ -749,7 +790,7 @@ export async function createView3d(container, mapData, src) {
     // Rock material: the old ambient 0.72 / diffuse 0.5 lit every face of a mass to within a few
     // values of every other, which is exactly how a rock stops looking like a rock. Letting the sun
     // do the work separates lid from wall and one wall from the next.
-    new SolidPolygonLayer({ id: 'rock-talus', shadowEnabled: false, data: talusData(), getPolygon: (d) => d.poly.map(([x, z]) => P([x, z], BASE_H(x, z) + 0.02)), extruded: true, getElevation: (d) => Math.max(0.1, hardRockLift(d.rock) * d.keep), getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch, getElevation: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'rock') }),
+    new SolidPolygonLayer({ id: 'rock-talus', shadowEnabled: false, data: talusData(), getPolygon: (d) => d.poly.map(([x, z]) => P([x, z], BASE_H(x, z) + 0.02)), extruded: true, getElevation: (d) => d.height, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch, getElevation: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'rock') }),
     new SolidPolygonLayer({ id: 'hard-rocks', shadowEnabled: false, data: hardRocks, getPolygon: (d) => (Number.isFinite(d.surfaceY) ? d.poly.map(([x, z]) => P([x, z], rockGround(d).lo)) : d.poly.map(([x, z]) => P([x, z], BASE_H(x, z) + 0.04))), extruded: true, getElevation: (d) => (Number.isFinite(d.surfaceY) ? hardRockLift(d) : Math.max(0.1, (d.height ?? 1.2) * RELIEF)), getFillColor: (d) => d.color ? liftTone(d.color, 0.08) : C.rock, updateTriggers: { getPolygon: heightEpoch, getElevation: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'rock') }),
     new SolidPolygonLayer({ id: 'rock-masses', shadowEnabled: false, data: rockMasses, getPolygon: (d) => ringG(d.poly, 0.05), getFillColor: (d) => [...(d.color ? liftTone(d.color, 0.06) : C.rock).slice(0, 3), 150], updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: boulders, getPolygon: (d) => ringG(d.poly, 0.04), extruded: true, getElevation: (d) => d.height, getFillColor: (d) => d.color ? liftTone(d.color, 0.1) : C.rock, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'boulder') }),
