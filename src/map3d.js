@@ -17,6 +17,12 @@ import {
   waterExtensionFor, voidMargin, shadowRings, materialTint,
 } from './atmosphere.js';
 import { buildingMaterialId, roofMaterialId } from './render-style.js';
+// Where a building's walls meet the ground, and what fills the downhill gap. Pure module, shared
+// verbatim with scripts/building-height-test.mjs — see its header for the foundation bug it exists
+// to prevent.
+import {
+  placeBuildings as seatBuildings, seatBuilding, floorLevels, plinthColor, PLINTH_EXPAND_M,
+} from './buildings.js';
 
 /* ------------------------------------------------------------------ the look ---
  * `C` is the one colour table every recipe in this module draws from. Stage 1 makes it a function
@@ -313,7 +319,7 @@ function tintBuildings(bs) {
   }
 }
 function detailParts(bs, scenes = []) {
-  const out = { boxes: [], flats: [], lines: [], dashes: [], dots: [] };
+  const out = { boxes: [], plinths: [], flats: [], lines: [], dashes: [], dots: [] };
   const B = (poly, base, h, color, lvl = 0) => { if (poly && poly.length > 2 && h > 0.02) out.boxes.push({ poly, base, h, color, lvl }); };
   const F = (poly, z, color, lvl = 0) => { if (poly && poly.length > 2) out.flats.push({ ring: ringAt(poly, z), color, lvl }); };
   const F3 = (ring, color, lvl = 0) => out.flats.push({ ring, color, lvl });
@@ -342,8 +348,18 @@ function detailParts(bs, scenes = []) {
     // fallback to write.
     const roof = b.roof ? liftTone(b.roof, 0.12) : ROOF_BY_PLACE[place] ?? b.roofTint;
 
-    // --- 1. plinth: every building meets the ground instead of being pasted onto it
-    if (st !== 'canopy') B(expand(b.poly, 0.25), b.plinthBase ?? base, b.plinthHeight ?? 0.75, mul(wall, 0.7), 0);
+    /* --- 1. plinth: every building meets the ground instead of being pasted onto it.
+     *
+     * It is NOT wall material and it is NOT in `out.boxes`. Until 2026-08-30 it was both: a
+     * `wall x 0.7` box, lit, expanded 0.25 m outward, spanning the full relief-amplified drop under
+     * the footprint — 10 m of apparent building under Dorms 3-Story at relief 3. It now goes to its
+     * own near-black, `material: false` layer (see the `building-plinths` layer below), barely
+     * expanded, and capped by `skirtCap()` in src/buildings.js, so it reads as the shadow a
+     * building sits in. */
+    if (st !== 'canopy') {
+      const ph = b.plinthHeight ?? 0.47;
+      if (ph > 0.02) out.plinths.push({ poly: expand(b.poly, PLINTH_EXPAND_M), base: b.plinthBase ?? base - 0.35, h: ph, lvl: 0 });
+    }
 
     // Audited cooling towers are hyperboloid shells, not short storage tanks.
     // Stacked circular frustums keep the recipe in the existing shared box layer.
@@ -362,11 +378,11 @@ function detailParts(bs, scenes = []) {
     }
 
     // --- 2. window bands: one dashed ring per floor. Dashes read as glass, gaps as piers.
+    // `floorLevels()` measures off b.height / b.floors — the REAL building — never off the extruded
+    // span or the plinth, so a slope cannot invent a storey line.
     const banded = st === 'box' && A >= 40 && !['Fortress', 'Big Red'].includes(place) && b.kind !== 'tank';
-    if (banded) for (let k = 1; k <= b.floors; k++) {
-      const z = k * 3.3 - 1.35; if (z > h - 0.4) break;
+    if (banded) for (const z of floorLevels(b, { inset: 1.35 }))
       D(closed(b.poly, base + z), C.glass, 1.15, place.startsWith('Dorms') ? [1.55, 1.35] : [1.6, 1.5], z);
-    }
 
     // --- 3. parapet lip + roof slab: roof and wall stop being the same grey
     if (st === 'box') {
@@ -486,13 +502,13 @@ function detailParts(bs, scenes = []) {
       B(rect(u0 + LEN * 0.5 - 1.7, u0 + LEN * 0.5 + 1.7, v0 - 1.6, v0), base + 3.0, 0.2, C.parapet, 3.0);
       for (const t of [-1.5, 1.5]) B(rect(u0 + LEN * 0.5 + t - 0.09, u0 + LEN * 0.5 + t + 0.09, v0 - 1.4, v0 - 1.22), base, 3.0, C.parapet, 0);
       const q = pt(u1 - 3, vm); B(circle(q[0], q[1], 0.8, 14), base + h + 0.55, 1.2, C.tank, h);
-      if (b.floors >= 3) for (let k = 1; k <= 2; k++) {
-        L(closed(expand(b.poly, 0.5), base + k * 3.3), mul(wall, 0.9), 0.9, k * 3.3);
-        L(closed(expand(b.poly, 0.9), base + k * 3.3 + 0.9), C.bridgeRail, 0.12, k * 3.3);
+      if (b.floors >= 3) for (const z of floorLevels(b).slice(0, 2)) {
+        L(closed(expand(b.poly, 0.5), base + z), mul(wall, 0.9), 0.9, z);
+        L(closed(expand(b.poly, 0.9), base + z + 0.9), C.bridgeRail, 0.12, z);
       }
     }
     if (place === 'Fortress') {
-      for (let k = 1; k <= 2; k++) D(closed(b.poly, base + k * 3.3 - 1.4), [26, 34, 36, 240], 0.55, [0.55, 2.6], k * 3.3);
+      for (const z of floorLevels(b, { inset: 1.4 })) D(closed(b.poly, base + z), [26, 34, 36, 240], 0.55, [0.55, 2.6], z + 1.4);
       D(closed(expand(b.poly, 0.06), base + h + 0.55), [196, 192, 182], 0.55, [1.25, 1.25], h);
       const rim = columns(expand(b.poly, -0.6), Math.max(2.2, (LEN + WID) * 2 / 14));
       rim.forEach((q, i) => B(rbox(q[0], q[1], 0.5, 0.9, i * 37 % 180), base + h + 0.06, 0.5, C.sandbag, h));
@@ -597,9 +613,14 @@ const hash1 = (a, b) => { const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5
 // in the right value range in both skins instead of staying at its raw saturation.
 const liftTone = (c, amount = 0.1, target = C.liftTarget) => c.map((v, i) => i < 3 ? Math.round(v + (target[i] - v) * amount) : v);
 const centroid = (poly) => poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]);
+/**
+ * The seat a building falls back to when `placeBuildings()` has not written one (a layer built
+ * before the pass, or a hand-made row). Same rule as `seatBuilding()`: the ground under the
+ * CENTROID, not the highest ground under the footprint — seating on the maximum stilts a building
+ * over its own downhill corner by the full relief-amplified cross-slope.
+ */
 function footprintGround(poly) {
-  const points = [centroid(poly), ...poly, ...poly.map((p, i) => [(p[0] + poly[(i + 1) % poly.length][0]) / 2, (p[1] + poly[(i + 1) % poly.length][1]) / 2])];
-  return Math.max(...points.map((p) => H(p[0], p[1])));
+  return seatBuilding({ poly, height: 0 }, H).base;
 }
 function propParts(props) { // -> game-coordinate footprints; the layer samples H when it renders
   return props.map((p) => {
@@ -768,18 +789,13 @@ export async function createView3d(container, mapData, src) {
   // --- end TRACK B ------------------------------------------------------------------------
   const inLimit = (x, z) => !data.limit || inPolyXZ([x, z], data.limit);
   const centroidOf = centroid;
-  const placeBuildings = () => {
-    for (const b of data.buildings) {
-      const c = centroidOf(b.poly);
-      const footprintSamples = [c, ...b.poly, ...b.poly.map((p, i) => [(p[0] + b.poly[(i + 1) % b.poly.length][0]) / 2, (p[1] + b.poly[(i + 1) % b.poly.length][1]) / 2])];
-      const ground = footprintSamples.map((p) => H(p[0], p[1]));
-      // A rigid footprint sits on the highest sampled point. The plinth fills the downhill gap;
-      // neither the wall nor its details can be swallowed by a 3x slope.
-      b.base = Math.max(...ground) + 0.06;
-      b.plinthBase = Math.min(...ground) - 0.18;
-      b.plinthHeight = Math.max(0.75, b.base - b.plinthBase + 0.12);
-    }
-  };
+  /**
+   * Seat every building on the draped ground. The rule (and the foundation bug it replaces) lives
+   * in src/buildings.js so `npm run test:buildings` can assert against the same functions: the
+   * walls sit on the ground under the footprint centroid and stand exactly `height` metres, and
+   * the downhill gap is closed by the dark, unlit, capped skirt — never by wall-coloured mass.
+   */
+  const placeBuildings = () => seatBuildings(data.buildings, H);
   const tBuildings = performance.now();
   placeBuildings();
   const tTrees = performance.now();
@@ -1044,6 +1060,23 @@ export async function createView3d(container, mapData, src) {
     new TextLayer({ id: 'underground-badges', data: (data.underground || []).filter((d) => polyArea(d.poly) > 1000), getPosition: (d) => Pg(centroidOf(d.poly), 0.7), getText: () => 'U', getSize: 13, sizeUnits: 'pixels', getColor: C.ink, background: true, getBackgroundColor: [255, 176, 48, 245], backgroundPadding: [4, 2, 4, 2], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF, billboard: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ];
   const buildingLayer = () => [...undergroundLayers(),
+    /*
+     * The dark skirt that closes the gap between a wall base and the downhill ground.
+     *
+     * Its own layer, and it must stay that way. `material: false` is the load-bearing prop: deck
+     * lights an `extruded: true` SolidPolygonLayer, and a LIT box in a wall-ish tint is exactly the
+     * "foundation that makes it look like a 10 story building when it's 3" the founder reported on
+     * 2026-08-30. Unlit + near-black (`plinthColor`) + `PLINTH_EXPAND_M` instead of the old 0.25 m
+     * ledge means the skirt reads as the shadow under a building, and only the wall above it can
+     * ever be counted as storeys.
+     */
+    new SolidPolygonLayer({
+      id: 'building-plinths', visible: floor !== 'U', shadowEnabled: false, data: details.plinths,
+      getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h,
+      getFillColor: plinthColor(look), material: false,
+      updateTriggers: { getPolygon: heightEpoch, getFillColor: look },
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(),
+    }),
     new SolidPolygonLayer({
       id: 'buildings', visible: floor !== 'U', data: parts.walls, getPolygon: (d) => ringAt(d.poly, d.base ?? footprintGround(d.poly)), extruded: true, getElevation: (d) => capH(d, d.h), updateTriggers: { getPolygon: heightEpoch, getElevation: floor, getFillColor: [hover, floor] },
       getFillColor: (d, { index }) => (hover === index ? C.buildingHover : d.color ? liftTone(d.color, 0.12) : d.tint ? d.tint : d.kind === 'tank' ? C.tank : d.kind === 'powerline_towers' ? C.tower : d.floors > 1 ? C.buildingMulti : C.building),
