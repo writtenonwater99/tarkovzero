@@ -237,9 +237,21 @@ async function main() {
       // armRenderAssets() catches every failure by design, and a `dist` with public/assets/3d
       // deleted walked this whole chain green with `ready:false`, no ground detail and no grade.
       // The frame stays up either way — this is the check that says whether the look shipped.
+      //
+      // Vector has been the default look since 2026-08-30, and vector deliberately loads NONE of
+      // that asset set — it has no shader for it (map3d's `armAssetsOnce`). So the default is
+      // asserted as vector, the look is flipped to Real (the flip is what fetches the assets), the
+      // realistic look is gated on the far side of the flip, and the default is put back so the
+      // persisted choice this step leaves behind is the one the app ships with.
+      const defaultLook = await page.evaluate('window.tz.renderStyle()');
+      assert(defaultLook === 'vector', `the default look is "${defaultLook}", expected "vector"`);
+      const vectorStats = await page.evaluate('window.tz.renderStats()');
+      assert(vectorStats.postEffects === 0 && vectorStats.fx.fogArmed === false,
+        `vector is running R1 shaders: ${JSON.stringify(vectorStats.fx)}`);
+      await page.evaluate(`window.tz.renderStyle('realistic')`);
       await page.waitFor('window.tz.renderStats()?.assets?.ready === true', { timeout: 25_000, label: 'the Stage 1 render assets' });
       const rs = await page.evaluate('window.tz.renderStats()');
-      assert(rs.look === 'realistic', `the default look is "${rs.look}", expected "realistic"`);
+      assert(rs.look === 'realistic', `the look did not flip to realistic (got "${rs.look}")`);
       assert(rs.groundDetail === true, 'the realistic terrain is drawing without its ground-detail material');
       assert(rs.post.enabled && rs.post.armed, `the grade pass is not armed (${JSON.stringify(rs.post)})`);
       assert(rs.post.fxaa === false, 'FXAA is back on in a full-screen pass — it eats every label');
@@ -247,18 +259,37 @@ async function main() {
         `no asset bytes uploaded: ${JSON.stringify(rs.textureBytes)}`);
 
       // QA D1: the cold load used to show place names with no marker badge under them for a long
-      // window, which reads as broken rather than as loading. `badgeLagMs` is that window — the ms
-      // between the first frame with glyphs on screen and the first frame with an icon atlas
-      // behind the markers. It goes in the report so a regression is a number, not a screenshot.
-      // The badge must never be LATER than the name; a small negative (badges first) is fine.
+      // window, which reads as broken rather than as loading.
+      //
+      // What is gated here is the ATLAS, because the atlas is what D1's fix moved. It is NOT
+      // `badgeLagMs` (badges vs labels), which this gate used to assert at <= 250 ms: the labels
+      // come from data already in the bundle and the badges wait on `/data/<map>.json` over the
+      // network, so that number is a stopwatch on a fetch nothing in the branch touches — it failed
+      // 1 run in 4 on an unmodified tree (5919 ms once, with the atlas ready at 596 ms), and a CDP
+      // hold on the marker JSON alone reproduces the failure with the atlas untouched. It is still
+      // reported below, as a measurement rather than a gate.
+      //
+      // `markerIconMisses` is the assertion the old gate could not make. Every extract badge on
+      // Customs carries a letter, so its icon key is per-marker (`extract-scav:D`), and if the atlas
+      // was cut before the marker fetch landed those keys are absent from `iconMapping` and the
+      // IconLayer silently draws nothing for them — while `firstBadgeMs` still fires and reports
+      // "lag 0 ms" on a frame with no badge pixel on it.
       coldPaint = rs.timing ?? null;
       assert(coldPaint && Number.isFinite(coldPaint.firstBadgeMs),
         `no cold-paint timing in renderStats(): ${JSON.stringify(coldPaint)}`);
-      assert(coldPaint.badgeLagMs != null && coldPaint.badgeLagMs <= 250,
-        `marker badges paint ${coldPaint.badgeLagMs} ms after the labels (D1 regression; timing ${JSON.stringify(coldPaint)})`);
-      notes.push(`cold paint: labels ${coldPaint.firstLabelMs} ms, badges ${coldPaint.firstBadgeMs} ms `
-        + `(lag ${coldPaint.badgeLagMs} ms), icon atlas ready ${coldPaint.atlasReadyMs} ms `
-        + `(${coldPaint.atlasWaitMs} ms of it after the terrain prep), prep ${JSON.stringify(coldPaint.prepMs)}`);
+      assert(rs.markerIconMisses === 0,
+        `${rs.markerIconMisses} marker icon key(s) are missing from the atlas — those badges draw nothing (D1/atlas regression)`);
+      assert(coldPaint.badgeAfterDataMs != null && coldPaint.badgeAfterDataMs <= 1500,
+        `marker badges paint ${coldPaint.badgeAfterDataMs} ms after the marker data arrived (timing ${JSON.stringify(coldPaint)})`);
+      notes.push(`cold paint: labels ${coldPaint.firstLabelMs} ms, marker data ${coldPaint.markersReadyMs} ms, `
+        + `badges ${coldPaint.firstBadgeMs} ms (${coldPaint.badgeAfterDataMs} ms after the data, ${coldPaint.badgeLagMs} ms after the labels), `
+        + `icon atlas ready ${coldPaint.atlasReadyMs} ms (${coldPaint.atlasWaitMs} ms of it after the terrain prep), `
+        + `misses ${rs.markerIconMisses}, prep ${JSON.stringify(coldPaint.prepMs)}`);
+      notes.push(`vector ${vectorStats.cpuFrameMs?.toFixed?.(2) ?? '?'} ms vs realistic ${rs.cpuFrameMs?.toFixed?.(2) ?? '?'} ms cpu/frame`);
+      // Put the shipping default back: renderStyle() persists, and every step after this one shares
+      // the profile.
+      await page.evaluate(`window.tz.renderStyle('vector')`);
+      await sleep(400);
 
       // The zoom FLOOR, driven through the app's own control rather than through camera.js.
       // camera.js's minFitZoom() shipped once with no call site: the unit tests were green and
