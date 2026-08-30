@@ -41,6 +41,12 @@ export const CONTRACT = {
     '#quest-block', '#quest-toggle', '#quests', '#quest-sum',
     '#quest-find', '#quest-results', '#quest-vis', '#quest-vis-ico', '#quest-vis-n', '#quest-selected',
   ],
+  // "My quests" — the game's own quest log, above the search (docs/plans/ACTIVE-QUESTS.md).
+  'my quests (quests.js + live.js)': [
+    '#quest-mine', '#quest-mine-n', '#quest-auto', '#quest-mine-since', '#quest-mine-list',
+    '#quest-mine-other', '#quest-mine-other-n', '#quest-mine-other-list',
+    '#quest-mine-done', '#quest-mine-done-n', '#quest-mine-done-list',
+  ],
   'view panel (main.js)': [
     '#base-toggle', '#base-toggle .seg-cell[data-base=satellite]', '#base-toggle .seg-cell[data-base=map]',
     '#relief-toggle', '#relief-toggle .seg-cell[data-relief=1]', '#relief-toggle .seg-cell[data-relief=3]',
