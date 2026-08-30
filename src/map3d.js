@@ -914,10 +914,10 @@ export async function createView3d(container, mapData, src) {
    * The 3D view reads the same rule as the 2D map (src/lod.js): the tier is decided by metres per
    * pixel, which in an OrbitView is 1 / 2^zoom — the same number the HUD scale bar draws.
    *
-   * Note that at the oblique default tilt this is NOT the same m/px as the 2D map at the matching
-   * framing: zoomOffset() trades horizontal scale for the foreshortened ground plane, so the 3D
-   * view really is ~1.7x closer in across the screen and the tier follows the ground, not the
-   * zoom label. Fit in 2D lands in `dot`, fit in 3D lands in `icon`, and both are honest.
+   * zoomOffsetFor() (src/camera.js) is now the map's CRS scale and nothing else, so a 3D camera and
+   * the 2D view it mirrors onto report the SAME m/px and therefore the same tier — toggling views
+   * no longer moves the marker tier under the player. The two *fits* can still differ by a little,
+   * because a 2D cover fits the map's box and the 3D fit covers the rhombus the tilt makes of it.
    *
    * Extracts stay exempt and keep their own layer with its hover/pin behaviour; everything else
    * is a dot, a badge, or a counted cluster.
