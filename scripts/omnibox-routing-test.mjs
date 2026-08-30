@@ -110,6 +110,18 @@ console.log('commands');
   eq('prefix of a two-word command', r.rows[0].cmd.name, 'clear trails');
 }
 {
+  // `> my quests` opens the panel at the game's own quest log — and must not steal `> quests`.
+  const r = route('> my quests', ctx);
+  eq('two-word my quests', r.rows[0].cmd.name, 'my quests');
+  eq('my quests takes no argument', r.rows[0].arg, '');
+  eq('and Enter runs it', r.index, 0);
+}
+{
+  eq('prefix of my quests', route('> my', ctx).rows[0].cmd.name, 'my quests');
+  eq('`> quests` still means the panel', route('> quests', ctx).rows[0].cmd.name, 'quests');
+  eq('the alias resolves too', route('> active quests', ctx).rows[0].cmd.name, 'my quests');
+}
+{
   const r = route('> pin quests', ctx);
   eq('pin command', r.rows[0].cmd.name, 'pin');
   eq('pin argument', r.rows[0].arg, 'quests');
