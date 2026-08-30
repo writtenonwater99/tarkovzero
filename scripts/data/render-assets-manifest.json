@@ -60,6 +60,7 @@
       "licensePage": "https://docs.ambientcg.com/license/",
       "purpose": "Stage 1 ground detail subset: wet soil / forest floor / muddy shore surface frequency for the terrain macro treatment. The plan's named pick for Stage 1.",
       "variantNote": "1K-PNG chosen over the smaller 1K-JPG so the pipeline needs no JPEG decoder and no lossy-recompression step; the ZIP is cache-only and never shipped.",
+      "retrievedAt": "2026-08-29",
       "sourceBytes": 20293422,
       "sourceSha256": "dfec3bf5bc0a92f6fb41c019157197149a45f66488ce4f434cb2d4c08d827944"
     },
@@ -74,6 +75,7 @@
       "licensePage": "https://polyhaven.com/license",
       "purpose": "Stage 1 environment: overcast, low-contrast autumn IBL/sky reference. Reduced to SH radiance + hemisphere colours + a tone-mapped preview; the raw HDR is never shipped.",
       "variantNote": "1K HDR is the plan's pick. Poly Haven publishes md5 c0f556c01d12120169b916b0b4c3efc1 for this file; the pipeline additionally pins sha256.",
+      "retrievedAt": "2026-08-29",
       "sourceBytes": 1889442,
       "sourceSha256": "3cd13dc94041aa3f94c4d7ba4898d5924da2d2193476851557387cbd170a084e"
     }
@@ -198,7 +200,7 @@
   },
   "totals": {
     "sourceBytes": 22182864,
-    "shippedBytes": 1722564,
+    "shippedBytes": 1722844,
     "shippedBudgetBytes": 12582912
   }
 }
