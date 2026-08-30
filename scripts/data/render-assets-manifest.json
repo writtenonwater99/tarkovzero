@@ -22,21 +22,21 @@
       "pageUrl": "https://docs.ambientcg.com/license/",
       "expect": "CC0",
       "verifiedAt": "2026-08-29",
-      "verifiedQuote": "All files and previews downloadable on ambientCG.com are published under the Creative Commons CC0 1.0 Universal License."
+      "verifiedQuote": "All ambientCG assets are provided under the Creative Commons CC0 1.0 Universal License."
     },
     {
       "source": "Poly Haven",
       "pageUrl": "https://polyhaven.com/license",
       "expect": "CC0",
       "verifiedAt": "2026-08-29",
-      "verifiedQuote": "All assets on Poly Haven are licensed as CC0, which is the same as public domain."
+      "verifiedQuote": "Our assets are all licensed as CC0, which is effectively Public Domain even in jurisdictions that do not support the Public Domain."
     },
     {
       "source": "Quaternius",
       "pageUrl": "https://quaternius.com/faq.html",
       "expect": "CC0",
       "verifiedAt": "2026-08-29",
-      "verifiedQuote": "All my models are CC0, which means you can use them for anything.",
+      "verifiedQuote": "These assets are licensed under CC0, allowing you to use them without giving credit, even for commercial purposes.",
       "usedInStage1": false
     },
     {
@@ -44,7 +44,7 @@
       "pageUrl": "https://kenney.nl/support",
       "expect": "CC0",
       "verifiedAt": "2026-08-29",
-      "verifiedQuote": "All assets on the asset pages are licensed as Creative Commons Zero (CC0).",
+      "verifiedQuote": "Yes, all game assets on the asset pages are public domain licensed (CC0).",
       "usedInStage1": false
     }
   ],

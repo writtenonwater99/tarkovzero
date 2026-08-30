@@ -42,6 +42,9 @@ import { LIGHT, PALETTE } from '../src/render-style.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MANIFEST_PATH = path.join(ROOT, 'scripts/data/render-assets-manifest.json');
 const USER_AGENT = 'tarkovzero-render-assets/1 (+https://tarkovzero.com)';
+// Every network call is bounded: a hung connection must fail the run, not stall
+// it until someone notices.
+const FETCH_TIMEOUT_MS = 60_000;
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -86,7 +89,25 @@ function fail(message) {
 // ---------------------------------------------------------------------------
 // Manifest
 // ---------------------------------------------------------------------------
-const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
+// Editing this file by hand is the documented way to change the pipeline, so a
+// trailing comma has to read as a diagnosed failure, not a raw SyntaxError with
+// a Node stack.
+const MANIFEST_SHOWN = path.relative(ROOT, MANIFEST_PATH);
+let manifest;
+try {
+  manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
+} catch (err) {
+  fail(`could not read ${MANIFEST_SHOWN}: ${err.message}`);
+}
+for (const [key, kind] of [
+  ['cacheRoot', 'string'], ['outputRoot', 'string'], ['detailSize', 'number'],
+  ['skyPreviewWidth', 'number'], ['shippedBudgetBytes', 'number'],
+]) {
+  if (typeof manifest[key] !== kind) fail(`${MANIFEST_SHOWN}: "${key}" must be a ${kind}`);
+}
+for (const key of ['sources', 'outputs', 'licenseChecks']) {
+  if (!Array.isArray(manifest[key])) fail(`${MANIFEST_SHOWN}: "${key}" must be an array`);
+}
 const CACHE_DIR = path.join(ROOT, manifest.cacheRoot);
 const OUT_DIR = path.join(ROOT, manifest.outputRoot);
 const DETAIL = manifest.detailSize;
@@ -94,32 +115,104 @@ const SKY_W = manifest.skyPreviewWidth;
 const sourceById = new Map(manifest.sources.map((s) => [s.id, s]));
 const outputById = new Map(manifest.outputs.map((o) => [o.id, o]));
 
+/** Look up a manifest record by the id the recipes hardcode, or fail by name. */
+function requireSource(id) {
+  const s = sourceById.get(id);
+  if (!s) fail(`${MANIFEST_SHOWN} declares no source "${id}" (has: ${[...sourceById.keys()].join(', ') || 'none'})`);
+  return s;
+}
+function requireOutput(id) {
+  const o = outputById.get(id);
+  if (!o) fail(`${MANIFEST_SHOWN} declares no output "${id}" (has: ${[...outputById.keys()].join(', ') || 'none'})`);
+  return o;
+}
+
 // ---------------------------------------------------------------------------
 // Licence verification
 // ---------------------------------------------------------------------------
+const HTML_ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', para: '',
+  rsquo: '’', lsquo: '‘', ldquo: '"', rdquo: '"', mdash: '—', ndash: '–', hellip: '...',
+};
+
+/** Readable text from an HTML page: no scripts, no tags, entities resolved. */
+function stripHtml(html) {
+  return html
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(Number.parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (m, n) => (n.toLowerCase() in HTML_ENTITIES ? HTML_ENTITIES[n.toLowerCase()] : m))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Letters and digits only. Inline markup inside a sentence ("credi<b>t</b>")
+// survives tag-stripping as stray spaces, so the comparison has to ignore
+// everything that is not a character of the wording itself.
+const canonical = (s) => stripHtml(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+/**
+ * Re-fetch every licence page and assert it still says what was recorded.
+ *
+ * Two things this deliberately does NOT do any more. It does not count a network
+ * failure as a licence change — an unreachable page is a separate outcome with
+ * its own message, because "the licence page no longer states CC0" is the last
+ * sentence anyone should see because of a DNS blip. And it does not settle for
+ * finding "CC0" anywhere in the flattened page, which a 404 page, a cookie
+ * banner, a nav link or a page that has moved to CC-BY while grandfathering old
+ * files all satisfy. The manifest already records the exact sentence that was
+ * read at acquisition; that sentence is the assertion.
+ */
 async function verifyLicenses() {
+  if (OFFLINE) fail('--verify-licenses re-fetches the licence pages; it cannot be combined with --offline');
   console.log('licence pages');
-  let bad = 0;
+  const changed = [];
+  const unreachable = [];
   for (const check of manifest.licenseChecks) {
     let text = '';
     try {
-      const res = await fetch(check.pageUrl, { headers: { 'user-agent': USER_AGENT } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(check.pageUrl, {
+        headers: { 'user-agent': USER_AGENT },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       text = await res.text();
     } catch (err) {
-      console.log(`  FAIL ${check.source.padEnd(11)} ${check.pageUrl} (${err.message})`);
-      bad++;
+      console.log(`  UNREACHABLE ${check.source.padEnd(11)} ${check.pageUrl} (${err.message})`);
+      unreachable.push(`${check.source} (${err.message})`);
       continue;
     }
-    // Accept either the licence identifier or its spelled-out name; both appear
+    const flat = canonical(text);
+    // Accept the licence identifier or its spelled-out name; both are used
     // across these four sites and both are unambiguous.
-    const flat = text.replace(/\s+/g, ' ');
-    const ok = /CC0/i.test(flat) || /Creative Commons Zero/i.test(flat);
-    console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${check.source.padEnd(11)} ${check.pageUrl}`);
-    if (!ok) bad++;
+    const idOk = flat.includes(canonical(check.expect)) ||
+      (check.expect === 'CC0' && flat.includes('creativecommonszero'));
+    const quoteOk = check.verifiedQuote ? flat.includes(canonical(check.verifiedQuote)) : false;
+    if (quoteOk) {
+      console.log(`  ok   ${check.source.padEnd(11)} ${check.pageUrl}`);
+      continue;
+    }
+    console.log(`  FAIL ${check.source.padEnd(11)} ${check.pageUrl} (recorded sentence not found; "${check.expect}" ${idOk ? 'still' : 'no longer'} appears)`);
+    changed.push(`${check.source}: ${check.pageUrl}`);
   }
-  if (bad) fail(`${bad} licence page(s) no longer state CC0 — do not ship until this is resolved`);
-  console.log('  all four sources still publish CC0\n');
+  if (changed.length) {
+    fail(
+      `${changed.length} licence page(s) no longer contain the sentence recorded at acquisition:\n` +
+        changed.map((c) => `    ${c}`).join('\n') +
+        '\n  Re-read the page. If it still grants the same licence, update `verifiedQuote` and\n' +
+        '  `verifiedAt` in the manifest; if it does not, do not ship until this is resolved.',
+    );
+  }
+  if (unreachable.length) {
+    fail(
+      `${unreachable.length} licence page(s) could not be fetched:\n` +
+        unreachable.map((c) => `    ${c}`).join('\n') +
+        '\n  This is a network failure, NOT a licence change — nothing has been asserted\n' +
+        '  about these pages either way. Re-run when they are reachable.',
+    );
+  }
+  console.log(`  all ${manifest.licenseChecks.length} sources still publish their recorded licence\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,9 +229,20 @@ async function download(source) {
   const cached = path.join(CACHE_DIR, source.cacheFile);
   const partial = `${cached}.part`;
   console.log(`  fetching ${source.sourceUrl}`);
-  const res = await fetch(source.sourceUrl, { headers: { 'user-agent': USER_AGENT } });
-  if (!res.ok) fail(`download failed for ${source.id}: HTTP ${res.status} ${res.statusText}`);
-  const buf = Buffer.from(await res.arrayBuffer());
+  let buf;
+  try {
+    const res = await fetch(source.sourceUrl, {
+      headers: { 'user-agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) fail(`download failed for ${source.id}: HTTP ${res.status} ${res.statusText}`);
+    buf = Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    // A rejected fetch (DNS, refused, TLS, a body that ends early) otherwise
+    // escapes the top-level await as a bare undici stack trace. fail() exits, so
+    // the !res.ok branch above never reaches here.
+    fail(`download failed for ${source.id}: ${err.message}\n  ${source.sourceUrl}`);
+  }
   await mkdir(CACHE_DIR, { recursive: true });
   await writeFile(partial, buf);
   await rename(partial, cached);
@@ -232,11 +336,10 @@ function zipEntry(zip, name) {
 
 function buildGroundDetail(zipBuf) {
   const zip = readZip(zipBuf);
-  const decl = (id) => outputById.get(id);
 
-  const color = decodePng(zipEntry(zip, decl('ground106-albedo').zipEntry));
-  const normal = decodePng(zipEntry(zip, decl('ground106-normal').zipEntry));
-  const [aoName, roughName] = decl('ground106-orm').zipEntry.split('+');
+  const color = decodePng(zipEntry(zip, requireOutput('ground106-albedo').zipEntry));
+  const normal = decodePng(zipEntry(zip, requireOutput('ground106-normal').zipEntry));
+  const [aoName, roughName] = requireOutput('ground106-orm').zipEntry.split('+');
   const ao = decodePng(zipEntry(zip, aoName));
   const rough = decodePng(zipEntry(zip, roughName));
 
@@ -381,8 +484,8 @@ async function ktx2Report() {
 if (VERIFY_LICENSES) await verifyLicenses();
 
 console.log('sources');
-const groundZip = await fetchSource(sourceById.get('ground106'));
-const hdrBuf = await fetchSource(sourceById.get('autumn-crossing'));
+const groundZip = await fetchSource(requireSource('ground106'));
+const hdrBuf = await fetchSource(requireSource('autumn-crossing'));
 
 console.log('\nprocessing');
 const ground = buildGroundDetail(groundZip);

@@ -48,7 +48,12 @@ Source packs stay in the git-ignored cache and are never committed or served.
 ## Licences
 
 Every source is CC0. Each licence page was fetched and checked on the date below;
-`--verify-licenses` re-runs that check and fails the build if any page stops saying CC0.
+`--verify-licenses` re-runs that check. The assertion is the **exact sentence** recorded in
+the manifest's `verifiedQuote`, matched against the tag-stripped page ignoring markup and
+punctuation — not "the string CC0 appears somewhere", which a 404 page, a nav link or a page
+that has moved to CC-BY while grandfathering old files would all satisfy. A page that has
+been reworded fails and asks for a human re-read; a page that cannot be fetched is reported
+separately as a network failure and never as a licence change.
 
 | Asset | Author | Licence | Licence page | Verified | Used in Stage 1 |
 |---|---|---|---|---|---|
