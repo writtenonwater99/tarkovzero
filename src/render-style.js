@@ -251,6 +251,13 @@ export const BACKGROUND = deepFreeze({
     horizon: PALETTE.skyFar,
     ground: '#7d817b',
     // Derived environment reference produced by scripts/prepare-render-assets.mjs.
+    //
+    // PROVENANCE, not a runtime fetch. The three colours above, LIGHT.realistic and the grade LUT
+    // were all derived from this HDRI's SH9 radiance, and the manifest carries it with its licence
+    // for that reason; src/atmosphere.js's `want` list deliberately does not include it, so the
+    // browser never downloads it. render-assets-test asserts both halves of that — the id resolves
+    // in the shipped manifest, and it is NOT in the runtime fetch list — so this line cannot quietly
+    // become a lie in either direction. Painting an actual sky from it is a later stage's job.
     environmentAsset: 'autumn-crossing-sky',
   },
   vector: {
