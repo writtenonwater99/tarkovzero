@@ -640,11 +640,13 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .mk-cluster{position:relative;display:flex;align-items:center;justify-content:center;width:26px;height:26px}
 .mk-cluster .mk-dot{width:9px;height:9px;opacity:.95}
 .mk-cluster .mk{opacity:.95}
-.mk-count{position:absolute;left:52%;bottom:52%;min-width:14px;height:14px;padding:0 3px;box-sizing:border-box;
-  display:flex;align-items:center;justify-content:center;border-radius:8px;
-  background:rgba(10,14,12,.92);border:1px solid rgba(230,227,215,.55);color:var(--cream);
-  font:700 9.5px/1 var(--f-mono);letter-spacing:-.02em;pointer-events:none;
-  box-shadow:0 1px 2px rgba(0,0,0,.6)}
+/* the bubble stays smaller than a badge: a cluster is a hint that there is more here, not a
+   louder marker than the extract next to it */
+.mk-count{position:absolute;left:52%;bottom:52%;min-width:12px;height:12px;padding:0 2px;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;border-radius:7px;
+  background:rgba(10,14,12,.88);border:1px solid rgba(230,227,215,.3);color:var(--text-dim);
+  font:700 8.5px/1 var(--f-mono);letter-spacing:-.02em;pointer-events:none;
+  box-shadow:0 1px 2px rgba(0,0,0,.55)}
 .mk-cluster-dot .mk-count{left:56%;bottom:56%}
 .leaflet-marker-icon:hover .mk-cluster .mk-count{border-color:var(--acc);color:#fff}
 .mk-cluster:hover{cursor:zoom-in}

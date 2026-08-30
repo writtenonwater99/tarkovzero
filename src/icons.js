@@ -141,8 +141,10 @@ function badgeSvg(k0, letter, level = 'surface', tint = null, req = null) {
     : '';
   // Bottom-LEFT, because the underground cue already owns the bottom-right corner and an extract
   // can easily be both (Smugglers' Bunker is underground and needs the Voron note).
+  // Scaled to 88% and pushed into the corner so the plate clips as little of the extract letter
+  // as possible — the letter is the badge's job, the requirement is a footnote on it.
   const reqMark = REQ_MARK[req]
-    ? `<g><rect x='1.7' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='${STENCIL}' stroke-width='.7' stroke-opacity='.8'/>${REQ_MARK[req]}</g>`
+    ? `<g transform='translate(0.1 2.5) scale(0.88)'><rect x='1.7' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='${STENCIL}' stroke-width='.8' stroke-opacity='.8'/>${REQ_MARK[req]}</g>`
     : '';
   return `${shape}${split}${key}${ring}${inner}${underground}${reqMark}`;
 }

@@ -735,8 +735,15 @@ export async function createView3d(container, mapData, src) {
 
   /* --- marker LOD ------------------------------------------------------------------------
    * The 3D view reads the same rule as the 2D map (src/lod.js): the tier is decided by metres per
-   * pixel, which in an OrbitView is 1 / 2^zoom. Extracts stay exempt and keep their own layer with
-   * its hover/pin behaviour; everything else is a dot, a badge, or a counted cluster.
+   * pixel, which in an OrbitView is 1 / 2^zoom — the same number the HUD scale bar draws.
+   *
+   * Note that at the oblique default tilt this is NOT the same m/px as the 2D map at the matching
+   * framing: zoomOffset() trades horizontal scale for the foreshortened ground plane, so the 3D
+   * view really is ~1.7x closer in across the screen and the tier follows the ground, not the
+   * zoom label. Fit in 2D lands in `dot`, fit in 3D lands in `icon`, and both are honest.
+   *
+   * Extracts stay exempt and keep their own layer with its hover/pin behaviour; everything else
+   * is a dot, a badge, or a counted cluster.
    */
   const zoomIntoCluster = (c) => {
     viewState = clampView({ ...viewState, target: [-c.x, -c.z, 0], zoom: Math.min(viewState.maxZoom ?? 5, (viewState.zoom ?? 0) + 1) });
