@@ -640,8 +640,9 @@ export function buildTerrain(data, relief = 3, options = {}) {
    *
    * COLOR_0 is a per-vertex MULTIPLIER on the layer's colour (SimpleMeshLayer: `vColor = colors *
    * instanceColors.rgb`), so one attribute turns the flat wall into a vertical ramp from the
-   * contract's `skirtTop` earth value down toward `skirtBottom`, which is the void haze the plane
-   * below it is painted with. The skirt is fogged as well, so the far side of the map loses the
+   * contract's `skirtTop` earth value TOWARD `skirtBottom`, which is the void plane's own colour —
+   * lighter than the earth, not darker, because the haze the skirt has to disappear into is
+   * lighter than it. The skirt is fogged as well, so the far side of the map loses the
    * edge entirely and the near side keeps a readable thickness. In vector the two colours are equal
    * and this is exactly a no-op.
    */
