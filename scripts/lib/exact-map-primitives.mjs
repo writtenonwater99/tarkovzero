@@ -31,6 +31,164 @@ function stableValue(value) {
 
 export const stableStringify = (value) => JSON.stringify(stableValue(value));
 
+// Marker names are cross-provider witnesses, so compare their semantic text
+// rather than display punctuation. Parenthetical suffixes such as "(Flare)" or
+// "(Co-op)" are useful in the UI but do not distinguish the physical marker.
+export function normalizeMarkerName(value) {
+  return String(value ?? '')
+    .normalize('NFKD')
+    .replace(/\p{Mark}+/gu, '')
+    .replace(/\([^)]*\)/g, '')
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '');
+}
+
+const markerDistance = (a, b) => a?.position && b?.position
+  && Number.isFinite(a.position.x) && Number.isFinite(a.position.z)
+  && Number.isFinite(b.position.x) && Number.isFinite(b.position.z)
+  ? Math.hypot(a.position.x - b.position.x, a.position.z - b.position.z)
+  : Infinity;
+
+const identityTokens = (row) => new Set(['sourceId', 'tarkovDevId', 'id', 'identityId']
+  .map((field) => row?.[field])
+  .filter((value) => value != null && value !== '')
+  .map(String));
+
+const sourceWitness = (row) => row?.source && (row.sourceId ?? row.id) != null
+  ? `${row.source}:${row.sourceId ?? row.id}` : null;
+
+const hasValue = (value) => value != null && value !== '';
+
+/**
+ * Reconcile authoritative exact markers with secondary SPT/Wiki witnesses.
+ * Matching is deliberately ordered:
+ *   1. shared source/tarkov.dev identity;
+ *   2. normalized name plus faction and kind;
+ *   3. nearest exact marker of the same kind within maxDistance.
+ *
+ * Exact rows always remain the output object. A matched Wiki row may only fill
+ * descriptive fields that exact data does not provide; it can never replace
+ * position, volume, outline, elevation, identity, or renderer semantics.
+ */
+export function reconcileMarkerRows(authoritative, secondary, {
+  kindOf = (row) => row?.sourceKind,
+  nameOf = (row) => row?.name,
+  factionOf = (row) => row?.faction ?? '',
+  maxDistance = 25,
+  descriptiveFields = ['description', 'image', 'requirementText'],
+  approximate = (row) => row?.source === 'eft-wiki',
+} = {}) {
+  const output = authoritative.map((row) => structuredClone(row));
+  const exactIndices = output.map((_, index) => index);
+  const kindOrder = [];
+  const stats = new Map();
+  const statFor = (kind) => {
+    const token = String(kind ?? 'unknown');
+    if (!stats.has(token)) {
+      kindOrder.push(token);
+      stats.set(token, { kind: token, exact: 0, secondary: 0, before: 0, matched: 0, after: 0, byId: 0, byName: 0, byDistance: 0 });
+    }
+    return stats.get(token);
+  };
+  for (const row of authoritative) { const stat = statFor(kindOf(row)); stat.exact++; stat.before++; }
+  for (const row of secondary) { const stat = statFor(kindOf(row)); stat.secondary++; stat.before++; }
+
+  const candidatesFor = (row) => exactIndices
+    .filter((index) => kindOf(output[index]) === kindOf(row));
+  const nearest = (indices, row) => indices
+    .map((index) => ({ index, distance: markerDistance(output[index], row) }))
+    .sort((a, b) => a.distance - b.distance || a.index - b.index)[0];
+
+  for (const row of secondary) {
+    const candidates = candidatesFor(row);
+    const rowIds = identityTokens(row);
+    let matchType = null;
+    let choice = nearest(candidates.filter((index) => {
+      const candidateIds = identityTokens(output[index]);
+      return [...rowIds].some((id) => candidateIds.has(id));
+    }), row);
+    if (choice) matchType = 'Id';
+
+    const rowName = normalizeMarkerName(nameOf(row));
+    const rowFaction = String(factionOf(row) ?? '').toLowerCase();
+    if (!choice && rowName) {
+      choice = nearest(candidates.filter((index) => normalizeMarkerName(nameOf(output[index])) === rowName
+        && String(factionOf(output[index]) ?? '').toLowerCase() === rowFaction), row);
+      if (choice) matchType = 'Name';
+    }
+
+    if (!choice) {
+      const distanceChoice = nearest(candidates, row);
+      if (distanceChoice?.distance <= maxDistance) { choice = distanceChoice; matchType = 'Distance'; }
+    }
+
+    if (!choice) {
+      output.push({ ...structuredClone(row), ...(approximate(row) ? { visualApproximate: true } : {}) });
+      continue;
+    }
+    const hit = output[choice.index];
+    const witnesses = [sourceWitness(hit), ...(hit.corroboratedBy ?? []), sourceWitness(row)].filter(Boolean);
+    hit.corroboratedBy = [...new Set(witnesses)];
+    if (row?.source === 'eft-wiki') for (const field of descriptiveFields) {
+      if (!hasValue(hit[field]) && hasValue(row[field])) hit[field] = structuredClone(row[field]);
+    }
+    const stat = statFor(kindOf(row));
+    stat.matched++;
+    stat[`by${matchType}`]++;
+  }
+
+  for (const row of output) statFor(kindOf(row)).after++;
+  return { rows: output, stats: kindOrder.map((kind) => stats.get(kind)) };
+}
+
+/**
+ * Fail when a built map contains ambiguous same-kind semantic names. Repeated
+ * generic physical markers (for example several Toolboxes) must be reviewed and
+ * pinned to an exact count in data/<map>-features.json, so a new provider copy
+ * cannot hide behind a broad exception.
+ */
+export function assertMarkerNameUniqueness(mapKey, collections, whitelist = []) {
+  const groups = new Map();
+  for (const collection of collections) for (const row of collection.rows ?? []) {
+    const name = collection.nameOf?.(row) ?? row?.name;
+    const normalizedName = normalizeMarkerName(name);
+    if (!normalizedName) continue;
+    const kind = String(collection.kindOf?.(row) ?? collection.kind ?? row?.sourceKind ?? 'unknown');
+    const faction = String(collection.factionOf?.(row) ?? row?.faction ?? '').toLowerCase();
+    const key = stableStringify([kind, normalizedName, faction]);
+    if (!groups.has(key)) groups.set(key, { kind, name, normalizedName, faction, rows: [] });
+    groups.get(key).rows.push(row);
+  }
+
+  const rules = whitelist.map((rule, index) => {
+    if (!rule || typeof rule !== 'object' || !rule.kind || !rule.name || !Number.isInteger(rule.count) || rule.count < 2) {
+      throw new Error(`${mapKey}: invalid markerDuplicateWhitelist entry ${index}; expected kind, name, and integer count >= 2`);
+    }
+    return {
+      ...rule,
+      normalizedName: normalizeMarkerName(rule.name),
+      faction: String(rule.faction ?? '').toLowerCase(),
+    };
+  });
+  const duplicateGroups = [...groups.values()].filter((group) => group.rows.length > 1);
+  const problems = [];
+  for (const group of duplicateGroups) {
+    const rule = rules.find((candidate) => candidate.kind === group.kind
+      && candidate.normalizedName === group.normalizedName && candidate.faction === group.faction);
+    const sourceRows = group.rows.map((row) => `${row.source ?? 'unknown'}:${row.sourceId ?? row.id ?? '?'}`);
+    const sources = `${sourceRows.slice(0, 6).join(', ')}${sourceRows.length > 6 ? `, ... +${sourceRows.length - 6}` : ''}`;
+    if (!rule) problems.push(`${group.kind}/${group.name}/${group.faction || '-'} has ${group.rows.length} rows (${sources})`);
+    else if (rule.count !== group.rows.length) problems.push(`${group.kind}/${group.name}/${group.faction || '-'} expected ${rule.count} whitelisted rows, got ${group.rows.length} (${sources})`);
+  }
+  for (const rule of rules) {
+    const group = duplicateGroups.find((candidate) => candidate.kind === rule.kind
+      && candidate.normalizedName === rule.normalizedName && candidate.faction === rule.faction);
+    if (!group) problems.push(`stale whitelist ${rule.kind}/${rule.name}/${rule.faction || '-'} expected ${rule.count} duplicate rows`);
+  }
+  if (problems.length) throw new Error(`${mapKey}: duplicate marker name assertion failed:\n- ${problems.join('\n- ')}`);
+  return duplicateGroups;
+}
+
 function cacheError(message) {
   return new Error(`${message}. Run: node scripts/fetch-map-primitives.mjs --date YYYY-MM-DD`);
 }

@@ -417,3 +417,75 @@ The table uses the same conditioned, water-capped canonical 1× sampler as the r
 - No screenshot/headless-browser verification was attempted in this worktree; the orchestrator owns the visual gate.
 
 No deploy, push, or commit was performed.
+
+## Fix pass 10b — dedupe exact vs Wiki/SPT markers
+
+### Changed
+
+- Replaced the pass-10 distance-gated reconciliation with one shared ordered matcher: common source/tarkov.dev identity, then punctuation/case/whitespace-insensitive normalized name plus faction and kind (with parenthetical qualifiers ignored for comparison), then nearest exact marker of the same kind within 25 m. Every exact object survives with its full position/size/outline/top/bottom/level geometry; matched Wiki rows can only fill missing description, image, or requirement text.
+- Matched objects now retain both authoritative and corroborating source references. Multiple Wiki/SPT observations can corroborate one exact object instead of surviving as duplicate markers. Wiki-only survivors remain explicitly `visualApproximate: true` and omit fabricated Y.
+- Added a builder-time normalized name+faction uniqueness assertion for every marker kind. Reviewed legitimate repeated names are pinned to exact counts in each `data/<map>-features.json` manifest, so an unreviewed or count-drifted duplicate fails the build.
+- Added a stable checked-in Customs Wiki marker projection, matching the existing Reserve/Woods offline inputs, and made every builder print exact, secondary, before, matched, after, and ID/name/distance counts per kind.
+- The corrected marker inventories feed the 3D playable-boundary gate. Rebuilt boundaries retain all remaining markers at the required margin; all eighteen canonical elevation anchors remain unchanged from pass 10.
+
+### Marker counts
+
+`Before` is exact plus secondary input rows; `Matched` is the number folded into exact objects; `After` is the serialized count.
+
+| Map | Kind | Before | Matched | After |
+|---|---|---:|---:|---:|
+| Customs | extract | 53 | 25 | 28 |
+| Customs | transit | 8 | 4 | 4 |
+| Customs | lock | 68 | 6 | 62 |
+| Customs | switch | 2 | 1 | 1 |
+| Customs | hazard | 5 | 0 | 5 |
+| Customs | loot container / stash | 951 | 332 | 619 |
+| Customs | loose loot | 749 | 333 | 416 |
+| Customs | spawn | 575 | 292 | 283 |
+| Customs | stationary weapon | 8 | 1 | 7 |
+| Customs | BTR stop | 0 | 0 | 0 |
+| Customs | artillery zone | 2 | 0 | 2 |
+| Reserve | extract | 22 | 11 | 11 |
+| Reserve | transit | 6 | 3 | 3 |
+| Reserve | lock | 38 | 5 | 33 |
+| Reserve | switch | 6 | 1 | 5 |
+| Reserve | hazard | 4 | 0 | 4 |
+| Reserve | loot container / stash | 1,104 | 102 | 1,002 |
+| Reserve | loose loot | 1,228 | 462 | 766 |
+| Reserve | spawn | 363 | 196 | 167 |
+| Reserve | stationary weapon | 16 | 8 | 8 |
+| Reserve | BTR stop | 0 | 0 | 0 |
+| Reserve | artillery zone | 2 | 0 | 2 |
+| Woods | extract | 38 | 18 | 20 |
+| Woods | transit | 8 | 4 | 4 |
+| Woods | lock | 9 | 4 | 5 |
+| Woods | switch | 0 | 0 | 0 |
+| Woods | hazard | 64 | 0 | 64 |
+| Woods | loot container / stash | 739 | 302 | 437 |
+| Woods | loose loot | 694 | 307 | 387 |
+| Woods | spawn | 663 | 295 | 368 |
+| Woods | stationary weapon | 4 | 2 | 2 |
+| Woods | BTR stop | 8 | 0 | 8 |
+| Woods | artillery zone | 2 | 0 | 2 |
+
+Customs now has 9 PMC, 16 Scav, 3 shared, and 4 transit extract rows, with no repeated `name|faction` group. A cross-source audit of every requested kind on all three maps found no remaining same-name group and no same-kind pair within 25 m.
+
+### Public-data hashes
+
+```text
+fe49b31cd7791ab8a46201180d9f019efabc35f0f9a73d656d27c09aa2ed2257  public/data/customs.json
+2fc39043aeb7627d8ba46d7e0ed353a0ce0cc19d9bec8b02505f247a9ec1306c  public/data/customs-3d.json
+0dc4ceeca5228ea7012f0c52f0d37aa425a32433886c0f7e28ae01a128178036  public/data/reserve.json
+81d67bf8a6b845e40cc8c4b4ed9d82fa70399b1096cda9338b2f0259829d1bbf  public/data/reserve-3d.json
+95dfe4fd6e67e4af980cc48c853f01f886c38b9b97d2029b9741d6b7f52dadbd  public/data/woods.json
+375a7359c772991b48a7b0ebeeda202fdcdf4c704993b1486750619160265702  public/data/woods-3d.json
+```
+
+### Verified
+
+- Two complete consecutive runs of both builders for all three maps were byte-identical at the six hashes above while preserving `builtAt`.
+- `node scripts/verify-map-pipeline.mjs --baseline=HEAD` passes the ordered-matcher fixtures, exact geometry/provenance checks, duplicate whitelist/count gates, fixed marker/output hashes, unchanged anchor heights, and the existing exact-cache/elevation/feature/relief assertions.
+- `npm run build` passes (968 modules; only Vite's existing >500 kB chunk-size advisory remains).
+- `node --check` passes for every edited JavaScript file, all changed/generated JSON parses, and `git diff --check` passes.
+
+No deploy, push, or commit was performed.

@@ -1,6 +1,31 @@
 {
   "schemaVersion": 1,
   "map": "woods",
+  "markerDuplicateWhitelist": [
+    { "kind": "hazard", "name": "Sniper", "count": 39 },
+    { "kind": "hazard", "name": "Landmine", "count": 25 },
+    { "kind": "lootContainer", "name": "PC block", "count": 2 },
+    { "kind": "lootContainer", "name": "Drawer", "count": 36 },
+    { "kind": "lootContainer", "name": "Technical supply crate", "count": 16 },
+    { "kind": "lootContainer", "name": "PMC body", "count": 43 },
+    { "kind": "lootContainer", "name": "Dead Scav", "count": 14 },
+    { "kind": "lootContainer", "name": "Duffle bag", "count": 62 },
+    { "kind": "lootContainer", "name": "Weapon box", "count": 50 },
+    { "kind": "lootContainer", "name": "Wooden crate", "count": 57 },
+    { "kind": "lootContainer", "name": "Medbag SMU06", "count": 9 },
+    { "kind": "lootContainer", "name": "Wooden ammo box", "count": 8 },
+    { "kind": "lootContainer", "name": "Toolbox", "count": 39 },
+    { "kind": "lootContainer", "name": "Grenade box", "count": 11 },
+    { "kind": "lootContainer", "name": "Buried barrel cache", "count": 25 },
+    { "kind": "lootContainer", "name": "Civilian body", "count": 2 },
+    { "kind": "lootContainer", "name": "Jacket", "count": 18 },
+    { "kind": "lootContainer", "name": "Ration supply crate", "count": 8 },
+    { "kind": "lootContainer", "name": "Ground cache", "count": 20 },
+    { "kind": "lootContainer", "name": "Medical supply crate", "count": 6 },
+    { "kind": "lootContainer", "name": "Sports Bag", "count": 6 },
+    { "kind": "looseLoot", "name": "Loose loot", "count": 387 },
+    { "kind": "stationaryWeapon", "name": "NSV Utyos 12.7x108 heavy machine gun", "count": 2 }
+  ],
   "features": [
     {
       "featureId": "woods.train_depot.structures",
