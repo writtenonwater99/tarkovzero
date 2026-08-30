@@ -35,7 +35,7 @@ const C = {
   concreteRaw: [187, 181, 169], rebar: [159, 140, 108], hazardStripe: [226, 190, 67],
 };
 const P = ([x, z], y = 0) => [-x, -z, y];
-let H = () => 0; // terrain height at game (x, z); set once data is loaded
+let BASE_H = () => 0, H = () => 0; // canonical surface samplers; set once data is loaded
 let WATER = [], RELIEF = 3;
 const Pg = ([x, z], dy = 0) => P([x, z], H(x, z) + dy); // draped point
 const ringG = (poly, dy = 0) => poly.map((p) => Pg(p, dy));
@@ -61,6 +61,9 @@ function makeSampler(t, relief = 3) {
   };
 }
 const inPolyXZ = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
+const makeSurfaceSampler = (base, hardRocks = [], relief = 1) => (x, z) => Math.max(base(x, z),
+  ...hardRocks.filter((rock) => inPolyXZ([x, z], rock.poly))
+    .map((rock) => Number.isFinite(rock.surfaceY) ? rock.surfaceY * relief : base(x, z) + rock.height * relief));
 let VOID_Z = -14;
 function voidRect(limit) { const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]); const m = 60; return [[Math.min(...xs) - m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.min(...zs) - m], [Math.max(...xs) + m, Math.max(...zs) + m], [Math.min(...xs) - m, Math.max(...zs) + m]]; }
 const OVERLAY = { depthCompare: 'always', depthWriteEnabled: false };
@@ -232,6 +235,22 @@ function detailParts(bs, scenes = []) {
 
     // --- 1. plinth: every building meets the ground instead of being pasted onto it
     if (st !== 'canopy') B(expand(b.poly, 0.25), b.plinthBase ?? base, b.plinthHeight ?? 0.75, mul(wall, 0.7), 0);
+
+    // Audited cooling towers are hyperboloid shells, not short storage tanks.
+    // Stacked circular frustums keep the recipe in the existing shared box layer.
+    if (st === 'cooling-tower') {
+      const segments = 14, baseRadius = Math.max(2.4, Math.sqrt(A / Math.PI));
+      const profile = (t) => baseRadius * (1 - 0.43 * Math.sin(Math.PI * t) - 0.22 * t);
+      for (let i = 0; i < segments; i++) {
+        const t0 = i / segments, t1 = (i + 1) / segments;
+        const radius = Math.max(profile(t0), profile(t1));
+        B(circle(cen[0], cen[1], radius, 28), base + h * t0, h / segments + 0.04, mul(C.concreteRaw, 0.92 + 0.05 * (i % 2)), h * t0);
+      }
+      const rimRadius = profile(1);
+      L(closed(circle(cen[0], cen[1], rimRadius, 32), base + h + 0.18), C.parapet, 0.55, h);
+      L([P([cen[0] + rimRadius + 0.12, cen[1]], base + 0.4), P([cen[0] + rimRadius + 0.12, cen[1]], base + h - 0.3)], C.tower, 0.22, 0);
+      continue;
+    }
 
     // --- 2. window bands: one dashed ring per floor. Dashes read as glass, gaps as piers.
     const banded = st === 'box' && A >= 40 && !['Fortress', 'Big Red'].includes(place) && b.kind !== 'tank';
@@ -497,15 +516,16 @@ export async function createView3d(container, mapData, src) {
     terrain = null;
     WATER = data.water || [];
     RELIEF = relief;
-    if (!data.terrain) { H = () => 0; VOID_Z = -14; heightEpoch++; return; }
+    if (!data.terrain) { BASE_H = () => 0; H = makeSurfaceSampler(BASE_H, data.hardRocks || [], relief); VOID_Z = -14; heightEpoch++; return; }
     data.terrain.limit = data.limit;
-    try { terrain = buildTerrain(data, relief); H = terrain.H; VOID_Z = terrain.voidZ; }
+    try { terrain = buildTerrain(data, relief); BASE_H = terrain.H; VOID_Z = terrain.voidZ; }
     catch (e) {
       console.warn('terrain mesh failed, falling back to quads', e);
       const sample = makeSampler(data.terrain, relief), capWater = makeWaterHeightCapper(data.water || [], relief);
-      H = (x, z) => capWater(sample(x, z), x, z);
+      BASE_H = (x, z) => capWater(sample(x, z), x, z);
       VOID_Z = Math.min(-14, Math.floor((Math.min(...data.terrain.heights) * relief - 10) / 2) * 2);
     }
+    H = makeSurfaceSampler(BASE_H, data.hardRocks || [], relief);
     heightEpoch++;
   };
   rebuildGround();
@@ -581,7 +601,8 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'understory', shadowEnabled: false, data: data.understory || [], getPolygon: (d) => ringG(d, 0.09), getFillColor: C.understory, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'shore', shadowEnabled: false, data: shoreData, getPath: (d) => [...d.path, d.path[0]].map((point) => waterPoint(d.water, point, 0.04)), getColor: C.shore, getWidth: 0.5, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
     new PathLayer({ id: 'cables', shadowEnabled: false, data: data.powerlines || [], getPath: (d) => catenary(d.path, 19), getColor: [96, 96, 92, 170], getWidth: 0.2, widthUnits: 'meters', widthMinPixels: 1, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks, getPolygon: (d) => ringG(d.poly ?? d, 0.04), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: (d) => d.color ? liftTone(d.color, 0.1) : C.rock, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 3 } }),
+    new SolidPolygonLayer({ id: 'hard-rocks', shadowEnabled: false, data: data.hardRocks || [], getPolygon: (d) => d.poly.map(([x, z]) => P([x, z], BASE_H(x, z) + 0.04)), extruded: true, getElevation: (d) => Number.isFinite(d.surfaceY) ? Math.max(0.1, d.surfaceY * RELIEF - BASE_H(d.anchor[0], d.anchor[1])) : d.height * RELIEF, getFillColor: (d) => d.color ? liftTone(d.color, 0.08) : C.rock, updateTriggers: { getPolygon: heightEpoch, getElevation: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.72, diffuse: 0.5, shininess: 2 } }),
+    new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: data.rocks || [], getPolygon: (d) => ringG(d.poly ?? d, 0.04), extruded: true, getElevation: (d) => d.height ?? 1.2, getFillColor: (d) => d.color ? liftTone(d.color, 0.1) : C.rock, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, material: { ambient: 0.75, diffuse: 0.45, shininess: 3 } }),
   ];
   const makeFloorLines = () => data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
   let floorLines = makeFloorLines();
@@ -784,7 +805,7 @@ export async function createView3d(container, mapData, src) {
   let extras = extraLayers();
   initialised = true;
   function render() {
-    const visibleBase = base.filter((layer) => (nature.trees || layer.id !== 'understory') && (nature.rocks || layer.id !== 'rocks'));
+    const visibleBase = base.filter((layer) => (nature.trees || layer.id !== 'understory') && (nature.rocks || !['rocks', 'hard-rocks'].includes(layer.id)));
     const vegetation = nature.trees ? treeLayers({ treeSet, H, zoom: viewState.zoom ?? 0, relief }) : [];
     deck.setProps({ layers: [...visibleBase, ...vegetation, extras[0], ...buildingLayer(), ...extras.slice(1), ...dynamicLayers()] });
   }
@@ -813,7 +834,7 @@ export async function createView3d(container, mapData, src) {
     relief,
     terrain: terrain?.stats ?? null,
     sources: {
-      buildings: data.buildings.length, props: propData.length, fences: (data.fences || []).length,
+      buildings: data.buildings.length, props: propData.length, fences: (data.fences || []).length, hardRocks: (data.hardRocks || []).length,
       bridges: (data.bridges || []).length, rocks: (data.rocks || []).length,
       treesAll: treeSet.all.length, treesFar: treeSet.far.length,
       water: (data.water || []).length,
