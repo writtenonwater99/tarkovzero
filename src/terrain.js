@@ -184,6 +184,16 @@ function drawSleepers(ctx, path, spacing = 2.4, halfWidth = 1.25) {
 
 // Pavement and every at-grade transport line are painted into the terrain texture. They therefore
 // share the mesh's exact vertices and can never stack, step, float, or z-fight on a steep relief.
+/**
+ * A road path that comes back to where it started is an AREA, not a centreline.
+ *
+ * Reserve's dirt roads are all closed rings (12/12; no Customs or Woods road closes at all): the
+ * builder handed the renderer the *outlines* of the gravel yards and the braided trails rather than
+ * their spines. Stroking an outline at the road's own width traces both banks of the ribbon and
+ * every hairpin twice, which is what the tangled tan loops at Reserve's east and west edges were.
+ * Filling the ring instead draws the thing the outline describes.
+ */
+const isAreaRing = (path) => path.length > 3 && Math.hypot(path[0][0] - path[path.length - 1][0], path[0][1] - path[path.length - 1][1]) < 1;
 function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz) {
   ctx.save();
   ctx.setTransform(1 / mx, 0, 0, 1 / mz, -X0 / mx, -Z0 / mz);
@@ -192,16 +202,26 @@ function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz) {
   ctx.fillStyle = css(SURFACE.pavement);
   for (const poly of data.pavement || []) if (trace(ctx, poly, true)) ctx.fill();
 
-  const paved = (data.roads || []).filter((d) => d.kind !== 'track' && d.kind !== 'dirt');
+  const roads = (data.roads || []).filter((d) => Array.isArray(d.path) && d.path.length > 1);
+  const rings = roads.filter((d) => isAreaRing(d.path));
+  const lines = roads.filter((d) => !isAreaRing(d.path));
+  for (const d of rings) {
+    const unpaved = d.kind === 'track' || d.kind === 'dirt';
+    ctx.fillStyle = css(unpaved ? SURFACE.dirt : SURFACE.road);
+    if (trace(ctx, d.path, true)) ctx.fill();
+    strokeMapPath(ctx, d.path, unpaved ? SURFACE.dirtEdge : SURFACE.roadEdge, 0.7);
+  }
+
+  const paved = lines.filter((d) => d.kind !== 'track' && d.kind !== 'dirt');
   for (const d of paved) strokeMapPath(ctx, d.path, d.kind === 'highway' ? SURFACE.highwayEdge : SURFACE.roadEdge, d.width + 1.6);
   for (const d of paved) strokeMapPath(ctx, d.path, d.kind === 'highway' ? SURFACE.highway : SURFACE.road, d.width);
   for (const d of paved.filter((d) => d.kind === 'highway')) strokeMapPath(ctx, d.path, SURFACE.marking, 0.25, [6, 6]);
 
-  for (const d of (data.roads || []).filter((r) => r.kind === 'dirt')) {
+  for (const d of lines.filter((r) => r.kind === 'dirt')) {
     strokeMapPath(ctx, d.path, SURFACE.dirtEdge, d.width + 1.2);
     strokeMapPath(ctx, d.path, SURFACE.dirt, d.width);
   }
-  for (const d of (data.roads || []).filter((r) => r.kind === 'track')) {
+  for (const d of lines.filter((r) => r.kind === 'track')) {
     const width = Math.max(2.2, d.width || 0);
     strokeMapPath(ctx, d.path, SURFACE.dirt, width + 0.8);
     for (const side of [-1, 1]) strokeMapPath(ctx, offsetLine(d.path, side * width * 0.24), SURFACE.track, 0.48, [4.5, 2.8]);
