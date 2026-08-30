@@ -20,7 +20,7 @@
 //     of those gates runs while the outputs are still only in memory, so a run
 //     that fails any of them leaves the working tree exactly as it found it.
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -159,9 +159,33 @@ async function fetchSource(source) {
 // Recipes
 // ---------------------------------------------------------------------------
 const produced = new Map(); // id -> Buffer
+const shapes = new Map(); // id -> { width, height } for image outputs
 
-function emit(id, buf) {
+/**
+ * Record one produced output.
+ *
+ * `image` is the decoded image the buffer was encoded from, and `nominalSize` is
+ * the number that the declared filename is allowed to advertise (the texture
+ * width for a plain map, the cube size for a LUT). Both exist because the
+ * resolution knobs (`detailSize`, `skyPreviewWidth`) live in the manifest while
+ * the output paths are literal strings in the same file: without this check,
+ * bumping `detailSize` to 1024 silently ships 1024px content inside a file
+ * called `-512.png`, and `--check` then reports the tree as green.
+ */
+function emit(id, buf, image = null, nominalSize = null) {
   if (!outputById.has(id)) fail(`recipe produced undeclared output "${id}"`);
+  const decl = outputById.get(id);
+  const named = /-(\d+)\.[a-z0-9]+$/.exec(decl.path);
+  if (named && nominalSize === null) {
+    fail(`${decl.path} advertises a size in its filename but the recipe declares none`);
+  }
+  if (named && Number(named[1]) !== nominalSize) {
+    fail(
+      `${decl.path} is named for ${named[1]} but the recipe produced ${nominalSize}.\n` +
+        '  Changing a resolution knob means renaming its outputs too — the filename must not lie.',
+    );
+  }
+  if (image) shapes.set(id, { width: image.width, height: image.height });
   produced.set(id, buf);
 }
 
@@ -185,18 +209,16 @@ function buildGroundDetail(zipBuf) {
     if (img.width % DETAIL) fail(`${name} map ${img.width}px has no integer box ratio to ${DETAIL}px`);
   }
 
-  emit('ground106-albedo', encodePng(takeChannels(resizeTo(color, DETAIL, 'srgb'), 3), { srgbChunk: true }));
-  emit('ground106-normal', encodePng(takeChannels(resizeTo(normal, DETAIL, 'normal'), 3)));
-  emit(
-    'ground106-orm',
-    encodePng(
-      packChannels([
-        { img: resizeTo(ao, DETAIL, 'linear'), channel: 0 },
-        { img: resizeTo(rough, DETAIL, 'linear'), channel: 0 },
-        { constant: 0 }, // ground is never metallic
-      ]),
-    ),
-  );
+  const albedo = takeChannels(resizeTo(color, DETAIL, 'srgb'), 3);
+  const normalOut = takeChannels(resizeTo(normal, DETAIL, 'normal'), 3);
+  const orm = packChannels([
+    { img: resizeTo(ao, DETAIL, 'linear'), channel: 0 },
+    { img: resizeTo(rough, DETAIL, 'linear'), channel: 0 },
+    { constant: 0 }, // ground is never metallic
+  ]);
+  emit('ground106-albedo', encodePng(albedo, { srgbChunk: true }), albedo, DETAIL);
+  emit('ground106-normal', encodePng(normalOut), normalOut, DETAIL);
+  emit('ground106-orm', encodePng(orm), orm, DETAIL);
 
   return {
     sourceSize: color.width,
@@ -210,9 +232,10 @@ function buildEnvironment(hdrBuf) {
   const exposure = autoExposure(analysis.meanLuminance);
 
   if (hdr.width % SKY_W) fail(`HDRI width ${hdr.width} has no integer box ratio to ${SKY_W}px`);
-  const preview = resizeTo(hdr, SKY_W, 'linear');
-  emit('autumn-crossing-sky', encodePng(tonemapToSrgb(preview, exposure), { srgbChunk: true }));
-  emit('autumn-crossing-gradient', encodePng(skyGradientStrip(hdr, { width: 8, height: 128, exposure }), { srgbChunk: true }));
+  const preview = tonemapToSrgb(resizeTo(hdr, SKY_W, 'linear'), exposure);
+  const gradient = skyGradientStrip(hdr, { width: 8, height: 128, exposure });
+  emit('autumn-crossing-sky', encodePng(preview, { srgbChunk: true }), preview, SKY_W);
+  emit('autumn-crossing-gradient', encodePng(gradient, { srgbChunk: true }), gradient);
 
   const light = {
     note:
@@ -262,14 +285,14 @@ function buildEnvironment(hdrBuf) {
 }
 
 function buildGenerated() {
-  emit('macro-noise', encodePng(macroNoise({ size: 256, seed: 20260829 })));
-  emit(
-    'overcast-grade-lut',
-    encodePng(
-      gradeLut({ shadowTint: PALETTE.fogFar, highlightTint: LIGHT.realistic.keyColor }, { size: 16 }),
-      { srgbChunk: true },
-    ),
-  );
+  const NOISE = 256;
+  const LUT = 16;
+  const noise = macroNoise({ size: NOISE, seed: 20260829 });
+  // A cube LUT ships as a horizontal strip, so its filename advertises the cube
+  // size (16), not the 256px image width.
+  const lut = gradeLut({ shadowTint: PALETTE.fogFar, highlightTint: LIGHT.realistic.keyColor }, { size: LUT });
+  emit('macro-noise', encodePng(noise), noise, NOISE);
+  emit('overcast-grade-lut', encodePng(lut, { srgbChunk: true }), lut, LUT);
 }
 
 // ---------------------------------------------------------------------------
@@ -348,8 +371,13 @@ let shipped = 0;
 const rows = [];
 for (const decl of manifest.outputs) {
   const buf = produced.get(decl.id);
+  const shape = shapes.get(decl.id) ?? null;
   decl.bytes = buf.length;
   decl.sha256 = sha256(buf);
+  // Dimensions travel with the asset so the filename is no longer the only
+  // signal a consumer has for how big the thing actually is.
+  decl.width = shape ? shape.width : null;
+  decl.height = shape ? shape.height : null;
   shipped += buf.length;
   rows.push([decl.id, decl.path, decl.bytes, decl.sha256]);
 }
@@ -367,6 +395,8 @@ const attribution = {
       kind: o.kind,
       colorSpace: o.colorSpace,
       channels: o.channels,
+      width: o.width,
+      height: o.height,
       bytes: o.bytes,
       sha256: o.sha256,
       source: src
@@ -421,6 +451,36 @@ if (shipped > manifest.shippedBudgetBytes) {
   fail(
     `shipped weight ${mib(shipped)} exceeds the Stage 1 budget of ${mib(manifest.shippedBudgetBytes)}\n` +
       '  nothing was written; the working tree is unchanged.',
+  );
+}
+
+// Undeclared files under the output root ship in dist/ verbatim and count
+// against nobody's budget, so a retired or renamed output has to be loud rather
+// than silently left behind. This runs before the writes for the same reason the
+// budget gate does.
+async function walk(dir, prefix = '') {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return []; // nothing shipped yet
+  }
+  const found = [];
+  for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) found.push(...(await walk(path.join(dir, entry.name), rel)));
+    else found.push(rel);
+  }
+  return found;
+}
+const declaredPaths = new Set([...manifest.outputs.map((o) => o.path), 'render-assets.json']);
+const orphans = (await walk(OUT_DIR)).filter((p) => !declaredPaths.has(p));
+if (orphans.length) {
+  fail(
+    `${orphans.length} file(s) under ${manifest.outputRoot} are not declared in the manifest:\n` +
+      orphans.map((p) => `    ${p}`).join('\n') +
+      '\n  They would still be copied into dist/. Delete them or declare them.\n' +
+      '  Nothing was written; the working tree is unchanged.',
   );
 }
 
