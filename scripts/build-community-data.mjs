@@ -1,9 +1,12 @@
-// Build public/data/<map>.json from reproducible community-source snapshots.
-//   spawns/bosses : SPT server database (game coordinates)
-//   extracts/transits/locks/guns/containers : EFT Wiki interactive map (wiki pixels -> game coords)
-//   optional dense loose loot : thinned SPT loose-loot positions (game coordinates)
+// Build public/data/<map>.json from the verified tarkov.dev exact cache, then
+// merge SPT/Wiki witnesses and additions without replacing exact primitives.
+// Wiki pixels have only visual X/Z; SPT and tarkov.dev retain game X/Y/Z.
 // Output matches the shape of the tarkov.dev GraphQL response used by src/api.js.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import {
+  assertMarkerNameUniqueness, loadExactMap, reconcileMarkerRows, stableStringify, translateExact,
+} from './lib/exact-map-primitives.mjs';
 
 const WIKI_CONTAINER_TYPES = new Set([
   'container_stash', 'container_weapon', 'container_crate', 'container_greencrate',
@@ -29,8 +32,9 @@ const CONFIG = {
     name: 'Customs',
     spt: 'scripts/spt-bigmap-base.json',
     maps: 'scripts/tarkov-dev-maps.json',
-    // Customs has no checked-in raw wiki response yet; retain the online fallback used by the original builder.
-    wikiUrl: 'https://escapefromtarkov.fandom.com/api.php?action=query&prop=revisions&titles=Map:Customs&rvslots=main&rvprop=content&format=json',
+    // Stable offline projection reconstructed from the committed pre-exact
+    // community snapshot; the builder never needs mutable live Wiki data.
+    wiki: 'scripts/data/customs/wiki-map.json',
     calibration: [
       { title: 'ZB-1011', game: [628, -131] },
       { title: "Smugglers' Bunker (ZB-1012)", game: [466, -116] },
@@ -119,6 +123,14 @@ if (!cfg) throw new Error(`unknown map ${key}; expected ${Object.keys(CONFIG).jo
 const stamp = process.argv.includes('--stamp');
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 
+const featureManifest = JSON.parse(await readFile(`data/${key}-features.json`, 'utf8'));
+if (featureManifest.schemaVersion !== 1 || featureManifest.map !== key || !Array.isArray(featureManifest.features)) {
+  throw new Error(`${key}: invalid data/${key}-features.json manifest`);
+}
+const markerDuplicateWhitelist = featureManifest.markerDuplicateWhitelist ?? [];
+if (!Array.isArray(markerDuplicateWhitelist)) throw new Error(`${key}: markerDuplicateWhitelist must be an array`);
+
+const exactSource = await loadExactMap(key);
 const spt = JSON.parse(await readFile(cfg.spt, 'utf8'));
 const mapFamily = JSON.parse(await readFile(cfg.maps, 'utf8'));
 const mapEntry = (Array.isArray(mapFamily) ? mapFamily.find((m) => m.normalizedName === key) : mapFamily)?.maps?.find((m) => m.key === key);
@@ -162,11 +174,13 @@ if (cfg.axisAligned && !cfg.affine) { // normalize to [wx, wy, constant]
   fx.splice(1, 0, 0); fx.length = 3;
   const [, a, b] = fz; fz[0] = 0; fz[1] = a; fz[2] = b;
 }
-const affine = ([wx, wy]) => ({ x: fx[0] * wx + fx[1] * wy + fx[2], y: 0, z: fz[0] * wx + fz[1] * wy + fz[2] });
+const affine = ([wx, wy]) => ({ x: fx[0] * wx + fx[1] * wy + fx[2], z: fz[0] * wx + fz[1] * wy + fz[2] });
 const toGame = (m) => {
   const override = cfg.overrides?.[titleOf(m)];
-  const p = override ? { x: override[0], y: 0, z: override[1] } : affine(m.position);
-  return { x: +p.x.toFixed(1), y: 0, z: +p.z.toFixed(1) };
+  const p = override ? { x: override[0], z: override[1] } : affine(m.position);
+  // Wiki sheets have no vertical coordinate. Omitting Y is honest; zero was a
+  // fabricated surface that later contaminated level/elevation decisions.
+  return { x: +p.x.toFixed(1), z: +p.z.toFixed(1) };
 };
 const VALID_LEVELS = new Set(['surface', 'underground', 'rooftop', 'upper']);
 const floorExtents = (mapEntry.layers || []).flatMap((layer) => (layer.extents || []).flatMap((ext) => (ext.bounds || []).map((bounds) => ({
@@ -213,29 +227,46 @@ for (const p of pairs) {
 console.log(`affine x=[${fx.map((x) => x.toPrecision(10)).join(', ')}], z=[${fz.map((x) => x.toPrecision(10)).join(', ')}]`);
 
 const markers = wiki.markers.filter((m) => !cfg.include || cfg.include(m));
-const extracts = [];
+function wikiEnrichment(marker, { requirement = false } = {}) {
+  const raw = marker.popup?.description ?? '';
+  const description = cleanWikiNote(raw);
+  const image = raw.match(/\[\[File:([^|\]]+)/i)?.[1]?.trim();
+  return {
+    ...(description ? { description } : {}),
+    ...(image ? { image } : {}),
+    ...(requirement && description ? { requirementText: description, note: description } : {}),
+  };
+}
+const wikiExtracts = [];
 for (const m of markers) {
   if (!m.categoryId.startsWith('exfil')) continue;
-  const faction = { exfil_pmc: 'pmc', exfil_scav: 'scav', exfil_transit: 'transit' }[m.categoryId];
+  const faction = { exfil_pmc: 'pmc', exfil_scav: 'scav', exfil_shared: 'shared', exfil_transit: 'transit' }[m.categoryId];
   const name = titleOf(m);
-  const note = (m.popup.description || '').replace(/\[\[File:[^\]]*\]\]/g, '').replace(/\[\[([^\]|]*)(\|[^\]]*)?\]\]/g, '$1').trim();
   const located = withLevel(m, 'extract');
-  const same = extracts.find((e) => e.name === name && e.faction !== faction && e.faction !== 'transit' && faction !== 'transit');
+  const same = wikiExtracts.find((e) => e.name === name && e.faction !== faction && e.faction !== 'transit' && faction !== 'transit');
   if (same) {
     if (same.level !== located.level) throw new Error(`${key}: conflicting levels for merged extract ${name}`);
     same.faction = 'shared'; continue;
   }
-  extracts.push({ id: `wiki-${m.id}`, name, faction, level: located.level, note, position: located.position });
+  wikiExtracts.push({
+    id: `wiki-${m.id}`, sourceId: String(m.id), source: 'eft-wiki', sourceKind: faction === 'transit' ? 'transit' : 'extract',
+    name, faction, level: located.level, ...wikiEnrichment(m, { requirement: true }), position: located.position,
+  });
 }
 
-const spawns = spt.SpawnPointParams.map((s) => {
+const sptSpawns = spt.SpawnPointParams.map((s) => {
   const cats = s.Categories.map((c) => c.toLowerCase());
   const sides = s.Sides.map((c) => ({ pmc: 'pmc', savage: 'scav', all: 'all' }[c.toLowerCase()] ?? c.toLowerCase()));
   const categories = [];
   if (cats.includes('player')) categories.push('player');
   if (cats.includes('boss')) categories.push('boss');
   if (cats.includes('bot') && !cats.includes('boss')) categories.push(s.BotZoneName?.toLowerCase().includes('snipe') ? 'sniper' : 'scav');
-  return { position: { x: +s.Position.x.toFixed(1), y: +s.Position.y.toFixed(1), z: +s.Position.z.toFixed(1) }, sides, categories, zoneName: s.BotZoneName || null };
+  return {
+    sourceId: `generated:${createHash('sha256').update(stableStringify(s)).digest('hex').slice(0, 24)}`,
+    source: 'spt-4.1.2', sourceKind: 'spawn',
+    position: { x: s.Position.x, y: s.Position.y, z: s.Position.z },
+    sides, categories, zoneName: s.BotZoneName || null,
+  };
 });
 const bosses = Object.values(spt.BossLocationSpawn.reduce((acc, b) => {
   if (b.BossName.startsWith('pmc') || b.BossChance === 0 || b.BossName === 'arenaFighterEvent') return acc;
@@ -245,10 +276,18 @@ const bosses = Object.values(spt.BossLocationSpawn.reduce((acc, b) => {
   return acc;
 }, {}));
 
-const locks = markers.filter((m) => m.categoryId === 'locked').map((m) => ({ lockType: 'door', key: { name: titleOf(m) }, ...withLevel(m, 'lock') }));
-const stationaryWeapons = markers.filter((m) => m.categoryId === 'stationarygun').map((m) => ({ stationaryWeapon: { name: titleOf(m) }, position: toGame(m) }));
-const hazards = [];
-const switches = markers.filter((m) => m.categoryId === 'lever').map((m) => ({ name: titleOf(m), ...withLevel(m, 'switch') }));
+const wikiLocks = markers.filter((m) => m.categoryId === 'locked').map((m) => ({
+  sourceId: String(m.id), source: 'eft-wiki', sourceKind: 'lock', lockType: 'door', key: { name: titleOf(m) },
+  ...wikiEnrichment(m, { requirement: true }), ...withLevel(m, 'lock'),
+}));
+const wikiStationaryWeapons = markers.filter((m) => m.categoryId === 'stationarygun').map((m) => ({
+  sourceId: String(m.id), source: 'eft-wiki', sourceKind: 'stationaryWeapon', stationaryWeapon: { name: titleOf(m) },
+  ...wikiEnrichment(m), position: toGame(m),
+}));
+const wikiSwitches = markers.filter((m) => m.categoryId === 'lever').map((m) => ({
+  sourceId: String(m.id), source: 'eft-wiki', sourceKind: 'switch', name: titleOf(m),
+  ...wikiEnrichment(m, { requirement: true }), ...withLevel(m, 'switch'),
+}));
 
 function cleanWikiNote(raw = '') {
   return raw
@@ -263,9 +302,12 @@ function cleanWikiNote(raw = '') {
 const wikiContainers = markers.filter((m) => WIKI_CONTAINER_TYPES.has(m.categoryId)).map((m) => {
   const note = cleanWikiNote(m.popup?.description);
   return {
+    sourceId: String(m.id),
+    source: 'eft-wiki', sourceKind: 'lootContainer',
     type: m.categoryId,
     name: titleOf(m) || m.categoryId,
     ...withLevel(m, 'container'),
+    ...wikiEnrichment(m),
     ...(note ? { note } : {}),
   };
 });
@@ -305,17 +347,154 @@ try {
   if (loose.map && loose.map !== key) throw new Error(`loose-loot map is ${loose.map}`);
   sptLoose = thinLooseLoot(loose.points ?? []).map(([x, y, z]) => {
     const position = { x: +x.toFixed(1), y: +y.toFixed(1), z: +z.toFixed(1) };
-    return { type: 'loot_spt', name: 'Loose loot (SPT)', position, level: sptLevelFor(position) };
+    return {
+      sourceId: `generated:${createHash('sha256').update(`${x},${y},${z}`).digest('hex').slice(0, 24)}`,
+      source: 'spt-4.1.2', sourceKind: 'looseLoot', type: 'loot_spt', name: 'Loose loot (SPT)', position, level: sptLevelFor(position),
+    };
   });
 } catch (e) {
   if (e?.code !== 'ENOENT') throw new Error(`${key}: invalid SPT loose-loot samples: ${e.message}`);
 }
-const containers = [...wikiContainers, ...sptLoose];
+
+// ---- exact cache -> renderer markers ---------------------------------------------------
+// The raw records themselves are serialized once in <map>-3d.json. This projection
+// keeps full-precision coordinates/volumes and only adds renderer-facing names,
+// levels and provenance. Wiki/SPT can corroborate or add records, never replace it.
+const exactItems = (collection) => exactSource.exact.collections[collection] ?? [];
+const provenance = (item, kind) => ({ source: 'tarkov.dev-json', sourceKind: kind, sourceId: item.sourceId });
+const volume = (raw) => ({
+  position: structuredClone(raw.position),
+  ...(raw.size ? { size: structuredClone(raw.size) } : {}),
+  ...(raw.outline ? { outline: structuredClone(raw.outline) } : {}),
+  ...(Number.isFinite(raw.top) ? { top: raw.top } : {}),
+  ...(Number.isFinite(raw.bottom ?? raw.botom) ? { bottom: raw.bottom ?? raw.botom } : {}),
+});
+function exactLevel(type, name, position) {
+  const override = cfg.levelOverrides?.[type]?.[name];
+  if (override) return override;
+  const matches = floorExtents.filter((ext) => inExtent(position, ext)
+    && Number.isFinite(position.y) && Number.isFinite(ext.height?.[0]) && Number.isFinite(ext.height?.[1])
+    && position.y >= Math.min(...ext.height) - 0.75 && position.y <= Math.max(...ext.height) + 0.75);
+  if (matches.some((ext) => /underground|bunkers/i.test(ext.layer))) return 'underground';
+  if (matches.some((ext) => !/ground|underground|bunkers/i.test(ext.layer))) return 'upper';
+  return 'surface';
+}
+const exactExtracts = [
+  ...exactItems('extracts').map((item) => {
+    const raw = item.raw, name = translateExact(raw.name, exactSource.translations);
+    return { ...provenance(item, 'extract'), id: raw.id, name, faction: raw.faction, level: exactLevel('extract', name, raw.position), ...volume(raw) };
+  }),
+  ...exactItems('transits').map((item) => {
+    const raw = item.raw, name = translateExact(raw.description, exactSource.translations);
+    return { ...provenance(item, 'transit'), id: `transit-${raw.id}`, name, faction: 'transit', level: exactLevel('extract', name, raw.position), targetMapId: raw.map, ...volume(raw) };
+  }),
+];
+const exactSpawns = exactItems('spawns').map((item) => ({
+  ...provenance(item, 'spawn'), position: structuredClone(item.raw.position),
+  sides: structuredClone(item.raw.sides ?? []), categories: structuredClone(item.raw.categories ?? []), zoneName: item.raw.zoneName ?? null,
+}));
+const exactLocks = exactItems('locks').map((item) => {
+  const raw = item.raw, name = translateExact(raw.key, exactSource.translations, ' Name');
+  return {
+    ...provenance(item, 'lock'), id: raw.id, lockType: raw.lockType, key: { id: raw.key, name },
+    needsPower: raw.needsPower, level: exactLevel('lock', name, raw.position), ...volume(raw),
+  };
+});
+const exactSwitches = exactItems('switches').map((item) => {
+  const raw = item.raw, name = translateExact(raw.name, exactSource.translations);
+  return { ...provenance(item, 'switch'), id: raw.id, name, switchType: raw.switchType, level: exactLevel('switch', name, raw.position), ...volume(raw) };
+});
+const exactHazards = exactItems('hazards').map((item) => {
+  const raw = item.raw;
+  return { ...provenance(item, 'hazard'), id: raw.id, name: translateExact(raw.name, exactSource.translations), hazardType: raw.hazardType, ...volume(raw) };
+});
+const artilleryZones = exactItems('artilleryZones').map((item) => ({
+  ...provenance(item, 'artilleryZone'), id: item.raw.id, name: `Artillery zone ${item.raw.id}`, hazardType: 'artillery', ...volume(item.raw),
+}));
+const exactStationaryWeapons = exactItems('stationaryWeapons').map((item) => {
+  const raw = item.raw, lookup = exactSource.lookups.stationaryWeapons[raw.stationaryWeapon] ?? {};
+  const name = translateExact(lookup.name ?? raw.stationaryWeapon, exactSource.translations, lookup.name ? '' : ' Name');
+  return {
+    ...provenance(item, 'stationaryWeapon'),
+    stationaryWeapon: { id: raw.stationaryWeapon, name, ...(lookup.normalizedName ? { normalizedName: lookup.normalizedName } : {}) },
+    position: structuredClone(raw.position),
+  };
+});
+const exactContainers = [
+  ...exactItems('lootContainers').map((item) => {
+    const raw = item.raw, lookup = exactSource.lookups.lootContainers[raw.lootContainer] ?? {};
+    const normalized = lookup.normalizedName?.replace(/-/g, '_') ?? 'unknown';
+    const name = translateExact(lookup.name ?? raw.lootContainer, exactSource.translations, lookup.name ? '' : ' Name');
+    return {
+      ...provenance(item, 'lootContainer'), type: `container_${normalized}`, name,
+      lootContainerId: raw.lootContainer, position: structuredClone(raw.position), level: exactLevel('container', name, raw.position),
+    };
+  }),
+  ...exactItems('lootLoose').map((item) => ({
+    ...provenance(item, 'looseLoot'), type: 'loot_loose', name: 'Loose loot',
+    position: structuredClone(item.raw.position), items: structuredClone(item.raw.items ?? []),
+    level: exactLevel('container', 'Loose loot', item.raw.position),
+  })),
+];
+const btrStops = exactItems('btrStops').map((item) => ({
+  ...provenance(item, 'btrStop'), name: translateExact(item.raw.name, exactSource.translations),
+  position: { x: item.raw.x, y: item.raw.y, z: item.raw.z },
+}));
+
+const extractMerge = reconcileMarkerRows(exactExtracts, wikiExtracts, {
+  nameOf: (row) => row.name, factionOf: (row) => row.faction,
+});
+const spawnMerge = reconcileMarkerRows(exactSpawns, sptSpawns, { nameOf: () => '' });
+const lockMerge = reconcileMarkerRows(exactLocks, wikiLocks, { nameOf: (row) => row.key?.name });
+const switchMerge = reconcileMarkerRows(exactSwitches, wikiSwitches, { nameOf: (row) => row.name });
+const stationaryWeaponMerge = reconcileMarkerRows(exactStationaryWeapons, wikiStationaryWeapons, {
+  nameOf: (row) => row.stationaryWeapon?.name,
+});
+const containerMerge = reconcileMarkerRows(exactContainers, [...wikiContainers, ...sptLoose], { nameOf: (row) => row.name });
+
+const extracts = extractMerge.rows;
+const spawns = spawnMerge.rows;
+const locks = lockMerge.rows;
+const switches = switchMerge.rows;
+const stationaryWeapons = stationaryWeaponMerge.rows;
+const containers = containerMerge.rows;
+const hazards = [...exactHazards, ...artilleryZones];
+
+const markerStats = [
+  ...extractMerge.stats, ...spawnMerge.stats, ...lockMerge.stats, ...switchMerge.stats,
+  ...stationaryWeaponMerge.stats, ...containerMerge.stats,
+  { kind: 'hazard', exact: exactHazards.length, secondary: 0, before: exactHazards.length, matched: 0, after: exactHazards.length, byId: 0, byName: 0, byDistance: 0 },
+  { kind: 'artilleryZone', exact: artilleryZones.length, secondary: 0, before: artilleryZones.length, matched: 0, after: artilleryZones.length, byId: 0, byName: 0, byDistance: 0 },
+  { kind: 'btrStop', exact: btrStops.length, secondary: 0, before: btrStops.length, matched: 0, after: btrStops.length, byId: 0, byName: 0, byDistance: 0 },
+];
+const kindOrder = ['extract', 'transit', 'lock', 'switch', 'hazard', 'lootContainer', 'looseLoot', 'spawn', 'stationaryWeapon', 'btrStop', 'artilleryZone'];
+for (const kind of kindOrder) if (!markerStats.some((stat) => stat.kind === kind)) {
+  markerStats.push({ kind, exact: 0, secondary: 0, before: 0, matched: 0, after: 0, byId: 0, byName: 0, byDistance: 0 });
+}
+markerStats.sort((a, b) => kindOrder.indexOf(a.kind) - kindOrder.indexOf(b.kind));
+console.log(`marker counts ${key} (before = exact + secondary)`);
+console.log('kind               exact secondary before matched after  match rule (id/name/distance)');
+for (const stat of markerStats) console.log(`${stat.kind.padEnd(18)} ${String(stat.exact).padStart(5)} ${String(stat.secondary).padStart(9)} ${String(stat.before).padStart(6)} ${String(stat.matched).padStart(7)} ${String(stat.after).padStart(5)}  ${stat.byId}/${stat.byName}/${stat.byDistance}`);
 
 const output = `public/data/${key}.json`;
 let builtAt = new Date().toISOString();
 if (!stamp) { try { builtAt = JSON.parse(await readFile(output, 'utf8')).builtAt || builtAt; } catch {} }
-const out = { name: cfg.name, normalizedName: key, source: 'community (SPT database + EFT Wiki)', builtAt, extracts, spawns, bosses, hazards, stationaryWeapons, locks, switches, containers };
+const out = {
+  name: cfg.name, normalizedName: key,
+  source: 'tarkov.dev exact cache + SPT 4.1.2 + EFT Wiki visual approximations', builtAt,
+  exactCache: exactSource.exact.source,
+  extracts, spawns, bosses, hazards, stationaryWeapons, locks, switches, containers, btrStops, artilleryZones,
+};
+assertMarkerNameUniqueness(key, [
+  { rows: extracts, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction },
+  { rows: locks, kindOf: (row) => row.sourceKind, nameOf: (row) => row.key?.name },
+  { rows: switches, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: hazards, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: containers, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: spawns, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: stationaryWeapons, kindOf: (row) => row.sourceKind, nameOf: (row) => row.stationaryWeapon?.name },
+  { rows: btrStops, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+], markerDuplicateWhitelist);
 await mkdir('public/data', { recursive: true });
 await writeFile(output, JSON.stringify(out, null, 1));
-console.log(`wrote ${output}: ${extracts.length} extracts, ${spawns.length} spawns, ${bosses.length} bosses, ${locks.length} locks, ${stationaryWeapons.length} guns, ${switches.length} switches, ${wikiContainers.length} wiki containers, ${sptLoose.length} thinned SPT loose-loot points`);
+console.log(`wrote ${output}: ${extracts.length} extracts/transits, ${spawns.length} spawns, ${bosses.length} bosses, ${locks.length} locks, ${hazards.length} hazards/artillery, ${stationaryWeapons.length} guns, ${switches.length} switches, ${containers.length} loot markers, ${btrStops.length} BTR stops`);

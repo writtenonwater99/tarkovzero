@@ -7,7 +7,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { index, rank, groundingFor, parseReply, buildActions } from '../api/assistant.js';
+import {
+  index, rank, groundingFor, parseReply, buildActions,
+  normalizeActiveIds, activeQuestNames, cacheKeyFor, MAX_ACTIVE,
+} from '../api/assistant.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quests = JSON.parse(readFileSync(join(root, 'public/data/quests.json'), 'utf8'));
@@ -44,6 +47,52 @@ ok(top('punisher part 4')?.name === 'The Punisher - Part 4', 'the part number de
   ok(!!c && !!w, 'ranks on every map');
   ok(rank(entries, 'a', 'customs').length <= 3, 'never returns more than 3 hits');
   ok(rank(entries, 'zzzqqxx nonsense', 'customs').length === 0, 'no hits for nonsense');
+}
+
+/* ------------------------------------------------------------- active quests */
+// The server half of the active-quest feature (commit 2bdec1d): what the request body may contain,
+// which ids the model is told about, the +5 ranking nudge, and the cache key that keeps a question
+// asked before and after accepting a quest apart. None of it was covered — every line of it could
+// be deleted and this file stayed green.
+console.log('\n# active quests (the game\'s own log)');
+{
+  ok(normalizeActiveIds(['  a1  ', 'b-2', 'C_3']).join(',') === 'a1,b-2,C_3', 'ids are trimmed and kept');
+  ok(normalizeActiveIds(['<img src=x>', 'a b', 'x'.repeat(65), '', 7, null]).length === 0, 'anything not id-shaped is dropped');
+  ok(normalizeActiveIds('a1').length === 0, 'a non-array is an empty list');
+  ok(normalizeActiveIds(Array.from({ length: 200 }, (_, i) => `id${i}`)).length === MAX_ACTIVE, `a flood is capped at ${MAX_ACTIVE}`);
+}
+{
+  const real = quests.slice(0, 3);
+  const names = activeQuestNames(entries, real.map((q) => q.id));
+  ok(names.length === 3 && names.every((n, i) => n === real[i].name), 'ids resolve to the names the prompt uses', names.join(' | '));
+  ok(activeQuestNames(entries, ['not-a-task']).length === 0, 'an id with no quest never reaches the model');
+  ok(activeQuestNames(entries, []).length === 0, 'no active set, no names');
+  ok(activeQuestNames(entries, quests.slice(0, 40).map((q) => q.id)).length === 12, 'the prompt list is capped at 12');
+}
+{
+  // The nudge, on the real file: a question that names a quest family without saying which part.
+  // Whichever sibling wins without grounding, the one the GAME says the player is on must win with
+  // it — and it must be a nudge, not an override (a quest named outright still wins).
+  const family = quests.filter((q) => /^The Punisher - Part \d$/.test(q.name ?? ''));
+  const blind = rank(entries, 'how do I finish the punisher', 'customs')[0]?.q;
+  const other = family.find((q) => q.id !== blind?.id);
+  ok(!!blind && !!other, 'found a quest family to test the nudge with', `${blind?.name} vs ${other?.name}`);
+  const nudged = rank(entries, 'how do I finish the punisher', 'customs', { activeIds: new Set([other.id]) })[0]?.q;
+  ok(nudged?.id === other.id, 'the active sibling outranks the one plain retrieval picked', `${blind?.name} -> ${nudged?.name}`);
+  const named = rank(entries, `how do I finish ${blind.name}`, 'customs', { activeIds: new Set([other.id]) })[0]?.q;
+  ok(named?.id === blind.id, 'but a quest the player names outright still wins — it is a nudge, not an override', named?.name);
+  ok(rank(entries, 'how do I finish the punisher', 'customs', { activeIds: new Set(['not-a-task']) })[0]?.id === blind?.id
+    || rank(entries, 'how do I finish the punisher', 'customs', { activeIds: new Set(['not-a-task']) })[0]?.q?.id === blind?.id,
+  'an unknown active id changes nothing');
+  ok(rank(entries, 'how do I finish the punisher', 'customs', { activeIds: null })[0]?.q?.id === blind?.id, 'a null active set is the plain ranking');
+}
+{
+  const base = { map: 'customs', message: 'Where is it?', history: [] };
+  ok(cacheKeyFor(base) === cacheKeyFor({ ...base }), 'the same request is the same key');
+  ok(cacheKeyFor({ ...base, activeIds: ['a1'] }) !== cacheKeyFor(base), 'accepting a quest is a different question');
+  ok(cacheKeyFor({ ...base, activeIds: ['a1', 'b2'] }) !== cacheKeyFor({ ...base, activeIds: ['a1'] }), 'so is accepting another');
+  ok(cacheKeyFor({ ...base, message: 'WHERE IS IT?' }) === cacheKeyFor(base), 'case is not a different question');
+  ok(cacheKeyFor({ ...base, map: 'woods' }) !== cacheKeyFor(base), 'a different map is');
 }
 
 console.log('\n# grounding');

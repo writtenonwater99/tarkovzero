@@ -1,0 +1,244 @@
+/**
+ * Active quests — the pure half (no DOM, no Leaflet, no deck).
+ *
+ * The companion replays Escape from Tarkov's own `push-notifications` log (message type 10 =
+ * started, 12 = finished, 11 = failed) and posts the resulting sets to the relay, which forwards
+ * them to every subscriber of a pairing code as ONE message shape:
+ *
+ *   { t:'quests', active:[taskId], done:[taskId], failed:[taskId], accountId, ts, since }
+ *
+ * `taskId` is the tarkov.dev / SPT task id — the `id` field of a row in public/data/quests.json.
+ * `since` is the oldest game log the companion could read: EFT rotates logs, so a quest started
+ * before that date may be missing from `active` and the UI has to say so.
+ *
+ * Everything in this file is a pure function of (message | quest list | current map), which is what
+ * scripts/active-quests-test.mjs exercises. See docs/plans/ACTIVE-QUESTS.md for the full spec.
+ */
+
+/**
+ * A quest set from a stranger's relay room is untrusted input: cap what we will look at.
+ *
+ * 1000, the same number as the relay's own ID_CAP (relay/server.mjs) and for the same reason: the
+ * cap has to sit well above the quest count. public/data/quests.json carries 517 quests, so the old
+ * 500 truncated a late-game player's `done` list — up to 17 finished quests never reached
+ * "Completed", and because parseQuestsMessage() filters `active` against the truncated `done` set,
+ * a quest the game had reported finished stayed in "My quests" and kept selecting itself onto the
+ * map. mergeQuestSets() re-normalises the flattened lists, so two paired companions hit it sooner.
+ */
+export const MAX_IDS = 1000;
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Trim, drop anything that isn't an id-shaped string, dedupe, keep the incoming order. */
+export function normalizeIds(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const raw of list) {
+    if (typeof raw !== 'string') continue;
+    const id = raw.trim();
+    if (!ID_RE.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= MAX_IDS) break;
+  }
+  return out;
+}
+
+const str = (v, n) => (typeof v === 'string' || typeof v === 'number' ? String(v).slice(0, n) : null);
+
+/**
+ * Normalise one `{t:'quests'}` message. Returns null when the message is something else, so the
+ * socket handler can use it as its own type test.
+ *
+ * A finished or failed quest never stays in `active`: the companion should already have removed it,
+ * but the site is the last line and two lists disagreeing would show a quest twice.
+ */
+export function parseQuestsMessage(m) {
+  if (!m || typeof m !== 'object') return null;
+  if ((m.t ?? m.type) !== 'quests') return null;
+  const done = normalizeIds(m.done);
+  const failed = normalizeIds(m.failed);
+  const closed = new Set([...done, ...failed]);
+  return {
+    active: normalizeIds(m.active).filter((id) => !closed.has(id)),
+    done,
+    failed,
+    accountId: str(m.accountId, 64),
+    ts: Number.isFinite(m.ts) ? m.ts : Date.now(),
+    since: str(m.since, 40),
+  };
+}
+
+/**
+ * Merge the sets of several pairing codes (you + a friend running their own companion), best
+ * source first. Active anywhere wins: a quest one player has finished is still worth drawing while
+ * another player is on it.
+ */
+export function mergeQuestSets(sets) {
+  const list = (sets ?? []).filter(Boolean);
+  const active = normalizeIds(list.flatMap((s) => s.active ?? []));
+  const inActive = new Set(active);
+  const done = normalizeIds(list.flatMap((s) => s.done ?? [])).filter((id) => !inActive.has(id));
+  const closed = new Set([...inActive, ...done]);
+  return {
+    active,
+    done,
+    failed: normalizeIds(list.flatMap((s) => s.failed ?? [])).filter((id) => !closed.has(id)),
+    accountId: list.find((s) => s.accountId)?.accountId ?? null,
+    since: list.find((s) => s.since)?.since ?? null,
+    ts: list.reduce((t, s) => Math.max(t, s.ts ?? 0), 0) || null,
+  };
+}
+
+/** One panel row. `here` = this quest has drawable objectives on the map that is open. */
+function rowFor(id, q, mapKey) {
+  return {
+    id,
+    slug: q.slug,
+    name: q.name,
+    trader: q.trader ?? '',
+    here: !!q.siteMaps?.includes(mapKey),
+    maps: [...new Set([...(q.siteMaps ?? []), ...(q.maps ?? [])])],
+  };
+}
+
+/**
+ * Active ids ∩ quests.json, split into this map and everywhere else.
+ *
+ * Order is the order the ids arrived in — the companion replays the log in `dt` order, so that is
+ * "most recently accepted last", which is a fact about the player's game and not ours to re-sort.
+ * Ids with no row in quests.json (trader chatter carries the same message shape) are reported
+ * separately and never rendered as quests.
+ */
+export function activeRows(all, activeIds, mapKey) {
+  const byId = new Map((all ?? []).map((q) => [q.id, q]));
+  const here = [];
+  const elsewhere = [];
+  const unknown = [];
+  for (const id of normalizeIds(activeIds)) {
+    const q = byId.get(id);
+    if (!q) { unknown.push(id); continue; }
+    const row = rowFor(id, q, mapKey);
+    (row.here ? here : elsewhere).push(row);
+  }
+  return { here, elsewhere, unknown };
+}
+
+/** The same intersection for the finished ids — one flat list, incoming order. */
+export function doneRows(all, doneIds, mapKey) {
+  const byId = new Map((all ?? []).map((q) => [q.id, q]));
+  const rows = [];
+  for (const id of normalizeIds(doneIds)) {
+    const q = byId.get(id);
+    if (q) rows.push(rowFor(id, q, mapKey));
+  }
+  return rows;
+}
+
+/**
+ * Which quests auto-select should ADD right now. It only ever adds:
+ *
+ *  - off when the toggle is off;
+ *  - only active quests with objectives on the map that is open;
+ *  - never something already selected — a manual selection is never touched, and never removed;
+ *  - never a slug that was auto-selected once already (`applied`), so a player who takes one off
+ *    the map keeps it off until the game says the quest changed.
+ */
+export function autoSelectSlugs({ all, activeIds, mapKey, selected = [], applied = new Set(), auto = true } = {}) {
+  if (!auto) return [];
+  const already = new Set(selected);
+  const out = [];
+  for (const row of activeRows(all, activeIds, mapKey).here) {
+    if (already.has(row.slug) || applied.has(row.slug) || out.includes(row.slug)) continue;
+    out.push(row.slug);
+  }
+  return out;
+}
+
+/**
+ * `since` as a calendar date, whether it arrives as an ISO string, a seconds epoch or a ms epoch.
+ *
+ * The date is the player's OWN, not UTC's. It is rendered straight into sinceCaveat's "quests
+ * started before then may be missing", and the companion reads EFT's log filenames, which the game
+ * writes in local time — so formatting an instant through toISOString() told a player in UTC−6
+ * whose oldest log is from the evening that the data starts the NEXT day. That is the wrong
+ * direction for a line whose whole job is to say how far back the data can be trusted.
+ */
+export function sinceLabel(since) {
+  if (since == null || since === '') return '';
+  const raw = String(since).trim();
+  // Already a plain calendar date — it came from a log filename. Re-parsing it would read it as UTC
+  // midnight and hand back the day before, west of Greenwich.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const n = Number(raw);
+  const d = /^\d{13}$/.test(raw) ? new Date(n)
+    : /^\d{10}$/.test(raw) ? new Date(n * 1000)
+    : new Date(raw);
+  if (!Number.isFinite(d.getTime())) return raw.slice(0, 40);
+  const p = (v) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * The caveat line. EFT deletes old logs, so the companion's replay can only reach back so far —
+ * an empty "My quests" is not proof the player has no quests, and the panel must say which.
+ */
+export function sinceCaveat(since) {
+  const label = sinceLabel(since);
+  return label ? `Read from game logs since ${label} — quests started before then may be missing.` : '';
+}
+
+/* ------------------------------------------------------- objective checklist rows -- */
+/**
+ * The `(n of m)` counter build-quests.mjs appends to identical SYNTHESISED objective lines.
+ *
+ * When SPT's locale has no English for an objective, scripts/build-quests.mjs assembles one from
+ * the structured fields (`synthText()`), and a quest whose objectives all synthesise to the same
+ * sentence gets its rows numbered so they are at least distinguishable. That is a build-time
+ * artifact and it says so, but the panel rendered every one of them: Abandoned Cargo shows one real
+ * objective — "Locate and mark the first special TerraGroup cargo with an MS2000 Marker on Customs"
+ * — followed by seven rows reading "Locate the objective on Customs (n of 7) (optional)", each with
+ * no zone, so eight of eleven visible rows in the "My quests" frame were filler (QA M4).
+ */
+const NUMBERED = /^(.*\S)\s+\((\d+) of (\d+)\)$/;
+
+/**
+ * Fold those runs into one row each.
+ *
+ * The rule is the build contract, not a string guess: consecutive objectives that carry the SAME
+ * sentence under a `(n of m)` counter, agree on `optional`, and have NO zones — so not one of them
+ * can ever be a pin, a number or a fly-to — are one thing said m times. They collapse to a single
+ * row carrying every id, so ticking it ticks all of them and nothing is hidden from the player.
+ *
+ * Everything else passes through untouched, one row per objective, in order. An objective with a
+ * zone is never folded even if its text is numbered: those rows carry map badges that differ.
+ *
+ * @param {Array<{id:string, text?:string, optional?:boolean, zones?:Array}>} objectives
+ * @returns {Array<{ids:string[], text:string, optional:boolean, count:number, objective:object}>}
+ */
+export function objectiveRows(objectives) {
+  const list = Array.isArray(objectives) ? objectives : [];
+  const foldable = (o) => {
+    const m = NUMBERED.exec(String(o?.text ?? ''));
+    return m && !(o.zones ?? []).length ? { stem: m[1], total: Number(m[3]) } : null;
+  };
+  const rows = [];
+  for (let i = 0; i < list.length; i++) {
+    const head = foldable(list[i]);
+    let j = i;
+    if (head) {
+      while (j + 1 < list.length) {
+        const next = foldable(list[j + 1]);
+        if (!next || next.stem !== head.stem || next.total !== head.total
+          || Boolean(list[j + 1].optional) !== Boolean(list[i].optional)) break;
+        j++;
+      }
+    }
+    const run = list.slice(i, j + 1);
+    rows.push(run.length > 1
+      ? { ids: run.map((o) => o.id), text: head.stem, optional: Boolean(list[i].optional), count: run.length, objective: list[i] }
+      : { ids: [list[i].id], text: String(list[i].text ?? ''), optional: Boolean(list[i].optional), count: 1, objective: list[i] });
+    i = j;
+  }
+  return rows;
+}

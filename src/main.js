@@ -5,10 +5,17 @@ import { loadMapData } from './api.js';
 import { roadmapLayer } from './roadmap.js';
 import { placeLabelsLayer } from './placeLabels.js';
 import { LABELS } from './labels.js';
-import { KINDS, iconHtml, extractLetter } from './icons.js';
+import { KINDS, iconHtml, extractLetter, extractReq, dotHtml, clusterHtml, EXTRACT_SUB } from './icons.js';
+// One LOD rule for both views: tiers cut on metres per pixel, with hysteresis. See src/lod.js.
+import { updateTier, currentTier, cellFor, clusterPoints } from './lod.js';
 import { createLive, esc } from './live.js';
 import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
+import { createShell } from './shell.js';
+import { createOmnibox } from './omnibox.js';
+// zOff() is the 2D↔3D zoom relation. It is this MAP's CRS scale and nothing else, so the two views
+// always report the same metres per pixel — see the note in camera.js.
+import { CAM, zoomOffsetFor, fitZoom, setFitBox } from './camera.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -20,11 +27,39 @@ const num = (n, p = 1) => n.toFixed(p).replace('-', '−');
 function is3d() { return document.body.classList.contains('view-3d'); }
 // Declared up here: rail helpers below run during module init and poke at both.
 let view3d = null;
-let assistant = null;   // the Ask panel; created once window.tz exists (bottom of this file)
-let v3 = { target: [0, 0, 0], zoom: 0, rotationX: 50, rotationOrbit: 0, minZoom: -3, maxZoom: 8 };
+let assistant = null;   // the AI card; created once window.tz exists (bottom of this file)
+let omni = null;        // the omnibox controller; created last — it drives everything above
+// The zoom limits mirror src/map3d.js's own — deck applies its copy, so a wider pair here would
+// only ever be a lie about what a zoom key can reach.
+let v3 = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -2, maxZoom: 5 };
+
+/* ------------------------------------------------------------------ shell -- */
+// Floating HUD: right icon toolbar, docked panels, pin model, safe-viewport rect. Everything the
+// panels contain is mounted statically in index.html — the shell only shows and hides it.
+let booted = false;   // the map exists and the HUD can be measured
+const shell = createShell({ store, onLayout: () => { if (booted) updateHud(); } });
+const stageEl = $('#stage');
+/**
+ * The rect a FIT frames into: the full stage width minus the top chip band and the omnibox band.
+ * A docked panel floats OVER the map and is deliberately not an inset here (QA H4, shell.js).
+ */
+const safeRect = () => shell.safeRect();
+/** The rect nothing floats over — fly-to targets, the quest card and the label seating pass. */
+const avoidRect = () => shell.avoidRect();
+/** How far a rect's centre sits from the stage centre, in px. */
+function offsetOf(r) {
+  const s = stageEl.getBoundingClientRect();
+  return L.point((r.left + r.right) / 2 - s.width / 2, (r.top + r.bottom) / 2 - s.height / 2);
+}
+/** The recentring a fit owes the chrome bands. Horizontal is 0 by construction: the bands span. */
+const safeOffset = () => offsetOf(safeRect());
+/** The recentring a fly owes the reader: land the point where the dock is not covering it. */
+const avoidOffset = () => offsetOf(avoidRect());
 
 const requestedMap = new URLSearchParams(location.search).get('map');
 const mapData = selectMap(requestedMap);
+/** zoom2d = zoom3d + zOff(), for THIS map. Both directions and the permalink go through it. */
+const zOff = () => zoomOffsetFor(mapData);
 const mapLabels = LABELS[mapData.key] ?? [];
 const RAID = mapData.raid;
 document.title = `TarkovZero — ${mapData.name}`;
@@ -78,6 +113,10 @@ const bounds = toLatLngBounds(mapData.bounds);
 // Base layer: satellite tiles.
 const tiles = L.tileLayer(mapData.tilePath, {
   tileSize: mapData.tileSize,
+  // The tileset's own range. Outside it Leaflet upscales the nearest real tile instead of asking
+  // the CDN for one that was never rendered — which is what lets the map zoom out past z2 to frame
+  // Woods' whole footprint (see MAPS.minZoom in mapdata.js).
+  minNativeZoom: mapData.minNativeZoom ?? mapData.minZoom,
   maxNativeZoom: mapData.maxZoom,
   keepBuffer: 4,          // keep more off-screen tiles so panning/zooming doesn't blank
   updateWhenZooming: false,
@@ -150,39 +189,300 @@ function setRelief(next, persist = true) {
 $$('#relief-toggle .seg-cell').forEach((b) => (b.onclick = () => setRelief(b.dataset.relief)));
 setRelief(relief, false);
 
+/* ------------------------------------------------------------------- look ----- */
+// The render style (docs/plans/RENDER-REALISM.md Stage 1): `vector` is the default and the cheap
+// skin, `realistic` is the R1 look over exactly the same geometry. Like Relief/Trees/Rocks,
+// `?look=` overrides the persisted choice for one visit without rewriting it.
+const looks = new Set(['realistic', 'vector']);
+const lookQuery = new URLSearchParams(location.search).get('look');
+let look = looks.has(lookQuery) ? lookQuery : String(store.get('look', 'vector'));
+if (!looks.has(look)) look = 'vector';
+function setLook(next, persist = true) {
+  // The fallback is the DEFAULT, and the default is vector. It used to be 'realistic', two lines
+  // under a loader that falls back to 'vector' — so `window.tz.renderStyle('typo')` silently moved
+  // the reader into the beta look and persisted it to `tz:look` (QA M12).
+  next = looks.has(next) ? next : 'vector';
+  look = next;
+  $$('#look-toggle .seg-cell').forEach((b) => {
+    const active = b.dataset.look === look;
+    b.classList.toggle('on', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+  if (persist) store.set('look', look);
+  // The FX row only means anything under Real — vector holds no effects to switch.
+  paintFx();
+  view3d?.setLook(look);
+  return look;
+}
+$$('#look-toggle .seg-cell').forEach((b) => (b.onclick = () => setLook(b.dataset.look)));
+
+/* --------------------------------------------------------------- realistic FX --- */
+/**
+ * The three R1/R1.5 shaders, individually switchable — founder 2026-08-30: "items like fog take
+ * performance without adding fidelity", so each one has to be measurable on its own on the real
+ * GPU. Realistic-only by construction (map3d's `fxOn()` gates on the look), so the row is hidden
+ * whenever Vector is showing: vector has no effects to switch.
+ *
+ *   ?fx=none · ?fx=fog · ?fx=fog,grade · ?fx=all (default)
+ */
+const FX_KEYS = ['fog', 'grade', 'detail'];
+const fxQuery = new URLSearchParams(location.search).get('fx');
+const fx = (() => {
+  const stored = store.get('fx', null);
+  const raw = fxQuery ?? (stored == null ? null : String(stored));
+  if (raw == null || raw === '' || raw === 'all') return Object.fromEntries(FX_KEYS.map((k) => [k, true]));
+  const want = new Set(raw.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean));
+  return Object.fromEntries(FX_KEYS.map((k) => [k, want.has(k)]));
+})();
+const fxParam = () => (FX_KEYS.every((k) => fx[k]) ? 'all' : FX_KEYS.filter((k) => fx[k]).join(',') || 'none');
+function paintFx() {
+  $$('#fx-row .seg-cell').forEach((b) => {
+    const on = Boolean(fx[b.dataset.fx]);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  const row = $('#fx-row');
+  if (row) row.hidden = look !== 'realistic';
+}
+function setFx(key, persist = true) {
+  if (!FX_KEYS.includes(key)) return;
+  fx[key] = !fx[key];
+  if (persist) store.set('fx', fxParam());
+  paintFx();
+  view3d?.setFx({ [key]: fx[key] });
+}
+$$('#fx-row .seg-cell').forEach((b) => (b.onclick = () => setFx(b.dataset.fx)));
+setLook(look, false);
+paintFx();
+
+/* ------------------------------------------------------------- footprint -- */
+/**
+ * THE box every fit frames — in both views, at every aspect.
+ *
+ * The map's own bounds are not the whole of what a player has to see: the extract and transit
+ * badges sit ON the rim, and they carry a letter, a name and (in 3D) a hover line that hang off the
+ * marker's own position. Framing the terrain and forgetting the furniture is QA H5 — Woods opened
+ * with "RAILWAY BRIDGE TO TARKOV" cut by the right edge and two extract badges cut by the bottom.
+ * So the footprint is the union of the map bounds with every extract/transit position grown by
+ * MARKER_MARGIN metres, and the fit contains THAT.
+ *
+ * The margin is a distance, not a pixel count, because it has to mean the same thing before the
+ * zoom it will be measured at is known; 40 m is ~44 px at the Customs default framing, which clears
+ * the badge and most of its name.
+ */
+const MARKER_MARGIN = 40;
+const FURNITURE_KINDS = ['extract-pmc', 'extract-scav', 'extract-shared', 'extract-transit'];
+let footprint = {
+  x0: Math.min(bounds.getWest(), bounds.getEast()), x1: Math.max(bounds.getWest(), bounds.getEast()),
+  z0: Math.min(bounds.getSouth(), bounds.getNorth()), z1: Math.max(bounds.getSouth(), bounds.getNorth()),
+};
+/** Recompute the footprint from the markers that have loaded. Returns true when it actually moved. */
+function updateFootprint() {
+  const next = {
+    x0: Math.min(bounds.getWest(), bounds.getEast()), x1: Math.max(bounds.getWest(), bounds.getEast()),
+    z0: Math.min(bounds.getSouth(), bounds.getNorth()), z1: Math.max(bounds.getSouth(), bounds.getNorth()),
+  };
+  for (const m of markerPoints) {
+    if (!FURNITURE_KINDS.includes(m.kind)) continue;
+    const { x, z } = m.position ?? {};
+    if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+    next.x0 = Math.min(next.x0, x - MARKER_MARGIN); next.x1 = Math.max(next.x1, x + MARKER_MARGIN);
+    next.z0 = Math.min(next.z0, z - MARKER_MARGIN); next.z1 = Math.max(next.z1, z + MARKER_MARGIN);
+  }
+  const moved = ['x0', 'x1', 'z0', 'z1'].some((k) => Math.abs(next[k] - footprint[k]) > 0.5);
+  footprint = next;
+  if (moved) syncFitBox();
+  return moved;
+}
+const footprintBounds = () => L.latLngBounds([footprint.z0, footprint.x0], [footprint.z1, footprint.x1]);
+const footprintCentre = () => ({ x: (footprint.x0 + footprint.x1) / 2, z: (footprint.z0 + footprint.z1) / 2 });
+
+/**
+ * Fit = **contain the footprint in the safe rect**, not cover the window.
+ *
+ * Cover (`max(sx, sy)`) fills the frame by cropping the long axis, which reads well only while the
+ * viewport's aspect is near the map's. It is not: on a 2:1 map a taller window made cover pick a
+ * TIGHTER camera and slice the map off both sides (QA H1). Contain says the opposite and says it at
+ * every aspect — a window that grows can only ever show the same map bigger, never less of it.
+ * The safe rect (the part of the stage nothing floats over) is the box, so the corners under the
+ * chips, the toolbar and the omnibox are chrome, not the bit of the map you needed.
+ *
+ * Cover is still one keystroke away and unchanged: F / #hud-fit ask for it explicitly, and that is
+ * the only thing that switches `fitMode` (QA H2 — a first visit owes the player the whole map).
+ * Only an explicit fit (F, #hud-fit, `> fit`, first load, window resize, markers arriving) moves the
+ * camera; opening, closing or pinning a panel never does.
+ */
+function coverZoom() {
+  const off = safeOffset();
+  const grow = L.point(-2 * Math.abs(off.x), -2 * Math.abs(off.y));
+  const z = map.getBoundsZoom(bounds, true, grow);
+  return Number.isFinite(z) ? z : map.getZoom();
+}
+function containZoom() {
+  // Positive padding SHRINKS the box Leaflet fits into, and the box a contain fit has to land in is
+  // the SAFE RECT, so the padding is the chrome — the stage minus that rect, on both axes.
+  //
+  // It used to be `2 * |safeOffset()|`, the recentring OFFSET doubled, which is the right growth for
+  // the cover fit above (cover has to fill the stage even after the recentring slides it) and the
+  // wrong shrink for this one. The vertical chrome is near-symmetric — 68 px of chips on top, 70 px
+  // of omnibox underneath — so `off.y` was −1 and the fit reserved 2 px for 138 px of furniture.
+  // Bottom-row markers were then drawn under the omnibox on Woods and Reserve (QA D4, 2D half).
+  const s = stageEl.getBoundingClientRect();
+  const r = safeRect();
+  const shrink = L.point(Math.max(0, s.width - (r.right - r.left)), Math.max(0, s.height - (r.bottom - r.top)));
+  const z = map.getBoundsZoom(footprintBounds(), false, shrink);
+  return Number.isFinite(z) ? z : map.getZoom();
+}
+let fitMode = 'contain';
+function fit(mode = fitMode) {
+  fitMode = mode === 'cover' ? 'cover' : 'contain';
+  const cover = fitMode === 'cover';
+  const z = cover ? coverZoom() : containZoom();
+  const b = cover ? bounds : footprintBounds();
+  const centre = map.unproject(map.project(b.getCenter(), z).subtract(safeOffset()), z);
+  map.setView(centre, z, { animate: false });
+}
+
+/**
+ * The 3D fit, computed in 3D — not borrowed from the 2D one.
+ *
+ * The old path was `coverZoom() - zOff(tilt)`, which fits a map by its *unrotated* pixel box and
+ * then subtracts a constant tuned on Customs. Two things break: the constant secretly carries
+ * Customs' CRS scale (2.06 = -log2(0.239)), so every other map lands at the wrong scale; and a 2D
+ * cover on a near-square map is decided by its width, while the 3D frame is decided by the depth of
+ * the rhombus the tilt makes of it. Woods (1407 x 1356 m) therefore opened ~2.1x too close, with a
+ * wider window making it worse. So the fit asks for the projected footprint at the tilt we are
+ * actually going to use, and CONTAINS it in the safe rect (see fit() above) — the map's middle in
+ * the middle of the rect nothing floats over, and every edge of it on screen at every aspect.
+ */
+function fit3dBox(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) {
+  const r = safeRect();
+  return {
+    width: Math.abs(bounds.getEast() - bounds.getWest()),
+    depth: Math.abs(bounds.getNorth() - bounds.getSouth()),
+    fitWidth: footprint.x1 - footprint.x0,
+    fitDepth: footprint.z1 - footprint.z0,
+    viewportWidth: Math.max(1, r.right - r.left),
+    viewportHeight: Math.max(1, r.bottom - r.top),
+    // The DECK CANVAS, not the safe rect: the perspective term in fitZoom() is about how close the
+    // eye stands, and that is set by the canvas the view state is applied to. The box we frame into
+    // is the safe rect above; the two are ~140 px apart vertically at the shipped chrome.
+    containerHeight: Math.max(1, stageEl.getBoundingClientRect().height),
+    rotationX, rotationOrbit,
+  };
+}
+function fit3dZoom(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) {
+  return fitZoom(fit3dBox(rotationX, rotationOrbit));
+}
+/**
+ * Hand camera.js the box the fit frames, so the zoom FLOOR every drag, wheel and permalink is
+ * clamped against is exactly this fit minus MIN_ZOOM_MARGIN. map3d.js owns the clamp but knows
+ * neither the safe rect nor the marker furniture; without this the floor could sit above the fit.
+ */
+function syncFitBox() { setFitBox(fit3dBox()); }
+syncFitBox();
+/** Restore the default 3D framing: contain the footprint at the oblique default, on the safe rect. */
+function fit3d() {
+  syncFitBox();
+  const zoom = fit3dZoom(CAM.rotationX, CAM.rotationOrbit);
+  if (zoom == null) return;
+  const c = footprintCentre();
+  set3d({ target: target3dFor(c.x, c.z, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
+}
+
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
-const fit = () => map.fitBounds(bounds, { padding: [0, 0], animate: false });
 const hash = location.hash.slice(1).split('/').map(Number);
-const starts3d = new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d';
-let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
-  ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - 2.06 }
+// 3D is the site's default view (founder, 2026-08-29): with no ?view= and nothing remembered we
+// open the diorama. 2D stays one click — or `3` — away, and both choices persist.
+const viewParam = new URLSearchParams(location.search).get('view');
+const savedView = localStorage.getItem('view');
+const starts3d = viewParam ? viewParam !== '2d' : savedView ? savedView === '3d' : true;
+const arrivedByHash = hash.length === 3 && hash.every(Number.isFinite);
+let initial3dHash = starts3d && arrivedByHash
+  ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - zOff() }
   : null;
 let autoFit = true; // refit on window resize only until the user navigates (or arrived via a permalink)
-if (hash.length === 3 && hash.every(Number.isFinite)) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
+let framed3d = false; // the 3D camera has been framed once; later 2D->3D switches hand the view over
+if (arrivedByHash) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
 else fit();
 // Remember what "fit" means while the 2D map is measurable — #map is display:none in 3D.
 let fitState = { center: map.getCenter(), zoom: map.getZoom() };
-const rememberFit = () => { if (!is3d()) fitState = { center: bounds.getCenter(), zoom: map.getBoundsZoom(bounds, false) }; };
+const rememberFit = () => {
+  if (is3d()) return;
+  fitState = { center: bounds.getCenter(), zoom: coverZoom() };
+};
 rememberFit();
-window.addEventListener('resize', () => { if (autoFit) fit(); rememberFit(); updateHud(); });
+// A resize changes the frame the fit was computed for, in both views: 2D refits in whichever mode it
+// is in and 3D refits its projected one (the 3D fit depends on the viewport aspect, so a wider window
+// used to leave the diorama framed for the old one). The fit box the zoom floor is measured from
+// moves with the window whether or not anything is refitted.
+/**
+ * Leaflet caches its container size and only re-measures when it is told to. `getBoundsZoom()` —
+ * which both fits go through — reads that cache, so a `fit()` run straight off the resize event
+ * framed the map for the window it had BEFORE the resize: every refit landed one window behind
+ * (measured on Customs: 1400x985 → 1920x1165 stayed at zoom 2.3676 instead of 2.8407, then
+ * shrinking to 1200x800 jumped to 2.8407 instead of 2.1344 — i.e. shrink the window and the map is
+ * left zoomed for a window up to 60% wider, cropped). One `invalidateSize` ahead of the fit is the
+ * whole difference; `pan: false` keeps it from nudging the centre the fit is about to set anyway.
+ *
+ * Only while 2D is on screen: `#map` is `display: none` in 3D, where the container measures 0x0 and
+ * invalidating would cache THAT. 3D never needed it — fit3dBox() measures the live rects itself.
+ */
+window.addEventListener('resize', () => {
+  syncFitBox();
+  if (is3d()) { if (autoFit) fit3d(); updateHud(); return; }
+  map.invalidateSize({ animate: false, pan: false });
+  if (autoFit) fit();
+  rememberFit(); updateHud();
+});
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
 map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
+/**
+ * The address bar follows the camera — but a permalink OWNS it until the camera leaves it.
+ *
+ * Every move writes `#zoom/x/z`, and on a permalinked load the first move IS the permalink being
+ * applied, so the URL was rewritten before the visitor had touched anything: `#1.4/-209/-280` on
+ * Woods came back as `#1.95/-209.0/-280.0` (QA H4), i.e. the sender's own link silently changed
+ * under them to a camera they never asked for. So while the camera still stands where the hash put
+ * it, nothing is written; the first move that lands somewhere else — including a clamp — arms the
+ * writer for good, because from then on the URL has to tell the truth about where the camera is.
+ */
+let hashArmed = !arrivedByHash;
+const onHash = (zoom2d, x, z) => {
+  if (!hashArmed) {
+    if (Math.abs(zoom2d - hash[0]) < 0.005 && Math.abs(x - hash[1]) < 0.05 && Math.abs(z - hash[2]) < 0.05) return;
+    hashArmed = true;
+  }
+  history.replaceState(null, '', `#${zoom2d.toFixed(2)}/${x.toFixed(1)}/${z.toFixed(1)}`);
+};
 map.on('moveend', () => {
-  if (is3d()) history.replaceState(null, '', `#${((v3.zoom ?? 0) + 2.06).toFixed(2)}/${(-v3.target[0]).toFixed(1)}/${(-v3.target[1]).toFixed(1)}`);
-  else { const c = map.getCenter(); history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`); }
+  if (is3d()) onHash((v3.zoom ?? 0) + zOff(), -v3.target[0], -v3.target[1]);
+  else { const c = map.getCenter(); onHash(map.getZoom(), c.lng, c.lat); }
 });
 map.on('move zoom', updateHud);
+// The marker tier and the cluster grid follow the zoom, not the pan — so they settle once, at the
+// end of a zoom, instead of on every animation frame.
+map.on('zoomend', () => applyLod());
 
 /* ---------------------------------------------------------------- HUD ---- */
 const coordsEl = $('#coords');
 const scaleCap = $('#scale .scale-cap');
 const scaleBar = $('#scale .scale-line i');
 const compass = $('#hud-north svg');
-const showCoords = (x, z) => { coordsEl.innerHTML = `X <b>${num(x)}</b>&nbsp;&nbsp; Z <b>${num(z)}</b>`; };
-const idleCoords = () => { coordsEl.textContent = '—'; };
-map.on('mousemove', (e) => showCoords(e.latlng.lng, e.latlng.lat));
-map.on('mouseout', idleCoords);
+// QA L1: the read-out rendered as a dark pill containing a bare "—" in every frame where nobody
+// was streaming and the cursor was off the map — a control-looking thing that says nothing. It
+// collapses instead, and the bottom-left strip is one chip until there is a position to put in it.
+const showCoords = (x, z) => { coordsEl.classList.remove('idle'); coordsEl.innerHTML = `X <b>${num(x)}</b>&nbsp;&nbsp; Z <b>${num(z)}</b>`; };
+const idleCoords = () => { coordsEl.classList.add('idle'); coordsEl.textContent = '—'; };
+idleCoords();
+// While a primary live player is streaming/stale, #coords is their read-out, not the cursor — the
+// live section below flips this on/off through updateTelemetry().
+let liveTelemetryActive = false;
+map.on('mousemove', (e) => { if (!liveTelemetryActive) showCoords(e.latlng.lng, e.latlng.lat); });
+map.on('mouseout', () => { if (!liveTelemetryActive) idleCoords(); });
 
+/** Set once the 2D place-label layers exist; re-clips them against the safe rect. */
+let labelClip = null;
 const SNAP = [10, 25, 50, 100, 200, 500, 1000, 2000];
 function metresPerPixel() {
   if (is3d()) return 1 / Math.pow(2, v3.zoom ?? 0);
@@ -191,12 +491,14 @@ function metresPerPixel() {
 function updateHud() {
   const mpp = metresPerPixel();
   if (!Number.isFinite(mpp) || mpp <= 0) return;
+  updateTier(mpp);   // keep window.tz.lod live during a zoom; the redraw happens on zoomend
   let m = SNAP[0];
   for (const s of SNAP) if (s / mpp <= 120) m = s;
   scaleCap.textContent = m >= 1000 ? `${m / 1000} km` : `${m} m`;
   const w = Math.round(m / mpp) + 'px';
   scaleBar.style.width = w; scaleBar.parentElement.style.width = w;
   compass.style.setProperty('--rot', `${-(v3.rotationOrbit ?? 0)}deg`);
+  labelClip?.();
 }
 
 /* ------------------------------------------------------------ markers ---- */
@@ -217,14 +519,49 @@ const CONTAINER_TYPE = {
   container_pc: 'PC', container_drawer: 'Drawer', container_tool: 'Tool container', container_medcase: 'Medcase', container_medical: 'Medical bag',
   container_ammo: 'Ammo box', container_grenade: 'Grenade box', container_dead: 'Dead body', loot_key: 'Key spawn', loot_loose: 'Marked loose loot', loot_spt: 'SPT loose-loot point',
 };
-const iconFor = (kind, letter = null, level = 'surface') => {
-  const key = `${kind}:${letter ?? ''}:${safeLevel(level)}`;
-  return (icons[key] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter, safeLevel(level)), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
+const iconFor = (kind, letter = null, level = 'surface', req = null) => {
+  const key = `${kind}:${letter ?? ''}:${safeLevel(level)}:${req ?? ''}`;
+  return (icons[key] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter, safeLevel(level), null, req), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
 };
-function marker(p, kind, html, name = null, level = 'surface') {
-  const m = L.marker(pos(p), { icon: iconFor(kind, kind.startsWith('extract') ? extractLetter(name) : null, level) }).bindPopup(html);
-  // Extracts carry their full name on hover — the badge letter alone is a riddle.
-  if (kind.startsWith('extract') && name) m.bindTooltip(esc(name + levelSuffix(level)), { direction: 'top', offset: [0, -13], className: `extract-name ${kind} level-${safeLevel(level)}`, opacity: 1 });
+const dotIcons = {};
+const dotIcon = (kind) => (dotIcons[kind] ??= L.divIcon({ className: '', html: dotHtml(kind, 6), iconSize: [6, 6], iconAnchor: [3, 3], popupAnchor: [0, -4] }));
+/** The requirement line for an extract, or '' — the same text the 3D chip shows on hover. */
+const reqText = (name) => EXTRACT_SUB[(name || '').trim()] ?? '';
+
+/**
+ * One marker point, drawn at the tier the camera is currently in.
+ *
+ *   dot   6 px desaturated dot in the category colour; still clickable, still has its popup
+ *   icon  the badge, no hover label
+ *   full  badge + a hover label
+ *
+ * Extracts and transits ignore the tier entirely (red team #12): they are the thing the map is
+ * for, and a 6 px dot where your way out is would be a worse map, not a cleaner one.
+ */
+function marker(p, kind, html, name = null, level = 'surface', tier = 'full') {
+  const isExtract = kind.startsWith('extract');
+  const t = isExtract ? 'full' : tier;
+  if (t === 'dot') return L.marker(pos(p), { icon: dotIcon(kind) }).bindPopup(html);
+  const req = isExtract ? extractReq(name) : null;
+  const m = L.marker(pos(p), { icon: iconFor(kind, isExtract ? extractLetter(name) : null, level, req) }).bindPopup(html);
+  // Extracts carry their full name on hover — the badge letter alone is a riddle — and now the
+  // requirement rides with it instead of being printed under every badge at every zoom.
+  if (isExtract && name) {
+    const sub = reqText(name);
+    m.bindTooltip(esc(name + levelSuffix(level)) + (sub ? `<i>${esc(sub)}</i>` : ''), { direction: 'top', offset: [0, -13], className: `extract-name ${kind} level-${safeLevel(level)}`, opacity: 1 });
+  } else if (t === 'full' && name) {
+    m.bindTooltip(esc(name + levelSuffix(level)), { direction: 'top', offset: [0, -12], className: 'mk-name', opacity: 1 });
+  }
+  return m;
+}
+/** A grid cluster: one mark plus its count, and a click that zooms in far enough to split it. */
+function clusterMarker(kind, c, tier) {
+  const m = L.marker([c.z, c.x], {
+    icon: L.divIcon({ className: '', html: clusterHtml(kind, c.count, tier), iconSize: [26, 26], iconAnchor: [13, 13] }),
+    riseOnHover: true,
+  });
+  m.bindTooltip(`${c.count} ${esc(KINDS[kind].label.toLowerCase())}`, { direction: 'top', offset: [0, -14], className: 'mk-name', opacity: 1 });
+  m.on('click', () => { autoFit = false; map.setView([c.z, c.x], Math.min(map.getMaxZoom(), map.getZoom() + 1), { animate: true }); });
   return m;
 }
 
@@ -235,7 +572,10 @@ export function classify(d) {
   for (const e of d.extracts) {
     const f = ['pmc', 'scav', 'transit'].includes(e.faction) ? e.faction : 'shared';
     const level = safeLevel(e.level);
-    add('extract-' + f, e.position, `<b>${e.name}${levelSuffix(level)}</b>Extract · ${f} · ${level}${e.note ? `<br><i>${e.note}</i>` : ''}`, e.name, level);
+    // The requirement is a badge corner glyph and a hover line now, so the popup is where the
+    // words live: "REQ: GREEN FLARE" above the wiki note, not a second label on the map.
+    const req = EXTRACT_SUB[(e.name || '').trim()];
+    add('extract-' + f, e.position, `<b>${e.name}${levelSuffix(level)}</b>Extract · ${f} · ${level}${req ? `<br><b class="mk-req">${esc(req)}</b>` : ''}${e.note ? `<br><i>${e.note}</i>` : ''}`, e.name, level);
   }
   for (const s of d.spawns) {
     const isBoss = s.categories.includes('boss');
@@ -263,6 +603,57 @@ export function classify(d) {
 let markerPoints = [];
 const layerOf = new Map();  // kind -> L.layerGroup
 const countOf = new Map();  // kind -> n
+const pointsOf = new Map(); // kind -> points[] (the layer is rebuilt from these on every tier change)
+
+/* ---------------------------------------------------------------- LOD ---- */
+// Which kinds ignore the zoom tier, and which ones collapse into counted clusters. Extracts and
+// transits are exempt by decision (red team #12); live players and selected-quest objectives are
+// exempt by construction — they are drawn by live.js and quests.js, which never ask about a tier.
+const clustered = (kind) => kind.startsWith('spawn-');
+let lodState = { tier: null, cell: 0 };
+// Things outside this module that also draw at a tier and have to be told when it moves. Filled in
+// after the modules that own them exist (quests.js is created further down), so applyLod can fire
+// during the first data load without reaching into a binding that is still in its temporal dead zone.
+const tierHooks = [];
+
+/** Refill one kind's layer group at the current tier. Cheap: ~200 points on Customs. */
+function fillMarkerLayer(kind) {
+  const layer = layerOf.get(kind);
+  if (!layer) return;
+  layer.clearLayers();
+  const pts = pointsOf.get(kind) ?? [];
+  const t = kind.startsWith('extract') ? 'full' : lodState.tier ?? 'full';
+  if (t !== 'full' && clustered(kind)) {
+    for (const c of clusterPoints(pts, lodState.cell)) {
+      if (c.count === 1) layer.addLayer(marker(c.points[0].position, kind, c.points[0].html, c.points[0].name, c.points[0].level, t));
+      else layer.addLayer(clusterMarker(kind, c, t));
+    }
+    return;
+  }
+  for (const p of pts) layer.addLayer(marker(p.position, kind, p.html, p.name, p.level, t));
+}
+const rebuildMarkerLayers = () => { for (const kind of layerOf.keys()) fillMarkerLayer(kind); };
+
+/**
+ * Fold the current metres-per-pixel into the shared tier and redraw whatever depends on it.
+ *
+ * Called on zoomend rather than on every zoom frame: the tier only changes at a boundary, the
+ * cluster grid is in world units (panning cannot move it), and rebuilding mid-animation would
+ * throw away work Leaflet is about to re-render anyway.
+ */
+function applyLod(force = false) {
+  const mpp = metresPerPixel();
+  if (!Number.isFinite(mpp) || mpp <= 0) return;
+  const t = updateTier(mpp);
+  const cell = cellFor(mpp);
+  const tierChanged = t !== lodState.tier;
+  // Reclustering on a small zoom change inside one tier keeps the counts honest without redrawing
+  // on every wheel notch.
+  if (!force && !tierChanged && Math.abs(cell - lodState.cell) < lodState.cell * 0.15) return;
+  lodState = { tier: t, cell };
+  if (!is3d()) rebuildMarkerLayers();
+  if (tierChanged) { applyLabels(); for (const f of tierHooks) f(t); }
+}
 
 /* ------------------------------------------------------------- labels ---- */
 // Two panes so major/minor place names can be styled apart in 2D, and the same
@@ -270,19 +661,76 @@ const countOf = new Map();  // kind -> n
 const SURFACE_LABELS = mapLabels.filter((l) => l.floor !== 'U');
 const MAJOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) >= 100);
 const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
-const labelLayers = { major: placeLabelsLayer(map, MAJOR), minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor' }) };
-let density = store.get('density', 'all');
+/*
+ * An extract OWNS its own name.
+ *
+ * Its badge already draws the name as a caption, so a hand-written place label carrying the same
+ * text renders the POI twice at one anchor — green above the badge, white below it. QA M1 caught
+ * Woods' BRIDGE V-EX and RAILWAY BRIDGE TO TARKOV; QA M3 caught the Customs ZB-013 ghost half-way
+ * up its own beam. It is not two typos: eleven rows across the three shipped maps collide this way
+ * (customs Trailer Park / Warehouse 4 / Warehouse 17 / ZB-1011 / ZB-013; woods Scav House /
+ * Bridge V-Ex / Railway Bridge to Tarkov; reserve Bunker Hermetic Door / Depot Hermetic Door /
+ * D-2), and the extract list is fetched data that can grow a new collision at any time. So the
+ * rule lives here and reads the live marker set, rather than being edited out of labels.js.
+ */
+const extractNames = new Set();
+const labelKey = (t) => String(t ?? '').trim().toLowerCase();
+const ownedByExtract = (l) => extractNames.has(labelKey(l?.text));
+// A quest pin and an extract badge own their pixels; a place name is moved off one rather than
+// printed through it (QA D6 — a pin centred on CRACKHOUSE, an extract badge eating "OLD GAS").
+// Lazy on purpose — `quests` and `markerPoints` are created further down, and a label clip only
+// ever runs after boot. The 3D view runs the same de-confliction in map3d.js's textLayout().
+const EXTRACT_BADGE_PX = 26;
+function labelObstacles() {
+  const out = [];
+  try { out.push(...quests.pinBoxes()); } catch {}
+  try {
+    const on = visibleKinds();
+    for (const m of markerPoints) {
+      if (!m.kind.startsWith('extract') || !on.has(m.kind)) continue;
+      const q = map.latLngToContainerPoint([m.position.z, m.position.x]);
+      if (!Number.isFinite(q?.x)) continue;
+      out.push({ left: q.x - EXTRACT_BADGE_PX / 2, top: q.y - EXTRACT_BADGE_PX / 2,
+        right: q.x + EXTRACT_BADGE_PX / 2, bottom: q.y + EXTRACT_BADGE_PX / 2 });
+    }
+  } catch {}
+  return out;
+}
+const labelLayers = {
+  major: placeLabelsLayer(map, MAJOR, { safeRect: avoidRect, obstacles: labelObstacles, hidden: ownedByExtract }),
+  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect: avoidRect, obstacles: labelObstacles, hidden: ownedByExtract }),
+};
+// The chrome can move without the map moving at all (a dock panel opens), so the label clip has to
+// be re-run from the layout hook too — see updateHud().
+labelClip = () => { labelLayers.major.reclip(); labelLayers.minor.reclip(); };
+// Density "Auto" is the default (step 4): Key at fit zoom — where the map should read as extracts
+// and place names — and All from one tier in, where there is room for the minor names. Off/Key/All
+// stay as explicit overrides, and an explicit choice always wins.
+let density = store.get('density', 'auto');
 let labelsShown = store.get('labels', true);
+const effectiveDensity = () => (density !== 'auto' ? density : currentTier() === 'dot' ? 'key' : 'all');
 function labelSet() {
-  if (!labelsShown || density === 'off') return [];
-  return density === 'key' ? mapLabels.filter((l) => (l.size ?? 100) >= 100) : mapLabels;
+  const d = effectiveDensity();
+  if (!labelsShown || d === 'off') return [];
+  const rows = mapLabels.filter((l) => !ownedByExtract(l));
+  return d === 'key' ? rows.filter((l) => (l.size ?? 100) >= 100) : rows;
 }
 function applyLabels() {
-  const wantMajor = labelsShown && density !== 'off';
-  const wantMinor = labelsShown && density === 'all';
+  const d = effectiveDensity();
+  const wantMajor = labelsShown && d !== 'off';
+  const wantMinor = labelsShown && d === 'all';
   wantMajor ? labelLayers.major.addTo(map) : map.removeLayer(labelLayers.major);
   wantMinor ? labelLayers.minor.addTo(map) : map.removeLayer(labelLayers.minor);
-  $$('#label-density .seg-cell').forEach((b) => b.classList.toggle('on', b.dataset.density === density));
+  // Adding a layer to a Leaflet map raises no map-level event, so nothing else re-runs the safe-rect
+  // clip: the labels Key→All brings in were drawn with no clip pass at all and stayed truncated
+  // under the toolbar/dock/omnibox until the user happened to pan (measured on Customs: 13 labels
+  // with 3 hidden → 32 labels with 3 hidden, the 19 new minors never measured). This is that pass.
+  labelClip?.();
+  $$('#label-density .seg-cell').forEach((b) => {
+    b.classList.toggle('on', b.dataset.density === density);
+    // Auto shows which way it is currently leaning, so the control is never a black box.
+    b.classList.toggle('auto-on', density === 'auto' && b.dataset.density === d);
+  });
   view3d?.refresh();
 }
 $$('#label-density .seg-cell').forEach((b) => (b.onclick = () => { density = b.dataset.density; store.set('density', density); applyLabels(); }));
@@ -331,8 +779,6 @@ function syncGroupCounts() {
     btn.textContent = `${n}/${kinds.length || g.kinds.length}`;
     btn.classList.toggle('full', kinds.length > 0 && n === kinds.length);
   }
-  const badge = $('#sheet-badge');
-  if (badge) badge.textContent = `${onKinds.size} filters`;
 }
 
 // Structure first (place-names row + three groups with skeletons); real rows land when the API answers.
@@ -392,12 +838,18 @@ applyLabels();
 // All / None with a 3s undo.
 let undoState = null, undoTimer = 0;
 const toastEl = $('#toast');
-function toast(msg, undo) {
+/** `action` is either the old bare undo callback, or `{label, run, sticky}` for a non-undo action
+ *  (e.g. the raid-map-switch toast's "Switch" button) — never performed until the button is clicked. */
+function toast(msg, action) {
   toastEl.hidden = false;
-  toastEl.innerHTML = `<span>${msg}</span>`;
-  const b = document.createElement('button'); b.textContent = 'Undo'; b.onclick = () => { undo(); hideToast(); };
-  toastEl.appendChild(b);
-  clearTimeout(undoTimer); undoTimer = setTimeout(hideToast, 3000);
+  toastEl.textContent = '';
+  const s = document.createElement('span'); s.textContent = msg; toastEl.appendChild(s);
+  const act = typeof action === 'function' ? { label: 'Undo', run: action } : action;
+  if (act) {
+    const b = document.createElement('button'); b.textContent = act.label ?? 'Undo'; b.onclick = () => { act.run(); hideToast(); };
+    toastEl.appendChild(b);
+  }
+  clearTimeout(undoTimer); undoTimer = setTimeout(hideToast, act?.sticky ? 8000 : 3000);
 }
 const hideToast = () => { toastEl.hidden = true; clearTimeout(undoTimer); };
 function setAll(on) {
@@ -416,9 +868,33 @@ $('#all-off').onclick = () => setAll(false);
 /* ------------------------------------------------------------- status ---- */
 const statusEl = $('#status'), statusPop = $('#status-pop');
 const statusText = $('.status-text', statusEl), statusDot = $('.dot', statusEl);
+/**
+ * The raid read-out, as icon+value chunks rather than one sentence.
+ *
+ * Gemini's read (2026-08-29): "40 MIN · 10-12 PMC · PARTISAN 30%" is a monolithic string that has
+ * to be *read*; a HUD read-out has to be *glanced at*. Each fact now gets its own glyph, its own
+ * number in the mono face, and a hairline divider — so the eye snaps to "how long" or "how many"
+ * without parsing the middle dots. Inline SVG, never emoji: an emoji would be a third typeface,
+ * colour-managed by the OS, at a size where its detail is mud.
+ */
+const STATUS_GLYPH = {
+  time: '<circle cx="12" cy="12" r="8.4"/><path d="M12 7.4V12l3.1 2.1"/>',
+  pmc: '<circle cx="12" cy="7.8" r="3.4"/><path d="M5.4 19.6c0-3.6 2.9-6.2 6.6-6.2s6.6 2.6 6.6 6.2"/>',
+  boss: '<path d="M12 3.4a7.1 7.1 0 0 0-7.1 7.1c0 2.4 1.2 4.2 2.9 5.3v3h8.4v-3c1.7-1.1 2.9-2.9 2.9-5.3A7.1 7.1 0 0 0 12 3.4Z"/><circle cx="9.5" cy="11" r="1.4"/><circle cx="14.5" cy="11" r="1.4"/>',
+};
+const statusChunk = ({ glyph, value, unit }) =>
+  `<span class="st-chunk"><svg class="st-ico" viewBox="0 0 24 24" aria-hidden="true">${STATUS_GLYPH[glyph] ?? ''}</svg>` +
+  `<span class="st-val mono">${esc(value)}</span>${unit ? `<span class="st-unit">${esc(unit)}</span>` : ''}</span>`;
+/** `text` is a plain string (loading / error) or a chunk list built by renderMarkers(). */
 function setStatus(state, text, popHtml) {
   statusDot.dataset.state = state;
-  statusText.textContent = text;
+  if (Array.isArray(text)) {
+    statusText.innerHTML = text.map(statusChunk).join('<i class="st-div" aria-hidden="true"></i>');
+    statusEl.title = text.map((c) => [c.value, c.unit].filter(Boolean).join(' ')).join(' · ');
+  } else {
+    statusText.textContent = text;
+    statusEl.title = text;
+  }
   if (popHtml != null) statusPop.innerHTML = popHtml;
 }
 statusEl.onclick = () => togglePop(statusPop, statusEl);
@@ -427,21 +903,36 @@ statusEl.onclick = () => togglePop(statusPop, statusEl);
 const CACHE_KEY = `tarkovzero:${mapData.key}`;
 function renderMarkers(data, source) {
   markerPoints = classify(data);
-  layerOf.clear(); countOf.clear();
+  // Every extract name is now spoken for; the place label with the same text stands down.
+  extractNames.clear();
+  for (const m of markerPoints) if (m.kind.startsWith('extract') && m.name) extractNames.add(labelKey(m.name));
+  layerOf.clear(); countOf.clear(); pointsOf.clear();
   for (const m of markerPoints) {
     if (!KINDS[m.kind]) continue;
-    if (!layerOf.has(m.kind)) layerOf.set(m.kind, L.layerGroup());
-    layerOf.get(m.kind).addLayer(marker(m.position, m.kind, m.html, m.name, m.level));
+    if (!layerOf.has(m.kind)) { layerOf.set(m.kind, L.layerGroup()); pointsOf.set(m.kind, []); }
+    pointsOf.get(m.kind).push(m);
     countOf.set(m.kind, (countOf.get(m.kind) ?? 0) + 1);
   }
+  applyLod(true);   // fills every layer group at the tier the camera is already in
+  // The extracts are part of the box every fit frames (see updateFootprint), and they arrive after
+  // the first fit did. Re-fit only while the camera is still the one WE put there — a visitor who
+  // has already panned, or arrived on a permalink, keeps their view.
+  if (updateFootprint() && autoFit) { fit(); if (is3d()) fit3d(); }
   fillRows();
   for (const [kind, layer] of layerOf) if (onKinds.has(kind)) layer.addTo(map);
   view3d?.refresh();
   buildSearchIndex();
+  labelClip?.();   // extractNames just changed: the place labels an extract owns stand down now
 
   const bosses = [...(data.bosses ?? [])].sort((a, b) => b.spawnChance - a.spawnChance);
   const top = bosses[0];
-  const meta = `${RAID.minutes} MIN · ${RAID.pmc} PMC${top ? ` · ${top.name.toUpperCase()} ${Math.round(top.spawnChance * 100)}%` : ''}`;
+  // Three chunks: how long the raid is, how many PMCs, and the likeliest boss with its odds. The
+  // boss keeps its name as the chunk's unit — "30%" alone would be a number with no subject.
+  const meta = [
+    { glyph: 'time', value: RAID.minutes, unit: 'min' },
+    { glyph: 'pmc', value: RAID.pmc, unit: 'pmc' },
+    ...(top ? [{ glyph: 'boss', value: `${Math.round(top.spawnChance * 100)}%`, unit: top.name }] : []),
+  ];
   const list = bosses.map((b) => `<div><b>${esc(b.name)}</b> <span class="num">${Math.round(b.spawnChance * 100)}%</span></div>`).join('');
   setStatus(source === 'live' ? 'live' : 'cached',
     meta,
@@ -463,70 +954,95 @@ async function loadMarkers(attempt = 0) {
 }
 loadMarkers();
 
-/* --------------------------------------------------------------- find ---- */
-const findEl = $('#find'), resEl = $('#find-results');
-let index = [], results = [], active = 0;
+/* ------------------------------------------------------- search index ---- */
+// What the omnibox looks things up in: everything on this map that has a name and a position,
+// plus the layer rows so "scav" can also mean "the scav spawn filter". Quests are added on the
+// omnibox side (they load out of band). See src/omnibox.js.
+let index = [];
 function buildSearchIndex() {
   index = [];
+  const seen = new Set();
   for (const m of markerPoints) {
-    if (!m.kind.startsWith('extract') || !m.name) continue;
-    if (index.some((i) => i.kind === 'extract' && i.label === m.name)) continue;
+    if (!m.kind.startsWith('extract') || !m.name || seen.has('e:' + m.name)) continue;
+    seen.add('e:' + m.name);
     index.push({ kind: 'extract', label: m.name, sub: `${m.kind.replace('extract-', '')} · ${safeLevel(m.level)}`, level: safeLevel(m.level), x: m.position.x, z: m.position.z, badge: extractLetter(m.name) ?? '', mk: m.kind });
   }
   for (const m of markerPoints) {
-    if (m.kind !== 'stash' || !m.name) continue;
-    index.push({ kind: 'marker', label: m.name, sub: `stash · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
+    if (!['stash', 'switch'].includes(m.kind) || !m.name) continue;
+    index.push({ kind: 'marker', label: m.name, sub: `${m.kind} · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
   }
-  for (const l of mapLabels) index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] });
-  for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'filter', mk: k });
+  // Locks and their keys: "ZB-1011" is how a player asks for a door, not "lock".
+  for (const m of markerPoints) {
+    if (m.kind !== 'lock' || !m.name || seen.has('l:' + m.name)) continue;
+    seen.add('l:' + m.name);
+    index.push({ kind: 'lock', label: m.name, sub: `key · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
+  }
+  for (const l of mapLabels) { if (ownedByExtract(l)) continue; index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] }); }
+  for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'layer', mk: k });
+  omni?.refresh();
 }
 buildSearchIndex();
-function renderResults() {
-  if (!results.length) { resEl.hidden = !findEl.value; resEl.innerHTML = '<div class="res-empty">No match</div>'; return; }
-  resEl.hidden = false;
-  resEl.innerHTML = results.map((r, i) => {
-    const chip = r.kind === 'layer' || r.kind === 'marker' ? iconHtml(r.mk, 17)
-      : r.kind === 'extract' ? `<span class="badge">${esc(r.badge || '·')}</span>`
-      : `<span class="badge">${esc((r.label[0] || '·').toUpperCase())}</span>`;
-    return `<div class="res${i === active ? ' act' : ''}" data-i="${i}" role="option">${chip}<span class="rn">${esc(r.label)}</span><span class="rk">${esc(r.sub)}</span></div>`;
-  }).join('');
-  $$('.res', resEl).forEach((el) => (el.onclick = () => choose(Number(el.dataset.i))));
-}
-function search(q) {
-  const s = q.trim().toLowerCase();
-  if (!s) { results = []; resEl.hidden = true; return; }
-  results = index
-    .map((r) => ({ r, i: r.label.toLowerCase().indexOf(s) }))
-    .filter((o) => o.i >= 0)
-    .sort((a, b) => a.i - b.i || a.r.label.length - b.r.label.length)
-    .slice(0, 8).map((o) => o.r);
-  active = 0;
-  renderResults();
-}
-function choose(i) {
-  const r = results[i]; if (!r) return;
-  if (r.kind === 'layer') setKind(r.mk, true);
-  else {
-    if (r.kind === 'marker') setKind(r.mk, true);
-    flyTo(r.x, r.z);
-  }
-  findEl.blur(); resEl.hidden = true; findEl.value = ''; results = [];
-}
-findEl.oninput = () => search(findEl.value);
-findEl.onkeydown = (e) => {
-  if (e.key === 'ArrowDown') { active = Math.min(active + 1, results.length - 1); renderResults(); e.preventDefault(); }
-  else if (e.key === 'ArrowUp') { active = Math.max(active - 1, 0); renderResults(); e.preventDefault(); }
-  else if (e.key === 'Enter') { choose(active); e.preventDefault(); }
-  else if (e.key === 'Escape') { findEl.value = ''; results = []; resEl.hidden = true; findEl.blur(); }
-};
-if (!/Mac|iPhone|iPad/.test(navigator.platform)) $('#find-kbd').textContent = 'Ctrl K';
 
+/** `> show scav` / `> hide loot` — every layer whose group, kind or label matches. */
+function matchLayers(query) {
+  const s = query.trim().toLowerCase();
+  if (!s) return [];
+  const hit = new Set();
+  for (const g of GROUPS) if (g.id.startsWith(s) || g.title.toLowerCase().includes(s)) for (const k of g.kinds) hit.add(k);
+  for (const k of MARKER_KINDS) if (k.includes(s) || KINDS[k].label.toLowerCase().includes(s)) hit.add(k);
+  return [...hit].filter((k) => layerOf.has(k));
+}
+
+/**
+ * The 3D orbit target that lands the game point (x, z) in the middle of the AVOID rect — the part
+ * of the stage no panel is floating over. The FIT rect deliberately ignores the dock (QA H4); a
+ * fly-to must not, or the thing you asked for by name lands behind the panel that answered you.
+ *
+ * The 2D branch of a fly just subtracts avoidOffset() in screen px, because Leaflet's screen is the
+ * ground plane. In 3D the ground is rotated by the orbit and foreshortened by the tilt, so the same
+ * pixel offset is a different world offset. deck's OrbitView puts one common-space unit on one
+ * screen pixel at the target, with the ground turned through `rotationOrbit` and squashed by
+ * sin(rotationX), which inverts to:
+ *
+ *   A = px_right / 2^zoom                    B = -px_down / (2^zoom · sin(tilt))
+ *   world = ( A·cosθ + B·sinθ , −A·sinθ + B·cosθ )        θ = rotationOrbit
+ *
+ * (The mapping is exact at the target's own depth and drifts slightly across a perspective frame;
+ * over a half-dock offset that is a few pixels, against the ~215 px of not doing it at all.)
+ */
+function target3dFor(x, z, zoom, rotationX = v3.rotationX, rotationOrbit = v3.rotationOrbit) {
+  const off = avoidOffset();
+  const scale = Math.pow(2, Number(zoom) || 0);
+  const tilt = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, Number(rotationX) || CAM.rotationX));
+  const sin = Math.sin((tilt * Math.PI) / 180);
+  if (!Number.isFinite(scale) || scale <= 0 || !(sin > 0)) return [-x, -z, 0];
+  const th = ((Number(rotationOrbit) || 0) * Math.PI) / 180, c = Math.cos(th), s = Math.sin(th);
+  const A = off.x / scale, B = -off.y / (scale * sin);
+  return [-x - (A * c + B * s), -z - (-A * s + B * c), 0];
+}
+
+/**
+ * How close a fly-to lands, as METRES PER PIXEL rather than a Leaflet zoom.
+ *
+ * You asked for a thing by name; the map owes you the thing with its badge AND its name, which is
+ * src/lod.js's `full` tier — m/px ≤ 0.165. The old constant was a 2D zoom of 4.4, which is 0.196 m/px
+ * on Customs (`icon`: a badge, no label) and something different on every other map, because a
+ * Leaflet zoom carries the map's CRS scale. In metres per pixel it means the same thing on every map
+ * and in both views. A fly never zooms OUT: if you are already closer, you stay there.
+ */
+const FLY_MPP = 0.14;
 function flyTo(x, z) {
-  const z2 = Math.max(map.getZoom(), 4.4);
-  if (is3d()) set3d({ target: [-x, -z, 0], zoom: z2 - 2.06 });
-  else map.setView([z, x], z2, { animate: true });
+  const z2 = Math.max(map.getZoom(), -Math.log2(Math.abs(mapData.transform[0]) * FLY_MPP));
+  // Land the target in the middle of the *avoid* rect, not the middle of the window: with a panel
+  // docked on the right, the geometric centre is behind it. Both views owe the player that.
+  if (is3d()) {
+    const zoom = z2 - zOff();
+    set3d({ target: target3dFor(x, z, zoom), zoom });
+  } else {
+    const centre = map.unproject(map.project([z, x], z2).subtract(avoidOffset()), z2);
+    map.setView(centre, z2, { animate: true });
+  }
   ping(x, z);
-  if (document.body.classList.contains('sheet-half') || document.body.classList.contains('sheet-full')) sheet('peek');
 }
 function ping(x, z) {
   const m = L.marker([z, x], { icon: L.divIcon({ className: 'ping', iconSize: [0, 0] }), interactive: false, keyboard: false }).addTo(map);
@@ -545,65 +1061,220 @@ const quests = createQuests({
   is3d,
   refresh3d: () => view3d?.refresh(),
   project3d: (x, z) => view3d?.project?.(x, z) ?? null,
+  panel: { setOpen: (on) => shell.setOpen('quests', on), isOpen: () => shell.isOpen('quests') },
+  // A selected quest is a working session, not a lookup: the panel pins itself while one is on the
+  // map and lets go when the last is dropped — unless the user pinned it by hand.
+  onSelection: (n) => { shell.setAutoPin('quests', n > 0); shell.setIndicator('quests', n > 0); },
+  // The card is chrome, not map: it is parked in the box nothing floats over.
+  safeRect: avoidRect,
+  afterDraw: () => labelClip?.(),
 });
 quests.layer.addTo(map);
 quests.init();
+// Quest pins shrink and drop their numbers below the `full` tier (step 4 polish). The 3D layer
+// re-reads the tier on its own every frame; the Leaflet markers are built once per draw, so they
+// have to be rebuilt when the camera crosses a boundary.
+tierHooks.push(() => { if (!is3d()) quests.draw2d(); });
 
 /* --------------------------------------------------------- live panel ---- */
+// State model (red team #11): disconnected -> connecting -> streaming -> stale -> connecting again on
+// reconnect. src/live.js owns the machine (`live.state()`, `live.summary()`, `live.primary()`); this
+// section is the view — toolbar GPS indicator, the panel list, the telemetry chip, and the raid-map
+// mismatch toast (never auto-switches, per red team #6).
 const liveEl = $('#live'), liveToggle = $('#live-toggle'), liveSum = $('#live-sum');
-let liveOpen = store.get('liveOpen', false), liveCollapseTimer = 0;
+const tbLive = $('#tb-live'), tbLiveTip = $('.tb-item[data-tb="live"] .tb-tip');
+let liveCollapseTimer = 0;
 function setLiveOpen(o) {
-  liveOpen = o; store.set('liveOpen', o);
-  liveEl.hidden = !o; liveToggle.setAttribute('aria-expanded', String(o));
+  store.set('liveOpen', o);
+  shell.setOpen('live', o);
+  liveToggle.setAttribute('aria-expanded', String(o));
 }
-liveToggle.onclick = () => setLiveOpen(!liveOpen);
-const ui = { render() {
-  const ps = [...live.players.values()];
-  liveSum.textContent = ps.length ? `${ps[0].code} · ${ps.length} player${ps.length > 1 ? 's' : ''}` : 'Not connected';
-  liveToggle.classList.toggle('armed', ps.length > 0);
-  if (ps.length && !liveOpen) setLiveOpen(true);
-  if (!ps.length && liveOpen) { clearTimeout(liveCollapseTimer); liveCollapseTimer = setTimeout(() => { if (!live.players.size) setLiveOpen(false); }, 8000); }
+liveToggle.onclick = () => setLiveOpen(!shell.isOpen('live'));
+
+const LIVE_STATE_LABEL = { disconnected: 'Not connected', connecting: 'Connecting…', streaming: 'Streaming', stale: 'Stale' };
+function ageSuffix(ms) {
+  if (ms == null) return '';
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
+}
+/** Per-row status text: a map mismatch always wins (it explains why the dot isn't green here). */
+function rowStatus(s) {
+  if (s.map && s.map !== mapData.key) return `on ${MAPS[s.map]?.name ?? s.map}`;
+  if (s.state === 'connecting') return 'connecting…';
+  const age = ageSuffix(s.ageMs);
+  return `${s.state}${age ? ' · ' + age : ''}`;
+}
+function updateLiveToolbar(st) {
+  tbLive.dataset.liveState = st.state;
+  const age = st.state === 'streaming' || st.state === 'stale' ? ` — updated ${ageSuffix(st.ageMs)}` : '';
+  const label = `Live position — ${LIVE_STATE_LABEL[st.state]}${age}`;
+  tbLive.setAttribute('aria-label', label);
+  if (tbLiveTip) tbLiveTip.textContent = st.state === 'disconnected' ? 'Live' : `${LIVE_STATE_LABEL[st.state]}${age}`;
+}
+/** #coords becomes the primary player's read-out while streaming/stale; cursor coords own it otherwise. */
+function updateTelemetry(st) {
+  const p = (st.state === 'streaming' || st.state === 'stale') ? live.primary() : null;
+  if (p?.last) {
+    const hdg = Math.round(((p.last.yaw ?? 0) % 360 + 360) % 360);
+    const mapName = MAPS[p.map]?.name ?? mapData.name;
+    const age = ageSuffix(p.ageMs) || 'just now';
+    coordsEl.classList.remove('idle');
+    coordsEl.innerHTML = `X <b>${num(p.last.x)}</b>&nbsp;&nbsp; Z <b>${num(p.last.z)}</b> · HDG <b>${hdg}°</b> · ${esc(mapName)} · ` +
+      `<span class="tele-age${p.state === 'stale' ? ' stale' : ''}">${esc(age)}</span>`;
+    liveTelemetryActive = true;
+    // QA M9: the streaming read-out is ~350 px wide and the strip was one ROW, so it shoved the
+    // scale bar right into the omnibox, where the bar was overlapped and truncated — the scale was
+    // only fully readable while nobody was connected. The strip stacks while it is long; the scale
+    // bar keeps its corner and the read-out goes above it.
+    coordsEl.parentElement?.classList.add('stacked');
+    return;
+  }
+  if (liveTelemetryActive) { liveTelemetryActive = false; idleCoords(); }
+  coordsEl.parentElement?.classList.remove('stacked');
+}
+/** Raid detection (red team #6 spirit): tell, never switch. One toast per distinct mismatched map. */
+let raidToastFor = null;
+function checkRaidSwitch() {
+  const p = live.primary();
+  if (!p || !p.map || p.map === mapData.key) { raidToastFor = null; return; }
+  if (raidToastFor === p.map) return;
+  raidToastFor = p.map;
+  const target = MAPS[p.map];
+  if (target) toast(`Companion is on ${target.name} — switch?`, { label: 'Switch', run: () => goMap(target.key), sticky: true });
+  else toast(`Companion is on ${p.map} — not on TarkovZero yet`);
+}
+function playerRowHtml(s, primaryCode) {
+  return `<div class="player p-${s.state}" data-row="${esc(s.code)}">` +
+    `<span class="pcol" style="background:${esc(s.color)}"></span>` +
+    `<label class="prad" title="Follow this player"><input type="radio" name="live-primary" data-primary="${esc(s.code)}"${s.code === primaryCode ? ' checked' : ''}><span class="prad-mark"></span></label>` +
+    `<b title="double-click to rename" data-rn="${esc(s.code)}">${esc(s.name)}</b>` +
+    `<span class="code">${s.name !== s.code ? esc(s.code) : ''}</span>` +
+    `<span class="st" data-status="${esc(s.code)}">${esc(rowStatus(s))}</span>` +
+    `<button class="rm" data-rm="${esc(s.code)}" aria-label="Remove">✕</button></div>`;
+}
+/** The 1 Hz path from live.js's ticker: text/class updates only. It must never touch the add-code /
+ *  add-name inputs or rebuild rows — a full innerHTML replace every second would blow away whatever
+ *  the player is mid-typing (and their focus) the moment a tick lands between keystrokes. */
+function tickLivePanel() {
+  const list = live.summary();
+  const st = live.state();
+  liveSum.textContent = list.length ? `${LIVE_STATE_LABEL[st.state]} · ${list.length} player${list.length > 1 ? 's' : ''}` : LIVE_STATE_LABEL.disconnected;
+  liveToggle.dataset.liveState = st.state;
+  for (const s of list) {
+    const row = liveEl.querySelector(`[data-row="${s.code}"]`);
+    if (!row) continue; // a structural change is coming through ui.render(); this tick just skips it
+    row.className = `player p-${s.state}`;
+    const stEl = row.querySelector('[data-status]');
+    if (stEl) stEl.textContent = rowStatus(s);
+    // The companion's name can arrive after the row was first drawn (it rides a position message,
+    // which is tick-only) — keep the visible name/code in sync here too, not just the map tooltip.
+    const nameEl = row.querySelector('b[data-rn]');
+    if (nameEl && nameEl.textContent !== s.name) nameEl.textContent = s.name;
+    const codeEl = row.querySelector('.code');
+    if (codeEl) codeEl.textContent = s.name !== s.code ? s.code : '';
+  }
+  updateLiveToolbar(st);
+  updateTelemetry(st);
+  checkRaidSwitch();
+  // Every position — matched map or not — flows through this cheap path (see live.js onPos), so the
+  // 3D live-player arrow/trail has to refresh here, not only on the rarer structural rebuild.
+  view3d?.refresh();
+}
+/** Full rebuild — only for structural events (add/remove/rename/(re)connect/first position). */
+function renderLivePanel() {
+  const list = live.summary();
+  const primaryCode = live.primary()?.code ?? null;
+  if (list.length && !shell.isOpen('live')) setLiveOpen(true);
+  if (!list.length && shell.isOpen('live')) { clearTimeout(liveCollapseTimer); liveCollapseTimer = setTimeout(() => { if (!live.players.size) setLiveOpen(false); }, 8000); }
+
   liveEl.innerHTML =
-    ps.map((p) => `<div class="player"><span class="pcol" style="background:${esc(p.color)}"></span>` +
-      `<b title="double-click to rename" data-rn="${esc(p.code)}">${esc(p.name)}</b>` +
-      `<span class="code">${p.name !== p.code ? esc(p.code) : ''}</span>` +
-      `<span class="st">${esc(p.status)}</span>` +
-      `<button class="rm" data-rm="${esc(p.code)}" aria-label="Remove">✕</button></div>`).join('') +
-    `<input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX" aria-label="Pairing code">` +
-    `<button class="btn-primary" id="live-add">${ps.length ? 'Add another' : 'Connect'}</button>` +
+    list.map((s) => playerRowHtml(s, primaryCode)).join('') +
+    `<div class="live-add-row">` +
+      // "pairing code, e.g. K7P3QX" was clipped to "PAIRING CODE, E." at the dock width — a
+      // placeholder cut mid-example teaches nothing (QA D9). The short form fits; the full
+      // sentence lives in the title tooltip and the aria-label.
+      `<input type="text" id="live-code" maxlength="7" placeholder="code e.g. K7P3QX" title="Pairing code, e.g. K7P3QX" aria-label="Pairing code">` +
+      `<input type="text" id="live-name" maxlength="24" placeholder="name (optional)" aria-label="Your name">` +
+    `</div>` +
+    `<button class="btn-primary" id="live-add">${list.length ? 'Add another' : 'Connect'}</button>` +
     `<div class="err" id="live-err"></div>` +
     `<div class="opts">` +
       `<label class="sw"><input type="checkbox" id="live-follow" ${live.opts.follow ? 'checked' : ''}><span class="track"></span>follow</label>` +
       `<label class="sw"><input type="checkbox" id="live-trail" ${live.opts.trail ? 'checked' : ''}><span class="track"></span>trail</label>` +
       `<button class="ghost" id="live-clear">clear trail</button>` +
-    `</div>`;
-  const input = $('#live-code', liveEl);
-  const tryAdd = () => { try { live.add(input.value); input.value = ''; ui.render(); } catch (e) { $('#live-err', liveEl).textContent = e.message; } };
+    `</div>` +
+    `<p class="live-hint">No code yet? Run the companion on the game PC — ` +
+      `<a href="https://github.com/writtenonwater99/tarkovzero/blob/main/companion/README.md" target="_blank" rel="noopener">companion/README.md</a>.</p>`;
+  const codeInput = $('#live-code', liveEl), nameInput = $('#live-name', liveEl);
+  const tryAdd = () => {
+    try { live.add(codeInput.value, nameInput.value, { override: !!nameInput.value.trim() }); codeInput.value = ''; nameInput.value = ''; renderLivePanel(); }
+    catch (e) { $('#live-err', liveEl).textContent = e.message; }
+  };
   $('#live-add', liveEl).onclick = tryAdd;
-  input.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
+  codeInput.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
+  nameInput.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
   $$('[data-rm]', liveEl).forEach((b) => (b.onclick = () => live.remove(b.dataset.rm)));
   $$('[data-rn]', liveEl).forEach((b) => (b.ondblclick = () => { const n = prompt('Name for this player (empty = use companion name / code)', b.textContent); if (n !== null) live.rename(b.dataset.rn, n); }));
+  $$('[data-primary]', liveEl).forEach((r) => (r.onchange = () => live.setPrimary(r.dataset.primary)));
   $('#live-follow', liveEl).onchange = (e) => (live.opts.follow = e.target.checked);
   $('#live-trail', liveEl).onchange = (e) => (live.opts.trail = e.target.checked);
   $('#live-clear', liveEl).onclick = () => live.clearTrails();
-} };
-const live = createLive(map, mapData, ui);
-setLiveOpen(liveOpen);
-ui.render();
+
+  tickLivePanel();
+}
+// ui.render is the full rebuild — only for structural events (add/remove/rename/connect status).
+// ui.tick is everything position-driven: live.js's onPos calls it directly on every incoming position
+// (matched map or not — that can be several times a second) and its own 1 Hz ticker calls it too, so
+// age text keeps advancing between positions. Both paths end inside tickLivePanel(), which is also
+// where the 3D live-player refresh lives — but tick never touches the add-code/add-name inputs or
+// rebuilds a row, so a position arriving mid-keystroke can't steal focus or the field's value.
+const ui = { render: renderLivePanel, tick: tickLivePanel };
+// onQuests: the companion also streams the player's quest log ({t:'quests'}); the Quests panel owns
+// what to do with it (list it, auto-select what belongs on this map). See docs/plans/ACTIVE-QUESTS.md.
+const live = createLive(map, mapData, ui, {
+  onFollow: (x, z) => { if (is3d()) set3d({ target: [-x, -z, 0] }); },
+  onQuests: (set) => quests.setQuestSet(set),
+});
+renderLivePanel();
 live.restore();
 for (const c of (new URLSearchParams(location.search).get('live') || '').split(',').filter(Boolean)) { try { live.add(c); } catch {} }
-ui.render();
+renderLivePanel();
 
 /* ----------------------------------------------------------- 3D view ----- */
 const visibleKinds = () => new Set([...$$('#layers input[data-kind]')].filter((i) => i.checked && i.dataset.kind).map((i) => i.dataset.kind));
 function set3d(patch) {
   v3 = { ...v3, ...patch };
+  // Programmatic flies obey the same floor as a right-drag: the eye stays above the ground plane —
+  // and *only* map3d.js knows how high the terrain under the orbit target is, so it owns the clamp
+  // and its answer is authoritative. v3 is re-seeded from what it actually applied; pushing a second
+  // viewState at deck here would throw the ground clamp away and leave the two states disagreeing.
   if (view3d) {
-    try { view3d.setView({ target: v3.target, zoom: v3.zoom }); } catch {}
-    try { view3d.deck?.setProps({ viewState: { ...v3 } }); } catch {}
+    try { v3 = { ...v3, ...view3d.setView(v3) }; } catch {}
+  } else {
+    // Before deck exists there is no terrain to clear — the flat horizon floor is all there is.
+    v3.rotationX = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, v3.rotationX ?? CAM.rotationX));
   }
-  map.setView([-v3.target[1], -v3.target[0]], v3.zoom + 2.06, { animate: false });
+  mirror2d();
   updateHud();
+}
+/**
+ * Push the 3D camera onto the hidden 2D map, and remember what actually landed there.
+ *
+ * Leaflet clamps to its own [minZoom, maxZoom], so the zoom we ask for is not always the zoom it
+ * keeps: on Woods the 3D fit mirrors to 2.52 but a fully zoomed-out 3D view mirrors to 0.43 against
+ * a `minZoom` of 2. Reading that clamped number back on the next 2D→3D switch is what used to move
+ * the camera for free. `mirror` is the receipt: while the 2D zoom is still exactly the one this
+ * function left there, the hand-over restores the 3D zoom instead of re-deriving it.
+ */
+let mirror = null;
+function mirror2d() {
+  map.setView([-v3.target[1], -v3.target[0]], (v3.zoom ?? 0) + zOff(), { animate: false });
+  mirror = { zoom2d: map.getZoom(), zoom3d: v3.zoom ?? 0 };
+}
+/** The 3D zoom a 2D→3D switch should land on, undoing any clamp the mirror suffered. */
+function handoffZoom() {
+  const z2 = map.getZoom();
+  return mirror && Math.abs(z2 - mirror.zoom2d) < 1e-9 ? mirror.zoom3d : z2 - zOff();
 }
 const viewBtns = $$('#view-toggle .seg-cell');
 async function setView(mode) {
@@ -615,14 +1286,20 @@ async function setView(mode) {
       const { createView3d } = await import('./map3d.js');
       view3d = await createView3d($('#map3d'), mapData, {
         relief,
+        look,
+        fx: fxParam(),
         markers: () => markerPoints.filter((m) => visibleKinds().has(m.kind)),
         labels: labelSet,
         players: () => [...live.players.values()],
         quests: () => quests.deckData(),
         onQuestClick: (obj) => quests.onDeckClick(obj),
+        // The 3D labels are seated in screen space against the same rect the 2D ones are, so the
+        // diorama's names are pushed out from under the toolbar/dock/omnibox instead of drawn
+        // under them (QA D3/D4). Handed as a function: the dock moves without the map moving.
+        safeRect: avoidRect,
         onViewChange: (v) => {
           v3 = { ...v3, ...v };
-          map.setView([-v3.target[1], -v3.target[0]], v3.zoom + 2.06, { animate: false });
+          mirror2d();
           updateHud();
         },
       });
@@ -631,11 +1308,22 @@ async function setView(mode) {
       try { view3d.deck?.setProps({ onHover: (i) => { const c = i?.coordinate; Array.isArray(c) ? showCoords(-c[0], -c[1]) : idleCoords(); } }); } catch {}
     }
     if (initial3dHash) { const direct = initial3dHash; initial3dHash = null; set3d(direct); }
-    else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - 2.06 }); }
+    // The FIRST time 3D opens without a permalink it is a fit, not a hand-off: the frame is computed
+    // in 3D (fit3d), which fits the map's *projected* footprint at the tilt we are about to use —
+    // a 2D cover zoom fits by width and frames a near-square map like Woods against the camera.
+    // The gate is the permalink, NOT `autoFit`: `autoFit` is cleared by any 2D pan or wheel, so
+    // gating on it meant one pan in 2D silently bought back the pre-fix framing (QA: Woods opened
+    // at 1.160 instead of 0.085). Every later 2D→3D switch picks the 2D view up where it was left,
+    // so a 3D → 2D → 3D round trip still lands on the same camera.
+    else if (!framed3d && !arrivedByHash) fit3d();
+    else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: handoffZoom() }); }
+    framed3d = true;
     view3d.refresh();
   } else {
     // #map was display:none while 3D drove it — remeasure before Leaflet draws again.
     map.invalidateSize({ animate: false });
+    // 3D moved the shared LOD tier while it was on screen; rebuild the Leaflet layers to match.
+    applyLod(true);
   }
   // The quest card is a Leaflet popup in 2D and a floating HTML card in 3D — neither survives the
   // switch, so close it rather than leave a card pinned to nothing.
@@ -661,24 +1349,27 @@ floorBtns.forEach((b) => (b.onclick = () => setFloor(b.dataset.floor)));
 setFloor(floor);
 const stepFloor = (d) => { const i = floorBtns.findIndex((b) => b.classList.contains('on')); setFloor(floorBtns[Math.max(0, Math.min(floorBtns.length - 1, i + d))].dataset.floor); };
 
-const origRender = ui.render; ui.render = () => { origRender(); view3d?.refresh(); };
+// (view3d refresh lives inside tickLivePanel() now — both ui.render and ui.tick end up there, see above.)
 
 /* ------------------------------------------------------- HUD controls ---- */
 function zoomBy(d) {
-  if (is3d()) set3d({ zoom: Math.max(-2, Math.min(8, (v3.zoom ?? 0) + d)) });
+  if (is3d()) set3d({ zoom: Math.max(v3.minZoom ?? -2, Math.min(v3.maxZoom ?? 5, (v3.zoom ?? 0) + d)) });
   else map.setZoom(map.getZoom() + d, { animate: true });
 }
 $('#hud-zin').onclick = () => zoomBy(0.5);
 $('#hud-zout').onclick = () => zoomBy(-0.5);
 $('#hud-fit').onclick = () => {
-  if (is3d()) set3d({ target: [-fitState.center.lng, -fitState.center.lat, 0], zoom: fitState.zoom - 2.06 });
-  else { autoFit = true; fit(); }
+  // Fit in 3D restores the default framing: the contain zoom, the oblique tilt and the diorama's
+  // near corner, centred on the safe rect. In 2D it is the one place cover lives (QA H2): asking
+  // for the fit by hand is asking to fill the window, and it sticks until the next explicit fit.
+  if (is3d()) fit3d();
+  else { autoFit = true; fit('cover'); }
 };
 $('#hud-north').onclick = () => {
-  const t0 = performance.now(), o0 = v3.rotationOrbit ?? 0, x0 = v3.rotationX ?? 50;
+  const t0 = performance.now(), o0 = v3.rotationOrbit ?? 0, x0 = v3.rotationX ?? CAM.rotationX;
   const step = (t) => {
     const k = Math.min(1, (t - t0) / 400), e = 1 - Math.pow(1 - k, 3);
-    set3d({ rotationOrbit: o0 * (1 - e), rotationX: x0 + (62 - x0) * e });
+    set3d({ rotationOrbit: o0 + (CAM.rotationOrbit - o0) * e, rotationX: x0 + (CAM.rotationX - x0) * e });
     if (k < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
@@ -689,7 +1380,40 @@ function togglePop(pop, trigger) {
   const open = pop.hidden;
   closePops();
   pop.hidden = !open;
+  if (open) placePop(pop, trigger);
   trigger?.setAttribute('aria-expanded', String(open));
+}
+/**
+ * Put a popover on screen and keep it there.
+ *
+ * A `fixed` popover (the Controls list) is placed by hand: it hangs off a button inside a panel,
+ * and .panel/.panel-body clip their content, so it has to escape the panel box entirely. It goes
+ * under the button, right-aligned with it, flips above if it will not fit below, and is squared up
+ * with the window edges either way. An `absolute` one (the status chip's) is already where it
+ * belongs and only needs the same last nudge.
+ */
+function placePop(pop, trigger) {
+  pop.style.transform = '';
+  const M = 10;                                   // margin from the window edge
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (getComputedStyle(pop).position === 'fixed') {
+    if (!trigger) return;
+    const t = trigger.getBoundingClientRect();
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    let top = t.bottom + 8;
+    if (top + h > vh - M) top = t.top - 8 - h;    // no room below: flip above the button
+    top = Math.min(Math.max(M, top), Math.max(M, vh - M - h));
+    const left = Math.min(Math.max(M, t.right - w), Math.max(M, vw - M - w));
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.top = `${Math.round(top)}px`;
+    return;
+  }
+  const r = pop.getBoundingClientRect();
+  if (!r.height) return;
+  let dy = 0;
+  if (r.bottom > vh - M) dy = vh - M - r.bottom;
+  if (r.top + dy < M) dy = M - r.top;
+  if (dy) pop.style.transform = `translateY(${Math.round(dy)}px)`;
 }
 function closePops() {
   for (const p of $$('.pop')) p.hidden = true;
@@ -700,30 +1424,26 @@ function closePops() {
 $('#help-btn').onclick = (e) => { e.stopPropagation(); togglePop($('#hint3d'), $('#help-btn')); };
 document.addEventListener('click', (e) => { if (!e.target.closest('.pop') && !e.target.closest('#status') && !e.target.closest('#help-btn')) closePops(); });
 
-/* -------------------------------------------------------- mobile sheet --- */
-const DETENTS = ['peek', 'half', 'full'];
-const mobile = () => window.matchMedia('(max-width:760px)').matches;
-function sheet(d) {
-  document.body.classList.remove('sheet-peek', 'sheet-half', 'sheet-full');
-  document.body.classList.add('sheet-' + d);
-  document.body.dataset.sheet = d;
-  setTimeout(() => { map.invalidateSize(); updateHud(); }, 240);
-}
-if (mobile()) sheet('half');
-$('#sheet-grab').onclick = () => sheet(DETENTS[(DETENTS.indexOf(document.body.dataset.sheet || 'half') + 1) % 3]);
-$('#stage').addEventListener('pointerdown', () => { if (mobile() && document.body.dataset.sheet !== 'peek') sheet('peek'); });
-window.addEventListener('resize', () => { if (!mobile()) document.body.classList.remove('sheet-peek', 'sheet-half', 'sheet-full'); else if (!document.body.dataset.sheet) sheet('half'); });
-
 /* ------------------------------------------------------------ keyboard --- */
 document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
-  if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); findEl.focus(); findEl.select(); return; }
-  if (e.key === 'Escape') { closePops(); map.closePopup(); quests.closeCard(); if (mobile()) sheet('peek'); return; }
+  if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); omni?.focus(); return; }
+  if (e.key === 'Escape') {
+    // Peel one layer at a time: popovers and cards, then the omnibox, then the transient panel.
+    // Pinned workspaces stay. (Esc inside the omnibox never reaches here — it stops propagation.)
+    const hadPop = $$('.pop').some((p) => !p.hidden) || !mapMenu.hidden;
+    const hadCard = !$('#quest-card').hidden || !!$('.leaflet-popup');
+    closePops(); map.closePopup(); quests.closeCard();
+    if (hadPop || hadCard) return;
+    if (omni?.escape()) return;
+    shell.closeTransient();
+    return;
+  }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === '/') { e.preventDefault(); findEl.focus(); return; }
+  if (e.key === '/') { e.preventDefault(); omni?.focus(); return; }
   if (e.key === '3') { setView(is3d() ? '2d' : '3d'); return; }
   if (e.key === 'q' || e.key === 'Q') { quests.setOpen(true); $('#quest-find')?.focus(); return; }
-  if (e.key === 'a' || e.key === 'A') { assistant?.focus(); return; }
+  if (e.key === 'a' || e.key === 'A') { e.preventDefault(); omni?.focusAsk(); return; }
   if (e.key === 'l' || e.key === 'L') { setLabels(!labelsShown); return; }
   if (e.key === 'f' || e.key === 'F') { $('#hud-fit').click(); return; }
   if (e.key === 'n' || e.key === 'N') { if (is3d()) $('#hud-north').click(); return; }
@@ -731,11 +1451,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === ']') { if (is3d()) stepFloor(1); return; }
   if (e.key === '+' || e.key === '=') { zoomBy(0.5); return; }
   if (e.key === '-') { zoomBy(-0.5); return; }
-  if (/^[1-6]$/.test(e.key)) {
-    const rows = $$('#layers .row[data-kind]:not([data-kind=""])');
-    const row = rows[Number(e.key) - 1];
-    if (row) { const k = row.dataset.kind; setKind(k, !onKinds.has(k)); }
-  }
+  // Bare 1–6 used to toggle whatever the first six filter rows happened to be — a shortcut whose
+  // meaning changed with the data, and `3` collided with the 2D/3D toggle. Dropped (red team #9);
+  // layer commands come back through the omnibox in step 2.
 });
 
 /* ------------------------------------------------------------ tz API ----- */
@@ -746,6 +1464,49 @@ window.tz = {
   get view() { return is3d() ? '3d' : '2d'; },
   setView,
   flyTo,
+  /**
+   * The 3D render style (docs/plans/RENDER-REALISM.md): 'realistic' | 'vector'.
+   * Called with no argument it reports the current one; with one it flips and persists it.
+   * The flip is material-only — geometry, feature ids, picking, floors and the camera do not move.
+   */
+  renderStyle: (mode) => (mode === undefined ? look : setLook(mode)),
+  /**
+   * The realistic-only effect switches. `renderFx()` reports, `renderFx('fog')` toggles one —
+   * the measurement hook behind the View panel's Effects row.
+   */
+  renderFx: (key) => { if (key !== undefined) setFx(key); return { ...fx }; },
+  /** QA hook: draw count, GPU/CPU frame time and texture bytes for the live 3D frame. */
+  renderStats: () => view3d?.renderStats?.() ?? null,
+  /** QA hook: the box a fit frames into — the stage minus the chip band and the omnibox band. */
+  safeRect,
+  /** QA hook: the part of the stage nothing floats over (safeRect minus the toolbar and dock). */
+  avoidRect,
+  /** QA hook: which marker tier is on screen and the metres-per-pixel it was decided from. */
+  get lod() { return { tier: currentTier(), mpp: metresPerPixel() }; },
+  /**
+   * QA hook: the live camera. 3D reports the OrbitView state the walkthrough asserts the oblique
+   * default against (`rotationX` ≈ CAM.rotationX); 2D reports Leaflet's centre and zoom.
+   */
+  get camera() {
+    if (is3d()) return { mode: '3d', target: [...v3.target], zoom: v3.zoom, rotationX: v3.rotationX, rotationOrbit: v3.rotationOrbit };
+    const c = map.getCenter();
+    return { mode: '2d', center: { x: c.lng, z: c.lat }, zoom: map.getZoom() };
+  },
+  /** QA hook: game coords -> stage CSS px in the 3D view (null in 2D or before deck is up). */
+  project: (x, z) => view3d?.project?.(x, z) ?? null,
+  /** QA hook: how many markers the current filter set puts on the map, and the per-kind totals. */
+  markers: () => ({
+    kinds: [...onKinds].filter((k) => layerOf.has(k)).sort(),
+    total: [...onKinds].reduce((n, k) => n + (countOf.get(k) ?? 0), 0),
+    byKind: Object.fromEntries([...countOf].sort()),
+  }),
+  panel: { open: (n) => shell.open(n), close: (n) => shell.close(n), isOpen: (n) => shell.isOpen(n), isPinned: (n) => shell.isPinned(n) },
+  live: {
+    /** {state:'disconnected'|'connecting'|'streaming'|'stale', lastAt, ageMs, players:[{code,name,map,lastAt}]} */
+    state: () => live.state(),
+    /** The quest log the companion reported: {active, done, failed, accountId, ts, since, codes}. */
+    quests: () => live.quests(),
+  },
   quests: {
     /** Select a quest by slug (adds it to the map). Returns false if the slug is unknown. */
     select: (slug) => quests.select(slug),
@@ -755,29 +1516,106 @@ window.tz = {
     markObjective: (objectiveId, value) => quests.markObjective(objectiveId, value),
     /** Centre the map on an objective and open its card. */
     flyTo: (objectiveId) => quests.flyToObjective(objectiveId),
-    /** Everything currently on the map: [{id, questSlug, objectiveId, badge, position, level}] */
-    points: () => quests.points().map((p) => ({ id: p.id, questSlug: p.questSlug, objectiveId: p.objectiveId, badge: p.badge, text: p.objective.text, position: p.position, level: p.level })),
+    /**
+     * Everything currently on the map: [{id, questSlug, objectiveId, badge, position, pin, level}].
+     * `position` is the exact objective coordinate; `pin` is where the marker is actually drawn
+     * (coincident pins are fanned apart), which is what a click has to aim at.
+     */
+    points: () => quests.points().map((p) => ({ id: p.id, questSlug: p.questSlug, objectiveId: p.objectiveId, badge: p.badge, text: p.objective.text, position: p.position, pin: { x: p.pin.x, z: p.pin.z }, level: p.level })),
     selected: () => quests.selectedSlugs(),
     /** The full quest list (loads it if it has not been fetched yet). */
     all: async () => (await quests.load()),
     setVisible: (on) => quests.setVisible(on),
     open: (on = true) => quests.setOpen(on),
+    /**
+     * The task ids the GAME says are active (companion -> relay -> live.js), already intersected
+     * with nothing — raw ids, in the order they were started. src/assistant.js sends them to
+     * /api/assistant as grounding: "these are the quests this player is actually on".
+     */
+    active: () => quests.activeIds(),
+    /** Everything the quest log said: {active, done, failed, since, ts}. */
+    log: () => quests.questSet(),
+    /** Open the Quests panel with "My quests" in view (the omnibox's `> my quests`). */
+    mine: () => quests.revealMine(),
   },
 };
 
-/* ------------------------------------------------------- ask (AI) panel -- */
+/* --------------------------------------------------------- ask (AI) ------ */
 // Grounded quest Q&A: src/assistant.js posts to /api/assistant and replays the actions it gets
-// back through window.tz (select a quest, fly to an objective, switch map). See api/assistant.js.
+// back through window.tz (select a quest, fly to an objective). It answers into the omnibox card;
+// a map switch is offered as a chip and never performed on its own. See api/assistant.js.
 assistant = createAssistant({
   mapKey: mapData.key,
   tz: window.tz,
   store,
-  onOpen: (reveal) => { if (mobile() && (reveal || document.body.dataset.sheet === 'peek')) sheet('full'); },
+  // The card IS the omnibox's card: it can only be shown by something that exists, which is why
+  // init() is called below the omnibox and not here. `ask` routes the card's own starter chips back
+  // through the omnibox, so a chip-initiated answer captures the undo the Restore chip needs.
+  panel: {
+    setOpen: (on) => omni?.setCardOpen(on),
+    isOpen: () => !!omni?.isCardOpen(),
+    ask: (text) => omni?.ask(text),
+  },
+  onAnswer: (x) => omni?.onAnswer(x),
 });
+
+/* --------------------------------------------------------- omnibox ------- */
+// One field for three jobs: lookup (no prefix), commands (`>`), the assistant (`?`). It owns the
+// bottom-centre strip and the card above it; everything it can do to the map goes through the
+// handles below, so the routing module never touches Leaflet or deck directly.
+omni = createOmnibox({
+  mapKey: mapData.key,
+  index: () => index,
+  quests,
+  assistant,
+  flyTo,
+  toast: (m) => toast(m),
+  onLayout: () => { if (booted) updateHud(); },
+  camera: {
+    get: () => (is3d() ? { mode: '3d', v3: { ...v3 } } : { mode: '2d', center: map.getCenter(), zoom: map.getZoom() }),
+    set: (s) => {
+      if (!s) return;
+      if (s.mode === '3d') { if (!is3d()) setView('3d'); set3d(s.v3); }
+      else { if (is3d()) setView('2d'); map.setView(s.center, s.zoom, { animate: true }); }
+    },
+  },
+  actions: {
+    setView,
+    fit: () => $('#hud-fit').click(),
+    north: () => $('#hud-north').click(),
+    setKind: (kind, on) => setKind(kind, on),
+    setLayers: (query, on) => {
+      const s = query.trim().toLowerCase();
+      if ('labels'.startsWith(s) || 'places'.startsWith(s) || 'names'.startsWith(s)) { setLabels(on); return 1; }
+      if ('quests'.startsWith(s) || 'objectives'.startsWith(s)) { quests.setVisible(on); return 1; }
+      const kinds = matchLayers(query);
+      for (const k of kinds) setKind(k, on, { refresh: false });
+      if (kinds.length) { store.set('kinds', [...onKinds]); syncGroupCounts(); view3d?.refresh(); }
+      return kinds.length;
+    },
+    setFloor: (f) => { if (!allowedFloors.has(String(f))) return false; setFloor(String(f)); return true; },
+    setRelief: (n) => setRelief(n),
+    setNature: (kind, on) => setNature(kind, on),
+    setLabels: (d) => { density = d; store.set('density', density); if (d !== 'off' && !labelsShown) setLabels(true); else applyLabels(); },
+    panel: (name, on) => shell.setOpen(name, on),
+    pin: (name, on) => shell.setPinned(name, on),
+    myQuests: () => quests.revealMine(),
+    clearTrails: () => live.clearTrails(),
+    help: () => { shell.open('view'); closePops(); togglePop($('#hint3d'), $('#help-btn')); },
+    goMap,
+    mapKeys: () => Object.keys(MAPS),
+  },
+});
+
+// Only now: everything init() does — ?ask=1, and replaying the transcript after an assistant map
+// switch — is written into the omnibox's card, and setOpen() on a card that does not exist yet is a
+// silent no-op that leaves the content in a permanently hidden element.
 assistant.init();
 
+booted = true;
 updateHud();
-if (starts3d) setView('3d');
+setView(starts3d ? '3d' : '2d');
+omni.applyQaQuery();
 
 // ?debug=roads — draw the 3D road/track network over the 2D map to check it against the satellite
 if (new URLSearchParams(location.search).get('debug') === 'roads') {

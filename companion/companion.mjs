@@ -9,6 +9,7 @@
 //     --name <text> (shown on the map instead of the code) --keep (don't delete screenshots)
 //     --auto <ms> (auto-press screenshot key) --map <name> (skip log detection)
 //     --logs <EFT Logs folder> --elevation-log <file> (default elevation-<map>.jsonl) --verbose
+//   quest options: --no-quests (don't read the quest log) --reset-quests (forget the reconstructed set)
 //   UI options: --headless (no UI server) --port <n> (default 4173) --no-open (don't open the browser)
 // Runs with Windows node or WSL node (paths under /mnt/c are handled).
 import fs from 'node:fs';
@@ -19,9 +20,11 @@ import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { QuestTracker } from './quests.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG = path.join(here, 'companion.json');
+const QUEST_STATE = path.join(here, 'companion-quests.json');
 const UI_FILE = path.join(here, 'ui.html');
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? true : all[i + 1]] : []).filter((x) => x.length));
 const isWin = process.platform === 'win32';
@@ -127,7 +130,12 @@ let ws = null, sent = 0, lastPos = null, reconnectTimer = null;
 function connect() {
   const target = `${cfg.relay}/pub/${cfg.code}`;
   const mine = ws = new WebSocket(target);
-  ws.on('open', () => { if (ws === mine) { log('connected to relay'); stateChanged(); } });
+  ws.on('open', () => {
+    if (ws !== mine) return;
+    log('connected to relay'); stateChanged();
+    if (questsKnown()) postQuests('connect', { force: true });
+    else if (quests && verbose) log('quests: nothing reconstructed yet — not publishing an empty set');
+  });
   ws.on('close', () => {
     if (ws !== mine) return; // superseded by a newer socket (code/relay change)
     log('relay disconnected, retrying…'); stateChanged();
@@ -236,6 +244,58 @@ function rememberPos(msg) {
   stateChanged();
 }
 
+// ---- active quests (reconstructed from the EFT push-notification logs)
+// The game logs "quest started/failed/finished" chat messages but never a snapshot, so quests.mjs
+// replays every log session and keeps the result in companion-quests.json. The set is POSTed to
+// the relay (HTTP, same host as the websocket) whenever it moves and on every (re)connect.
+const questsEnabled = !args['no-quests'] && String(args.quests ?? '').toLowerCase() !== 'off';
+let quests = null, questsSent = 0, lastQuestsJson = null, fetchWarned = false, questPostBusy = false, questPostAgain = null;
+if (questsEnabled) {
+  quests = new QuestTracker({ logsDir, statePath: QUEST_STATE, questsFile: path.join(here, '..', 'public', 'data', 'quests.json'), log });
+  if (args['reset-quests']) quests.reset('--reset-quests');
+}
+const relayHttp = () => String(cfg.relay).replace(/^ws/i, 'http').replace(/\/+$/, '');
+// True once the tracker has actually read a log: without this a companion pointed at a missing/wrong
+// logs folder would publish an empty set on connect and wipe the relay's cached one for that code.
+const questsKnown = () => !!quests && !!(quests.state.since || quests.state.active.length || quests.state.done.length || quests.state.failed.length);
+async function sendQuests(reason, force) {
+  const body = JSON.stringify(quests.snapshot());
+  if (!force && body === lastQuestsJson) return;
+  if (typeof fetch !== 'function') { if (!fetchWarned) { fetchWarned = true; log('quests: this Node has no fetch (needs Node 18+) — quest sync disabled'); } return; }
+  try {
+    const res = await fetch(`${relayHttp()}/quests/${cfg.code}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+    if (!res.ok) return log(`quests: relay refused the quest set (HTTP ${res.status})`);
+    lastQuestsJson = body; questsSent++;
+    if (verbose || reason === 'connect') log(`quests: sent ${quests.state.active.length} active to the relay (${reason})`);
+    stateChanged();
+  } catch (e) { log('quests: could not reach the relay: ' + e.message); }
+}
+// One POST at a time: these are fired and forgotten from a 250 ms interval, and two in flight can finish
+// out of order — the older body would then win both the dedupe key here and the room cache on the relay.
+// A post asked for while one is running is collapsed into a single follow-up with the newest snapshot.
+async function postQuests(reason, { force = false } = {}) {
+  if (!quests) return;
+  if (questPostBusy) { questPostAgain = { reason, force: force || !!questPostAgain?.force }; return; }
+  questPostBusy = true;
+  try { await sendQuests(reason, force); }
+  finally {
+    questPostBusy = false;
+    const next = questPostAgain; questPostAgain = null;
+    if (next) postQuests(next.reason, { force: next.force });
+  }
+}
+function syncQuests(rescan = false, reason = 'change') {
+  if (!quests) return;
+  quests.setLogsDir(logsDir);
+  let r;
+  try { r = quests.sync({ rescan }); } catch (e) { return log('quests: could not read the quest log: ' + e.message); }
+  if (!r.changed) return;
+  const c = quests.counts();
+  log(`quests: ${c.active} active, ${c.done} done, ${c.failed} failed${c.unknown ? `, ${c.unknown} id(s) not in quests.json` : ''} (since ${c.since || '?'})`);
+  stateChanged();
+  postQuests(reason);
+}
+
 // ---- header
 log(`
   TarkovZero Companion
@@ -248,6 +308,7 @@ log(`
   Map          : ${cfg.map || 'auto (from logs, fallback customs)'}
   Delete PNGs  : ${cfg.deleteScreenshots}   Auto-screenshot: ${cfg.autoMs ? cfg.autoMs + ' ms' : 'off'}
   Elevation log: ${elevationLogging ? (elevationArg && elevationArg !== true ? elevationFile(currentMap()) : 'elevation-<map>.jsonl (next to companion.json)') : 'off'}
+  Active quests: ${quests ? `on (${quests.counts().active} known so far${quests.counts().since ? ', since ' + quests.counts().since : ''})` : 'off'}
 `);
 
 // ---- local UI server (127.0.0.1 only)
@@ -270,6 +331,7 @@ function stateJson() {
     relay: cfg.relay,
     sent,
     lastPos,
+    quests: quests ? { ...quests.counts(), sent: questsSent, ids: quests.state.active.slice(0, 50) } : null,
     events: events.slice(-100),
     version,
     simulate: !!args.simulate,
@@ -456,6 +518,14 @@ function scan() {
     if (ok) rememberPos(msg);
     if (cfg.deleteScreenshots) setTimeout(() => fs.rm(full, () => {}), 3000);
   }
+}
+
+if (quests) {
+  // The first sync replays every kept session (~300 ms on a real Logs folder), so it goes after the
+  // first turn of the loop instead of delaying the UI and the first screenshot scan.
+  setImmediate(() => syncQuests(true, 'start'));
+  setInterval(() => syncQuests(false), 250);   // tail the live push-notifications file (cheap path)
+  setInterval(() => syncQuests(true), 5000);   // pick up a new log session / new log folder
 }
 
 if (args.simulate) {

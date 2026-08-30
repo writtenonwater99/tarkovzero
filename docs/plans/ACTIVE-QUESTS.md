@@ -46,6 +46,9 @@ newest — today the companion scans only the latest folder):
 - Companion → relay: `POST /quests/CODE` `{active:[ids], done:[ids], accountId, ts}` on change and on connect.
 - Relay: keep last quest set per code (same cache as last position); forward to `/sub/CODE` as `{t:'quests', …}`
   alongside `pos|map`. Retention identical to positions.
+  **As built (2026-08-29):** the discriminator is `type:'quests'`, not `t:'quests'` — `t` is already the
+  timestamp the relay stamps on every message. Payload as shipped:
+  `{type:'quests', active[], done[], failed[], accountId, since, ts, code, t}`.
 - Site (`src/live.js` → `src/quests.js`): on `quests` message, populate "My quests" (ids ∩ quests.json for the
   current map first, others collapsed); on `map` message, auto-select the active quests that have objectives on
   that map (respect a "auto-select" toggle, default on). Manual selections are never overwritten.

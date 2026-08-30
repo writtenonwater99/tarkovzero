@@ -14,19 +14,16 @@ const MAPS = {
     aliases: ['customs', 'bigmap'],
     spt: 'scripts/spt-bigmap-base.json',
     loose: 'scripts/data/customs/loose-loot-samples.json',
-    spawnOk: (p) => p.y > -8 && p.y < 30 && !/snipe/i.test(p.zone),
   },
   reserve: {
     aliases: ['reserve', 'rezervbase'],
     spt: 'scripts/data/reserve/spt-base.json',
     loose: 'scripts/data/reserve/loose-loot-samples.json',
-    spawnOk: (p) => p.y > -9 && p.y < 35 && !/ZoneSub(Command|Storage)|snipe/i.test(p.zone),
   },
   woods: {
     aliases: ['woods'],
     spt: 'scripts/data/woods/spt-base.json',
     loose: 'scripts/data/woods/loose-loot-samples.json',
-    spawnOk: (p) => p.y > -25 && p.y < 55 && !/snipe|Zone(?:Big|High)Rocks/i.test(p.zone),
   },
 };
 
@@ -80,7 +77,9 @@ function collectJson(value, fallbackSource, out) {
   if (Array.isArray(value.SpawnPointParams)) {
     for (const s of value.SpawnPointParams) {
       const p = { ...s.Position, zone: s.BotZoneName || '' };
-      if (finitePoint(p) && cfg.spawnOk(p)) out.push(clean(p, 'spawn'));
+      // Preserve every finite vertical observation. Ground/rock/floor/roof/
+      // underground routing belongs to the shared 3D builder, not ingestion.
+      if (finitePoint(p)) out.push(clean(p, 'spawn'));
     }
     return;
   }
@@ -147,14 +146,21 @@ for (const bucket of cells.values()) {
 }
 samples.sort((a, b) => a[2] - b[2] || a[0] - b[0] || a[3] - b[3]);
 const counts = Object.fromEntries(SOURCE_TYPES.map((name, index) => [name, samples.filter((p) => p[3] === index).length]));
+const exactPoints = points.filter(finitePoint).map((point) => [point.x, point.y, point.z, SOURCE_TYPES.indexOf(point.source), point.zone || ''])
+  .sort((a, b) => a[2] - b[2] || a[0] - b[0] || a[1] - b[1] || a[3] - b[3] || a[4].localeCompare(b[4]));
+const inputCounts = Object.fromEntries(SOURCE_TYPES.map((name, index) => [name, exactPoints.filter((point) => point[3] === index).length]));
 const output = path.join(ROOT, 'scripts', 'data', map, 'elevation-samples.json');
 const document = {
-  version: 1,
+  version: 2,
   map,
   grid: GRID,
   sourceTypes: SOURCE_TYPES,
   inputs: inputNames,
-  counts,
+  inputCounts,
+  cellCounts: counts,
+  // Full-precision observations are the auditable route input. `samples` is a
+  // compact compatibility view, never the only copy of a rejected elevation.
+  points: exactPoints,
   samples,
 };
 await writeFile(output, `${JSON.stringify(document)}\n`);
