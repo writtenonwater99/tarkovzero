@@ -385,8 +385,12 @@ const coordsEl = $('#coords');
 const scaleCap = $('#scale .scale-cap');
 const scaleBar = $('#scale .scale-line i');
 const compass = $('#hud-north svg');
-const showCoords = (x, z) => { coordsEl.innerHTML = `X <b>${num(x)}</b>&nbsp;&nbsp; Z <b>${num(z)}</b>`; };
-const idleCoords = () => { coordsEl.textContent = '—'; };
+// QA L1: the read-out rendered as a dark pill containing a bare "—" in every frame where nobody
+// was streaming and the cursor was off the map — a control-looking thing that says nothing. It
+// collapses instead, and the bottom-left strip is one chip until there is a position to put in it.
+const showCoords = (x, z) => { coordsEl.classList.remove('idle'); coordsEl.innerHTML = `X <b>${num(x)}</b>&nbsp;&nbsp; Z <b>${num(z)}</b>`; };
+const idleCoords = () => { coordsEl.classList.add('idle'); coordsEl.textContent = '—'; };
+idleCoords();
 // While a primary live player is streaming/stale, #coords is their read-out, not the cursor — the
 // live section below flips this on/off through updateTelemetry().
 let liveTelemetryActive = false;
@@ -1007,12 +1011,19 @@ function updateTelemetry(st) {
     const hdg = Math.round(((p.last.yaw ?? 0) % 360 + 360) % 360);
     const mapName = MAPS[p.map]?.name ?? mapData.name;
     const age = ageSuffix(p.ageMs) || 'just now';
+    coordsEl.classList.remove('idle');
     coordsEl.innerHTML = `X <b>${num(p.last.x)}</b>&nbsp;&nbsp; Z <b>${num(p.last.z)}</b> · HDG <b>${hdg}°</b> · ${esc(mapName)} · ` +
       `<span class="tele-age${p.state === 'stale' ? ' stale' : ''}">${esc(age)}</span>`;
     liveTelemetryActive = true;
+    // QA M9: the streaming read-out is ~350 px wide and the strip was one ROW, so it shoved the
+    // scale bar right into the omnibox, where the bar was overlapped and truncated — the scale was
+    // only fully readable while nobody was connected. The strip stacks while it is long; the scale
+    // bar keeps its corner and the read-out goes above it.
+    coordsEl.parentElement?.classList.add('stacked');
     return;
   }
   if (liveTelemetryActive) { liveTelemetryActive = false; idleCoords(); }
+  coordsEl.parentElement?.classList.remove('stacked');
 }
 /** Raid detection (red team #6 spirit): tell, never switch. One toast per distinct mismatched map. */
 let raidToastFor = null;
