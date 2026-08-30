@@ -109,6 +109,18 @@ Not in scope: mobile (explicitly dropped 2026-08-29), 3D data fidelity (separate
 - **Omnibox bottom-centre.** Game-HUD convention, keeps the top edge free for status, and the assistant card grows
   upward over the map rather than covering the map chip. Mitigation for the south-edge collision: the card is capped
   at 40vh and the map auto-pans so a fly-to target lands in the upper 60% of the viewport.
+- **3D is the default view** (founder, 2026-08-29). With no `?view=` and nothing in localStorage the site opens the
+  diorama; 2D is one click (or `3`) away and either choice persists. `index.html` ships with the 3D cell marked and
+  `main.js` calls `setView()` for both branches on boot.
+- **The 3D camera is oblique and can never go under the map** (founder, 2026-08-29). Load / fit / `N` frame at
+  `rotationX 32°`, `rotationOrbit −20°` (`src/camera.js` `CAM`) instead of the old near-top-down 50–62°. Two clamps
+  ride every view-state change (`onViewStateChange`, `setView`, and `set3d` in main.js): a hard floor of 9° above the
+  ground plane, and — when the eye is close enough that 9° would put it inside the hill under the orbit target — a
+  higher floor computed from the OrbitView eye distance and the terrain height there. Because the ground plane
+  foreshortens with tilt, the 2D↔3D zoom offset is now a function of it (`zoomOffset()`, still 2.06 at the historical
+  62°), so the oblique view still covers the viewport and 2D→3D→2D round-trips keep their scale.
+- **Fit means cover, not contain** (step 2, defect from step 1). An explicit fit zooms so the map covers the viewport
+  and centres it in the safe rect; opening, closing or pinning a panel never moves the camera.
 
 ## Codex red team (2026-08-29, job cxt-20260829-232819-lqr0) — dispositions
 

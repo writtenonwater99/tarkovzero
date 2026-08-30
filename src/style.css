@@ -244,6 +244,7 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .res-command .rn{color:var(--text);letter-spacing:.02em}
 .res-command .res-arg{font-style:normal;color:var(--acc);margin-left:6px}
 .res .res-q{display:grid;place-items:center;width:18px;height:18px;flex:0 0 18px}
+.res-quest .rk{text-transform:none}          /* a trader is a name, not a category */
 .res-ask{border-top:1px solid var(--line);background:rgba(45,190,108,.05)}
 .res-ask .rn em{font-style:normal;color:var(--text)}
 .res-ask .rn{color:var(--text-mute)}
