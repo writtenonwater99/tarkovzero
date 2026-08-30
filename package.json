@@ -11,7 +11,9 @@
     "warm-tiles": "node scripts/warm-tiles.mjs",
     "build-community-data": "node scripts/build-community-data.mjs",
     "build-3d": "node scripts/build-3d.mjs",
-    "build-quests": "node scripts/build-quests.mjs"
+    "build-quests": "node scripts/build-quests.mjs",
+    "prepare-render-assets": "node scripts/prepare-render-assets.mjs",
+    "test:render-style": "node --test scripts/render-style-test.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.11",
