@@ -76,10 +76,17 @@ const cr = (p0, p1, p2, p3, u) => {
 };
 const norm3 = (v) => { const L = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / L, v[1] / L, v[2] / L]; };
 // deterministic integer hash -> [0,1)
+//
+// The final shift is LOGICAL, and that is the whole range of this function. With an arithmetic
+// `>>`, bit 31 of `n >> 16` is bit 31 of `n`, so the XOR cancels it and the result can never have
+// its top bit set: `hash2` returned [0, 0.5), `vnoise` inherited the bound, and every consumer
+// with a threshold above 0.5 was dead code that rendered nothing. That was the `bare` dirt field
+// (0.55) and all three TERRAIN_MACRO patches (0.55/0.60/0.57) — the entire macro-variation pass
+// was authored against a range the helper had never had.
 const hash2 = (i, j) => {
   let n = (i * 374761393 + j * 668265263) | 0;
-  n = Math.imul(n ^ (n >> 13), 1274126177);
-  return ((n ^ (n >> 16)) >>> 0) / 4294967296;
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
 // 2D value noise with smoothstep interpolation
 function vnoise(x, z, wl) {
