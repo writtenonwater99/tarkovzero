@@ -33,6 +33,14 @@ function stage(keys) {
 function addSessions(dir, keys) {
   for (const k of keys) fs.cpSync(path.join(FIX, SESSION[k]), path.join(dir, SESSION[k]), { recursive: true });
 }
+function appLog(dir, key) {
+  const d = path.join(dir, SESSION[key]);
+  return path.join(d, fs.readdirSync(d).find((f) => f.includes('application')));
+}
+function setIdentity(dir, key, profileId, accountId) { // fixture C changes both ids at once; these tests split them
+  const f = appLog(dir, key);
+  fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/ProfileId:[0-9a-f]+ AccountId:\d+/g, `ProfileId:${profileId} AccountId:${accountId}`));
+}
 function pushLog(dir, key) {
   const d = path.join(dir, SESSION[key]);
   return path.join(d, fs.readdirSync(d).find((f) => f.includes('push-notifications')));
@@ -275,6 +283,53 @@ test('a different AccountId wipes the state and replays only the new session', (
   assert.deepEqual(t.state.failed, []);
   assert.equal(t.state.since, '2026-08-09'); // "since" moves to the wipe, not the oldest log
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'companion-quests.json'), 'utf8')).accountId, '20000002');
+});
+
+// Fixture session C changes AccountId *and* ProfileId, so the two reset branches shadow each other in
+// the test above. These three pin one branch each.
+
+test('the AccountId alone changing wipes the state', () => {
+  const dir = stage(['a', 'b']);
+  const t = tracker(dir);
+  t.sync({ rescan: true });
+  addSessions(dir, ['c']);
+  setIdentity(dir, 'c', 'aaaa1111bbbb2222cccc3333', '30000003'); // same profile, different account
+  assert.equal(t.sync({ rescan: true }).changed, true);
+  assert.equal(t.state.accountId, '30000003');
+  assert.deepEqual(sorted(t.state.active), sorted([FIRSTINLINE, SUPPLYPLANS]));
+  assert.deepEqual(t.state.done, []);
+  assert.equal(t.state.since, '2026-08-09');
+});
+
+test('the ProfileId alone changing keeps a reconstruction whose log stream continues', () => {
+  const dir = stage(['a', 'b']);
+  const lines = [];
+  const t = tracker(dir, (l) => lines.push(l));
+  t.sync({ rescan: true });
+  addSessions(dir, ['c']);
+  setIdentity(dir, 'c', 'dddd4444eeee5555ffff6666', '10000001'); // same account, different profile
+  t.sync({ rescan: true });
+  t.sync({ rescan: true });
+  assert.equal(t.state.profileId, 'dddd4444eeee5555ffff6666');
+  assert.equal(t.state.accountId, '10000001');
+  assert.deepEqual(sorted(t.state.active), sorted([SHOOTER, FIRSTINLINE, SUPPLYPLANS])); // A+B survived
+  assert.deepEqual(sorted(t.state.done), sorted([BACKGROUND, AQUARIUS]));
+  assert.equal(t.state.since, '2026-08-04');
+  assert.equal(lines.filter((l) => l.includes('keeping the reconstruction')).length, 1);
+});
+
+test('a ProfileId change with an empty event stream after it wipes the state', () => {
+  const dir = stage(['a', 'b']);
+  const t = tracker(dir);
+  t.sync({ rescan: true });
+  addSessions(dir, ['c']);
+  setIdentity(dir, 'c', 'dddd4444eeee5555ffff6666', '10000001');
+  fs.writeFileSync(pushLog(dir, 'c'), '');                        // a brand-new character: nothing logged yet
+  assert.equal(t.sync({ rescan: true }).changed, true);
+  assert.deepEqual(t.state.active, []);
+  assert.deepEqual(t.state.done, []);
+  assert.equal(t.state.since, '2026-08-09');
+  assert.ok(t.state.cursor.file.startsWith(SESSION.c), t.state.cursor.file);
 });
 
 test('reset() throws the reconstruction away and a later sync rebuilds it', () => {

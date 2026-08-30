@@ -317,9 +317,14 @@ export class QuestTracker {
 
     const s = this.state;
     const acct = this.detectAccount();
+    let profileChange = null;
     if (acct) {
       if (s.accountId && acct.accountId !== s.accountId) { this.reset(`AccountId ${s.accountId} → ${acct.accountId}`, newest); changed = true; }
-      else if (s.profileId && acct.profileId !== s.profileId) { this.reset(`ProfileId ${s.profileId} → ${acct.profileId}`, newest); changed = true; }
+      // A ProfileId change on the same account is ambiguous, so the spec (docs/plans/ACTIVE-QUESTS.md §3)
+      // only wipes when the event stream after it is empty — a fresh character with no quest history.
+      // If events keep coming the reconstruction is kept: throwing away every earlier session and jumping
+      // the cursor forward is unrecoverable, and `--reset-quests` is there for the rest.
+      else if (s.profileId && acct.profileId !== s.profileId) profileChange = { reason: `ProfileId ${s.profileId} → ${acct.profileId}`, from: newest };
       const cur = this.state;
       if (cur.accountId !== acct.accountId || cur.profileId !== acct.profileId) { cur.accountId = acct.accountId; cur.profileId = acct.profileId; dirty = true; changed = true; }
     }
@@ -327,7 +332,7 @@ export class QuestTracker {
     if (this.files.length && !st.since) { st.since = sessionDate(this.files[0].dir); dirty = true; changed = true; }
 
     const events = [];
-    let cursor = { ...st.cursor };
+    let cursor = { ...st.cursor }, sinceProfileChange = 0;
     for (const f of this.files) {
       if (st.cursor.file && f.rel < st.cursor.file) continue;
       const from = f.rel === st.cursor.file ? st.cursor.offset : 0;
@@ -345,6 +350,7 @@ export class QuestTracker {
       const parsed = parseNotificationLog(read.text);
       if (parsed.bad) this.log(`quests: ${parsed.bad} unparsable notification block(s) in ${f.rel}`);
       events.push(...parsed.events);
+      if (profileChange && (!profileChange.from || f.rel >= profileChange.from.rel)) sinceProfileChange += parsed.events.length;
       const size = Buffer.byteLength(read.text, 'utf8');
       if (parsed.consumed < size) {
         // An unfinished line or JSON block. On the newest file that just means the game is mid-write:
@@ -357,6 +363,10 @@ export class QuestTracker {
         continue;
       }
       cursor = { file: f.rel, offset: read.start + parsed.consumed };
+    }
+    if (profileChange) {
+      if (!sinceProfileChange) { this.reset(profileChange.reason, profileChange.from); return { changed: true, applied: 0, snapshot: this.snapshot() }; }
+      this.log(`quests: ${profileChange.reason} but the quest log keeps going — keeping the reconstruction (--reset-quests starts over)`);
     }
     if (cursor.file !== st.cursor.file || cursor.offset !== st.cursor.offset) { st.cursor = cursor; dirty = true; }
 
