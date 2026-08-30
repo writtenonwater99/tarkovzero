@@ -762,7 +762,9 @@ export async function createView3d(container, mapData, src) {
       getSize: (d) => size(d), sizeUnits: 'pixels', sizeMinPixels: weight === 700 ? 10 : 9, sizeMaxPixels: weight === 700 ? 15 : 12,
       getColor: color, getTextAnchor: 'middle', getPixelOffset: offset,
       fontFamily: LABEL_FONT(), fontWeight: weight, fontSettings: LABEL_SDF,
-      outlineWidth: weight === 700 ? 3.4 : 2.5, outlineColor: [...C.ink, 245],
+      // QA D16: the extract names are coloured type on grass with no plate behind them — at 12 px
+      // the old halo left them low-contrast wherever the terrain was pale. Wider, opaquer ink.
+      outlineWidth: weight === 700 ? 4.2 : 3.2, outlineColor: [...C.ink, 255],
       billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       updateTriggers: { getText: trig, getSize: trig, getPixelOffset: trig, getColor: trig },
     });
@@ -891,7 +893,10 @@ export async function createView3d(container, mapData, src) {
         getPosition: (d) => d.p, getText: (d) => d.t, getSize: isMajor ? 6.2 : 4.6, sizeUnits: 'meters', sizeMinPixels: isMajor ? 10 : 8, sizeMaxPixels: isMajor ? 15 : 11,
         getColor: isMajor ? [...C.cream, 255] : [...C.creamDim, minorAlpha()], updateTriggers: { getColor: isMajor ? 0 : minorAlpha() },
         fontFamily: LABEL_FONT(), fontWeight: isMajor ? 700 : 600, fontSettings: LABEL_SDF,
-        outlineWidth: isMajor ? 2.5 : 2, outlineColor: isMajor ? [...C.ink, 242] : [...C.ink, 230],
+        // QA D13: the minor tier bottoms out at 8 px of sentence-case type over hillshade, where a
+        // 2 px halo is not enough separation to read the word. Outline only — the size floor
+        // (sizeMinPixels above) is owned by the 3D lane right now and is left alone.
+        outlineWidth: isMajor ? 3.2 : 3, outlineColor: isMajor ? [...C.ink, 252] : [...C.ink, 250],
         billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
       ...extractNameLayers(markers),
       ...questLayers(),
