@@ -241,7 +241,24 @@ async function main() {
       assert(rs.post.fxaa === false, 'FXAA is back on in a full-screen pass — it eats every label');
       assert(rs.textureBytes.groundDetail > 0 && rs.textureBytes.gradeLut > 0,
         `no asset bytes uploaded: ${JSON.stringify(rs.textureBytes)}`);
+
+      // The zoom FLOOR, driven through the app's own control rather than through camera.js.
+      // camera.js's minFitZoom() shipped once with no call site: the unit tests were green and
+      // '-' still walked the camera down to viewState.minZoom (-2), where the map is a slab in
+      // the void with the terrain underside showing. Ten '-' presses is 5 zoom levels, far more
+      // than any window can absorb, so an unclamped camera lands on -2 and a clamped one stops
+      // at contain - MIN_ZOOM_MARGIN, which is above 0 on every shipped map at this window.
+      for (let i = 0; i < 10; i++) { await page.key('-'); }
+      await sleep(900);
+      const floored = await page.evaluate('window.tz.camera.zoom');
+      assert(floored > -1.5, `zooming out ran past the fit floor to ${floored} (the -2 hard stop, i.e. no floor)`);
+      await page.key('f');   // back to the default framing for every step after this one
+      await sleep(1200);
+      const refit = await page.evaluate('window.tz.camera.zoom');
+      assert(refit >= floored, `the fit key did not restore the framing (${floored} → ${refit})`);
+
       return { view, rotationX: cam.rotationX, rotationOrbit: cam.rotationOrbit, frameMean: Number(stats.mean.toFixed(1)), blackFrameRetry: retried,
+        zoomFloor: Number(floored.toFixed(3)), zoomRefit: Number(refit.toFixed(3)),
         assets: { ready: rs.assets.ready, sourceBytes: rs.assets.sourceBytes, groundDetail: rs.textureBytes.groundDetail, gradeLut: rs.textureBytes.gradeLut } };
     });
 

@@ -10,7 +10,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAM, COVER_BAND, DEFAULT_ZOOM_OFFSET, zoomOffsetFor, projectedGroundExtent, fitZoom, eyeDistance, groundFloorAngle, clampTilt } from '../src/camera.js';
+import { CAM, COVER_BAND, DEFAULT_ZOOM_OFFSET, MIN_ZOOM_MARGIN, zoomOffsetFor, projectedGroundExtent, fitZoom, minFitZoom, eyeDistance, groundFloorAngle, clampTilt, clampCamera } from '../src/camera.js';
 import { MAPS } from '../src/mapdata.js';
 
 // The founder's reference window, and the one scripts/e2e-walkthrough.mjs drives.
@@ -120,4 +120,95 @@ test('clampTilt never returns a camera under the horizon or past straight down',
   // Untouched states are returned by identity, so deck does not see a new object every frame.
   const v = { rotationX: 32, zoom: 1 };
   assert.equal(clampTilt(v), v);
+});
+
+/* ------------------------------------------------------------------ QA D2 -- */
+// A low-zoom permalink (#1.4/-209/-280 on Woods) framed the diorama as a small slab in a grey void
+// with the terrain mesh's underside on show. minFitZoom() is the floor that stops it.
+test('minFitZoom is the contain zoom minus the margin, and it sits under every fit', () => {
+  for (const m of Object.values(MAPS)) {
+    const e = extentOf(m);
+    const min = minFitZoom({ ...e, ...STAGE });
+    const fit = fitZoom({ ...e, ...STAGE });
+    assert.ok(Number.isFinite(min), `${m.key}: no min zoom`);
+    // The floor is BELOW the fit — clamping must never push a fitted map closer than it was framed.
+    assert.ok(min < fit, `${m.key}: min zoom ${min} is not under the cover fit ${fit}`);
+    // and it is exactly contain - margin.
+    const { w, d } = projectedGroundExtent(e.width, e.depth, CAM.rotationX, CAM.rotationOrbit);
+    close(min, Math.log2(Math.min(STAGE.viewportWidth / w, STAGE.viewportHeight / d)) - MIN_ZOOM_MARGIN, 1e-12, `${m.key} contain`);
+  }
+  // Garbage in, null out — the caller keeps whatever limit it had.
+  assert.equal(minFitZoom({ width: 0, depth: 0, ...STAGE }), null);
+  assert.equal(minFitZoom({ width: 100, depth: 100, viewportWidth: 0, viewportHeight: 0 }), null);
+});
+
+/*
+ * The floor above is a pure function; these cases drive `clampCamera`, which is the function
+ * src/map3d.js's `clampView` IS — every drag, wheel, key, permalink and programmatic move in the
+ * 3D view is one call to it. The first version of this feature shipped `minFitZoom` with no call
+ * site at all and a green suite, because the suite only ever exercised the arithmetic.
+ */
+test('clampCamera lifts a below-floor camera and leaves every other one alone', () => {
+  const e = extentOf(MAPS.customs);
+  const stage = { ...e, ...STAGE };
+  const floor = minFitZoom(stage);
+
+  // Under the floor: the zoom comes back AT the floor, and nothing else moves.
+  const low = clampCamera({ zoom: floor - 2, rotationX: 32, rotationOrbit: -20, target: [10, 20, 0] }, stage);
+  close(low.zoom, floor, 1e-12, 'a below-floor zoom is lifted to the floor');
+  assert.equal(low.rotationX, 32);
+  assert.equal(low.rotationOrbit, -20);
+  assert.deepEqual(low.target, [10, 20, 0]);
+
+  // At or above it: untouched, and returned by identity so deck does not see a new object a frame.
+  const ok = { zoom: floor + 0.5, rotationX: 32, rotationOrbit: -20 };
+  assert.equal(clampCamera(ok, stage), ok);
+  assert.equal(clampCamera({ ...ok, zoom: floor }, stage).zoom, floor);
+
+  // With no extent there is no floor to apply, and this is exactly clampTilt.
+  const noExtent = { zoom: -8, rotationX: 32 };
+  assert.equal(clampCamera(noExtent, { viewportHeight: 985 }), noExtent);
+});
+
+test('the Woods #1.4 permalink comes out of clampCamera framing the whole map', () => {
+  // The permalink zoom is a 2D zoom; the 3D one is zoom2d - zoomOffsetFor(woods).
+  const woods = MAPS.woods;
+  const zoom3d = 1.4 - zoomOffsetFor(woods);
+  const stage = { ...extentOf(woods), ...STAGE };
+  const floor = minFitZoom(stage);
+  assert.ok(zoom3d < floor, `the QA permalink (${zoom3d.toFixed(3)}) is supposed to be under the floor (${floor.toFixed(3)})`);
+
+  const out = clampCamera({ zoom: zoom3d, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, target: [-209, -280, 0] }, stage);
+  assert.ok(out.zoom > zoom3d, `the permalink was not lifted: still at ${out.zoom}`);
+  close(out.zoom, floor, 1e-12, 'the permalink lands on the floor');
+  // The point of the floor: at what comes back, the map is no smaller than the frame minus the
+  // margin, so there is no ring of void around the diorama for the underside to show through.
+  const { w, d } = projectedGroundExtent(extentOf(woods).width, extentOf(woods).depth, CAM.rotationX, CAM.rotationOrbit);
+  const scale = Math.pow(2, out.zoom);
+  assert.ok(Math.max((w * scale) / STAGE.viewportWidth, (d * scale) / STAGE.viewportHeight) > 0.9,
+    'the clamped framing still leaves the map floating inside the viewport');
+});
+
+test('clampCamera applies the tilt floor at the zoom it actually lands on', () => {
+  // Order matters: lifting the zoom shortens the eye distance, which RAISES the tilt floor. A
+  // clamp that tilts first would hand back a camera buried in the hill it just zoomed into.
+  const e = extentOf(MAPS.customs);
+  const stage = { ...e, ...STAGE, ground: 400, clearance: 3 };
+  const floor = minFitZoom({ ...e, ...STAGE });
+  const out = clampCamera({ zoom: floor - 3, rotationX: CAM.minRotationX, rotationOrbit: CAM.rotationOrbit }, stage);
+  close(out.zoom, floor, 1e-12, 'zoom floor');
+  close(out.rotationX, groundFloorAngle({ zoom: floor, ground: 400, viewportHeight: STAGE.viewportHeight }), 1e-12, 'tilt floor at the lifted zoom');
+  assert.ok(out.rotationX > CAM.minRotationX, 'a 400 m hill under the target must lift the tilt');
+});
+
+test('the min zoom follows the tilt, because the projected footprint does', () => {
+  const e = extentOf(MAPS.customs);
+  // A steeper camera un-foreshortens the depth, so the map needs MORE room to fit and the floor
+  // drops; a flat camera squashes the rhombus until the width is the only binding side.
+  const flat = minFitZoom({ ...e, ...STAGE, rotationX: 12 });
+  const steep = minFitZoom({ ...e, ...STAGE, rotationX: 80 });
+  assert.ok(steep <= flat, `steep ${steep} should not sit above flat ${flat}`);
+  // At the flat end the width binds, so the floor stops moving with the tilt entirely.
+  const { w } = projectedGroundExtent(e.width, e.depth, 12, CAM.rotationOrbit);
+  close(flat, Math.log2(STAGE.viewportWidth / w) - MIN_ZOOM_MARGIN, 1e-12, 'width-bound floor');
 });
