@@ -30,11 +30,10 @@ import {
   decodePng,
   deflateSettings,
   encodePng,
-  packChannels,
   readZip,
   resizeTo,
-  takeChannels,
 } from './lib/imageio.mjs';
+import { buildGroundMaps } from './lib/groundmaps.mjs';
 import { gradeLut, macroNoise } from './lib/imagegen.mjs';
 import { SH_LAMBERT_A, analyzeEquirect, autoExposure, linearToHex, skyGradientStrip, tonemapToSrgb } from './lib/skylight.mjs';
 import { LIGHT, PALETTE } from '../src/render-style.js';
@@ -343,21 +342,15 @@ function buildGroundDetail(zipBuf) {
   const ao = decodePng(zipEntry(zip, aoName));
   const rough = decodePng(zipEntry(zip, roughName));
 
-  for (const [name, img] of [['color', color], ['normal', normal], ['ao', ao], ['roughness', rough]]) {
-    if (img.width !== img.height) fail(`${name} map is not square (${img.width}x${img.height})`);
-    if (img.width % DETAIL) fail(`${name} map ${img.width}px has no integer box ratio to ${DETAIL}px`);
+  let maps;
+  try {
+    maps = buildGroundMaps({ color, normal, ao, rough }, DETAIL);
+  } catch (err) {
+    fail(err.message);
   }
-
-  const albedo = takeChannels(resizeTo(color, DETAIL, 'srgb'), 3);
-  const normalOut = takeChannels(resizeTo(normal, DETAIL, 'normal'), 3);
-  const orm = packChannels([
-    { img: resizeTo(ao, DETAIL, 'linear'), channel: 0 },
-    { img: resizeTo(rough, DETAIL, 'linear'), channel: 0 },
-    { constant: 0 }, // ground is never metallic
-  ]);
-  emit('ground106-albedo', encodePng(albedo, { srgbChunk: true }), albedo, DETAIL);
-  emit('ground106-normal', encodePng(normalOut), normalOut, DETAIL);
-  emit('ground106-orm', encodePng(orm), orm, DETAIL);
+  emit('ground106-albedo', encodePng(maps.albedo, { srgbChunk: true }), maps.albedo, DETAIL);
+  emit('ground106-normal', encodePng(maps.normal), maps.normal, DETAIL);
+  emit('ground106-orm', encodePng(maps.orm), maps.orm, DETAIL);
 
   return {
     sourceSize: color.width,

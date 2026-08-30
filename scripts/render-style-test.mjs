@@ -141,6 +141,53 @@ test('every authored colour is a valid hex string', () => {
   }
 });
 
+test('the authored palette matches the plan, value by value', () => {
+  // RENDER-REALISM.md Part C pins the art direction as exact hexes. This module
+  // is the reviewable source of truth for them, so "is a valid hex string" is
+  // not the assertion that matters — drift from the plan is.
+  assert.deepEqual({ ...PALETTE }, {
+    skyFar: '#a6aeac',
+    fogFar: '#979f9b',
+    grass: '#586149',
+    grassWet: '#46513f',
+    forestLitter: '#615445',
+    dirt: '#685a49',
+    dirtWet: '#49433a',
+    asphalt: '#4a4e4d',
+    asphaltWet: '#33393a',
+    concrete: '#7a7970',
+    brick: '#745148',
+    metalPaint: '#6d7573',
+    metalRust: '#7c4a32',
+    conifer: '#39483b',
+    broadleafLight: '#596047',
+    broadleafDark: '#756247',
+    waterShallow: '#52635d',
+    waterDeep: '#344a4c',
+    vectorBackground: '#e9eae6',
+    vectorInk: '#2d3130',
+  });
+});
+
+test('the pinned post and background numerics do not drift', () => {
+  assert.deepEqual({ ...POST.realistic }, {
+    enabled: true, lutAsset: 'overcast-grade-lut', vignette: 0.16, grain: 0.012, fxaa: true,
+  });
+  assert.deepEqual({ ...POST.vector }, {
+    enabled: false, lutAsset: null, vignette: 0, grain: 0, fxaa: true,
+  });
+  assert.deepEqual({ ...BACKGROUND.realistic }, {
+    kind: 'gradient', zenith: '#9aa4a6', horizon: PALETTE.skyFar, ground: '#7d817b',
+    environmentAsset: 'autumn-crossing-sky',
+  });
+  // The grade LUT is generated from these two exact colours by
+  // scripts/prepare-render-assets.mjs; changing either changes a shipped asset.
+  assert.equal(LIGHT.realistic.keyColor, '#c8c2b2');
+  assert.equal(FOG.realistic.color, PALETTE.fogFar);
+  assert.equal(LIGHT.realistic.ambientColor, '#a8b0ae');
+  assert.equal(LIGHT.realistic.fillColor, '#8f9aa0');
+});
+
 test('rgb255 converts hex to 0..255 triples', () => {
   assert.deepEqual(rgb255('#000000'), [0, 0, 0]);
   assert.deepEqual(rgb255('#ffffff'), [255, 255, 255]);
