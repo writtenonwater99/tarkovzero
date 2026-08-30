@@ -58,6 +58,12 @@ export function createShell({ store, onLayout } = {}) {
 
   /* ------------------------------------------------------------------ paint -- */
   function paint() {
+    // The standing first-run labels are ONE group, not four independent ones. Per-panel `seen`
+    // meant that opening Live once left LAYERS / QUESTS / VIEW captioned and the fourth button a
+    // bare icon — the same toolbar reading two different ways depending on which panel you had
+    // touched (QA D12, reproduced at 1920×1165 after a Live screenshot in the same profile).
+    // They all stand until the toolbar has been used at all, then they all stand down together.
+    const introOver = PANELS.some((n) => seen.has(n));
     for (const name of PANELS) {
       const e = el[name];
       if (!e.panel) continue;
@@ -66,7 +72,7 @@ export function createShell({ store, onLayout } = {}) {
       e.panel.classList.toggle('is-pinned', pinned.has(name));
       e.btn?.classList.toggle('on', on);
       e.btn?.setAttribute('aria-expanded', String(on));
-      e.item?.classList.toggle('unseen', !seen.has(name));
+      e.item?.classList.toggle('unseen', !introOver);
       if (e.pin) {
         // One meaning for all three: the button is lit iff the panel is pinned, whoever pinned it,
         // and pressing a lit one unpins. Reading `manual` for the state and `pinned` for the light
