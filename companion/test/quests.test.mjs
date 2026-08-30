@@ -37,9 +37,15 @@ function pushLog(dir, key) {
   const d = path.join(dir, SESSION[key]);
   return path.join(d, fs.readdirSync(d).find((f) => f.includes('push-notifications')));
 }
-function tracker(dir) {
-  return new QuestTracker({ logsDir: dir, statePath: path.join(dir, 'companion-quests.json'), questsFile: defaultQuestsFile() });
+function tracker(dir, log) {
+  return new QuestTracker({ logsDir: dir, statePath: path.join(dir, 'companion-quests.json'), questsFile: defaultQuestsFile(), log });
 }
+const HEAD = '2026-08-04 21:40:00.000|1.1.0.0.46624|Info|push-notifications|Got notification | ChatMessageReceived\n';
+function block(id, type, dt, taskId) { // one complete ChatMessageReceived block in the game's shape
+  return HEAD + `{\n  "type": "new_message",\n  "message": {\n    "_id": "${id}",\n    "type": ${type},\n`
+    + `    "dt": ${dt},\n    "templateId": "${taskId} description"\n  }\n}\n`;
+}
+const HALF_BLOCK = HEAD + '{\n  "type": "new_message",\n  "message": {\n    "_id": "cut";'; // killed mid-write
 const sorted = (a) => [...a].sort();
 test.after(() => { for (const d of tmps) try { fs.rmSync(d, { recursive: true, force: true }); } catch {} });
 
@@ -173,6 +179,57 @@ test('tailing the live file picks up an appended block without a rescan', () => 
   assert.equal(r.applied, 1);
   assert.ok(t.state.active.includes(FIRSTINLINE));
   assert.ok(t.state.cursor.offset > before);
+});
+
+// ---- damaged / unreadable logs ---------------------------------------------------------------------
+
+test('a truncated tail in a closed session is stepped over, not parked on forever', () => {
+  const dir = stage(['a', 'b']);
+  fs.appendFileSync(pushLog(dir, 'a'), HALF_BLOCK);   // EFT killed mid-write; this file never grows again
+  const lines = [];
+  const t = tracker(dir, (l) => lines.push(l));
+  for (let i = 0; i < 3; i++) t.sync({ rescan: true });
+  assert.deepEqual(sorted(t.state.done), sorted([BACKGROUND, AQUARIUS]));  // session B was still read
+  assert.deepEqual(sorted(t.state.active), [SHOOTER]);
+  assert.ok(t.state.cursor.file.startsWith(SESSION.b), t.state.cursor.file);
+  assert.equal(lines.filter((l) => l.includes('truncated tail')).length, 1); // said once, not per tick
+});
+
+test('a half-written block in the newest file is left for the next read', () => {
+  const dir = stage(['a']);
+  const t = tracker(dir);
+  t.sync({ rescan: true });
+  const at = t.state.cursor.offset;
+  const half = block('6a72c0000000000000000002', 10, 1785905000, FIRSTINLINE).slice(0, -20);
+  fs.appendFileSync(pushLog(dir, 'a'), half);
+  assert.equal(t.sync().applied, 0);
+  assert.equal(t.state.cursor.offset, at);            // the live file's tail is never skipped
+  assert.equal(t.state.active.includes(FIRSTINLINE), false);
+  fs.appendFileSync(pushLog(dir, 'a'), block('6a72c0000000000000000002', 10, 1785905000, FIRSTINLINE).slice(-20));
+  assert.equal(t.sync().applied, 1);
+  assert.ok(t.state.active.includes(FIRSTINLINE));
+});
+
+test('a read failure pins the cursor instead of losing that session', () => {
+  const dir = stage(['a', 'b', 'c']);
+  const clean = tracker(stage(['a', 'b', 'c']));
+  clean.sync({ rescan: true });
+
+  const lines = [];
+  const t = tracker(dir, (l) => lines.push(l));
+  const broken = pushLog(dir, 'b');
+  const saved = fs.readFileSync(broken);
+  fs.rmSync(broken); fs.mkdirSync(broken);            // statSync works, reading throws — an EIO blip
+  for (let i = 0; i < 5; i++) t.sync({ rescan: true });
+  assert.ok(t.state.cursor.file.startsWith(SESSION.a), t.state.cursor.file); // never jumped to C
+  assert.equal(lines.filter((l) => l.includes('could not read')).length, 1);
+
+  fs.rmSync(broken, { recursive: true }); fs.writeFileSync(broken, saved);
+  t.sync({ rescan: true });
+  assert.deepEqual(sorted(t.snapshot().active), sorted(clean.snapshot().active)); // session B recovered
+  assert.deepEqual(sorted(t.snapshot().done), sorted(clean.snapshot().done));
+  assert.deepEqual(sorted(t.snapshot().failed), sorted(clean.snapshot().failed));
+  assert.equal(lines.filter((l) => l.includes('readable again')).length, 1);
 });
 
 test('a different AccountId wipes the state and replays only the new session', () => {

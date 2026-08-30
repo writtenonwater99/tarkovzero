@@ -241,6 +241,7 @@ export class QuestTracker {
     this.log = log;
     this.files = null;
     this.taskIds = null;
+    this.readError = null;   // file we last failed to read (so the failure is logged once, not per tick)
     this.questsFile = questsFile;
     if (questsFile) {
       try { this.taskIds = loadTaskIds(questsFile); }
@@ -315,15 +316,31 @@ export class QuestTracker {
       if (st.cursor.file && f.rel < st.cursor.file) continue;
       const from = f.rel === st.cursor.file ? st.cursor.offset : 0;
       let read;
-      try { read = readFrom(f.full, from); } catch { continue; }
+      try { read = readFrom(f.full, from); }
+      catch (e) {
+        // A transient read failure (a drvfs blip on /mnt/c) must not let a newer file move the cursor
+        // past this one — that would drop the whole session's events for good, silently. Stop here and
+        // retry on the next tick instead, and say so once.
+        if (this.readError !== f.rel) { this.readError = f.rel; this.log(`quests: could not read ${f.rel} (${e.message}) — leaving the cursor here and retrying`); }
+        break;
+      }
+      if (this.readError === f.rel) { this.readError = null; this.log(`quests: ${f.rel} is readable again`); }
       if (read.start === 0 && from > 0) this.log(`quests: ${f.rel} shrank — re-reading from the start`);
       const parsed = parseNotificationLog(read.text);
       if (parsed.bad) this.log(`quests: ${parsed.bad} unparsable notification block(s) in ${f.rel}`);
       events.push(...parsed.events);
+      const size = Buffer.byteLength(read.text, 'utf8');
+      if (parsed.consumed < size) {
+        // An unfinished line or JSON block. On the newest file that just means the game is mid-write:
+        // stop so the cursor never jumps past bytes we have not parsed. On an older session it is a
+        // permanently truncated tail (EFT killed/crashed mid-write) that will never be completed — the
+        // cursor has to step over it, or it parks there and every newer session is never read again.
+        if (newest && f.rel === newest.rel) { cursor = { file: f.rel, offset: read.start + parsed.consumed }; break; }
+        this.log(`quests: ${f.rel} ends mid-block (${size - parsed.consumed} unparsable byte(s) in a closed session) — skipping the truncated tail`);
+        cursor = { file: f.rel, offset: read.start + size };
+        continue;
+      }
       cursor = { file: f.rel, offset: read.start + parsed.consumed };
-      // an unfinished block (the game is mid-write) means this file is the live one: stop here so
-      // the cursor never jumps past bytes we have not parsed
-      if (parsed.consumed < Buffer.byteLength(read.text, 'utf8')) break;
     }
     if (cursor.file !== st.cursor.file || cursor.offset !== st.cursor.offset) { st.cursor = cursor; dirty = true; }
 
