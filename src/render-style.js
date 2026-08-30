@@ -299,16 +299,29 @@ const REAL_DEFAULTS = {
   contactAO: 0.3,
 };
 
+// `alphaMode` / `alphaCutoff` are deliberately absent here: they are SILHOUETTE
+// state, not surface response, and the plan's flip is material-only ("flat
+// species colors; same instance/LOD transforms"). They are inherited from the
+// real variant below so an alpha-masked leaf card keeps its cutout in vector
+// mode instead of drawing as a solid opaque quad.
 const VECTOR_DEFAULTS = {
   fill: null,
   outline: PALETTE.vectorInk,
   outlineWidthPx: 0.9,
   opacity: 1,
+  fog: false, // FOG.vector is disabled; no material opts back in
+  castShadow: false,
+  receiveShadow: false,
+  contactAO: 0, // FLAGS.vector.bakedAO is false
 };
 
 function material(id, { group, label, real, vector }) {
   const r = { ...REAL_DEFAULTS, ...real };
   const v = { ...VECTOR_DEFAULTS, ...vector };
+  // Inherited, not defaulted: whatever the realistic skin cuts out, the vector
+  // skin cuts out identically.
+  if (v.alphaMode === undefined) v.alphaMode = r.alphaMode;
+  if (v.alphaCutoff === undefined) v.alphaCutoff = r.alphaCutoff;
   hex(r.baseColor);
   hex(v.fill);
   hex(v.outline);
@@ -555,8 +568,10 @@ const FLAGS = deepFreeze({
     normalTextures: false,
     ormTextures: false,
     imageBasedLighting: false,
+    // Plan, Top-look decision 1: "no contours or strong hypsometry in realistic
+    // mode; preserve them as optional vector parameters." Both survive here.
     contours: true,
-    hypsometry: false,
+    hypsometry: true,
     geometryOutlines: true,
     bakedAO: false,
     grime: false,

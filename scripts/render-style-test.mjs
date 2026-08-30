@@ -260,6 +260,51 @@ test('vector mode disables every texture and surface-response parameter', () => 
   assert.equal(vector.background.kind, 'flat');
 });
 
+test('the vector flip is material-only: the silhouette is invariant', () => {
+  // RENDER-REALISM.md:352 — "skin changes material/style state only. Geometry
+  // buffers ... are invariant", and the foliage row is "flat species colors;
+  // same instance/LOD transforms". An alpha-masked leaf card that loses its
+  // cutout draws as a solid opaque quad, which is a silhouette change.
+  const real = styleFor('realistic');
+  const vector = styleFor('vector');
+  let masked = 0;
+  for (const id of MATERIAL_IDS) {
+    const r = real.materials[id];
+    const v = vector.materials[id];
+    assert.equal(v.alphaMode, r.alphaMode, `${id} alphaMode must survive the flip`);
+    assert.equal(v.alphaCutoff, r.alphaCutoff, `${id} alphaCutoff must survive the flip`);
+    assert.ok(['opaque', 'mask', 'blend'].includes(v.alphaMode), `${id}.vector.alphaMode = ${v.alphaMode}`);
+    if (r.alphaMode === 'mask') masked++;
+  }
+  assert.ok(masked >= 3, `expected the alpha-masked foliage set, got ${masked} masked materials`);
+  for (const id of ['foliage-conifer', 'foliage-broadleaf', 'foliage-shrub']) {
+    assert.equal(vector.materials[id].alphaMode, 'mask', `${id} must stay cut out in vector mode`);
+  }
+});
+
+test('vector materials declare every key a consumer reads, never undefined', () => {
+  const vector = styleFor('vector');
+  for (const id of MATERIAL_IDS) {
+    const m = vector.materials[id];
+    for (const key of ['alphaMode', 'alphaCutoff', 'fog', 'castShadow', 'receiveShadow', 'contactAO', 'opacity', 'outlineWidthPx']) {
+      assert.notEqual(m[key], undefined, `${id}.${key} is undefined in vector mode`);
+    }
+    // Vector mode is unlit and unfogged; these are false, not merely absent.
+    assert.equal(m.fog, false, `${id} fog`);
+    assert.equal(m.castShadow, false, `${id} castShadow`);
+    assert.equal(m.receiveShadow, false, `${id} receiveShadow`);
+    assert.equal(m.contactAO, 0, `${id} contactAO`);
+  }
+});
+
+test('contours and hypsometry survive as vector parameters', () => {
+  // Plan, Top-look decision 1: "no contours or strong hypsometry in realistic
+  // mode; preserve them as optional vector parameters."
+  const vector = styleFor('vector');
+  assert.equal(vector.flags.contours, true);
+  assert.equal(vector.flags.hypsometry, true, 'the vector skin must keep hypsometric banding available');
+});
+
 test('realistic mode drops the diagram signals Stage 1 exists to remove', () => {
   const real = styleFor('realistic');
   assert.equal(real.flags.contours, false, 'realistic mode must not draw contours');
