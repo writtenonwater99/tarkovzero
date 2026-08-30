@@ -32,15 +32,6 @@ const shell = createShell({ store, onLayout: () => { if (booted) updateHud(); } 
 const stageEl = $('#stage');
 /** The rect nothing floats over, in stage CSS px. */
 const safeRect = () => shell.safeRect();
-/** Leaflet padding that keeps a fitted bounds inside the safe rect. */
-function safePad() {
-  const s = stageEl.getBoundingClientRect();
-  const r = safeRect();
-  return {
-    paddingTopLeft: L.point(Math.round(r.left), Math.round(r.top)),
-    paddingBottomRight: L.point(Math.round(s.width - r.right), Math.round(s.height - r.bottom)),
-  };
-}
 /** How far the safe rect's centre sits from the stage centre, in px. */
 function safeOffset() {
   const s = stageEl.getBoundingClientRect();
@@ -175,8 +166,32 @@ function setRelief(next, persist = true) {
 $$('#relief-toggle .seg-cell').forEach((b) => (b.onclick = () => setRelief(b.dataset.relief)));
 setRelief(relief, false);
 
+/**
+ * Fit = **cover**, not contain.
+ *
+ * fitBounds() with the safe rect as padding shrinks the whole map until it sits inside that rect,
+ * so every panel that opened left black bands around the map (step 1 defect). What a player wants
+ * is the opposite: zoom so the map *covers* the viewport — the edges may crop — and put the middle
+ * of the map in the middle of the safe rect. Leaflet's getBoundsZoom(bounds, true, …) is exactly
+ * that "inside" scale; the negative padding grows the box we must cover by the recentring offset,
+ * so the corners under the chips and the toolbar stay map, not void.
+ *
+ * Only an explicit fit (F, #hud-fit, `> fit`, first load, window resize) calls this. Opening,
+ * closing or pinning a panel never moves the camera.
+ */
+function coverZoom() {
+  const off = safeOffset();
+  const grow = L.point(-2 * Math.abs(off.x), -2 * Math.abs(off.y));
+  const z = map.getBoundsZoom(bounds, true, grow);
+  return Number.isFinite(z) ? z : map.getZoom();
+}
+function fit() {
+  const z = coverZoom();
+  const centre = map.unproject(map.project(bounds.getCenter(), z).subtract(safeOffset()), z);
+  map.setView(centre, z, { animate: false });
+}
+
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
-const fit = () => map.fitBounds(bounds, { ...safePad(), animate: false });
 const hash = location.hash.slice(1).split('/').map(Number);
 const starts3d = new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d';
 let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
@@ -189,8 +204,7 @@ else fit();
 let fitState = { center: map.getCenter(), zoom: map.getZoom() };
 const rememberFit = () => {
   if (is3d()) return;
-  const p = safePad();
-  fitState = { center: bounds.getCenter(), zoom: map.getBoundsZoom(bounds, false, p.paddingTopLeft.add(p.paddingBottomRight)) };
+  fitState = { center: bounds.getCenter(), zoom: coverZoom() };
 };
 rememberFit();
 window.addEventListener('resize', () => { if (autoFit) fit(); rememberFit(); updateHud(); });
