@@ -1037,8 +1037,16 @@ export async function createView3d(container, mapData, src) {
    * one grade pass. Vector keeps the pre-Stage-1 void, because the vector skin's job is to
    * reproduce today's map. The container's CSS is set to match so the canvas never flashes a
    * different colour before the first paint.
+   *
+   * `clear: true` is load-bearing, not decoration: deck reads `clearColor` only inside
+   * `if (clear)` (@deck.gl/core layers-pass.js), so without it the prop is inert and the buffer
+   * stays at [0,0,0,0]. That was survivable while the canvas was transparent and the CSS below
+   * showed through — but the Stage 1 grade pass ends `tzGrade_sampleColor` with alpha 1.0, so the
+   * canvas became opaque and the transparent clear went through the LUT and came out at ~[13,17,15].
+   * The realistic look was rendering its diorama against a black sky with a hard edge along the
+   * void plane. One boolean is the whole difference.
    */
-  const viewFor = (mode) => new OrbitView({ orbitAxis: 'Z', fovy: CAM.fovy, clearColor: backgroundFor(mode) });
+  const viewFor = (mode) => new OrbitView({ orbitAxis: 'Z', fovy: CAM.fovy, clear: true, clearColor: backgroundFor(mode) });
   let assetsReady = false, assetsError = null;
   container.style.background = backgroundCss(look);
   const deck = new Deck({
