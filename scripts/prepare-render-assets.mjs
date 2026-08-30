@@ -20,7 +20,7 @@
 //     of those gates runs while the outputs are still only in memory, so a run
 //     that fails any of them leaves the working tree exactly as it found it.
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -125,33 +125,69 @@ async function verifyLicenses() {
 // ---------------------------------------------------------------------------
 // Cached downloads
 // ---------------------------------------------------------------------------
+/**
+ * Download one source into the cache.
+ *
+ * The bytes land in a sibling `.part` file and are renamed into place, so an
+ * interrupted run, a dropped connection or a full disk can never leave a
+ * truncated file that the next run mistakes for a complete download.
+ */
+async function download(source) {
+  const cached = path.join(CACHE_DIR, source.cacheFile);
+  const partial = `${cached}.part`;
+  console.log(`  fetching ${source.sourceUrl}`);
+  const res = await fetch(source.sourceUrl, { headers: { 'user-agent': USER_AGENT } });
+  if (!res.ok) fail(`download failed for ${source.id}: HTTP ${res.status} ${res.statusText}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  await mkdir(CACHE_DIR, { recursive: true });
+  await writeFile(partial, buf);
+  await rename(partial, cached);
+  return buf;
+}
+
 async function fetchSource(source) {
   const cached = path.join(CACHE_DIR, source.cacheFile);
+  const shown = path.relative(ROOT, cached);
   let buf = null;
+  let fresh = false;
   try {
     buf = await readFile(cached);
   } catch {
-    if (OFFLINE) fail(`${source.id} is not cached at ${path.relative(ROOT, cached)} and --offline was given`);
-    console.log(`  fetching ${source.sourceUrl}`);
-    const res = await fetch(source.sourceUrl, { headers: { 'user-agent': USER_AGENT } });
-    if (!res.ok) fail(`download failed for ${source.id}: HTTP ${res.status} ${res.statusText}`);
-    buf = Buffer.from(await res.arrayBuffer());
-    await mkdir(CACHE_DIR, { recursive: true });
-    await writeFile(cached, buf);
+    if (OFFLINE) fail(`${source.id} is not cached at ${shown} and --offline was given`);
+    buf = await download(source);
+    fresh = true;
   }
 
-  const hash = sha256(buf);
+  let hash = sha256(buf);
   if (source.sourceSha256 && source.sourceSha256 !== hash) {
-    fail(
-      `${source.id} hash mismatch\n` +
-        `  manifest: ${source.sourceSha256}\n` +
-        `  download: ${hash}\n` +
-        `  the upstream file changed. Review the new file and its licence before updating the manifest.`,
-    );
+    // A mismatch on a CACHED file is far more likely to be a damaged local copy
+    // than a changed upstream, and the old code sent the operator into a licence
+    // review for what is usually a disk problem — then failed the same way on
+    // every re-run, because it never discarded the bad entry. Re-fetch once and
+    // let the network decide which of the two it actually is.
+    if (!fresh && !OFFLINE) {
+      console.log(`  ${source.id} cached copy does not match its recorded hash — discarding it and re-fetching`);
+      await rm(cached, { force: true });
+      buf = await download(source);
+      fresh = true;
+      hash = sha256(buf);
+    }
+    if (source.sourceSha256 !== hash) {
+      fail(
+        `${source.id} hash mismatch\n` +
+          `  manifest: ${source.sourceSha256}\n` +
+          `  ${(fresh ? 'download' : 'cached  ')}: ${hash}\n` +
+          (fresh
+            ? '  these bytes came off the network this run, so the upstream file changed.\n' +
+              '  Review the new file and its licence before updating the manifest.'
+            : `  these bytes came from ${shown}, most likely a truncated or partial download.\n` +
+              '  Delete that file and re-run without --offline; the fetcher will replace it.'),
+      );
+    }
   }
   source.sourceSha256 = hash;
   source.sourceBytes = buf.length;
-  console.log(`  ${source.id.padEnd(16)} ${mib(buf.length).padStart(9)}  ${hash.slice(0, 16)}...  cached`);
+  console.log(`  ${source.id.padEnd(16)} ${mib(buf.length).padStart(9)}  ${hash.slice(0, 16)}...  ${fresh ? 'fetched' : 'cached'}`);
   return buf;
 }
 
