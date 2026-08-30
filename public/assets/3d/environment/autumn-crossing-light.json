@@ -1,0 +1,100 @@
+{
+  "note": "Derived from the Autumn Crossing 1K HDRI (Poly Haven, CC0). Ambient/environment reference only — the key light direction is pinned by src/render-style.js, not by this file. The source HDRI is a forest path with an obstructed sky view, so the upper-hemisphere average already includes canopy.",
+  "source": "autumn-crossing",
+  "conventions": {
+    "basis": "x east, y up, z south (game map space)",
+    "azimuth": "degrees clockwise from +Z",
+    "elevation": "degrees above the horizon",
+    "equirect": "row 0 = zenith; theta = polar angle from +Y; phi = azimuth",
+    "shBasis": "real SH, bands 0..2, order [0, y, z, x, xy, yz, 3y^2-1, xz, x^2-z^2]",
+    "units": "linear radiance from the HDRI, before tone mapping"
+  },
+  "sourceSize": [
+    1024,
+    512
+  ],
+  "meanLuminance": 0.937487,
+  "previewExposure": 0.448006,
+  "shIrradiance": [
+    [
+      3.219683,
+      3.274708,
+      4.109949
+    ],
+    [
+      3.502909,
+      3.851413,
+      5.279982
+    ],
+    [
+      0.227205,
+      0.22702,
+      0.244762
+    ],
+    [
+      -0.375407,
+      -0.431301,
+      -0.630362
+    ],
+    [
+      -0.65728,
+      -0.739671,
+      -1.083593
+    ],
+    [
+      0.382793,
+      0.378141,
+      0.411358
+    ],
+    [
+      3.065568,
+      3.335266,
+      4.652643
+    ],
+    [
+      -0.184426,
+      -0.149429,
+      -0.129272
+    ],
+    [
+      -0.172586,
+      -0.175541,
+      -0.243815
+    ]
+  ],
+  "upperHemisphere": [
+    1.608348,
+    1.695255,
+    2.207942
+  ],
+  "lowerHemisphere": [
+    0.208159,
+    0.152297,
+    0.110843
+  ],
+  "zenith": [
+    4.981904,
+    5.438378,
+    7.540407
+  ],
+  "horizon": [
+    0.114865,
+    0.095158,
+    0.043779
+  ],
+  "dominant": {
+    "direction": [
+      -0.156891,
+      0.983264,
+      0.092615
+    ],
+    "azimuthDeg": 300.554,
+    "elevationDeg": 79.503
+  },
+  "displayReferred": {
+    "upperHemisphere": "#adb0bb",
+    "lowerHemisphere": "#52473d",
+    "zenith": "#d9dbe3",
+    "horizon": "#3f3926"
+  }
+}
