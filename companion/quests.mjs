@@ -26,7 +26,7 @@ export const STARTED = 10, FAILED = 11, FINISHED = 12;
 const QUEST_TYPES = new Set([STARTED, FAILED, FINISHED]);
 const SEEN_CAP = 4000;      // ids kept for de-duplication (a full wipe's worth is ~100)
 const UNKNOWN_CAP = 200;
-export const READ_RETRIES = 40;  // ticks a file may fail to read before the replay steps over it (10 s at 250 ms)
+export const READ_RETRY_MS = 120_000;  // how long a file may keep failing to read before the replay steps over it
 export const STATE_VERSION = 2; // v2 added lastDt (per-task ordering across polls); a bump forces one replay
 
 // ---- log-block parsing -------------------------------------------------------------------------
@@ -143,16 +143,19 @@ export function listLogFiles(logsDir) {
 /** Every push-notifications log under `logsDir`, oldest session first. */
 export function pushLogFiles(logsDir) { return listLogFiles(logsDir).push; }
 
+// both readers close the fd even when the read itself throws (a directory, an I/O error): these run up
+// to four times a second, so leaking one fd per failure exhausts the process in minutes
 function readHead(file, bytes) {
+  let fd = null;
   try {
     const st = fs.statSync(file);
     const len = Math.min(bytes, st.size);
-    const fd = fs.openSync(file, 'r');
+    fd = fs.openSync(file, 'r');
     const buf = Buffer.alloc(len);
     fs.readSync(fd, buf, 0, len, 0);
-    fs.closeSync(fd);
     return buf.toString('utf8');
   } catch { return ''; }
+  finally { if (fd !== null) try { fs.closeSync(fd); } catch {} }
 }
 
 function readFrom(file, offset) {
@@ -161,10 +164,11 @@ function readFrom(file, offset) {
   const len = st.size - start;
   if (len <= 0) return { text: '', start, size: st.size };
   const fd = fs.openSync(file, 'r');
-  const buf = Buffer.alloc(len);
-  fs.readSync(fd, buf, 0, len, start);
-  fs.closeSync(fd);
-  return { text: buf.toString('utf8'), start, size: st.size };
+  try {
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, start);
+    return { text: buf.toString('utf8'), start, size: st.size };
+  } finally { try { fs.closeSync(fd); } catch {} }
 }
 
 // ---- state -------------------------------------------------------------------------------------
@@ -257,7 +261,7 @@ export class QuestTracker {
     this.files = null;       // push-notification logs, oldest first (null = not listed yet)
     this.appFiles = [];      // application logs from the same listing pass
     this.taskIds = null;
-    this.readError = null; this.readFails = 0;   // file we last failed to read (logged once, not per tick)
+    this.readError = null; this.readSince = 0;   // file we last failed to read (logged once, not per tick)
     this.acctKey = null; this.acct = null;   // detectAccount() cache, keyed on the newest application log
     this.questsFile = questsFile;
     if (questsFile) {
@@ -355,11 +359,12 @@ export class QuestTracker {
         // A transient read failure (a drvfs blip on /mnt/c) must not let a newer file move the cursor
         // past this one — that would drop the whole session's events for good, silently. Stop here and
         // retry on the next tick instead, and say so once.
-        if (this.readError !== f.rel) { this.readError = f.rel; this.readFails = 0; this.log(`quests: could not read ${f.rel} (${e.message}) — leaving the cursor here and retrying`); }
-        if (++this.readFails < READ_RETRIES) break;
+        if (this.readError !== f.rel) { this.readError = f.rel; this.readSince = Date.now(); this.log(`quests: could not read ${f.rel} (${e.message}) — leaving the cursor here and retrying`); }
+        const failingFor = Date.now() - this.readSince;
+        if (failingFor < READ_RETRY_MS) break;
         // permanently unreadable (gone, a permission change): pinning the cursor forever would be its own
-        // silent stall, so step over it — loudly, and only after the blip has had ten seconds to clear
-        this.log(`quests: giving up on ${f.rel} after ${this.readFails} failed reads — that session's quest events are lost`);
+        // silent stall, so step over it — loudly, and only long after any blip would have cleared
+        this.log(`quests: giving up on ${f.rel} after ${Math.round(failingFor / 1000)} s of failed reads — that session's quest events are lost`);
         this.readError = null;
         continue;
       }

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { QuestTracker, parseNotificationLog, extractAccount, taskIdOf, loadTaskIds, defaultQuestsFile, sessionDate, pushLogFiles, READ_RETRIES } from '../quests.mjs';
+import { QuestTracker, parseNotificationLog, extractAccount, taskIdOf, loadTaskIds, defaultQuestsFile, sessionDate, pushLogFiles, READ_RETRY_MS } from '../quests.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(here, 'fixtures', 'logs');
@@ -255,9 +255,12 @@ test('a read failure pins the cursor instead of losing that session', () => {
   const broken = pushLog(dir, 'b');
   const saved = fs.readFileSync(broken);
   fs.rmSync(broken); fs.mkdirSync(broken);            // statSync works, reading throws — an EIO blip
-  for (let i = 0; i < 5; i++) t.sync({ rescan: true });
+  const fds = () => { try { return fs.readdirSync('/proc/self/fd').length; } catch { return null; } };
+  const before = fds();
+  for (let i = 0; i < 25; i++) t.sync({ rescan: true });
   assert.ok(t.state.cursor.file.startsWith(SESSION.a), t.state.cursor.file); // never jumped to C
   assert.equal(lines.filter((l) => l.includes('could not read')).length, 1);
+  if (before !== null) assert.ok(fds() - before < 5, `leaked ${fds() - before} fds over 25 failed reads`);
 
   fs.rmSync(broken, { recursive: true }); fs.writeFileSync(broken, saved);
   t.sync({ rescan: true });
@@ -291,7 +294,10 @@ test('a read failure that never clears is given up on loudly, not pinned forever
   const t = tracker(dir, (l) => lines.push(l));
   const broken = pushLog(dir, 'b');
   fs.rmSync(broken); fs.mkdirSync(broken);            // never recovers
-  for (let i = 0; i < READ_RETRIES + 1; i++) t.sync({ rescan: true });
+  t.sync({ rescan: true });
+  assert.ok(t.state.cursor.file.startsWith(SESSION.a), t.state.cursor.file);
+  t.readSince -= READ_RETRY_MS + 1;                   // as if it had been failing for the whole window
+  t.sync({ rescan: true });
   assert.equal(lines.filter((l) => l.includes('giving up')).length, 1);
   assert.ok(t.state.active.includes(FIRSTINLINE));    // session C is read again once B is written off
   assert.ok(t.state.cursor.file.startsWith(SESSION.c), t.state.cursor.file);
