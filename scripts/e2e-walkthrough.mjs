@@ -248,6 +248,12 @@ async function main() {
       const vectorStats = await page.evaluate('window.tz.renderStats()');
       assert(vectorStats.postEffects === 0 && vectorStats.fx.fogArmed === false,
         `vector is running R1 shaders: ${JSON.stringify(vectorStats.fx)}`);
+      // QA H1: the landing frame's names must go through the screen-space seating pass. A pass
+      // that bails hands every name back unseated and the frame prints them through each other —
+      // which is exactly what shipped, because deck has no viewport when the first layer set is
+      // built and a still map never rebuilt it.
+      assert(vectorStats.labels?.bail === null && vectorStats.labels.seated > 0,
+        `the label seating pass did not run on the landing frame: ${JSON.stringify(vectorStats.labels)}`);
       await page.evaluate(`window.tz.renderStyle('realistic')`);
       await page.waitFor('window.tz.renderStats()?.assets?.ready === true', { timeout: 25_000, label: 'the Stage 1 render assets' });
       const rs = await page.evaluate('window.tz.renderStats()');

@@ -942,6 +942,9 @@ export async function createView3d(container, mapData, src) {
     ground: (() => { try { return H(-(v.target?.[0] ?? 0), -(v.target?.[1] ?? 0)) ?? 0; } catch { return 0; } })(),
   });
   let hover = null;
+  // The viewport deck's last redraw actually used — textLayout()'s fallback when getViewports()
+  // has not been populated yet (see the note there).
+  let lastViewport = null;
   let fontsReady = false, initialised = false;
   // atlas is keyed on fontFamily: use the fallback stack until the webfont is confirmed, then switch (forces a fresh atlas)
   const LABEL_FONT = () => (fontsReady ? 'Barlow Condensed, Arial Narrow, system-ui, sans-serif' : 'Arial Narrow, system-ui, sans-serif');
@@ -1242,10 +1245,54 @@ export async function createView3d(container, mapData, src) {
   // M10: Woods place labels bottomed out at 10 px, ≈7 px of cap height — shapes, not words, on the
   // physically largest map. The floor is the one number that decides the smallest map's type.
   const MAJOR_MIN_PX = 12, MINOR_MIN_PX = 11;
-  // Barlow Condensed (and the Arial Narrow fallback) average ~0.5 em per glyph; 700 sits wider.
-  const inkWidth = (text, px, weight) => text.length * px * (weight >= 700 ? 0.52 : 0.47);
+  /*
+   * How wide a label's ink actually is, MEASURED — not estimated.
+   *
+   * This used to be `text.length * px * (weight >= 700 ? 0.52 : 0.47)`, a per-glyph average for
+   * Barlow Condensed. A name that draws WIDER than its estimate clears boxHit() against a
+   * neighbour that is already seated and is then seated straight on top of it. That is QA H1 on
+   * the Customs default frame: "POWERLINE TOWER" and "SNIPER RIDGE" printing as one word,
+   * "DEPOT" over "SMUGGLERS' BUNKER · UNDERGROUND", which in turn ran under "WAREHOUSE 3".
+   * Digits, spaces and punctuation are where a per-character average is worst, and the long
+   * underground names are all three at once.
+   *
+   * One 2d context answers it, in the same font string deck's own TextLayer atlas is built from
+   * (LABEL_FONT()), so the two cannot disagree. Text metrics are linear in font size, so each
+   * string is measured ONCE at a reference size and scaled — the cache is bounded by the number
+   * of distinct names, not by the continuum of zoom-driven pixel sizes. The font epoch is part of
+   * the key: LABEL_FONT() switches from the Arial Narrow fallback to Barlow Condensed the moment
+   * document.fonts confirms it, and a width measured against the fallback is wrong afterwards.
+   */
+  const MEASURE_PX = 100;
+  const measureCtx = (() => { try { return document.createElement('canvas').getContext('2d'); } catch { return null; } })();
+  const widthCache = new Map();
+  const estWidth = (text, px, weight) => text.length * px * (weight >= 700 ? 0.52 : 0.47);
+  function refWidth(text, weight) {
+    const key = `${fontsReady ? 1 : 0}|${weight}|${text}`;
+    const hit = widthCache.get(key);
+    if (hit !== undefined) return hit;
+    let w = 0;
+    if (measureCtx) {
+      try {
+        const want = `${weight} ${MEASURE_PX}px ${LABEL_FONT()}`;
+        measureCtx.font = want;
+        // An invalid shorthand is silently IGNORED by the setter and the context keeps its old
+        // font, which would hand back confident nonsense. Only trust a font that stuck.
+        if (measureCtx.font.includes(`${MEASURE_PX}px`)) {
+          const m = measureCtx.measureText(text);
+          const ink = Number.isFinite(m.actualBoundingBoxLeft) && Number.isFinite(m.actualBoundingBoxRight)
+            ? m.actualBoundingBoxLeft + m.actualBoundingBoxRight : 0;
+          w = Math.max(m.width || 0, ink);
+        }
+      } catch { w = 0; }
+    }
+    if (!(w > 0)) w = estWidth(text, MEASURE_PX, weight);   // no canvas (tests, exotic hosts)
+    widthCache.set(key, w);
+    return w;
+  }
+  const inkWidth = (text, px, weight) => (refWidth(text, weight) * px) / MEASURE_PX;
   const boxHit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-  /** The safe rect, inset, in the deck canvas' own pixels — or the whole canvas if there is none. */
+  /** The avoid rect, inset, in the deck canvas' own pixels — or the whole canvas if there is none. */
   function textRect(vp) {
     let r = null;
     try { r = src.safeRect?.(); } catch { r = null; }
@@ -1254,6 +1301,16 @@ export async function createView3d(container, mapData, src) {
     return { left: Math.max(0, base.left) + LABEL_INSET, top: Math.max(0, base.top) + LABEL_INSET,
       right: Math.min(base.right, vp.width) - LABEL_INSET, bottom: Math.min(base.bottom, vp.height) - LABEL_INSET };
   }
+
+  /**
+   * What the last pass did, for `renderStats().labels`.
+   *
+   * A pass that BAILS hands every name back unseated, which looks exactly like no pass at all —
+   * and that is how QA H1's overprint stayed on screen with a working seating pass in the file.
+   * `bail` names the reason, so "the labels print through each other" is one read-out away from
+   * "the pass never ran" instead of a bisect.
+   */
+  let layoutStats = { bail: 'not-yet-run', seated: 0, hidden: 0, rect: null };
 
   /**
    * @returns {{place:object[],extract:object[]}} draw-ready rows. `off` is the pixel offset the
@@ -1281,11 +1338,25 @@ export async function createView3d(container, mapData, src) {
     });
     const extract = extractAll.filter((d) => d.m.name && (d.lit || z >= -0.6));
 
+    /*
+     * The viewport this pass measures in.
+     *
+     * `deck.getViewports()` is EMPTY until deck's own first redraw, and `dynamicLayers()` runs
+     * inside `render()`, which is what feeds that redraw — so on a still map, where render() is
+     * called once and no camera event ever follows, every frame after that keeps the layer set
+     * built by the one pass that bailed. That is QA H1: a seating pass in the file, and thirteen
+     * unseated names on the landing frame. `viewport` is the OrbitViewport the last redraw
+     * actually used, kept by onAfterRender, and it is the honest answer on every frame but the
+     * very first; getViewports() is only the fast path.
+     */
     let vp = null;
-    try { vp = deck?.getViewports?.()[0]; } catch { vp = null; }
-    if (!vp || !vp.width || !vp.height) return { place, extract, badge: null };
+    try { vp = deck?.getViewports?.()[0] ?? lastViewport; } catch { vp = lastViewport; }
+    if (!vp || !vp.width || !vp.height) { layoutStats = { bail: 'no-viewport', seated: 0, hidden: place.length, rect: null }; return { place, extract, badge: null }; }
     const rect = textRect(vp);
-    if (rect.right - rect.left < 60 || rect.bottom - rect.top < 60) return { place, extract };
+    if (rect.right - rect.left < 60 || rect.bottom - rect.top < 60) {
+      layoutStats = { bail: 'rect-too-small', seated: 0, hidden: place.length, rect };
+      return { place, extract, badge: null };
+    }
     const taken = [];
     const project = (world) => { try { const q = vp.project(world); return Number.isFinite(q?.[0]) && Number.isFinite(q?.[1]) ? q : null; } catch { return null; } };
     /** Pixels per world metre AT this point — the only honest way to size `sizeUnits:'meters'` text. */
@@ -1374,6 +1445,8 @@ export async function createView3d(container, mapData, src) {
     });
     // 5. minor names last: they are the tier the map can afford to lose.
     const placedMinor = seatPlace(place.filter((e) => !e.major));
+    const seated = placedMajor.length + placedMinor.length;
+    layoutStats = { bail: null, seated, hidden: place.length - seated, rect };
     return { place: [...placedMajor, ...placedMinor], extract: placedExtract, badge };
   }
 
@@ -1636,6 +1709,17 @@ export async function createView3d(container, mapData, src) {
     // where the map showed names floating over nothing. Both stop being written after the first
     // hit, so this costs one array scan per frame until then and nothing afterwards.
     onAfterRender: () => {
+      // The screen-space text pass needs a viewport, and the FIRST layer build happens before deck
+      // has one. Remember the one this redraw used and re-run the pass the moment it appears (or
+      // changes size), or the landing frame keeps the unseated layer set forever — QA H1.
+      try {
+        const v = deck.getViewports()[0];
+        if (v?.width && v?.height && (!lastViewport || lastViewport.width !== v.width || lastViewport.height !== v.height)) {
+          const first = !lastViewport;
+          lastViewport = v;
+          if (first && initialised) scheduleRender();
+        }
+      } catch {}
       if (markersReadyMs == null && src.markers().length) markersReadyMs = Math.round(performance.now() - bootMs);
       if (firstLabelMs != null && firstBadgeMs != null) return;
       const layers = deck.props.layers || [];
@@ -1854,6 +1938,11 @@ export async function createView3d(container, mapData, src) {
       effects: (deck.props.effects || []).length,
       postEffects: gradeEffect ? 1 : 0,
       fx: { ...fx, fogArmed: Boolean(fogExt), gradeArmed: Boolean(gradeEffect), detailArmed: Boolean(groundExt), waterMesh: Boolean(waterExt) },
+      /**
+       * The screen-space text pass. `bail` is null on a healthy frame; anything else means every
+       * name was handed back UNSEATED and the frame is free to print names through each other.
+       */
+      labels: { ...layoutStats },
       fps: m.fps ?? null,
       gpuFrameMs: m.gpuTimePerFrame || null,   // null = the adapter has no timer query
       cpuFrameMs: m.cpuTimePerFrame || null,
