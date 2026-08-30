@@ -662,10 +662,18 @@ class GroundDetailExtension extends LayerExtension {
         'fs:DECKGL_FILTER_COLOR': `
   {
     // Wet-asphalt mask, taken from the untouched bake albedo (see GROUND_DETAIL above).
+    //
+    // Both ramps are INVERTED — asphalt is the low-saturation, low-luma end — and the way to write
+    // an inverted ramp is 1.0 - smoothstep(lo, hi, x), never smoothstep(hi, lo, x). GLSL ES 3.00
+    // leaves smoothstep undefined when edge0 >= edge1; every driver we can test here (ANGLE,
+    // SwiftShader) computes it as clamp((x-edge0)/(edge1-edge0)) and lands on the intended ramp,
+    // but a conformant driver may return anything, which would put the road specular on the wrong
+    // pixels or on none. Algebraically identical on the drivers that do define it.
+    // (No backticks in this comment: it lives inside a JS template literal.)
     float tzMx = max(color.r, max(color.g, color.b));
     float tzMn = min(color.r, min(color.g, color.b));
-    tz_roadMask = smoothstep(${f(t.roadSatHi)}, ${f(t.roadSatLo)}, (tzMx - tzMn) / max(tzMx, 0.0001))
-                * smoothstep(${f(t.roadLumHi)}, ${f(t.roadLumLo)}, dot(color.rgb, vec3(0.299, 0.587, 0.114)));
+    tz_roadMask = (1.0 - smoothstep(${f(t.roadSatLo)}, ${f(t.roadSatHi)}, (tzMx - tzMn) / max(tzMx, 0.0001)))
+                * (1.0 - smoothstep(${f(t.roadLumLo)}, ${f(t.roadLumHi)}, dot(color.rgb, vec3(0.299, 0.587, 0.114))));
     vec3 tzP = tz_gPos;
     vec3 tzN = normalize(tz_gNormal);
     vec3 tzW = abs(tzN);

@@ -111,7 +111,13 @@ test('the ground shader adds a wet-road lobe from an albedo mask', () => {
   assert.ok(ext, 'realistic + textures should produce a ground extension');
   const { inject } = ext.getShaders(ext);
   // The mask is read from the BAKE, in the colour filter, before this extension modulates anything.
-  assert.match(inject['fs:DECKGL_FILTER_COLOR'], /tz_roadMask = smoothstep/);
+  assert.match(inject['fs:DECKGL_FILTER_COLOR'], /tz_roadMask = \(1\.0 - smoothstep/);
+  // Both of its ramps are inverted, and an inverted ramp is 1 - smoothstep(lo, hi, x). Written as
+  // smoothstep(hi, lo, x) it is UNDEFINED under GLSL ES 3.00 (edge0 >= edge1) — it happens to work
+  // on ANGLE and SwiftShader, which is exactly why nothing here would ever have caught it.
+  for (const [, a, b] of [...inject['fs:DECKGL_FILTER_COLOR'].matchAll(/smoothstep\(([\d.]+), ([\d.]+),/g)]) {
+    assert.ok(Number(a) < Number(b), `smoothstep(${a}, ${b}, …) has edge0 >= edge1, which GLSL leaves undefined`);
+  }
   assert.ok(inject['fs:DECKGL_FILTER_COLOR'].indexOf('tz_roadMask') < inject['fs:DECKGL_FILTER_COLOR'].indexOf('tzDet'),
     'the mask must be taken before the detail maps modulate the albedo, or it drifts with the tuning');
   // It travels to main's tail as a fragment GLOBAL — a hook function cannot see main's locals and
