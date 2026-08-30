@@ -39,35 +39,48 @@ Retry a black 3D frame 2–4×; it is a swiftshader flake, not a bug. Road accur
 Independent judge: `codex exec --skip-git-repo-check -s read-only -i shot.png < prompt.txt`.
 Real-GPU truth comes from the user's browser — ask for a screenshot when it matters.
 
-## 4. How work is split (as of 2026-08-29)
+## 4. How work is done (as of 2026-08-30)
 
-- **Site features** (UI, layers, live position, quest layer, assistant): Claude (Fable) orchestrating, Opus/Sonnet subagents implementing.
-- **Map data & 3D world for each map** (terrain, buildings, roads, water, props, limits, per-map fixes): **Codex (GPT-5.6-Sol)**
-  in the worktree `../tarkovzero-codex` on branch `codex/maps`, one "fix pass" at a time; the orchestrator commits on its behalf
-  (its sandbox cannot write worktree metadata), merges to `main`, deploys. Briefs and outcomes: `docs/plans/PROGRESS.md`.
-- **Game PC** (companion app, real-raid testing): a separate Claude session on the Windows laptop (`docs/GAME-LAPTOP-PROMPT.md`).
-- Workstation setup notes (not code): `docs/setup/LAN-MOUSE.md` — how the Linux dev laptop shares its keyboard/mouse with the Windows game laptop; rebuild the Linux side from it after a reinstall.
-- The user reviews on a real GPU and sends terse feedback; prioritise exactly what they name.
+- **One machine**: the Windows game laptop (WSL2) owns everything — site, relay, companion, deploys (the Linux
+  laptop died 2026-08-29; `docs/setup/LAN-MOUSE.md` is historical). Deploys: `vercel --prod` (explicit team scope)
+  and `fly deploy --ha=false` from `relay/`.
+- Big pushes have been done by an orchestrator fanning out builder/reviewer subagents; every substantial change
+  goes through an adversarial review (findings verified by independent skeptics before fixing). Solo agents are
+  fine for focused fixes — keep the verification habits either way.
+- **The founder reviews on a real GPU and sends terse feedback; prioritise exactly what they name.** Visual work
+  is judged against the current live site on real hardware, never against a plan or headless captures — nothing
+  ships that looks worse than what is live, and every rendering effect must pay for its GPU cost visibly.
 
 ## 5. Current state and open work
 
-Done: multi-map 2D/3D; real terrain from SPT spawns + loose-loot + survey logs; 3× relief default; baked roads; trees/rocks
-toggles; buildings with detail recipes; props; extracts with `level` (underground) tags and letter badges; loot/stashes;
-labels with beam pings; game-icons art; live vision-cone marker; new UI rail (Find, filters, view controls, mobile sheet).
+Shipped to prod 2026-08-30 (merge `36b37d6`): the **UI v2 shell** (edge-to-edge map, floating chips, right
+toolbar with dockable panels — manual pin wins; bottom-centre omnibox: no prefix = lookup, `>` = commands,
+`?` = AI; DeepSeek assistant card with map actions), 3D default view with an oblique camera that can never go
+under the map, marker LOD + spawn clustering, live position with heading marker + state machine, the quest layer
+plus **active quests streamed from the player's own game logs** (companion → relay `POST /quests/CODE` → "My
+quests" + auto-select + assistant grounding; spec `docs/plans/ACTIVE-QUESTS.md`), exact tarkov.dev map data with
+elevation buckets (Woods' 77 m mountain is real), and two looks: **Vector (default, zero render overhead)** and
+Real (R1.5: fog/grade/detail, each individually toggleable via `?fx=`). Tests: `npm test` (12 suites),
+`npm run e2e` (9-step walkthrough). Headless capture trap: plain `--screenshot` hangs on deck.gl's rAF loop —
+use a CDP driver, fresh profile per shot, explicit `&view=` (the view persists in localStorage).
 
-In flight / backlog (highest value first):
-1. Flat water with carved riverbeds at any relief (Codex pass 8).
-2. Playable-limit expansion so every marker (e.g. Customs Dorms V-Ex) sits on terrain; smooth boundary edge (Codex pass 9 brief in scratch).
-3. Quest layer: `scripts/build-quests.mjs` → `public/data/quests.json`; Quests panel; numbered objective markers + zone outlines;
-   photo card from `public/data/quest-images.json` (wiki); `?quest=`; `window.tz.quests` API.
-4. DeepSeek assistant: Vercel function grounded on `quests.json` + wiki text, returning map actions (needs a key in Vercel env).
-5. Spawn clustering with counts; 2D label collision; Reserve wiki-panel locks (detached underground panels).
-6. More maps (Shoreline, Interchange, Lighthouse, Streets…) via the playbook; each needs playtest facts (real crossings, dirt vs paved).
+Backlog (highest value first):
+1. Real-raid validation of quest streaming (fixtures + simulate only so far) — first raid with the companion running.
+2. Visual defects skipped in the last QA (lane-F report): label beams punch through roofs, Woods Mountain Spine
+   blown out in Real, missing objective thumbnails, Reserve terrain spur, close-zoom fidelity at `#5`.
+3. Realism R2+ (`docs/plans/RENDER-REALISM.md`): terrain splats, instanced glTF vegetation, building materials —
+   only with real assets; tint-and-fog realism was tried and rejected by the founder.
+4. Woods 3D first paint: ~15 s of synchronous `buildTerrain` on the main thread (founder: performance later).
+5. Survey-dependent 3D fidelity (`docs/plans/3D-AUDIT.md` ranks): Reserve bunker network, Customs industrial east,
+   road profiles — needs founder raid-hours with the companion's elevation logging.
+6. More maps (Shoreline, Interchange, Lighthouse, Streets…) via `docs/MAP-BUILD-PLAYBOOK.md`.
 
 ## 6. Ready-to-paste prompt for a fresh session
 
 > You are continuing TarkovZero (https://github.com/writtenonwater99/tarkovzero, live at https://tarkovzero.com). Clone it,
-> read `docs/AGENT-ONBOARDING.md`, `README.md`, `CLAUDE.md`, `docs/MAP-BUILD-PLAYBOOK.md`, and `docs/plans/PROGRESS.md` (its
-> last "Fix pass" section is the newest state). Respect the non-negotiables in the onboarding doc. Run `npm install && npm run
-> build` and take a headless screenshot as described to confirm your environment. Then work on: <task>. Verify with build +
-> screenshots, keep Customs data deterministic, commit with clear messages, and do not deploy unless told.
+> read `docs/AGENT-ONBOARDING.md`, `README.md`, `CLAUDE.md` (deep log of decisions and gotchas — long, read all of it),
+> `docs/MAP-BUILD-PLAYBOOK.md`, `docs/plans/PROGRESS.md` (its last "Fix pass" section is the newest data-pipeline state),
+> and `docs/plans/UI-REWORK.md` + `docs/plans/ACTIVE-QUESTS.md` for the current UI and quest architecture. Respect the
+> non-negotiables in the onboarding doc. Run `npm install && npm test && npm run build` to confirm your environment
+> (12 suites must pass). Then work on: <task>. Verify with tests + the e2e walkthrough + screenshots (CDP driver, not
+> bare --screenshot), keep Customs data deterministic, commit with clear messages, and do not deploy unless told.

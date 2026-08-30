@@ -3,18 +3,12 @@
 Google-Maps-style interactive Escape from Tarkov map. Live at https://tarkovzero.com (Vercel), repo
 https://github.com/writtenonwater99/tarkovzero. v1 = Customs, outdoors only.
 
-## Two machines, two roles (important)
-- **Linux dev laptop** (no Tarkov installed): owns **site development** — `src/`, `public/`, `scripts/`, `relay/`,
-  Vercel and Fly deploys. This is where the site is built and deployed.
-- **Windows game laptop** (Tarkov installed, also the user's main coding machine): owns the **companion app**
-  (`companion/`) and all real-game testing. Claude on the game laptop should:
-  - run and debug `companion/companion.mjs` against the real game,
-  - fix companion-side bugs (filename parsing, folder detection, auto-screenshot, log-based map detection),
-  - commit + push those fixes to `main`,
-  - **not** change the site/relay unless a fix is required to make live position work; if so, keep the change
-    minimal, describe it clearly in the commit message, and the site laptop will deploy it
-    (site deploys: `vercel --prod`; relay deploys: `fly deploy --ha=false` from `relay/`).
-  Both sides sync through git. Pull before starting work.
+## One machine (since 2026-08-30)
+The Linux dev laptop died 2026-08-29. The **Windows game laptop** (WSL2, Tarkov installed) is now the only dev
+machine: site, relay, companion, and deploys all happen here. Deploys: `vercel --prod` (project `tarkovzero`;
+pass the explicit team scope or the CLI silently sees nothing) and `fly deploy --ha=false` from `relay/` (app
+`tarkovzero-relay`, `fly auth` = the founder's account). Real-game testing still means the real EFT install on
+this box — see "Game laptop facts" below. Pull before starting work.
 
 ## Layout
 - `src/main.js` map setup, marker layers, sidebar UI · `src/crs.js` game-coord CRS (lat=z, lng=x, 180° rotation)
