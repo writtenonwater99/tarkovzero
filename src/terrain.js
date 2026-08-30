@@ -17,9 +17,12 @@ import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
 import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import earcut from 'earcut';
-import { allWaterRings, carveWaterHeightfield, makeWaterHeightCapper } from './water.js';
-import { paletteFor, surfaceFor, terrainMaterialFor, groundDetailExtensionFor, toDeckDirection, resolveLook } from './atmosphere.js';
-import { LIGHT, styleFor } from './render-style.js';
+import { allWaterRings, carveWaterHeightfield, makeWaterHeightCapper, waterLevelAt, waterPoly, waterHoles, pointInRing } from './water.js';
+import {
+  paletteFor, surfaceFor, terrainMaterialFor, groundDetailExtensionFor, toDeckDirection, resolveLook,
+  skirtRamp, terrainMacro, waterTuning,
+} from './atmosphere.js';
+import { LIGHT, styleFor, ROAD_RIM, rgb255 } from './render-style.js';
 
 // ---------------------------------------------------------------- tunables
 const CELL = 2.5;          // mesh cell size in metres (10 m source grid subdivided 4x)
@@ -42,16 +45,25 @@ const FILL_DIR = [0.5, 0.35, -0.79];
 //   realistic  — 1.0 and a tight clamp: the mesh normals plus the 21-degree key do the relief, and
 //                a strong second hillshade on top of real lighting is exactly the "map board" read
 //                Stage 1 exists to remove.
-const SHADE = { vector: { gain: 2.6, lo: 0.60, hi: 1.34, contrast: 1.9 }, realistic: { gain: 1.0, lo: 0.84, hi: 1.14, contrast: 1.0 } };
+//
+// R1.5 raised the vector floor from 0.60 to 0.70. At 0.60 a lee slope on Woods lost 40% of its
+// albedo and, against the vector skin's BLACK void, the deepest folds of the mountain read as holes
+// in the map rather than as shaded ground. The ceiling comes down with it so the total range — the
+// thing that carries the relief — is nearly unchanged.
+const SHADE = { vector: { gain: 2.6, lo: 0.70, hi: 1.26, contrast: 1.75 }, realistic: { gain: 1.0, lo: 0.84, hi: 1.14, contrast: 1.0 } };
 
 // Bright field palette: still olive/green and desaturated, but no longer loses its middle values
 // under the baked hillshade and the scene light. VECTOR ONLY — this is the hypsometric ramp the
 // realistic look is required to drop.
-const vib = (rgb, k = 1.3) => { const l = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]; return rgb.map((v) => Math.max(0, Math.min(255, l + (v - l) * k))); };
-const GRASS = [[57, 82, 58], [68, 96, 62], [81, 108, 67], [101, 121, 73], [123, 137, 84]].map((c) => vib(c));
-const GRASS_DRY = [132, 126, 99];
-const GRASS_ROCK = [145, 138, 120];
-const YARD_EARTH = [133, 101, 68];
+//
+// R1.5: the saturation boost drops 1.30 -> 1.12 and the stops come down with the shared vector
+// palette. Mid-tone pastels against a black void were the contrast complaint; the ramp still spans
+// the same number of values, it just sits lower.
+const vib = (rgb, k = 1.12) => { const l = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]; return rgb.map((v) => Math.max(0, Math.min(255, l + (v - l) * k))); };
+const GRASS = [[52, 74, 53], [62, 87, 57], [74, 98, 61], [92, 110, 67], [112, 125, 77]].map((c) => vib(c));
+const GRASS_DRY = [122, 116, 92];
+const GRASS_ROCK = [134, 128, 111];
+const YARD_EARTH = [124, 94, 63];
 
 // ---------------------------------------------------------------- small maths helpers
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -201,10 +213,39 @@ function drawSleepers(ctx, path, spacing = 2.4, halfWidth = 1.25) {
  * Filling the ring instead draws the thing the outline describes.
  */
 const isAreaRing = (path) => path.length > 3 && Math.hypot(path[0][0] - path[path.length - 1][0], path[0][1] - path[path.length - 1][1]) < 1;
-function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz, SURFACE) {
+/**
+ * The dirt rim under every paved surface (R1.5, the plan's "edge darkening/dirt blending").
+ *
+ * A road that meets grass on a mathematically exact pixel edge is the single loudest "placed, not
+ * built" cue in the frame. Three widening, fading strokes UNDER the road put a soft mud shoulder
+ * around it instead — drawn into the same one baked texture, so it costs no layer, cannot z-fight,
+ * and moves no road: the rim only ever darkens ground the road already touches.
+ */
+function drawRoadRim(ctx, data, rim) {
+  const roads = (data.roads || []).filter((d) => Array.isArray(d.path) && d.path.length > 1);
+  const rings = roads.filter((d) => isAreaRing(d.path));
+  const lines = roads.filter((d) => !isAreaRing(d.path));
+  ctx.save();
+  for (let pass = rim.passes; pass >= 1; pass--) {
+    const grow = (rim.widthMeters * pass) / rim.passes;
+    ctx.globalAlpha = rim.alpha / rim.passes;
+    ctx.strokeStyle = css(rgb255(rim.color));
+    ctx.fillStyle = css(rgb255(rim.color));
+    ctx.setLineDash([]);
+    for (const poly of data.pavement || []) { ctx.lineWidth = grow * 2; if (trace(ctx, poly, true)) ctx.stroke(); }
+    for (const d of rings) { ctx.lineWidth = grow * 2; if (trace(ctx, d.path, true)) ctx.stroke(); }
+    for (const d of lines) { ctx.lineWidth = (d.width || 2) + grow * 2; if (trace(ctx, d.path)) ctx.stroke(); }
+    for (const d of data.railway || []) { ctx.lineWidth = 3.4 + grow * 2; if (trace(ctx, d.path)) ctx.stroke(); }
+  }
+  ctx.restore();
+}
+
+function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz, SURFACE, rim = null) {
   ctx.save();
   ctx.setTransform(1 / mx, 0, 0, 1 / mz, -X0 / mx, -Z0 / mz);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  if (rim) drawRoadRim(ctx, data, rim);
 
   ctx.fillStyle = css(SURFACE.pavement);
   for (const poly of data.pavement || []) if (trace(ctx, poly, true)) ctx.fill();
@@ -350,6 +391,7 @@ export function buildTerrain(data, relief = 3, options = {}) {
     // Realistic ground stops, all from the frozen palette.
     const R_GRASS = C.grass, R_LITTER = C.grassHigh, R_DIRT = C.dirt, R_WET = C.grass1, R_ROCK = C.rock;
     const R_YARD = C.pavement;
+    const MACRO = realistic ? terrainMacro().patches.map((p) => ({ ...p, rgb: rgb255(p.color) })) : [];
 
     for (let py = 0; py < TH_T; py++) {
       const gz = Z0 + (py + 0.5) * mz, o = py * TEX_W;
@@ -374,6 +416,15 @@ export function buildTerrain(data, relief = 3, options = {}) {
           g = R_GRASS[1] + (R_LITTER[1] - R_GRASS[1]) * cover;
           b = R_GRASS[2] + (R_LITTER[2] - R_GRASS[2]) * cover;
           r += (R_DIRT[0] - r) * bare * 0.5; g += (R_DIRT[1] - g) * bare * 0.5; b += (R_DIRT[2] - b) * bare * 0.5;
+          // (b') R1.5 macro variation: large-scale autumn die-off / mud / dark-scrub splotches over
+          // the land-cover base. Each patch is a thresholded value-noise field at its own frozen
+          // wavelength and seed, so the three overlap into irregular blotches rather than a grid,
+          // and none of them reads elevation — no bands, no hypsometric cue at any zoom.
+          for (const patch of MACRO) {
+            const w = smoothstep(clamp((vnoise(gx + patch.seed[0], gz + patch.seed[1], patch.wavelength) - patch.threshold) * patch.gain, 0, 1)) * patch.strength;
+            if (w <= 0) continue;
+            r += (patch.rgb[0] - r) * w; g += (patch.rgb[1] - g) * w; b += (patch.rgb[2] - b) * w;
+          }
           // (c') slope: damp hollows first, then exposed rock on the steep faces.
           const wet = Math.min(0.35, Math.max(0, 0.09 - slope) * 3.4);
           r += (R_WET[0] - r) * wet; g += (R_WET[1] - g) * wet; b += (R_WET[2] - b) * wet;
@@ -431,7 +482,8 @@ export function buildTerrain(data, relief = 3, options = {}) {
     if (styleFor(mode).flags.contours) drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax, relief);
     // Roads/rail/pavement are last so map symbols cover contours exactly as they would on a printed
     // topographic sheet. This is still the terrain's one texture, not a second draped surface.
-    drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz, surfaceFor(mode));
+    // Realistic gets the dirt rim; vector is a diagram and a diagram's roads have clean edges.
+    drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz, surfaceFor(mode), realistic ? ROAD_RIM : null);
 
     // dev aid: ?debugtex shows the complete baked ground texture at 1:1.
     if (typeof location !== 'undefined' && location.search.includes('debugtex')) {
@@ -576,11 +628,29 @@ export function buildTerrain(data, relief = 3, options = {}) {
   // segment colours, lit boxes, or shadow receivers.
   const cliffVerts = [...new Set(cliffEdges.flat())], cliffMap = new Map(cliffVerts.map((v, i) => [v, i]));
   const cliffPos = new Float32Array(cliffVerts.length * 2 * 3), cliffNrm = new Float32Array(cliffVerts.length * 2 * 3), cliffIdx = new Uint32Array(cliffEdges.length * 6);
+  /*
+   * R1.5 — the skirt is feathered into the backdrop instead of ending on a hard band.
+   *
+   * COLOR_0 is a per-vertex MULTIPLIER on the layer's colour (SimpleMeshLayer: `vColor = colors *
+   * instanceColors.rgb`), so one attribute turns the flat wall into a vertical ramp from the
+   * contract's `skirtTop` earth value down toward `skirtBottom`, which is the void haze the plane
+   * below it is painted with. The skirt is fogged as well, so the far side of the map loses the
+   * edge entirely and the near side keeps a readable thickness. In vector the two colours are equal
+   * and this is exactly a no-op.
+   */
+  const cliffCol = new Float32Array(cliffVerts.length * 2 * 3);
+  // Built from the REALISTIC ramp unconditionally, because a buffer may not depend on the look —
+  // the flip is a material state and the geometry cache key excludes it. Vector is unaffected in
+  // practice: its skirt colour is already the void value, so a 0.76 multiplier on #0c0e0d lands
+  // within a value of itself against a black background.
+  const ramp = skirtRamp('realistic');
+  const rampK = ramp.top.map((c, i) => (c > 0 ? 1 + ((ramp.bottom[i] / c) - 1) * ramp.feather : 1));
   for (let i = 0; i < cliffVerts.length; i++) {
     const v = cliffVerts[i], src = v * 3, top = i * 3, bottom = (i + cliffVerts.length) * 3;
     cliffPos.set([positions[src], positions[src + 1], positions[src + 2]], top);
     cliffPos.set([positions[src], positions[src + 1], voidZ], bottom);
     cliffNrm.set([0, 0, 1], top); cliffNrm.set([0, 0, 1], bottom); // ignored by material:false
+    cliffCol.set([1, 1, 1], top); cliffCol.set(rampK, bottom);
   }
   for (let i = 0; i < cliffEdges.length; i++) {
     const a = cliffMap.get(cliffEdges[i][0]), b = cliffMap.get(cliffEdges[i][1]), q = i * 6;
@@ -588,9 +658,85 @@ export function buildTerrain(data, relief = 3, options = {}) {
   }
   const cliffMesh = new Geometry({
     topology: 'triangle-list',
-    attributes: { POSITION: { value: cliffPos, size: 3 }, NORMAL: { value: cliffNrm, size: 3 } },
+    attributes: { POSITION: { value: cliffPos, size: 3 }, NORMAL: { value: cliffNrm, size: 3 }, COLOR_0: { value: cliffCol, size: 3 } },
     indices: { value: cliffIdx, size: 1 },
   });
+
+  /* ================================================================ water surface (R1.5)
+   *
+   * The realistic water is a MESH welded out of the ground grid, not a flat polygon fill, because
+   * the thing the plan asks for — "tint shallow water toward muddy/olive sediment, deepen toward
+   * blue-gray ... slightly reveal the carved bed near shore" — needs per-fragment DEPTH, and the
+   * only honest source of depth is the carved bed the heightfield already carries. A
+   * SolidPolygonLayer has vertices at the shoreline and nowhere else, so it has no depth to shade.
+   *
+   * Each grid vertex inside (or one cell outside) a water body gets:
+   *   COLOR_0.r = (level - bed) / WATER.depthMaxMeters, in REAL game metres
+   *   COLOR_0.g = 1 inside the ring, 0 outside it -> the 2.5 m interpolation across a boundary cell
+   *               IS the soft shore, with no distance field and no second layer
+   * and sits at the body's own evidence-backed level. src/atmosphere.js's WaterExtension decodes
+   * both. Vector keeps its flat SolidPolygonLayer fill (Part C's flip table), so this mesh is only
+   * ever bound in realistic mode.
+   */
+  const waterBodies = (data.water || []).filter((w) => waterPoly(w).length >= 3);
+  let waterMesh = null;
+  const waterStats = { verts: 0, tris: 0 };
+  if (waterBodies.length) {
+    const depthMax = Math.max(0.1, waterTuning().depthMaxMeters);
+    const specs = waterBodies.map((w) => {
+      const ring = waterPoly(w), holes = waterHoles(w), bank = Number.isFinite(w.bank) ? w.bank : 5;
+      const pad = Math.max(bank, cw * 2, ch * 2);
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (const [x, z] of ring) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+      return { w, ring, holes, x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad };
+    });
+    const level = new Float32Array(NV), inside = new Uint8Array(NV), covered = new Uint8Array(NV);
+    for (let j = 0; j < NVZ; j++) {
+      const gz = Z0 + j * ch;
+      for (let i = 0; i < NVX; i++) {
+        const gx = X0 + i * cw, k = j * NVX + i;
+        let best = null, isIn = 0;
+        for (const s of specs) {
+          if (gx < s.x0 || gx > s.x1 || gz < s.z0 || gz > s.z1) continue;
+          const l = waterLevelAt(s.w, gx, gz);
+          if (l == null) continue;
+          if (best == null || l > best) best = l;
+          if (pointInRing([gx, gz], s.ring) && !s.holes.some((hole) => pointInRing([gx, gz], hole))) isIn = 1;
+        }
+        if (best == null) continue;
+        covered[k] = 1; level[k] = best; inside[k] = isIn;
+      }
+    }
+    const waterIdx = [], remap = new Map();
+    const use = (k) => { let n = remap.get(k); if (n === undefined) { n = remap.size; remap.set(k, n); } return n; };
+    for (let j = 0; j < NCZ; j++) for (let i = 0; i < NCX; i++) {
+      const a = j * NVX + i, b = a + 1, c = a + NVX + 1, d = a + NVX;
+      if (!(covered[a] && covered[b] && covered[c] && covered[d])) continue;
+      if (!(inside[a] || inside[b] || inside[c] || inside[d])) continue;
+      waterIdx.push(use(a), use(b), use(c), use(a), use(c), use(d));
+    }
+    if (remap.size >= 3 && waterIdx.length) {
+      const n = remap.size;
+      const wPos = new Float32Array(n * 3), wNrm = new Float32Array(n * 3), wCol = new Float32Array(n * 3);
+      for (const [k, slot] of remap) {
+        const i = k % NVX, j = (k - i) / NVX, gx = X0 + i * cw, gz = Z0 + j * ch;
+        const surface = level[k];
+        // H() is already relief-scaled; the depth tint is authored in REAL metres, so divide back.
+        const bed = H(gx, gz) / relief;
+        wPos[slot * 3] = -gx; wPos[slot * 3 + 1] = -gz; wPos[slot * 3 + 2] = surface * relief;
+        wNrm[slot * 3] = 0; wNrm[slot * 3 + 1] = 0; wNrm[slot * 3 + 2] = 1;
+        wCol[slot * 3] = clamp(Math.max(0, surface - bed) / depthMax, 0, 1);
+        wCol[slot * 3 + 1] = inside[k];
+        wCol[slot * 3 + 2] = 0;
+      }
+      waterMesh = new Geometry({
+        topology: 'triangle-list',
+        attributes: { POSITION: { value: wPos, size: 3 }, NORMAL: { value: wNrm, size: 3 }, COLOR_0: { value: wCol, size: 3 } },
+        indices: { value: new Uint32Array(waterIdx), size: 1 },
+      });
+      waterStats.verts = n; waterStats.tris = waterIdx.length / 3;
+    }
+  }
 
   /**
    * The ground mesh layer for one look.
@@ -629,6 +775,33 @@ export function buildTerrain(data, relief = 3, options = {}) {
     extensions: extra.fogExtension ? [extra.fogExtension] : [],
   });
 
+  /**
+   * The realistic water surface, or `null` when this map has no water / the look is vector.
+   *
+   * `getColor: [255,255,255]` is load-bearing, not a default: SimpleMeshLayer computes
+   * `vColor = colors * instanceColors.rgb`, so a white instance colour is what lets the extension
+   * read COLOR_0's depth and inside flags back out unchanged. `material: false` because the
+   * extension does all the shading; `depthWriteEnabled: false` because a translucent surface that
+   * writes depth hides everything drawn behind it afterwards.
+   */
+  const waterLayer = (mode = look, extra = {}) => {
+    if (!waterMesh || !extra.waterExtension) return null;
+    return new SimpleMeshLayer({
+      id: 'water-surface',
+      data: [{ p: [0, 0, 0] }],
+      getPosition: (d) => d.p,
+      mesh: waterMesh,
+      getColor: [255, 255, 255],
+      sizeScale: 1,
+      material: false,
+      shadowEnabled: false,
+      pickable: false,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      parameters: { depthWriteEnabled: false, cullMode: 'none' },
+      extensions: [extra.waterExtension, ...(extra.fogExtension ? [extra.fogExtension] : [])],
+    });
+  };
+
   // NOTE on cast shadows (`_shadow: true` on the sun): they render correctly under OrbitView, but
   // deck gates casting AND receiving on the same `shadowEnabled` prop, so a ground surface that
   // receives building shadows also shadow-maps itself. Over a kilometre-scale relief surface lit at ~40
@@ -642,11 +815,14 @@ export function buildTerrain(data, relief = 3, options = {}) {
     voidZ,
     /** `layers(look, {fogExtension, groundExtension})` — geometry is shared, only material changes. */
     layers: (mode = look, extra = {}) => [cliffLayer(mode, extra), layer(mode, extra)],
+    /** The realistic depth-tinted water surface, or `null`. Vector keeps map3d's flat fill. */
+    waterLayer,
+    hasWaterMesh: () => Boolean(waterMesh),
     /** Pre-bake a look's texture so a toggle does not stall on 2048x1110 of canvas work. */
     prebake: (mode) => { textureFor(mode); },
     /** Resident bytes of every baked ground texture currently held (RGBA8, no mips). */
     textureBytes: () => bakes.size * TEX_W * TH * 4,
-    stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, cliffSegments: cliffEdges.length, boundaryVerts: limit.length, boundaryBandTris: bandIndices.length / 3, fullCells: full.reduce((sum, value) => sum + value, 0), maxBoundaryStep, tex: [TEX_W, TH] },
+    stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, cliffSegments: cliffEdges.length, boundaryVerts: limit.length, boundaryBandTris: bandIndices.length / 3, fullCells: full.reduce((sum, value) => sum + value, 0), maxBoundaryStep, tex: [TEX_W, TH], water: waterStats },
   };
 }
 
