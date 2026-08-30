@@ -800,8 +800,18 @@ function target3dFor(x, z, zoom, rotationX = v3.rotationX, rotationOrbit = v3.ro
   return [-x - (A * c + B * s), -z - (-A * s + B * c), 0];
 }
 
+/**
+ * How close a fly-to lands, as METRES PER PIXEL rather than a Leaflet zoom.
+ *
+ * You asked for a thing by name; the map owes you the thing with its badge AND its name, which is
+ * src/lod.js's `full` tier — m/px ≤ 0.165. The old constant was a 2D zoom of 4.4, which is 0.196 m/px
+ * on Customs (`icon`: a badge, no label) and something different on every other map, because a
+ * Leaflet zoom carries the map's CRS scale. In metres per pixel it means the same thing on every map
+ * and in both views. A fly never zooms OUT: if you are already closer, you stay there.
+ */
+const FLY_MPP = 0.14;
 function flyTo(x, z) {
-  const z2 = Math.max(map.getZoom(), 4.4);
+  const z2 = Math.max(map.getZoom(), -Math.log2(Math.abs(mapData.transform[0]) * FLY_MPP));
   // Land the target in the middle of the *safe* rect, not the middle of the window: with a panel
   // docked on the right, the geometric centre is behind it. Both views owe the player that.
   if (is3d()) {
