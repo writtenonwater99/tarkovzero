@@ -104,12 +104,23 @@ body.view-3d .tb-floors.only-3d{display:flex}
 .map-option .map-check{color:transparent;font:700 12px/1 var(--f-mono)}
 .map-option[aria-checked=true] .map-check{color:var(--acc)}
 
-/* raid read-out: 40 MIN · 10–12 PMC · PARTISAN 30% */
-.status{display:flex;align-items:center;gap:8px;height:100%;padding:0;background:none;border:0;cursor:pointer;
+/* raid read-out: ⏱ 40 MIN | 👤 10–12 PMC | ☠ 30% PARTISAN, as icon-value chunks.
+   One sentence made the eye read; three chunks let it glance. The glyph says which fact, the mono
+   number is the fact, and the hairline says "that one's over, here's the next". */
+.status{display:flex;align-items:center;gap:9px;height:100%;padding:0;background:none;border:0;cursor:pointer;
   font:500 12px/1 var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);text-align:left}
 .status:hover{color:var(--text)}
-.status-ico{flex:none;color:var(--text-mute)}
-.status-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46ch}
+/* 46ch was cut for one running sentence; three chunks with glyphs and dividers need more room
+   before the ellipsis, or the boss chunk truncates to "30% PART" */
+.status-text{display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;max-width:64ch}
+.st-chunk{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.st-ico{width:13px;height:13px;flex:none;color:var(--text-mute);fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round;transition:color var(--t-fast)}
+.status:hover .st-ico{color:var(--text-dim)}
+.st-val{font:500 12.5px/1 var(--f-mono);letter-spacing:.01em;color:var(--text)}
+.st-unit{font:600 11px/1 var(--f-display);letter-spacing:.13em;color:var(--text-mute)}
+.st-div{width:1px;height:15px;flex:none;background:var(--line)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--text-ghost);flex-shrink:0}
 .dot[data-state=live]{background:var(--acc)}
 .dot[data-state=cached]{background:var(--warn)}
