@@ -105,7 +105,44 @@ const KEY = '#0E1211', CREAM = '#E6E3D7';
 const STENCIL = '#F2F0E7';
 const HEX = 'M12 1.6 21.1 6.8v10.4L12 22.4 2.9 17.2V6.8z';
 const SHIELD = 'M12 1.7 21.2 5v7.4c0 4.7-4.3 7.9-9.2 9.9-4.9-2-9.2-5.2-9.2-9.9V5z';
-// Corner marks. ~8 px square in the badge's bottom-left, ink plate + one near-white stroke, so a
+/*
+ * Badge layout (24-unit viewBox, plate 1.8..22.2 with a 1.5 keyline, so ~2.55..21.45 is inside).
+ *
+ * QA H3: the badge cut the top of its own letter against the plate edge and the bottom of its
+ * corner chips against the opposite one, and the dashed underground outline drew over the letter.
+ * Two causes, both about assuming a face we do not have:
+ *
+ *   - The letter was set at a font size tuned for Barlow Condensed with no width constraint. The
+ *     3D atlas rasterises these through an `<img>`, and an SVG loaded as an image cannot see the
+ *     PAGE's webfonts — it falls back to a much wider face, and "OG" / "SB" measured 15.9 of the
+ *     18.9 units the plate has inside its keyline, running into both edges. `textLength` pins the
+ *     ink instead, which also makes 2D and 3D draw the badge identically for the first time (the
+ *     document path DOES have Barlow Condensed, so the two used to be different widths).
+ *   - The corner chips were an 8.2-unit square placed at 14.1..22.3, i.e. across the plate's
+ *     rounded corner and 0.1 past its bottom edge. They are 7.2 units inside the plate now, in
+ *     their own band under the letter, which is why the letter's baseline lifts when a badge
+ *     carries one.
+ */
+const PLATE = { top: 1.8, bottom: 22.2, size: 20.4, r: 5 };
+// The plate's corners are rounded (rx 5), so the bottom of the band is NARROWER than the plate:
+// at the chips' bottom edge the plate's own left boundary is x ≈ 3.13, not 1.8. These four
+// numbers are what keeps a chip inside the corner instead of poking out of it.
+const CHIP = { size: 6.6, top: 14.0, left: 3.1, right: 14.3 };
+// The chips' art is authored against the ORIGINAL 8.2-unit box at (1.7|14.1, 14.1); this is the
+// transform that drops that box onto the band above, so the drawings themselves never move.
+const CHIP_S = CHIP.size / 8.2;
+const chipAt = (x0) => `translate(${(x0 - CHIP_S * (x0 === CHIP.left ? 1.7 : 14.1)).toFixed(3)} ${(CHIP.top - CHIP_S * 14.1).toFixed(3)}) scale(${CHIP_S.toFixed(4)})`;
+/** Letter metrics: font size, the ink width it is pinned to, and the baseline. */
+function letterBox(letter, hasChip) {
+  const n = letter.length;
+  const size = n > 2 ? 9 : n > 1 ? 11 : 13;
+  // One glyph keeps its natural width — `spacing` has nothing to adjust and `spacingAndGlyphs`
+  // would only distort it. Two and three are the ones that overran the plate.
+  const len = n > 2 ? 15.6 : n > 1 ? 12.6 : 0;
+  return { size, len, base: hasChip ? 13.2 : 16.6 };
+}
+
+// Corner marks. ~7 px square in the badge's bottom-left, ink plate + one near-white stroke, so a
 // requirement reads as "there is a condition" at icon size and as which one when you lean in.
 const REQ_MARK = {
   flare: `<path d='M5.8 15.5v5.4M3.5 16.9l4.6 2.6M8.1 16.9l-4.6 2.6' fill='none' stroke='${STENCIL}' stroke-width='1.15' stroke-linecap='round'/>`,
@@ -120,7 +157,7 @@ function badgeSvg(k0, letter, level = 'surface', tint = null, req = null) {
   const k = tint ? { ...k0, color: tint, color2: null } : k0;
   const path = k.shape === 'hex' ? HEX : k.shape === 'sh' ? SHIELD : null;
   const shape = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='${k.color}'/>`
-    : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='${k.color}'/>`
+    : k.shape === 'sq' ? `<rect x='${PLATE.top}' y='${PLATE.top}' width='${PLATE.size}' height='${PLATE.size}' rx='${PLATE.r}' fill='${k.color}'/>`
     : path ? `<path d='${path}' fill='${k.color}'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='${k.color}'/>`;
   // Shared extracts are the one two-colour badge: half PMC green, half scav orange.
@@ -128,26 +165,30 @@ function badgeSvg(k0, letter, level = 'surface', tint = null, req = null) {
   // One keyline, in ink — it is what holds the badge together over a bright satellite tile. The
   // cream inner rule that used to sit inside it was a third tone and pure noise below ~20 px.
   const key = k.shape === 'ci' ? `<circle cx='12' cy='12' r='10.4' fill='none' stroke='${KEY}' stroke-width='1.5'/>`
-    : k.shape === 'sq' ? `<rect x='1.8' y='1.8' width='20.4' height='20.4' rx='5' fill='none' stroke='${KEY}' stroke-width='1.5'/>`
+    : k.shape === 'sq' ? `<rect x='${PLATE.top}' y='${PLATE.top}' width='${PLATE.size}' height='${PLATE.size}' rx='${PLATE.r}' fill='none' stroke='${KEY}' stroke-width='1.5'/>`
     : path ? `<path d='${path}' fill='none' stroke='${KEY}' stroke-width='1.5'/>`
     : `<rect x='4' y='4' width='16' height='16' rx='3' transform='rotate(45 12 12)' fill='none' stroke='${KEY}' stroke-width='1.5'/>`;
   const ring = k.ring ? `<circle cx='12' cy='12' r='11.6' fill='none' stroke='${CREAM}' stroke-width='0.8'/>` : '';
+  const isUnder = level === 'underground';
+  const hasChip = isUnder || !!REQ_MARK[req];
+  const lb = letter ? letterBox(letter, hasChip) : null;
   const inner = letter
-    ? `<text x='12' y='16.6' text-anchor='middle' font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${letter.length > 2 ? 9 : letter.length > 1 ? 11 : 13}' fill='${STENCIL}'>${letter}</text>`
+    ? `<text x='12' y='${lb.base}' text-anchor='middle'${lb.len ? ` textLength='${lb.len}' lengthAdjust='spacingAndGlyphs'` : ''} font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${lb.size}' fill='${STENCIL}'>${letter}</text>`
     : `<g fill='${STENCIL}' transform='${GLYPH_FIT[k.shape] ?? GLYPH_FIT.sq}'>${GLYPH[k.glyph]}</g>`;
   // An underground badge must remain recognisable even when its colour is muted by
-  // the marker-opacity setting: dashed extract outline + a universal down/stairs cue.
-  const underground = level === 'underground'
-    ? `${k.shape === 'sq' ? `<rect x='2.8' y='2.8' width='18.4' height='18.4' rx='4.2' fill='none' stroke='#FFD28A' stroke-width='1.2' stroke-dasharray='2.3 1.7'/>` : ''}<g><rect x='14.1' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='#FFD28A' stroke-width='.7'/><path d='M18.2 15.8v4.5m-1.7-1.7 1.7 1.7 1.7-1.7' fill='none' stroke='#FFD28A' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/></g>`
+  // the marker-opacity setting: dashed extract outline + a universal down/stairs cue. The outline
+  // is drawn UNDER the letter — it is the plate's border, and it used to cross the glyphs.
+  const dash = isUnder && k.shape === 'sq'
+    ? `<rect x='2.8' y='2.8' width='18.4' height='18.4' rx='4.2' fill='none' stroke='#FFD28A' stroke-width='1.2' stroke-dasharray='2.3 1.7'/>` : '';
+  const underground = isUnder
+    ? `<g transform='${chipAt(CHIP.right)}'><rect x='14.1' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='#FFD28A' stroke-width='.7'/><path d='M18.2 15.8v4.5m-1.7-1.7 1.7 1.7 1.7-1.7' fill='none' stroke='#FFD28A' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/></g>`
     : '';
-  // Bottom-LEFT, because the underground cue already owns the bottom-right corner and an extract
-  // can easily be both (Smugglers' Bunker is underground and needs the Voron note).
-  // Scaled to 88% and pushed into the corner so the plate clips as little of the extract letter
-  // as possible — the letter is the badge's job, the requirement is a footnote on it.
+  // Bottom-LEFT, because the underground cue owns the bottom-right corner and an extract can
+  // easily be both (Smugglers' Bunker is underground and needs the Voron note).
   const reqMark = REQ_MARK[req]
-    ? `<g transform='translate(0.1 2.5) scale(0.88)'><rect x='1.7' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='${STENCIL}' stroke-width='.8' stroke-opacity='.8'/>${REQ_MARK[req]}</g>`
+    ? `<g transform='${chipAt(CHIP.left)}'><rect x='1.7' y='14.1' width='8.2' height='8.2' rx='2' fill='${KEY}' stroke='${STENCIL}' stroke-width='.8' stroke-opacity='.8'/>${REQ_MARK[req]}</g>`
     : '';
-  return `${shape}${split}${key}${ring}${inner}${underground}${reqMark}`;
+  return `${shape}${split}${key}${ring}${dash}${inner}${underground}${reqMark}`;
 }
 export function iconHtml(kind, size = 24, letter = null, level = 'surface', tint = null, req = null) {
   const k = KINDS[kind];
