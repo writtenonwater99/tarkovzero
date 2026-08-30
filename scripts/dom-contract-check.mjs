@@ -22,10 +22,10 @@ export const CONTRACT = {
     '#app', '#stage', '#map', '#map3d', '#toast', '#quest-card',
     '#toolbar', '#dock',
     '#panel-layers', '#panel-quests', '#panel-view', '#panel-live', '#panel-ask',
-    '[data-panel-btn=layers]', '[data-panel-btn=quests]', '[data-panel-btn=view]',
-    '[data-panel-btn=live]', '[data-panel-btn=ask]',
-    '.tb-item[data-tb=layers]', '.tb-item[data-tb=quests]', '.tb-item[data-tb=view]',
-    '.tb-item[data-tb=live]', '.tb-item[data-tb=ask]',
+    // Ask has no toolbar button in step 2 — the omnibox is its only entry point — but the panel
+    // itself stays mounted and hidden so assistant.js still finds #ask-block / #ask-toggle / #ask.
+    '[data-panel-btn=layers]', '[data-panel-btn=quests]', '[data-panel-btn=view]', '[data-panel-btn=live]',
+    '.tb-item[data-tb=layers]', '.tb-item[data-tb=quests]', '.tb-item[data-tb=view]', '.tb-item[data-tb=live]',
     '[data-pin=layers]', '[data-pin=quests]',
     '[data-close=layers]', '[data-close=quests]', '[data-close=view]', '[data-close=live]', '[data-close=ask]',
   ],
@@ -55,8 +55,14 @@ export const CONTRACT = {
     '#floors .seg-cell[data-floor=U]',
   ],
   'live panel (main.js + live.js)': ['#live-block', '#live', '#live-toggle', '#live-sum', '#live-dot'],
-  'ask panel (assistant.js)': ['#ask-block', '#ask-toggle', '#ask', '#ask-log', '#ask-chips', '#ask-form', '#ask-input'],
-  'omnibox (main.js)': ['#omnibox', '#find', '#find-kbd', '#find-results'],
+  // #ask-log / #ask-chips / #ask-form / #ask-input MOVED out of #panel-ask into #ask-card in step 2:
+  // the assistant answers over the map now, and assistant.js binds them by id wherever they sit.
+  'ask panel — hidden mount (assistant.js)': ['#panel-ask', '#ask-block', '#ask-toggle', '#ask'],
+  'assistant card (omnibox.js + assistant.js)': [
+    '#ask-card', '#ask-log', '#ask-chips', '#ask-acts', '#ask-form', '#ask-input',
+    '#ask-history', '#ask-card-x',
+  ],
+  'omnibox (omnibox.js)': ['#omnibox', '#find', '#find-kbd', '#find-results'],
   'hud (main.js)': [
     '#hud-zin', '#hud-zout', '#hud-north', '#hud-fit',
     '#coords', '#scale', '#scale .scale-cap', '#scale .scale-line i',

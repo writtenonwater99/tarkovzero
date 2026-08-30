@@ -45,8 +45,9 @@
         <!-- --------------------------------------------------- top-right chip -->
         <div class="chipbar chipbar-tr">
           <div id="view-toggle" class="seg" role="group" aria-label="2D or 3D view">
-            <button type="button" class="seg-cell on" data-view="2d" aria-pressed="true">2D</button>
-            <button type="button" class="seg-cell" data-view="3d" aria-pressed="false">3D</button>
+            <!-- 3D is the default view (founder, 2026-08-29); main.js re-marks these on boot. -->
+            <button type="button" class="seg-cell" data-view="2d" aria-pressed="false">2D</button>
+            <button type="button" class="seg-cell on" data-view="3d" aria-pressed="true">3D</button>
           </div>
         </div>
 
@@ -77,12 +78,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="2.4" class="fillN"/></svg>
               </button>
             </div>
-            <div class="tb-item" data-tb="ask">
-              <span class="tb-tip" aria-hidden="true">Ask</span>
-              <button type="button" class="tb-btn" id="tb-ask" data-panel-btn="ask" aria-expanded="false" aria-controls="panel-ask" aria-label="Ask the assistant">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H12l-4.5 3.5V16.5H4z"/><path d="M9 11h.01M12 11h.01M15 11h.01" stroke-width="2.4"/></svg>
-              </button>
-            </div>
+            <!-- Ask has no toolbar button any more: the omnibox is the way in (? prefix or A). -->
           </div>
 
           <div class="tb-group tb-hud">
@@ -205,15 +201,16 @@
                     <dt>Drag</dt><dd>Pan</dd>
                     <dt>Right-drag</dt><dd>Rotate &amp; tilt (3D)</dd>
                     <dt>Scroll</dt><dd>Zoom</dd>
-                    <dt><b>3</b></dt><dd>Toggle 2D / 3D</dd>
+                    <dt><b>3</b></dt><dd>Toggle 2D / 3D (3D is the default view)</dd>
                     <dt><b>L</b></dt><dd>Place names</dd>
                     <dt><b>F</b></dt><dd>Fit map</dd>
                     <dt><b>N</b></dt><dd>Reset north (3D)</dd>
                     <dt><b>[</b> <b>]</b></dt><dd>Step floors (3D)</dd>
                     <dt><b>Q</b></dt><dd>Quests panel</dd>
-                    <dt><b>A</b></dt><dd>Ask panel</dd>
-                    <dt><b>/</b></dt><dd>Find</dd>
-                    <dt><b>Esc</b></dt><dd>Close the open panel</dd>
+                    <dt><b>/</b></dt><dd>Omnibox: find a place or a quest</dd>
+                    <dt><b>&gt;</b></dt><dd>Omnibox: commands (<b>&gt;</b> layers scav, <b>&gt;</b> 3d, <b>&gt;</b> fit)</dd>
+                    <dt><b>A</b></dt><dd>Ask the assistant (same as typing <b>?</b>)</dd>
+                    <dt><b>Esc</b></dt><dd>Clear the omnibox, then close the open panel</dd>
                   </dl>
                 </div>
               </footer>
@@ -238,6 +235,9 @@
             </div>
           </section>
 
+          <!-- The Ask panel is gone from the toolbar: the assistant lives in the omnibox card
+               below. This shell stays mounted (and permanently hidden) because assistant.js binds
+               #ask-block / #ask-toggle / #ask and a lazily-built node is a silent no-op. -->
           <section class="panel" id="panel-ask" data-panel="ask" aria-label="Ask the assistant" hidden>
             <header class="panel-hd">
               <span class="panel-name">Ask</span>
@@ -245,24 +245,11 @@
             </header>
             <div class="panel-body">
               <section class="block block-ask" id="ask-block">
-                <button type="button" class="block-head ask-head" id="ask-toggle" aria-expanded="true" aria-controls="ask">
-                  <svg class="ask-ico" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M4 5.5h16v11H12l-4.5 3.5V16.5H4z"/><circle cx="9" cy="11" r="1" fill="currentColor"/><circle cx="12" cy="11" r="1" fill="currentColor"/><circle cx="15" cy="11" r="1" fill="currentColor"/></svg>
+                <button type="button" class="block-head ask-head" id="ask-toggle" aria-expanded="false" aria-controls="ask">
                   <span class="block-title">Assistant</span>
                   <span class="ask-sum" id="ask-sum">AI quest help</span>
-                  <kbd class="kbd kbd-inline">A</kbd>
-                  <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
-                <div id="ask">
-                  <div id="ask-log" class="ask-log" role="log" aria-live="polite" aria-label="Assistant conversation">
-                    <div class="ask-msg ask-bot ask-note"><p>Ask about a quest and I'll put its objectives on the map.</p></div>
-                  </div>
-                  <div id="ask-chips" class="ask-chips"></div>
-                  <form id="ask-form" class="find find-ask" autocomplete="off">
-                    <input id="ask-input" type="text" placeholder="Ask about a quest…" maxlength="2000" spellcheck="false" aria-label="Ask the quest assistant" />
-                    <button type="submit" class="ask-send" aria-label="Send"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12h14m-5-6 6 6-6 6"/></svg></button>
-                  </form>
-                  <div class="ask-foot">Answers by DeepSeek · locations from tarkov.dev / SPT / EFT Wiki</div>
-                </div>
+                <div id="ask"></div>
               </section>
             </div>
           </section>
@@ -270,11 +257,32 @@
         </div>
 
         <!-- ------------------------------------------------------- omnibox ---- -->
+        <!-- One field: text = lookup, `>` = command, `?` = the assistant (src/omnibox.js). The
+             card and the results list grow upward, and both are inside #omnibox so the shell's
+             safe rect shrinks with them. -->
         <div id="omnibox">
+          <section id="ask-card" class="askcard" aria-label="Assistant" hidden>
+            <header class="askcard-hd">
+              <svg class="askcard-ico" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M4 5.5h16v11H12l-4.5 3.5V16.5H4z"/><circle cx="9" cy="11" r="1" fill="currentColor"/><circle cx="12" cy="11" r="1" fill="currentColor"/><circle cx="15" cy="11" r="1" fill="currentColor"/></svg>
+              <span class="askcard-name">Assistant</span>
+              <button type="button" class="ghost askcard-hist" id="ask-history" aria-pressed="false" title="Show the last five exchanges">↑ History</button>
+              <button type="button" class="askcard-x" id="ask-card-x" aria-label="Close the assistant">✕</button>
+            </header>
+            <div id="ask-log" class="ask-log" role="log" aria-live="polite" aria-label="Assistant conversation">
+              <div class="ask-msg ask-bot ask-note"><p>Ask about a quest and I'll put its objectives on the map.</p></div>
+            </div>
+            <div id="ask-acts" class="ask-acts"></div>
+            <div id="ask-chips" class="ask-chips"></div>
+            <!-- the omnibox input sends the question; this form stays mounted for assistant.js -->
+            <form id="ask-form" class="find find-ask" autocomplete="off" hidden>
+              <input id="ask-input" type="text" maxlength="2000" spellcheck="false" aria-label="Ask the quest assistant" />
+            </form>
+            <div class="ask-foot">Answers by DeepSeek · locations from tarkov.dev / SPT / EFT Wiki</div>
+          </section>
           <div id="find-results" class="results" hidden role="listbox" aria-label="Search results"></div>
           <div class="find">
             <svg class="find-ico" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            <input id="find" type="text" placeholder="Find an extract or a place…" autocomplete="off" spellcheck="false" aria-label="Find extract or place" />
+            <input id="find" type="text" placeholder="Find a place, a quest — or ask anything…" autocomplete="off" spellcheck="false" aria-label="Search, command or question" />
             <kbd class="kbd" id="find-kbd">⌘K</kbd>
           </div>
         </div>

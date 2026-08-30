@@ -234,6 +234,52 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 /* results open upward, above the box */
 #find-results{margin:0 0 7px;max-height:min(46vh,360px);overflow:auto;box-shadow:var(--shadow-panel);
   background:var(--panel-flat);scrollbar-color:var(--line) transparent;scrollbar-width:thin}
+#find-results::-webkit-scrollbar{width:8px}
+#find-results::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+#omnibox.busy .find{opacity:.65;pointer-events:none}
+#omnibox.busy .find-ico{color:var(--acc);animation:pulse 1s ease-in-out infinite}
+
+/* row variants: > commands, quest hits, the Ask-AI row */
+.res .res-cmd{width:18px;flex:0 0 18px;text-align:center;color:var(--acc);font-size:13px;font-weight:700}
+.res-command .rn{color:var(--text);letter-spacing:.02em}
+.res-command .res-arg{font-style:normal;color:var(--acc);margin-left:6px}
+.res .res-q{display:grid;place-items:center;width:18px;height:18px;flex:0 0 18px}
+.res-ask{border-top:1px solid var(--line);background:rgba(45,190,108,.05)}
+.res-ask .rn em{font-style:normal;color:var(--text)}
+.res-ask .rn{color:var(--text-mute)}
+.res .res-ai{width:18px;height:18px;flex:0 0 18px;display:grid;place-items:center;border-radius:5px;
+  background:rgba(45,190,108,.16);border:1px solid var(--acc-dim);color:var(--acc);
+  font:700 8.5px/1 var(--f-mono);letter-spacing:.04em}
+.res-ask.act{background:rgba(45,190,108,.14)}
+
+/* ---------- assistant card (above the omnibox) ---------- */
+.askcard{margin:0 0 7px;display:flex;flex-direction:column;min-height:0;max-height:40vh;overflow:hidden;
+  background:var(--panel-flat);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel)}
+.askcard-hd{display:flex;align-items:center;gap:7px;height:28px;flex:none;padding:0 5px 0 10px;
+  border-bottom:1px solid var(--line-soft);background:var(--panel-flat-2)}
+.askcard-ico{color:var(--acc);flex:none}
+.askcard-name{font:600 var(--fs-cap)/1 var(--f-display);text-transform:uppercase;letter-spacing:var(--ls-cap);color:var(--text-dim)}
+.askcard-hist{margin-left:auto;height:19px;font-size:10px;padding:0 6px}
+.askcard-hist[aria-pressed=true]{color:var(--acc);border-color:var(--acc-dim)}
+.askcard-x{appearance:none;background:none;border:0;cursor:pointer;width:20px;height:20px;flex:none;display:grid;
+  place-items:center;border-radius:var(--r-sm);color:var(--text-ghost);font-size:11px;line-height:1}
+.askcard-x:hover{color:var(--text);background:var(--panel-hi)}
+.askcard .ask-log{max-height:none;flex:1 1 auto;min-height:0;padding:8px 10px 0}
+/* the card shows the current exchange; "↑ History" flips the last five into view */
+.askcard .ask-log > .ask-msg{display:none}
+.askcard .ask-log > .ask-msg:nth-last-child(-n+2){display:block}
+.askcard.show-history .ask-log > .ask-msg:nth-last-child(-n+10){display:block}
+.askcard .ask-chips,.askcard .ask-acts{flex:none;padding:0 10px}
+.askcard .ask-chips{margin-top:6px}
+.askcard .ask-foot{flex:none;padding:6px 10px 7px;margin-top:6px;border-top:1px solid var(--line-soft)}
+.ask-acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.ask-acts:empty{display:none}
+.ask-act{appearance:none;background:var(--panel-hi);border:1px solid var(--line);border-radius:var(--r-sm);
+  height:24px;padding:0 9px;cursor:pointer;color:var(--text);font:600 11px/1 var(--f-display);
+  letter-spacing:var(--ls-btn);text-transform:uppercase;transition:border-color var(--t-fast),color var(--t-fast)}
+.ask-act:hover{border-color:var(--acc-dim);color:var(--cream)}
+.ask-act-map{border-color:var(--warn);color:#F0B36B}     /* never automatic — a click, always */
+.ask-act-undo{margin-left:auto;color:var(--text-mute);background:transparent}
 
 /* find / results (shared with the Quests panel search) */
 .find{position:relative;display:flex;align-items:center;gap:8px;height:32px;background:var(--panel-2);
@@ -534,19 +580,9 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 
 /* ---------- ask (AI quest assistant) ---------------------------------------
    Answers come from /api/assistant (DeepSeek, grounded on quests.json); the
-   actions it returns drive window.tz. Step 2 folds this into the omnibox.
+   actions it returns drive window.tz. The bubbles below live in #ask-card,
+   above the omnibox — the old Ask panel is a hidden mount, nothing more.
 --------------------------------------------------------------------------- */
-.ask-head{width:100%;appearance:none;background:none;border:0;padding:0;cursor:pointer;color:inherit;text-align:left;margin-bottom:0}
-.ask-head .ask-ico{color:var(--text-mute);flex:0 0 auto;transition:color var(--t-fast)}
-.ask-head[aria-expanded=true] .ask-ico{color:var(--acc)}
-.ask-head .block-title{display:none}
-.ask-head .chev{color:var(--text-ghost);transition:transform var(--t-fast)}
-.ask-head[aria-expanded=true] .chev{transform:rotate(90deg)}
-.ask-sum{font:400 var(--fs-micro) var(--f-mono);color:var(--text-ghost);margin-right:auto;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.kbd-inline{margin-right:0;padding:1px 4px}
-#ask{margin-top:8px}
-
 .ask-log{max-height:min(46vh,340px);overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:6px;
   padding-right:2px;scrollbar-color:var(--line) transparent;scrollbar-width:thin}
 .ask-log::-webkit-scrollbar{width:6px}
@@ -578,12 +614,6 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
   padding:3px 9px;cursor:pointer;font:400 11px var(--f-body);color:var(--text-mute);text-align:left}
 .ask-chip:hover{border-color:var(--acc-dim);color:var(--text)}
 
-.find-ask{margin-top:8px}
-.find-ask input{font-size:12.5px}
-.ask-send{appearance:none;background:transparent;border:0;width:30px;height:100%;display:grid;place-items:center;
-  color:var(--text-mute);cursor:pointer;flex:0 0 30px}
-.ask-send:hover{color:var(--acc)}
-.find-ask.busy{opacity:.6;pointer-events:none}
 .ask-foot{margin-top:6px;font:400 9.5px/1.4 var(--f-mono);color:var(--text-ghost)}
 
 /* narrow desktops: keep the dock and omnibox from meeting */
