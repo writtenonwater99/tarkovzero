@@ -39,9 +39,11 @@ const OUT = resolve(opt('out', process.env.TZ_E2E_OUT ?? join(ROOT, '.e2e')));
 const SKIP_BUILD = flag('skip-build');
 
 // The founder's own preview lives on 4190 and other lanes hold 4181–4187; this harness owns
-// 4210–4299, takes the first free port in that band, and kills only the PID it started.
-if (FIRST_PORT < 4210 || FIRST_PORT > 4299) {
-  console.error(`✗ refusing port ${FIRST_PORT}: this harness owns 4210–4299 (4190 and 4181–4187 belong to other sessions)`);
+// 4210–4399, takes the first free port in that band, and kills only the PID it started. The band
+// runs past 4299 because parallel QA lanes are handed 43xx ports of their own.
+const PORT_LO = 4210, PORT_HI = 4399;
+if (FIRST_PORT < PORT_LO || FIRST_PORT > PORT_HI) {
+  console.error(`✗ refusing port ${FIRST_PORT}: this harness owns ${PORT_LO}–${PORT_HI} (4190 and 4181–4187 belong to other sessions)`);
   process.exit(2);
 }
 const free = (port) => new Promise((res) => {
@@ -51,8 +53,8 @@ const free = (port) => new Promise((res) => {
   s.listen(port, '127.0.0.1');
 });
 async function pickPort() {
-  for (let p = FIRST_PORT; p <= 4299; p++) if (await free(p)) return p;
-  throw new Error('no free port in 4210–4299');
+  for (let p = FIRST_PORT; p <= PORT_HI; p++) if (await free(p)) return p;
+  throw new Error(`no free port in ${FIRST_PORT}–${PORT_HI}`);
 }
 
 let PORT = FIRST_PORT;
@@ -66,6 +68,8 @@ const steps = [];
 const notes = [];
 const pageLog = [];
 let shotN = 0;
+/** renderStats().timing from step 1 — the cold-load milestones QA D1 is measured with. */
+let coldPaint = null;
 
 const fmt = (ms) => `${(ms / 1000).toFixed(2)}s`;
 
@@ -241,6 +245,20 @@ async function main() {
       assert(rs.post.fxaa === false, 'FXAA is back on in a full-screen pass — it eats every label');
       assert(rs.textureBytes.groundDetail > 0 && rs.textureBytes.gradeLut > 0,
         `no asset bytes uploaded: ${JSON.stringify(rs.textureBytes)}`);
+
+      // QA D1: the cold load used to show place names with no marker badge under them for a long
+      // window, which reads as broken rather than as loading. `badgeLagMs` is that window — the ms
+      // between the first frame with glyphs on screen and the first frame with an icon atlas
+      // behind the markers. It goes in the report so a regression is a number, not a screenshot.
+      // The badge must never be LATER than the name; a small negative (badges first) is fine.
+      coldPaint = rs.timing ?? null;
+      assert(coldPaint && Number.isFinite(coldPaint.firstBadgeMs),
+        `no cold-paint timing in renderStats(): ${JSON.stringify(coldPaint)}`);
+      assert(coldPaint.badgeLagMs != null && coldPaint.badgeLagMs <= 250,
+        `marker badges paint ${coldPaint.badgeLagMs} ms after the labels (D1 regression; timing ${JSON.stringify(coldPaint)})`);
+      notes.push(`cold paint: labels ${coldPaint.firstLabelMs} ms, badges ${coldPaint.firstBadgeMs} ms `
+        + `(lag ${coldPaint.badgeLagMs} ms), icon atlas ready ${coldPaint.atlasReadyMs} ms `
+        + `(${coldPaint.atlasWaitMs} ms of it after the terrain prep), prep ${JSON.stringify(coldPaint.prepMs)}`);
 
       // The zoom FLOOR, driven through the app's own control rather than through camera.js.
       // camera.js's minFitZoom() shipped once with no call site: the unit tests were green and
@@ -498,7 +516,7 @@ async function main() {
     console.log(`    total ${fmt(total)} (${steps.filter((s) => s.status === 'PASS').length}/${steps.length} passed)`);
     for (const n of notes) console.log(`    note: ${n}`);
     writeFileSync(join(OUT, 'report.json'), JSON.stringify({
-      url: URL, port: PORT, at: new Date().toISOString(), totalMs: total, steps, notes, pageLog,
+      url: URL, port: PORT, at: new Date().toISOString(), totalMs: total, coldPaint, steps, notes, pageLog,
     }, null, 2));
     console.log(`    report ${join(OUT, 'report.json')}`);
   }
