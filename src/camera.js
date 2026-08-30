@@ -20,18 +20,29 @@ export const CAM = {
 };
 
 /**
- * The 2D↔3D zoom offset, as a function of tilt.
+ * The 2D↔3D zoom offset for ONE map: `zoom2d = zoom3d + zoomOffsetFor(mapData)`.
  *
- * The ground plane foreshortens as the camera drops — at 32° it covers ~60% of the screen height
- * it covered at 62° — so a fixed offset would frame the oblique view as a small island in a lot of
- * void. Folding sin(tilt) into the mapping keeps the map covering the viewport at any angle, and
- * keeps 2D→3D→2D round-trips at the same scale because both directions use this one function.
- * 62° was the old fixed tilt, so it still returns the historical 2.06.
+ * Both views state a scale in metres per pixel, and that is the only thing the two zoom numbers
+ * have to agree about:
+ *
+ *   2D (Leaflet + the tarkov.dev CRS):  m/px = 1 / (|transform[0]| · 2^zoom2d)
+ *   3D (deck's OrbitView):              m/px = 1 / 2^zoom3d
+ *
+ * so the offset is `-log2(|transform[0]|)` and nothing else — 2.065 on Customs, 1.340 on Reserve,
+ * 2.431 on Woods. The old constant 2.06 was Customs' scale with the map key filed off, which put
+ * every other map's mirror at the wrong scale, and it carried a `sin(tilt)` term that traded ~0.74
+ * of a zoom for the foreshortened ground plane. That term was there to frame the FIRST 3D open,
+ * which fitZoom() below now does properly; all it did afterwards was make the HUD's own m/px jump
+ * 1.67x on Customs the moment you toggled views, and push Woods' mirrored zoom under Leaflet's
+ * `minZoom: 2`, where it clamped and corrupted the camera on the way back.
+ *
+ * Tilt is deliberately NOT an argument: a scale is a scale at any tilt.
  */
 const rad = (d) => (d * Math.PI) / 180;
-export function zoomOffset(rotationX = CAM.rotationX) {
-  const tilt = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, Number(rotationX) || CAM.rotationX));
-  return 2.06 - Math.log2(Math.sin(rad(62)) / Math.sin(rad(tilt)));
+export const DEFAULT_ZOOM_OFFSET = 2.06;
+export function zoomOffsetFor(mapData) {
+  const scale = Math.abs(Number(mapData?.transform?.[0]));
+  return Number.isFinite(scale) && scale > 0 ? -Math.log2(scale) : DEFAULT_ZOOM_OFFSET;
 }
 
 /**

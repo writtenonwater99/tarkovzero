@@ -13,9 +13,9 @@ import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
 import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
-// zOff() is the 2D↔3D zoom relation; it depends on the camera tilt, so both directions ask for it
-// rather than hard-coding the old 2.06 that only held at 62°.
-import { CAM, zoomOffset as zOff, fitZoom } from './camera.js';
+// zOff() is the 2D↔3D zoom relation. It is this MAP's CRS scale and nothing else, so the two views
+// always report the same metres per pixel — see the note in camera.js.
+import { CAM, zoomOffsetFor, fitZoom } from './camera.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -50,6 +50,8 @@ function safeOffset() {
 
 const requestedMap = new URLSearchParams(location.search).get('map');
 const mapData = selectMap(requestedMap);
+/** zoom2d = zoom3d + zOff(), for THIS map. Both directions and the permalink go through it. */
+const zOff = () => zoomOffsetFor(mapData);
 const mapLabels = LABELS[mapData.key] ?? [];
 const RAID = mapData.raid;
 document.title = `TarkovZero — ${mapData.name}`;
@@ -261,12 +263,13 @@ const hash = location.hash.slice(1).split('/').map(Number);
 const viewParam = new URLSearchParams(location.search).get('view');
 const savedView = localStorage.getItem('view');
 const starts3d = viewParam ? viewParam !== '2d' : savedView ? savedView === '3d' : true;
-let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
-  ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - zOff(CAM.rotationX) }
+const arrivedByHash = hash.length === 3 && hash.every(Number.isFinite);
+let initial3dHash = starts3d && arrivedByHash
+  ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - zOff() }
   : null;
 let autoFit = true; // refit on window resize only until the user navigates (or arrived via a permalink)
 let framed3d = false; // the 3D camera has been framed once; later 2D->3D switches hand the view over
-if (hash.length === 3 && hash.every(Number.isFinite)) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
+if (arrivedByHash) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
 else fit();
 // Remember what "fit" means while the 2D map is measurable — #map is display:none in 3D.
 let fitState = { center: map.getCenter(), zoom: map.getZoom() };
@@ -282,7 +285,7 @@ window.addEventListener('resize', () => { if (autoFit) { fit(); if (is3d()) fit3
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
 map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
 map.on('moveend', () => {
-  if (is3d()) history.replaceState(null, '', `#${((v3.zoom ?? 0) + zOff(v3.rotationX)).toFixed(2)}/${(-v3.target[0]).toFixed(1)}/${(-v3.target[1]).toFixed(1)}`);
+  if (is3d()) history.replaceState(null, '', `#${((v3.zoom ?? 0) + zOff()).toFixed(2)}/${(-v3.target[0]).toFixed(1)}/${(-v3.target[1]).toFixed(1)}`);
   else { const c = map.getCenter(); history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`); }
 });
 map.on('move zoom', updateHud);
@@ -797,7 +800,7 @@ function flyTo(x, z) {
   // Land the target in the middle of the *safe* rect, not the middle of the window: with a panel
   // docked on the right, the geometric centre is behind it. Both views owe the player that.
   if (is3d()) {
-    const zoom = z2 - zOff(v3.rotationX);
+    const zoom = z2 - zOff();
     set3d({ target: target3dFor(x, z, zoom), zoom });
   } else {
     const centre = map.unproject(map.project([z, x], z2).subtract(safeOffset()), z2);
@@ -1006,8 +1009,27 @@ function set3d(patch) {
     // Before deck exists there is no terrain to clear — the flat horizon floor is all there is.
     v3.rotationX = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, v3.rotationX ?? CAM.rotationX));
   }
-  map.setView([-v3.target[1], -v3.target[0]], v3.zoom + zOff(v3.rotationX), { animate: false });
+  mirror2d();
   updateHud();
+}
+/**
+ * Push the 3D camera onto the hidden 2D map, and remember what actually landed there.
+ *
+ * Leaflet clamps to its own [minZoom, maxZoom], so the zoom we ask for is not always the zoom it
+ * keeps: on Woods the 3D fit mirrors to 2.52 but a fully zoomed-out 3D view mirrors to 0.43 against
+ * a `minZoom` of 2. Reading that clamped number back on the next 2D→3D switch is what used to move
+ * the camera for free. `mirror` is the receipt: while the 2D zoom is still exactly the one this
+ * function left there, the hand-over restores the 3D zoom instead of re-deriving it.
+ */
+let mirror = null;
+function mirror2d() {
+  map.setView([-v3.target[1], -v3.target[0]], (v3.zoom ?? 0) + zOff(), { animate: false });
+  mirror = { zoom2d: map.getZoom(), zoom3d: v3.zoom ?? 0 };
+}
+/** The 3D zoom a 2D→3D switch should land on, undoing any clamp the mirror suffered. */
+function handoffZoom() {
+  const z2 = map.getZoom();
+  return mirror && Math.abs(z2 - mirror.zoom2d) < 1e-9 ? mirror.zoom3d : z2 - zOff();
 }
 const viewBtns = $$('#view-toggle .seg-cell');
 async function setView(mode) {
@@ -1027,7 +1049,7 @@ async function setView(mode) {
         onQuestClick: (obj) => quests.onDeckClick(obj),
         onViewChange: (v) => {
           v3 = { ...v3, ...v };
-          map.setView([-v3.target[1], -v3.target[0]], v3.zoom + zOff(v3.rotationX), { animate: false });
+          mirror2d();
           updateHud();
         },
       });
@@ -1037,11 +1059,14 @@ async function setView(mode) {
     }
     if (initial3dHash) { const direct = initial3dHash; initial3dHash = null; set3d(direct); }
     // The FIRST time 3D opens without a permalink it is a fit, not a hand-off: the frame is computed
-    // in 3D (fit3d) instead of inheriting a 2D cover zoom through zOff(), which carries Customs' CRS
-    // scale and fits by width. Every later 2D->3D switch picks the 2D view up where it was left, so
-    // a 3D -> 2D -> 3D round trip still lands on the same camera.
-    else if (!framed3d && autoFit) fit3d();
-    else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - zOff(v3.rotationX) }); }
+    // in 3D (fit3d), which fits the map's *projected* footprint at the tilt we are about to use —
+    // a 2D cover zoom fits by width and frames a near-square map like Woods against the camera.
+    // The gate is the permalink, NOT `autoFit`: `autoFit` is cleared by any 2D pan or wheel, so
+    // gating on it meant one pan in 2D silently bought back the pre-fix framing (QA: Woods opened
+    // at 1.160 instead of 0.085). Every later 2D→3D switch picks the 2D view up where it was left,
+    // so a 3D → 2D → 3D round trip still lands on the same camera.
+    else if (!framed3d && !arrivedByHash) fit3d();
+    else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: handoffZoom() }); }
     framed3d = true;
     view3d.refresh();
   } else {

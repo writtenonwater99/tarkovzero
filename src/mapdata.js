@@ -1,5 +1,7 @@
-// In dev, assets go through the Vite dev-server cache (vite.config.js); in production straight to the tarkov.dev CDN.
-const ASSETS = import.meta.env.DEV ? '/tiles' : 'https://assets.tarkov.dev';
+// In dev, assets go through the Vite dev-server cache (vite.config.js); in production straight to the
+// tarkov.dev CDN. `?.` because this registry is the map geometry the Node tests read too, and outside
+// a bundler `import.meta.env` is undefined — same pattern as src/assistant.js.
+const ASSETS = import.meta.env?.DEV ? '/tiles' : 'https://assets.tarkov.dev';
 
 // Interactive map configs mirrored from tarkov.dev's maps.json (author: Shebuka / the-hideout).
 // bounds and svgBounds stay in tarkov.dev's [[x,z],[x,z]] order; crs.js swaps them for Leaflet.
