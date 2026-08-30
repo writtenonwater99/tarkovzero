@@ -1030,7 +1030,23 @@ function togglePop(pop, trigger) {
   const open = pop.hidden;
   closePops();
   pop.hidden = !open;
+  if (open) clampPop(pop);
   trigger?.setAttribute('aria-expanded', String(open));
+}
+/**
+ * Keep a popover on screen. Both popovers hang off panels in the top-anchored dock, so a tall one
+ * (the 13-row Controls list) can run past the bottom of a short window — it slides up by exactly
+ * the overshoot, and never past the top edge, which is the failure this replaced.
+ */
+function clampPop(pop) {
+  pop.style.transform = '';
+  const M = 10;
+  const r = pop.getBoundingClientRect();
+  if (!r.height) return;
+  let dy = 0;
+  if (r.bottom > window.innerHeight - M) dy = window.innerHeight - M - r.bottom;
+  if (r.top + dy < M) dy = M - r.top;
+  if (dy) pop.style.transform = `translateY(${Math.round(dy)}px)`;
 }
 function closePops() {
   for (const p of $$('.pop')) p.hidden = true;
