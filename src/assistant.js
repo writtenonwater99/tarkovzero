@@ -80,9 +80,16 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
     return div;
   }
 
+  /**
+   * A starter chip is a question the player asked, so it takes the same road a typed question does:
+   * through the omnibox, which is the only place the camera + selection snapshot behind the Restore
+   * chip is taken. Calling `ask` directly would fly the map with no way back.
+   */
+  const askFromUser = (text) => (panel?.ask ? panel.ask(text) : ask(text));
+
   function renderChips() {
     el.chips.innerHTML = CHIPS.map((c) => `<button type="button" class="ask-chip">${esc(c)}</button>`).join('');
-    for (const b of el.chips.querySelectorAll('.ask-chip')) b.onclick = () => ask(b.textContent);
+    for (const b of el.chips.querySelectorAll('.ask-chip')) b.onclick = () => askFromUser(b.textContent);
   }
 
   /* -------------------------------------------------------------- actions -- */
@@ -219,7 +226,7 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
   function init() {
     renderChips();
     el.toggle.onclick = () => setOpen(!panelOpen());
-    el.form.onsubmit = (e) => { e.preventDefault(); ask(el.input.value); };
+    el.form.onsubmit = (e) => { e.preventDefault(); askFromUser(el.input.value); };
     // ?ask=1 opens the card; ?ask=<question> opens it and asks — a shareable "show me this" link.
     // The card is an overlay over the map, so unlike the old panel it does not reopen on load.
     const param = new URLSearchParams(location.search).get('ask');

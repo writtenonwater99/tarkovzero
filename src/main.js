@@ -1150,10 +1150,16 @@ assistant = createAssistant({
   mapKey: mapData.key,
   tz: window.tz,
   store,
-  panel: { setOpen: (on) => omni?.setCardOpen(on), isOpen: () => !!omni?.isCardOpen() },
+  // The card IS the omnibox's card: it can only be shown by something that exists, which is why
+  // init() is called below the omnibox and not here. `ask` routes the card's own starter chips back
+  // through the omnibox, so a chip-initiated answer captures the undo the Restore chip needs.
+  panel: {
+    setOpen: (on) => omni?.setCardOpen(on),
+    isOpen: () => !!omni?.isCardOpen(),
+    ask: (text) => omni?.ask(text),
+  },
   onAnswer: (x) => omni?.onAnswer(x),
 });
-assistant.init();
 
 /* --------------------------------------------------------- omnibox ------- */
 // One field for three jobs: lookup (no prefix), commands (`>`), the assistant (`?`). It owns the
@@ -1202,6 +1208,11 @@ omni = createOmnibox({
     mapKeys: () => Object.keys(MAPS),
   },
 });
+
+// Only now: everything init() does — ?ask=1, and replaying the transcript after an assistant map
+// switch — is written into the omnibox's card, and setOpen() on a card that does not exist yet is a
+// silent no-op that leaves the content in a permanently hidden element.
+assistant.init();
 
 booted = true;
 updateHud();
