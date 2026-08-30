@@ -192,6 +192,16 @@
                     <button type="button" class="seg-cell" data-look="vector" aria-pressed="false">Vector</button>
                   </div>
                 </div>
+                <!-- Real-only shaders, one switch each, so the GPU cost of every R1 addition can be
+                     read off window.tz.renderStats() on its own. Hidden under Vector, which has none. -->
+                <div class="line only-3d" id="fx-row" hidden>
+                  <span class="line-lab" title="Real-only effects. Fog = distance haze on world layers. Grade = the post pass (FXAA, LUT, vignette, grain). Detail = the triplanar ground material. Vector runs none of them.">Effects</span>
+                  <div class="seg" role="group" aria-label="Realistic effects">
+                    <button type="button" class="seg-cell on" data-fx="fog" aria-pressed="true">Fog</button>
+                    <button type="button" class="seg-cell on" data-fx="grade" aria-pressed="true">Grade</button>
+                    <button type="button" class="seg-cell on" data-fx="detail" aria-pressed="true">Detail</button>
+                  </div>
+                </div>
                 <div class="line only-3d">
                   <span class="line-lab" title="Vertical scale of terrain only; buildings and trees keep their real height">Relief</span>
                   <div id="relief-toggle" class="seg" role="group" aria-label="Terrain relief">

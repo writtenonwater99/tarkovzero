@@ -8,6 +8,7 @@
     "build": "vite build --configLoader runner",
     "preview": "vite preview --configLoader runner",
     "check:dom": "node scripts/dom-contract-check.mjs",
+    "check:fx": "node scripts/render-fx-check.mjs",
     "test:omnibox": "node scripts/omnibox-routing-test.mjs",
     "test:lod": "node scripts/lod-test.mjs",
     "test:active-quests": "node scripts/active-quests-test.mjs",

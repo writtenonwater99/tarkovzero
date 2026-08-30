@@ -163,6 +163,13 @@ function voidGrid(limit, m = 60, outward = 12, across = 6) {
   }
   return quads;
 }
+/** The same plane as one rectangle: what the backdrop is when no fog needs a gradient across it. */
+function voidQuad(limit, m = 60) {
+  const xs = limit.map((p) => p[0]), zs = limit.map((p) => p[1]);
+  const x0 = Math.min(...xs) - m, x1 = Math.max(...xs) + m;
+  const z0 = Math.min(...zs) - m, z1 = Math.max(...zs) + m;
+  return [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+}
 const OVERLAY = { depthCompare: 'always', depthWriteEnabled: false };
 // One instance, reused: a fresh LayerExtension every render() makes deck rebuild the shader.
 const dashExt = new PathStyleExtension({ dash: true });
@@ -717,11 +724,23 @@ export async function createView3d(container, mapData, src) {
    * cannot introduce the self-intersections that clipping against a 2,636-point CONCAVE ring
    * would. It runs on `data` before anything reads it, so terrain.js's realistic water MESH and
    * map3d's vector water POLYGON are clipped by the same pass and neither file learns about it.
+   *
+   * Snapping the VERTICES is not enough, and the first version of this pass stopped there. The
+   * limit is a 2,636-point concave ring, and an EDGE between two points that are both on or inside
+   * it can still cut the corner across a bay — which is exactly what the SVG river does once its
+   * outlying vertices have been pulled onto the boundary. Measured on Woods after the vertex snap:
+   * unprojecting the drawn vector water back onto the ground plane still put 119 of 4,145 sampled
+   * water pixels outside `data.limit`, the worst 30 m out, with black void under them (QA M2, the
+   * east river's "solid blue band past the terrain edge"). So an edge whose midpoint lands outside
+   * is split and the split point snapped too, up to SPLIT_PASSES times — each pass halves the worst
+   * excursion, and a bay the ring itself resolves in 2 m needs four of them at most. It stays a
+   * snap: no new topology, no boolean, and an edge that never leaves the ring is never touched.
    */
   const clippedVerts = (() => {
     const ring = data.limit;
     if (!Array.isArray(ring) || ring.length < 3) return 0;
     const INSET_M = 0.4;
+    const SPLIT_PASSES = 4;
     const snap = (pt) => {
       if (!Array.isArray(pt) || pt.length < 2 || inPolyXZ(pt, ring)) return pt;
       let bx = pt[0], bz = pt[1], bd = Infinity;
@@ -738,12 +757,33 @@ export async function createView3d(container, mapData, src) {
       return [bx + (vx / vl) * INSET_M, bz + (vz / vl) * INSET_M];
     };
     let moved = 0;
-    const clipRing = (poly) => (Array.isArray(poly) ? poly.map((p) => { const q = snap(p); if (q !== p) moved++; return q; }) : poly);
+    /** @param {boolean} closed a water ring wraps back to its first point; a bridge path does not. */
+    const clipRing = (poly, closed) => {
+      if (!Array.isArray(poly)) return poly;
+      let out = poly.map((p) => { const q = snap(p); if (q !== p) moved++; return q; });
+      for (let pass = 0; pass < SPLIT_PASSES && out.length >= 2; pass++) {
+        const next = [];
+        let split = false;
+        const last = closed ? out.length : out.length - 1;
+        for (let i = 0; i < out.length; i++) {
+          const a = out[i];
+          next.push(a);
+          if (i >= last) continue;
+          const b = out[(i + 1) % out.length];
+          const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          if (inPolyXZ(mid, ring)) continue;
+          next.push(snap(mid)); moved++; split = true;
+        }
+        out = next;
+        if (!split) break;
+      }
+      return out;
+    };
     for (const w of data.water || []) {
-      w.poly = clipRing(w.poly);
-      if (Array.isArray(w.holes)) w.holes = w.holes.map(clipRing);
+      w.poly = clipRing(w.poly, true);
+      if (Array.isArray(w.holes)) w.holes = w.holes.map((h) => clipRing(h, true));
     }
-    for (const b of data.bridges || []) b.path = clipRing(b.path);
+    for (const b of data.bridges || []) b.path = clipRing(b.path, false);
     return moved;
   })();
 
@@ -761,6 +801,31 @@ export async function createView3d(container, mapData, src) {
    * ids, picking colours, LOD placement, floor filtering and the camera are invariant across it.
    */
   let look = applyLook(src.look ?? DEFAULT_LOOK);
+  /* --- the atmosphere switches -----------------------------------------------------------
+   * Founder, 2026-08-30: "items like fog take performance without adding fidelity."
+   *
+   * Every R1/R1.5 addition that costs a shader — the world fog extension, the post grade pass, the
+   * triplanar ground detail — is REALISTIC-ONLY and individually switchable, so the cost of each
+   * can be measured on the real GPU instead of argued about. `fxOn()` is the single gate; there is
+   * no other place in this module that decides whether an effect is armed.
+   *
+   *   ?fx=            (absent)  every realistic effect on — the shipping realistic look
+   *   ?fx=none                  realistic with no fog, no grade, no ground detail
+   *   ?fx=fog,detail            only those two
+   *
+   * Vector is short-circuited before the switches are even read: it is the pre-R1 layer set and the
+   * pre-R1 per-layer cost, and nothing here can opt it back into a shader.
+   */
+  const FX_KEYS = ['fog', 'grade', 'detail'];
+  let fx = (() => {
+    const raw = src.fx;
+    if (raw == null || raw === '') return Object.fromEntries(FX_KEYS.map((k) => [k, true]));
+    const want = new Set(String(raw).toLowerCase().split(',').map((s) => s.trim()).filter(Boolean));
+    if (want.has('all')) return Object.fromEntries(FX_KEYS.map((k) => [k, true]));
+    return Object.fromEntries(FX_KEYS.map((k) => [k, want.has(k)]));
+  })();
+  /** Is one realistic-only effect armed right now? The only reader of `look` for effect cost. */
+  const fxOn = (key) => look === 'realistic' && fx[key] !== false;
   const mapDiagonal = limitDiagonal(data.limit);
   // The fog's height term is metres above the ground, so it needs the map's own ground level (real
   // game metres, relief applied in the shader) and the relief the camera is drawing at. Read live,
@@ -770,7 +835,7 @@ export async function createView3d(container, mapData, src) {
   // ONE extension instance per look. Creating a fresh one on every render() would make deck see
   // `extensionsChanged` every frame and recompile every world shader — the extensions are cached
   // here and only replaced by setLook().
-  let fogExt = fogExtensionFor(look, mapDiagonal, fogScene);
+  let fogExt = fxOn('fog') ? fogExtensionFor(look, mapDiagonal, fogScene) : null;
   // The realistic water material. Like the fog extension it is cached per look, never rebuilt per
   // render, or deck sees `extensionsChanged` every frame and recompiles the water shader.
   let waterExt = waterExtensionFor(look);
@@ -1021,8 +1086,12 @@ export async function createView3d(container, mapData, src) {
        *
        * It is a GRID of quads, not one rectangle — see voidGrid(): a four-vertex plane cannot
        * carry a per-vertex fog gradient at all.
+       *
+       * ...which is exactly why VECTOR gets one rectangle. With no fog there is no gradient to
+       * carry, and 961 quads of flat colour is 959 quads of nothing: vector is back to the pre-R1
+       * single plane, tessellated on demand only when the fog that needs it is armed.
        */
-      new SolidPolygonLayer({ id: 'void', shadowEnabled: false, data: voidGrid(data.limit, voidMargin(look, mapDiagonal)), getPolygon: (d) => d.map(([x, z]) => P([x, z], VOID_Z)), getFillColor: C.oob, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+      new SolidPolygonLayer({ id: 'void', shadowEnabled: false, data: fogExt ? voidGrid(data.limit, voidMargin(look, mapDiagonal)) : [voidQuad(data.limit, voidMargin(look, mapDiagonal))], getPolygon: (d) => d.map(([x, z]) => P([x, z], VOID_Z)), getFillColor: C.oob, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     ] : []),
     ...(terrain
       ? terrain.layers(look, { fogExtension: fogExt, groundExtension: groundExt })
@@ -1548,17 +1617,26 @@ export async function createView3d(container, mapData, src) {
    */
   const viewFor = (mode) => new OrbitView({ orbitAxis: 'Z', fovy: CAM.fovy, clear: true, clearColor: backgroundFor(mode) });
   let assetsReady = false, assetsError = null;
+  /*
+   * The R1 asset set (Ground106 albedo/normal/ORM + the 16^3 grade LUT) is REALISTIC-ONLY cargo:
+   * a fetch, three decodes and a few MB of resident texture that vector has no shader for. A
+   * vector-first session therefore never loads it, and the first flip into realistic (or the first
+   * FX toggle that needs it) is what pays. `armDevice` holds the luma device the upload needs.
+   */
+  let armDevice = null, armStarted = false;
+  const armAssetsOnce = () => { if (!armStarted && armDevice) { armStarted = true; armRenderAssets(armDevice); } };
   container.style.background = backgroundCss(look);
   const deck = new Deck({
     parent: container, views: viewFor(look), controller: { dragMode: 'pan', inertia: 300 }, // left-drag pans, right/shift-drag rotates
     initialViewState: viewState, effects: sceneEffects(), getCursor: ({ isHovering }) => (isHovering ? 'pointer' : 'grab'),
     // The Stage 1 assets need a luma device to upload against; this is the first moment one exists.
-    onDeviceInitialized: (device) => { armRenderAssets(device); },
+    onDeviceInitialized: (device) => { armDevice = device; if (fxOn('grade') || fxOn('detail')) armAssetsOnce(); },
     // QA D1's measurement, not its fix: the first frame in which a place NAME actually has glyphs
     // on screen, and the first in which a marker BADGE does. The gap between the two is the window
     // where the map showed names floating over nothing. Both stop being written after the first
     // hit, so this costs one array scan per frame until then and nothing afterwards.
     onAfterRender: () => {
+      if (markersReadyMs == null && src.markers().length) markersReadyMs = Math.round(performance.now() - bootMs);
       if (firstLabelMs != null && firstBadgeMs != null) return;
       const layers = deck.props.layers || [];
       // TextLayer is a CompositeLayer: its models live on the sublayer, so `getModels()` on the
@@ -1640,6 +1718,33 @@ export async function createView3d(container, mapData, src) {
     render();
   }
   /**
+   * Re-arm every look-dependent shader from `look` + `fx`. The ONLY writer of the four effect
+   * handles — `fxOn()` decides, and vector can therefore never end up holding one.
+   */
+  function armEffects() {
+    fogExt = fxOn('fog') ? fogExtensionFor(look, mapDiagonal, fogScene) : null;
+    waterExt = waterExtensionFor(look);
+    groundExt = fxOn('detail') ? groundDetailExtensionFor(look, groundTextures) : null;
+    gradeEffect = fxOn('grade') ? gradeEffectFor(look, lutTexture) : null;
+  }
+  /**
+   * Turn one realistic effect on or off live, so its cost can be read off `renderStats()` on the
+   * real GPU. Vector ignores it: `fxOn()` short-circuits on the look.
+   */
+  function setFx(next) {
+    const before = JSON.stringify(fx);
+    fx = { ...fx, ...Object.fromEntries(FX_KEYS.filter((k) => k in (next || {})).map((k) => [k, Boolean(next[k])])) };
+    if (JSON.stringify(fx) === before) return { ...fx };
+    // The grade needs its LUT and the detail its textures; a first flip into either while vector was
+    // showing has to fetch them, exactly as a look flip does.
+    if ((fx.grade || fx.detail) && look === 'realistic' && !assetsReady && !assetsError) armAssetsOnce();
+    armEffects();
+    rebuildMaterialLayers();
+    deck.setProps({ effects: sceneEffects() });
+    render();
+    return { ...fx };
+  }
+  /**
    * Flip the render style. `realistic` <-> `vector`, material state only.
    *
    * What changes: the colour table, the terrain's baked texture and material, the light, the fog
@@ -1654,10 +1759,9 @@ export async function createView3d(container, mapData, src) {
     const wanted = resolveLook(next);
     if (wanted === look) return look;
     look = applyLook(wanted);
-    fogExt = fogExtensionFor(look, mapDiagonal, fogScene);
-    waterExt = waterExtensionFor(look);
-    groundExt = groundDetailExtensionFor(look, groundTextures);
-    gradeEffect = gradeEffectFor(look, lutTexture);
+    // Vector never pays for the R1 assets. Flipping INTO realistic is what fetches them.
+    if (look === 'realistic' && !assetsReady && !assetsError) armAssetsOnce();
+    armEffects();
     lighting = sceneLighting();
     terrain?.prebake(look);
     tintBuildings(data.buildings);
@@ -1679,8 +1783,7 @@ export async function createView3d(container, mapData, src) {
       renderAssets = await loadRenderAssets();
       groundTextures = createGroundTextures(device, renderAssets.images);
       lutTexture = createLutTexture(device, renderAssets.images);
-      groundExt = groundDetailExtensionFor(look, groundTextures);
-      gradeEffect = gradeEffectFor(look, lutTexture);
+      armEffects();
       deck.setProps({ effects: sceneEffects() });
       base = staticLayers();
       render();
@@ -1743,6 +1846,14 @@ export async function createView3d(container, mapData, src) {
       layers: layers.length,
       drawLayers: m.drawLayersCount ?? null,
       models,
+      /**
+       * What this frame is actually paying for. `effects` counts what deck holds (the scene light
+       * is always one of them); `postEffects` is the R1 additions alone, and must be 0 in vector.
+       * `fx` is the live switch state — see the `?fx=` gate above.
+       */
+      effects: (deck.props.effects || []).length,
+      postEffects: gradeEffect ? 1 : 0,
+      fx: { ...fx, fogArmed: Boolean(fogExt), gradeArmed: Boolean(gradeEffect), detailArmed: Boolean(groundExt), waterMesh: Boolean(waterExt) },
       fps: m.fps ?? null,
       gpuFrameMs: m.gpuTimePerFrame || null,   // null = the adapter has no timer query
       cpuFrameMs: m.cpuTimePerFrame || null,
@@ -1788,6 +1899,8 @@ export async function createView3d(container, mapData, src) {
     setRelief,
     setLook,
     getLook: () => look,
+    setFx,
+    getFx: () => ({ ...fx }),
     renderStats,
     diagnostics,
     // sidebar hover/click can pin an extract's name in 3D (name+kind key, or null to clear)

@@ -198,11 +198,51 @@ function setLook(next, persist = true) {
     b.setAttribute('aria-pressed', String(active));
   });
   if (persist) store.set('look', look);
+  // The FX row only means anything under Real — vector holds no effects to switch.
+  paintFx();
   view3d?.setLook(look);
   return look;
 }
 $$('#look-toggle .seg-cell').forEach((b) => (b.onclick = () => setLook(b.dataset.look)));
+
+/* --------------------------------------------------------------- realistic FX --- */
+/**
+ * The three R1/R1.5 shaders, individually switchable — founder 2026-08-30: "items like fog take
+ * performance without adding fidelity", so each one has to be measurable on its own on the real
+ * GPU. Realistic-only by construction (map3d's `fxOn()` gates on the look), so the row is hidden
+ * whenever Vector is showing: vector has no effects to switch.
+ *
+ *   ?fx=none · ?fx=fog · ?fx=fog,grade · ?fx=all (default)
+ */
+const FX_KEYS = ['fog', 'grade', 'detail'];
+const fxQuery = new URLSearchParams(location.search).get('fx');
+const fx = (() => {
+  const stored = store.get('fx', null);
+  const raw = fxQuery ?? (stored == null ? null : String(stored));
+  if (raw == null || raw === '' || raw === 'all') return Object.fromEntries(FX_KEYS.map((k) => [k, true]));
+  const want = new Set(raw.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean));
+  return Object.fromEntries(FX_KEYS.map((k) => [k, want.has(k)]));
+})();
+const fxParam = () => (FX_KEYS.every((k) => fx[k]) ? 'all' : FX_KEYS.filter((k) => fx[k]).join(',') || 'none');
+function paintFx() {
+  $$('#fx-row .seg-cell').forEach((b) => {
+    const on = Boolean(fx[b.dataset.fx]);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  const row = $('#fx-row');
+  if (row) row.hidden = look !== 'realistic';
+}
+function setFx(key, persist = true) {
+  if (!FX_KEYS.includes(key)) return;
+  fx[key] = !fx[key];
+  if (persist) store.set('fx', fxParam());
+  paintFx();
+  view3d?.setFx({ [key]: fx[key] });
+}
+$$('#fx-row .seg-cell').forEach((b) => (b.onclick = () => setFx(b.dataset.fx)));
 setLook(look, false);
+paintFx();
 
 /* ------------------------------------------------------------- footprint -- */
 /**
@@ -1213,6 +1253,7 @@ async function setView(mode) {
       view3d = await createView3d($('#map3d'), mapData, {
         relief,
         look,
+        fx: fxParam(),
         markers: () => markerPoints.filter((m) => visibleKinds().has(m.kind)),
         labels: labelSet,
         players: () => [...live.players.values()],
@@ -1395,6 +1436,11 @@ window.tz = {
    * The flip is material-only — geometry, feature ids, picking, floors and the camera do not move.
    */
   renderStyle: (mode) => (mode === undefined ? look : setLook(mode)),
+  /**
+   * The realistic-only effect switches. `renderFx()` reports, `renderFx('fog')` toggles one —
+   * the measurement hook behind the View panel's Effects row.
+   */
+  renderFx: (key) => { if (key !== undefined) setFx(key); return { ...fx }; },
   /** QA hook: draw count, GPU/CPU frame time and texture bytes for the live 3D frame. */
   renderStats: () => view3d?.renderStats?.() ?? null,
   /** The part of the stage nothing floats over — {left, top, right, bottom} in stage CSS px. */
