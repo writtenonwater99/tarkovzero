@@ -148,17 +148,33 @@ body.view-3d .tb-floors.only-3d{display:flex}
   display:flex;flex-direction:column;align-items:flex-end;gap:12px;pointer-events:none}
 #toolbar > *{pointer-events:auto}
 .tb-group{display:flex;flex-direction:column;align-items:flex-end;gap:var(--tb-gap)}
-.tb-item{display:flex;align-items:center;gap:7px}
+/* Label + icon are ONE control, not two.
+   A detached text pill beside a button reads as a second button — "is the word clickable?"
+   (Gemini, 2026-08-29). The label is now welded to the button's left edge: same surface, same
+   height, same shadow, one continuous outline with a hairline seam, and the button drops its left
+   radius while the label is showing. `--tbl` is the switch: 1 = the button stands alone (label
+   hidden), 0 = the two are one pill. The visibility rules below set it in the same places they
+   set the label's opacity, so the geometry can never disagree with what is on screen. */
+.tb-item{display:flex;align-items:stretch;gap:0;--tbl:1}
 .tb-tip{opacity:0;transform:translateX(6px);transition:opacity var(--t-fast),transform var(--t-fast);
-  pointer-events:none;white-space:nowrap;height:22px;display:flex;align-items:center;padding:0 8px;
+  pointer-events:none;white-space:nowrap;height:var(--tb-btn);display:flex;align-items:center;padding:0 11px;
   background:var(--glass);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
-  border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:var(--shadow-hud);
+  border:1px solid var(--line);border-right:0;border-radius:var(--r-md) 0 0 var(--r-md);box-shadow:var(--shadow-hud);
   font:600 11px/1 var(--f-display);letter-spacing:var(--ls-cap);text-transform:uppercase;color:var(--text-dim)}
 .tb-item:hover .tb-tip,.tb-item:focus-within .tb-tip,.tb-item.unseen .tb-tip{opacity:1;transform:none}
+.tb-item:hover,.tb-item:focus-within,.tb-item.unseen{--tbl:0}
 .tb-item.unseen .tb-tip{color:var(--text)}
 /* a docked panel owns that strip — the standing labels stand down, hover still answers */
 body.dock-open .tb-item.unseen .tb-tip{opacity:0;transform:translateX(6px)}
+body.dock-open .tb-item.unseen{--tbl:1}
 body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-tip{opacity:1;transform:none}
+body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
+/* the seam: while the pill is joined the button squares off its left corners and the shared border
+   between the two halves becomes the divider inside one control */
+.tb-item .tb-btn{border-top-left-radius:calc(var(--r-md) * var(--tbl));
+  border-bottom-left-radius:calc(var(--r-md) * var(--tbl))}
+/* the label rides the button's own state, so an open panel lights the whole pill, not half of it */
+.tb-item:has(.tb-btn.on) .tb-tip{border-color:var(--acc-dim);background:rgba(30,138,78,.22);color:var(--cream)}
 .tb-btn{width:var(--tb-btn);height:var(--tb-btn);display:grid;place-items:center;flex:none;
   background:var(--glass);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
   border:1px solid var(--line);border-radius:var(--r-md);cursor:pointer;color:var(--text-dim);
@@ -179,13 +195,21 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .tb-hud .tb-btn:first-child{border-radius:var(--r-md) var(--r-md) 0 0}
 .tb-hud .tb-btn:last-child{border-radius:0 0 var(--r-md) var(--r-md)}
 
-/* floors: a vertical stack under the HUD buttons, 3D only */
-.tb-floors{align-items:flex-end;flex-direction:column;gap:4px}
-.tb-floors-cap{width:var(--tb-btn);text-align:center;font:600 9px/1 var(--f-mono);letter-spacing:.14em;color:var(--text-ghost)}
-.seg-v{flex-direction:column;height:auto;width:var(--tb-btn);box-shadow:var(--shadow-hud)}
-.seg-v .seg-cell{height:24px;padding:0;border-right:0;border-bottom:1px solid var(--line-soft);font-size:11px}
-.seg-v .seg-cell:last-child{border-bottom:0}
-.seg-v .seg-cell.on{box-shadow:inset 2px 0 0 var(--acc)}
+/* floors: a vertical stack under the HUD buttons, 3D only.
+   Bare letters floating on the map edge read as a rendering glitch, not a control (Gemini,
+   2026-08-29), so the whole stack lives in one translucent pill on the same surface as the toolbar
+   buttons — and it stays exactly --tb-btn wide so its right edge lines up with them. The active
+   floor is a filled cream cell: a 2 px accent rule is a hint, and which floor you are on is a fact. */
+.tb-floors{align-items:stretch;flex-direction:column;gap:5px;width:var(--tb-btn);padding:6px 5px 5px;
+  background:var(--glass);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-hud)}
+.tb-floors-cap{width:100%;text-align:center;font:600 9px/1 var(--f-mono);letter-spacing:.14em;color:var(--text-mute)}
+.seg-v{flex-direction:column;height:auto;width:100%;background:transparent;backdrop-filter:none;
+  -webkit-backdrop-filter:none;border:0;border-radius:0;box-shadow:none;gap:1px}
+.seg-v .seg-cell{height:22px;padding:0;border:0;border-radius:var(--r-sm);font-size:11px;color:var(--text-mute)}
+.seg-v .seg-cell:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.seg-v .seg-cell.on{background:var(--cream);color:var(--bg-app);font-weight:700;box-shadow:none}
+.seg-v .seg-cell.on:hover{background:var(--cream);color:var(--bg-app)}
 
 /* ---------- dock column ---------- */
 #dock{position:absolute;right:calc(var(--edge) + var(--tb-btn) + 10px);top:var(--dock-top);bottom:var(--dock-bottom);
@@ -246,6 +270,14 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 #omnibox .find input{font-size:14px}
 .find-ico{flex:none;color:var(--text-mute)}
 #omnibox .find:focus-within .find-ico{color:var(--acc)}
+/* Focus: a lift, not a rule. The shared .find keeps its 1 px green keyline inside a panel, where a
+   field sits on a flat surface among other fields; the omnibox floats over the map at the centre
+   of the screen, and a hyper-saturated 1 px outline there is the loudest thing in the UI for the
+   least information (Gemini, 2026-08-29). Same signal, delivered as an inner glow and a background
+   lift in --focus at low alpha — the box gets brighter, not outlined. */
+#omnibox .find:focus-within{border-color:rgba(127,227,176,.22);
+  background:linear-gradient(rgba(127,227,176,.055),rgba(127,227,176,.055)),var(--panel-flat);
+  box-shadow:inset 0 0 0 1px rgba(127,227,176,.10),inset 0 2px 16px rgba(127,227,176,.10),var(--shadow-panel)}
 /* results open upward, above the box */
 #find-results{margin:0 0 7px;max-height:min(46vh,360px);overflow:auto;box-shadow:var(--shadow-panel);
   background:var(--panel-flat);scrollbar-color:var(--line) transparent;scrollbar-width:thin}
@@ -305,14 +337,16 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .find input::placeholder{color:var(--text-ghost)}
 .find:focus-within{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(45,190,108,.14)}
 .find:focus-within .kbd{opacity:0}
-.kbd{margin-right:8px;font:400 10px var(--f-mono);color:var(--text-ghost);border:1px solid var(--line);border-radius:3px;padding:2px 4px;transition:opacity var(--t-fast)}
+/* a shortcut hint nobody can read is not an affordance: --text-mute, and a keyline that shows */
+.kbd{margin-right:8px;font:400 10px var(--f-mono);color:var(--text-mute);border:1px solid var(--line);border-radius:3px;padding:2px 4px;transition:opacity var(--t-fast)}
 .results{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel-2);overflow:hidden}
 #quest-results{margin-top:6px}
 .res{display:flex;align-items:center;gap:7px;height:30px;padding:0 9px;cursor:pointer;border-bottom:1px solid var(--line-soft)}
 .res:last-child{border-bottom:0}
 .res:hover,.res.act{background:var(--panel-hi)}
 .res .rn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px var(--f-body);color:var(--text)}
-.res .rk{font:400 10.5px var(--f-mono);color:var(--text-ghost);text-transform:lowercase}
+/* result kind + the "enter" hint on the Ask row — both were black-on-black at --text-ghost */
+.res .rk{font:400 10.5px var(--f-mono);color:var(--text-mute);text-transform:lowercase}
 .res .badge{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;
   font:700 10px/1 var(--f-display);color:var(--cream);background:var(--panel-hi);border:1px solid var(--line)}
 .res-empty{padding:8px 9px;font:400 12.5px var(--f-body);color:var(--text-ghost)}
@@ -522,7 +556,7 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .qsel-head b{font:600 13px/1.15 var(--f-display);letter-spacing:.03em;text-transform:uppercase;color:var(--text);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 .qdot{width:8px;height:8px;border-radius:2px;flex:0 0 8px;transform:rotate(45deg)}
-.qmeta{font:400 10px var(--f-mono);color:var(--text-ghost);white-space:nowrap}
+.qmeta{font:400 10px var(--f-mono);color:var(--text-mute);white-space:nowrap}
 .qx{appearance:none;background:none;border:0;color:var(--text-ghost);cursor:pointer;font-size:12px;
   width:18px;height:18px;border-radius:var(--r-sm);flex:0 0 18px}
 .qx:hover{color:var(--danger);background:var(--panel-hi)}
@@ -537,10 +571,13 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .qobj input:checked + .qbox::after{content:'';width:6px;height:3px;border-left:1.6px solid var(--cream);
   border-bottom:1.6px solid var(--cream);transform:rotate(-45deg) translate(.5px,-1px)}
 .qobj input:focus-visible + .qbox{outline:2px solid var(--focus);outline-offset:1px}
-.qobj .qtext{font:400 12px/1.4 var(--f-body);color:var(--text-dim);min-width:0;overflow-wrap:anywhere}
-.qobj .qtext i{color:var(--text-ghost);font-style:normal}
-.qobj.done .qtext{color:var(--text-ghost);text-decoration:line-through}
-.qobj.qoff{opacity:.62}
+/* An objective is the thing you are reading the panel FOR — it was set one step below body text
+   and failed contrast against the panel (Gemini, 2026-08-29). Body text, and its parenthetical
+   ("(optional)") one step down instead of two. */
+.qobj .qtext{font:400 12px/1.45 var(--f-body);color:var(--text);min-width:0;overflow-wrap:anywhere}
+.qobj .qtext i{color:var(--text-mute);font-style:normal}
+.qobj.done .qtext{color:var(--text-mute);text-decoration:line-through}
+.qobj.qoff{opacity:.75}
 .qnum{display:inline-grid;place-items:center;min-width:18px;height:16px;padding:0 4px;border-radius:3px;
   font:700 10.5px/1 var(--f-mono);color:#0E1211;flex:0 0 auto}
 .qnum-off{background:var(--panel-hi);color:var(--text-ghost)}
@@ -627,7 +664,8 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .ask-did{margin-top:6px;padding-top:5px;border-top:1px solid var(--line-soft);
   font:400 10.5px var(--f-mono);color:var(--acc);letter-spacing:.02em}
 .ask-dots{display:inline-flex;gap:4px;padding:2px 0}
-.ask-dots i{width:5px;height:5px;border-radius:50%;background:var(--text-ghost);animation:askdot 1s infinite ease-in-out}
+/* the dots are the only sign the assistant is alive — at --text-ghost they vanished into the card */
+.ask-dots i{width:5px;height:5px;border-radius:50%;background:var(--text-dim);animation:askdot 1s infinite ease-in-out}
 .ask-dots i:nth-child(2){animation-delay:.15s}
 .ask-dots i:nth-child(3){animation-delay:.3s}
 @keyframes askdot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
@@ -637,7 +675,8 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
   padding:3px 9px;cursor:pointer;font:400 11px var(--f-body);color:var(--text-mute);text-align:left}
 .ask-chip:hover{border-color:var(--acc-dim);color:var(--text)}
 
-.ask-foot{margin-top:6px;font:400 9.5px/1.4 var(--f-mono);color:var(--text-ghost)}
+/* the source credit is a promise about where the answer came from — it has to be readable */
+.ask-foot{margin-top:6px;font:400 9.5px/1.4 var(--f-mono);color:var(--text-mute)}
 
 /* narrow desktops: keep the dock and omnibox from meeting */
 @media (max-width:1100px){
