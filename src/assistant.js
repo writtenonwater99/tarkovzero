@@ -169,7 +169,10 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
           // What the GAME says the player is on (companion -> relay -> live.js -> quests.js), as
           // tarkov.dev task ids. Empty without a companion; the server treats it as optional, so an
           // older deployment simply ignores the field. See docs/plans/ACTIVE-QUESTS.md.
-          activeQuests: tz.quests.active?.() ?? [],
+          // Called without `?.` on purpose: window.tz.quests.active() always exists, and optional
+          // chaining would turn a rename into a permanently empty field — the feature dying quietly
+          // with no error and nothing failing.
+          activeQuests: tz.quests.active(),
           history: history.slice(0, -1).slice(-MAX_TURNS),
         }),
       });
