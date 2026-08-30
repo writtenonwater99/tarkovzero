@@ -18,3 +18,4 @@ scripts/data/tasks/
 # Versioned tarkov.dev JSON responses are reproducible local build caches. The
 # small URL/date/hash manifest beside this directory is committed.
 scripts/data/tarkov-dev-exact/
+scratch/
