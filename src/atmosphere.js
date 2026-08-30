@@ -237,6 +237,8 @@ const MATERIALS_BY_LOOK = {
     rock: lit(0.27, { diffuse: 0.85, shininess: 1 }),
     boulder: lit(0.3, { diffuse: 0.78, shininess: 3 }),
     player: { ambient: 0.55, diffuse: 0.7, shininess: 20, specularColor: [80, 80, 80] },
+    foliage: lit(0.31, { diffuse: 0.76, shininess: 1, specularColor: [6, 8, 6] }),
+    trunk: lit(0.22, { diffuse: 0.8, shininess: 0 }),
   },
   vector: {
     building: { ambient: 0.7, diffuse: 0.55, shininess: 12, specularColor: [30, 30, 30] },
@@ -245,6 +247,8 @@ const MATERIALS_BY_LOOK = {
     prop: { ambient: 0.75, diffuse: 0.5 },
     rock: { ambient: 0.36, diffuse: 0.9, shininess: 1 },
     boulder: { ambient: 0.42, diffuse: 0.82, shininess: 3 },
+    foliage: { ambient: 0.72, diffuse: 0.58, shininess: 1, specularColor: [8, 10, 7] },
+    trunk: { ambient: 0.48, diffuse: 0.72, shininess: 0 },
     player: { ambient: 0.55, diffuse: 0.7, shininess: 20, specularColor: [80, 80, 80] },
   },
 };
@@ -255,8 +259,8 @@ export function surfaceMaterial(look, kind) {
 }
 
 /** Foliage/trunk materials, used by src/trees.js (vector keeps its own pre-Stage-1 numbers). */
-export const foliageMaterialFor = (look) => lit(0.31, { diffuse: 0.76, shininess: 1, specularColor: [6, 8, 6] });
-export const trunkMaterialFor = (look) => lit(0.22, { diffuse: 0.8, shininess: 0 });
+export const foliageMaterialFor = (look) => surfaceMaterial(look, 'foliage');
+export const trunkMaterialFor = (look) => surfaceMaterial(look, 'trunk');
 
 /** The material the terrain mesh is lit with. Realistic lets the scene key carry the relief. */
 export function terrainMaterialFor(look) {
