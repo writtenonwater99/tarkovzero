@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   MAX_IDS, normalizeIds, parseQuestsMessage, mergeQuestSets,
-  activeRows, doneRows, autoSelectSlugs, sinceLabel, sinceCaveat,
+  activeRows, doneRows, autoSelectSlugs, sinceLabel, sinceCaveat, objectiveRows,
 } from '../src/active-quests.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -167,6 +167,50 @@ console.log('against public/data/quests.json');
   // of the game: at 500, against 517 quests, finished quests were dropped and came back as active.
   eq('the whole quest list fits under the id cap in one call', normalizeIds(all.map((q) => q.id)).length, all.length);
   check('the cap leaves headroom over the quest count', MAX_IDS >= all.length * 1.5, `${MAX_IDS} vs ${all.length}`);
+}
+
+/* ---------------------------------------------- objectiveRows folds the filler (QA M4) */
+console.log('objective checklist rows');
+{
+  const row = (id, text, extra = {}) => ({ id, text, optional: false, zones: [], ...extra });
+  const plain = [row('a', 'Locate and mark the first special TerraGroup cargo', { zones: [{ map: 'customs' }] })];
+  same('a single real objective is one row of its own', objectiveRows(plain).map((r) => r.text), [plain[0].text]);
+  eq('and it carries exactly its own id', objectiveRows(plain)[0].ids.length, 1);
+
+  const filler = [...plain, ...Array.from({ length: 7 }, (_, i) =>
+    row(`f${i}`, `Locate the objective on Customs (${i + 1} of 7)`, { optional: true }))];
+  const folded = objectiveRows(filler);
+  eq('seven synthesised "(n of 7)" rows collapse into one', folded.length, 2);
+  eq('the folded row keeps the sentence without the counter', folded[1].text, 'Locate the objective on Customs');
+  eq('and reports how many it stands for', folded[1].count, 7);
+  eq('and carries every id, so ticking it ticks all seven', folded[1].ids.length, 7);
+  check('the real objective is untouched', folded[0].count === 1 && folded[0].text === plain[0].text);
+
+  // The rule is the build contract, not "text looks similar": a numbered row that has a ZONE is a
+  // pin with its own badge and a fly-to, and folding it would hide a place on the map.
+  const zoned = Array.from({ length: 3 }, (_, i) =>
+    row(`z${i}`, `Stash the case (${i + 1} of 3)`, { zones: [{ map: 'customs' }] }));
+  eq('numbered rows WITH zones are never folded', objectiveRows(zoned).length, 3);
+  // Different sentences, different totals, and a change of `optional` all break a run.
+  const mixed = [row('m0', 'Locate the objective on Customs (1 of 2)', { optional: true }),
+    row('m1', 'Locate the objective on Customs (2 of 2)', { optional: true }),
+    row('m2', 'Locate the objective on Woods (1 of 2)', { optional: true }),
+    row('m3', 'Locate the objective on Woods (2 of 2)')];
+  same('a run stops at the sentence and at the optional flag', objectiveRows(mixed).map((r) => r.count), [2, 1, 1]);
+  eq('nothing at all is still nothing', objectiveRows([]).length, 0);
+  eq('and a missing objective list does not throw', objectiveRows(undefined).length, 0);
+
+  // Against the shipped file: no row may be lost or duplicated by the fold, on any quest.
+  const all = JSON.parse(readFileSync(join(root, 'public/data/quests.json'), 'utf8'));
+  let folds = 0, ok = true;
+  for (const q of all) {
+    const rows = objectiveRows(q.objectives ?? []);
+    const ids = rows.flatMap((r) => r.ids);
+    if (ids.length !== (q.objectives ?? []).length || new Set(ids).size !== ids.length) { ok = false; break; }
+    folds += rows.filter((r) => r.count > 1).length;
+  }
+  check('every objective in quests.json appears in exactly one row', ok);
+  check('and the shipped data really does contain folded runs', folds > 0, `${folds} folded runs`);
 }
 
 /* -------------------------------------------------------------- summary */

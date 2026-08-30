@@ -187,3 +187,58 @@ export function sinceCaveat(since) {
   const label = sinceLabel(since);
   return label ? `Read from game logs since ${label} — quests started before then may be missing.` : '';
 }
+
+/* ------------------------------------------------------- objective checklist rows -- */
+/**
+ * The `(n of m)` counter build-quests.mjs appends to identical SYNTHESISED objective lines.
+ *
+ * When SPT's locale has no English for an objective, scripts/build-quests.mjs assembles one from
+ * the structured fields (`synthText()`), and a quest whose objectives all synthesise to the same
+ * sentence gets its rows numbered so they are at least distinguishable. That is a build-time
+ * artifact and it says so, but the panel rendered every one of them: Abandoned Cargo shows one real
+ * objective — "Locate and mark the first special TerraGroup cargo with an MS2000 Marker on Customs"
+ * — followed by seven rows reading "Locate the objective on Customs (n of 7) (optional)", each with
+ * no zone, so eight of eleven visible rows in the "My quests" frame were filler (QA M4).
+ */
+const NUMBERED = /^(.*\S)\s+\((\d+) of (\d+)\)$/;
+
+/**
+ * Fold those runs into one row each.
+ *
+ * The rule is the build contract, not a string guess: consecutive objectives that carry the SAME
+ * sentence under a `(n of m)` counter, agree on `optional`, and have NO zones — so not one of them
+ * can ever be a pin, a number or a fly-to — are one thing said m times. They collapse to a single
+ * row carrying every id, so ticking it ticks all of them and nothing is hidden from the player.
+ *
+ * Everything else passes through untouched, one row per objective, in order. An objective with a
+ * zone is never folded even if its text is numbered: those rows carry map badges that differ.
+ *
+ * @param {Array<{id:string, text?:string, optional?:boolean, zones?:Array}>} objectives
+ * @returns {Array<{ids:string[], text:string, optional:boolean, count:number, objective:object}>}
+ */
+export function objectiveRows(objectives) {
+  const list = Array.isArray(objectives) ? objectives : [];
+  const foldable = (o) => {
+    const m = NUMBERED.exec(String(o?.text ?? ''));
+    return m && !(o.zones ?? []).length ? { stem: m[1], total: Number(m[3]) } : null;
+  };
+  const rows = [];
+  for (let i = 0; i < list.length; i++) {
+    const head = foldable(list[i]);
+    let j = i;
+    if (head) {
+      while (j + 1 < list.length) {
+        const next = foldable(list[j + 1]);
+        if (!next || next.stem !== head.stem || next.total !== head.total
+          || Boolean(list[j + 1].optional) !== Boolean(list[i].optional)) break;
+        j++;
+      }
+    }
+    const run = list.slice(i, j + 1);
+    rows.push(run.length > 1
+      ? { ids: run.map((o) => o.id), text: head.stem, optional: Boolean(list[i].optional), count: run.length, objective: list[i] }
+      : { ids: [list[i].id], text: String(list[i].text ?? ''), optional: Boolean(list[i].optional), count: 1, objective: list[i] });
+    i = j;
+  }
+  return rows;
+}
