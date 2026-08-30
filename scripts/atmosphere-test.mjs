@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import {
   fogExtensionFor, gradeEffectFor, referenceGroundMeters, backgroundFor, fogParams, postFor,
   groundDetailExtensionFor, waterExtensionFor, surfaceMaterial, materialTint, shadowRings,
-  voidMargin, skirtRamp,
+  voidMargin, skirtRamp, DEFAULT_LOOK,
 } from '../src/atmosphere.js';
 import { FOG, POST, PALETTE, WATER, BACKDROP, FOG_DESATURATION, FOG_COOL_AMOUNT, specularFor, rgb255 } from '../src/render-style.js';
 
@@ -211,7 +211,10 @@ test('the contact rings widen, and the backdrop margin outruns the fog', () => {
   const rings = shadowRings('realistic');
   assert.equal(rings.length, 3);
   assert.ok(rings[0] < rings[1] && rings[1] < rings[2], 'the penumbra must widen outward');
-  assert.deepEqual(shadowRings('nonsense'), rings, 'an unknown look falls back to the default');
+  // An unknown look resolves to DEFAULT_LOOK — which is `vector` since the founder call of
+  // 2026-08-30, not `realistic`. Asserting it against the realistic rings hard-coded the old
+  // default and turned a look flip into a red suite.
+  assert.deepEqual(shadowRings('nonsense'), shadowRings(DEFAULT_LOOK), 'an unknown look falls back to the default');
   // 60 m of apron could never reach the fog's far end; the haze has to.
   const customsDiagonal = 1223;
   assert.ok(voidMargin('realistic', customsDiagonal) > fogParams('realistic', customsDiagonal).targetMeters);
