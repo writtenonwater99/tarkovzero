@@ -11,6 +11,9 @@ import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
 import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
+// zOff() is the 2D↔3D zoom relation; it depends on the camera tilt, so both directions ask for it
+// rather than hard-coding the old 2.06 that only held at 62°.
+import { CAM, zoomOffset as zOff } from './camera.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -24,7 +27,7 @@ function is3d() { return document.body.classList.contains('view-3d'); }
 let view3d = null;
 let assistant = null;   // the AI card; created once window.tz exists (bottom of this file)
 let omni = null;        // the omnibox controller; created last — it drives everything above
-let v3 = { target: [0, 0, 0], zoom: 0, rotationX: 50, rotationOrbit: 0, minZoom: -3, maxZoom: 8 };
+let v3 = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -3, maxZoom: 8 };
 
 /* ------------------------------------------------------------------ shell -- */
 // Floating HUD: right icon toolbar, docked panels, pin model, safe-viewport rect. Everything the
@@ -201,7 +204,7 @@ const viewParam = new URLSearchParams(location.search).get('view');
 const savedView = localStorage.getItem('view');
 const starts3d = viewParam ? viewParam !== '2d' : savedView ? savedView === '3d' : true;
 let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
-  ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - 2.06 }
+  ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - zOff(CAM.rotationX) }
   : null;
 let autoFit = true; // refit on window resize only until the user navigates (or arrived via a permalink)
 if (hash.length === 3 && hash.every(Number.isFinite)) { map.setView([hash[2], hash[1]], hash[0], { animate: false }); autoFit = false; }
@@ -217,7 +220,7 @@ window.addEventListener('resize', () => { if (autoFit) fit(); rememberFit(); upd
 for (const ev of ['mousedown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { autoFit = false; }, { passive: true });
 map.on('zoomstart', (e) => { if (e.originalEvent) autoFit = false; });
 map.on('moveend', () => {
-  if (is3d()) history.replaceState(null, '', `#${((v3.zoom ?? 0) + 2.06).toFixed(2)}/${(-v3.target[0]).toFixed(1)}/${(-v3.target[1]).toFixed(1)}`);
+  if (is3d()) history.replaceState(null, '', `#${((v3.zoom ?? 0) + zOff(v3.rotationX)).toFixed(2)}/${(-v3.target[0]).toFixed(1)}/${(-v3.target[1]).toFixed(1)}`);
   else { const c = map.getCenter(); history.replaceState(null, '', `#${map.getZoom().toFixed(2)}/${c.lng.toFixed(1)}/${c.lat.toFixed(1)}`); }
 });
 map.on('move zoom', updateHud);
@@ -554,7 +557,7 @@ function matchLayers(query) {
 
 function flyTo(x, z) {
   const z2 = Math.max(map.getZoom(), 4.4);
-  if (is3d()) set3d({ target: [-x, -z, 0], zoom: z2 - 2.06 });
+  if (is3d()) set3d({ target: [-x, -z, 0], zoom: z2 - zOff(v3.rotationX) });
   else {
     // Land the target in the middle of the *safe* rect, not the middle of the window: with a panel
     // docked on the right, the geometric centre is behind it.
@@ -639,11 +642,13 @@ ui.render();
 const visibleKinds = () => new Set([...$$('#layers input[data-kind]')].filter((i) => i.checked && i.dataset.kind).map((i) => i.dataset.kind));
 function set3d(patch) {
   v3 = { ...v3, ...patch };
+  // Programmatic flies obey the same floor as a right-drag: the eye stays above the ground plane.
+  v3.rotationX = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, v3.rotationX ?? CAM.rotationX));
   if (view3d) {
     try { view3d.setView({ target: v3.target, zoom: v3.zoom }); } catch {}
     try { view3d.deck?.setProps({ viewState: { ...v3 } }); } catch {}
   }
-  map.setView([-v3.target[1], -v3.target[0]], v3.zoom + 2.06, { animate: false });
+  map.setView([-v3.target[1], -v3.target[0]], v3.zoom + zOff(v3.rotationX), { animate: false });
   updateHud();
 }
 const viewBtns = $$('#view-toggle .seg-cell');
@@ -663,7 +668,7 @@ async function setView(mode) {
         onQuestClick: (obj) => quests.onDeckClick(obj),
         onViewChange: (v) => {
           v3 = { ...v3, ...v };
-          map.setView([-v3.target[1], -v3.target[0]], v3.zoom + 2.06, { animate: false });
+          map.setView([-v3.target[1], -v3.target[0]], v3.zoom + zOff(v3.rotationX), { animate: false });
           updateHud();
         },
       });
@@ -672,7 +677,7 @@ async function setView(mode) {
       try { view3d.deck?.setProps({ onHover: (i) => { const c = i?.coordinate; Array.isArray(c) ? showCoords(-c[0], -c[1]) : idleCoords(); } }); } catch {}
     }
     if (initial3dHash) { const direct = initial3dHash; initial3dHash = null; set3d(direct); }
-    else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - 2.06 }); }
+    else { const c = map.getCenter(); set3d({ target: [-c.lng, -c.lat, 0], zoom: map.getZoom() - zOff(v3.rotationX) }); }
     view3d.refresh();
   } else {
     // #map was display:none while 3D drove it — remeasure before Leaflet draws again.
@@ -712,14 +717,15 @@ function zoomBy(d) {
 $('#hud-zin').onclick = () => zoomBy(0.5);
 $('#hud-zout').onclick = () => zoomBy(-0.5);
 $('#hud-fit').onclick = () => {
-  if (is3d()) set3d({ target: [-fitState.center.lng, -fitState.center.lat, 0], zoom: fitState.zoom - 2.06 });
+  // Fit in 3D also restores the default framing: cover zoom, oblique tilt, the diorama's near corner.
+  if (is3d()) set3d({ target: [-fitState.center.lng, -fitState.center.lat, 0], zoom: fitState.zoom - zOff(CAM.rotationX), rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
   else { autoFit = true; fit(); }
 };
 $('#hud-north').onclick = () => {
-  const t0 = performance.now(), o0 = v3.rotationOrbit ?? 0, x0 = v3.rotationX ?? 50;
+  const t0 = performance.now(), o0 = v3.rotationOrbit ?? 0, x0 = v3.rotationX ?? CAM.rotationX;
   const step = (t) => {
     const k = Math.min(1, (t - t0) / 400), e = 1 - Math.pow(1 - k, 3);
-    set3d({ rotationOrbit: o0 * (1 - e), rotationX: x0 + (62 - x0) * e });
+    set3d({ rotationOrbit: o0 + (CAM.rotationOrbit - o0) * e, rotationX: x0 + (CAM.rotationX - x0) * e });
     if (k < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);

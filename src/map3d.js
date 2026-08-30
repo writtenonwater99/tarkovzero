@@ -8,6 +8,7 @@ import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
 import { makeWaterHeightCapper, waterLevelAt, waterRings, waterSurfaceAt } from './water.js';
+import { CAM, clampTilt, groundFloorAngle } from './camera.js';
 
 const C = {
   // Brighter field palette: sage/olive ground, warm mineral structures, restrained accents.
@@ -548,7 +549,15 @@ export async function createView3d(container, mapData, src) {
   const soldierAtlas = await buildAtlas(COLORS.map((c) => [c, soldierDataUrl(c, 64)]), 64);
   for (const m of Object.values(arrowAtlas.mapping)) m.anchorY = 32;
   const chipAtlas = { canvas: iconAtlas.canvas, mapping: Object.fromEntries(Object.entries(iconAtlas.mapping).map(([k, m]) => [k, { ...m, anchorY: 32 }])) };
-  let viewState = { target: [0, 0, 0], zoom: 0, rotationX: 62, rotationOrbit: 0, minZoom: -2, maxZoom: 5 };
+  let viewState = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -2, maxZoom: 5 };
+  /** The tilt floor for a view state: never under the horizon, never inside the hill it orbits. */
+  const tiltFloor = (v) => groundFloorAngle({
+    zoom: v.zoom ?? 0,
+    ground: (() => { try { return H(-(v.target?.[0] ?? 0), -(v.target?.[1] ?? 0)) ?? 0; } catch { return 0; } })(),
+    targetZ: v.target?.[2] ?? 0,
+    viewportHeight: container.clientHeight || 800,
+  });
+  const clampView = (v) => clampTilt(v, tiltFloor(v));
   let hover = null;
   let fontsReady = false, initialised = false;
   // atlas is keyed on fontFamily: use the fallback stack until the webfont is confirmed, then switch (forces a fresh atlas)
@@ -765,9 +774,18 @@ export async function createView3d(container, mapData, src) {
   container.addEventListener('contextmenu', (e) => e.preventDefault()); // right-drag = rotate/tilt, no browser menu
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pinnedExtract) { pinnedExtract = null; render(); } }); // Esc unpins an extract name
   const deck = new Deck({
-    parent: container, views: new OrbitView({ orbitAxis: 'Z', fovy: 22 }), controller: { dragMode: 'pan', inertia: 300 }, // left-drag pans, right/shift-drag rotates
+    parent: container, views: new OrbitView({ orbitAxis: 'Z', fovy: CAM.fovy }), controller: { dragMode: 'pan', inertia: 300 }, // left-drag pans, right/shift-drag rotates
     initialViewState: viewState, effects: [lighting], getCursor: ({ isHovering }) => (isHovering ? 'pointer' : 'grab'),
-    onViewStateChange: ({ viewState: v }) => { const zoomed = Math.abs((v.zoom ?? 0) - (viewState.zoom ?? 0)) > 0.05; viewState = v; deck.setProps({ viewState: v }); if (zoomed) render(); src.onViewChange?.(v); },
+    // Every camera change goes through the tilt clamp — right-drag can lower the eye to the ground
+    // plane and no further, and closing in on a hill raises the floor instead of burying the camera.
+    onViewStateChange: ({ viewState: raw }) => {
+      const v = clampView(raw);
+      const zoomed = Math.abs((v.zoom ?? 0) - (viewState.zoom ?? 0)) > 0.05;
+      viewState = v;
+      deck.setProps({ viewState: v });
+      if (zoomed) render();
+      src.onViewChange?.(v);
+    },
     getTooltip: ({ object, layer }) => {
       if (!object) return null;
       if (layer.id === 'buildings') return { html: `<b>${esc(object.place ?? object.name ?? object.kind)}</b><br>${object.floors} floor${object.floors > 1 ? 's' : ''} · ${object.height} m`, className: 'deck-tooltip' };
@@ -832,7 +850,7 @@ export async function createView3d(container, mapData, src) {
     diagnostics,
     // sidebar hover/click can pin an extract's name in 3D (name+kind key, or null to clear)
     focusExtract: (name, kind) => { pinnedExtract = name ? (name + '|' + (kind ?? 'extract-pmc')) : null; render(); },
-    setView: ({ target, zoom }) => { viewState = { ...viewState, target, zoom }; deck.setProps({ viewState }); },
+    setView: ({ target, zoom }) => { viewState = clampView({ ...viewState, target, zoom }); deck.setProps({ viewState }); },
     // game coords -> screen pixels, so main.js can pin an HTML card to a 3D point
     project: (x, z, dy = 0.7) => { try { const vp = deck.getViewports?.()[0]; return vp ? vp.project(Pg([x, z], dy)) : null; } catch { return null; } },
     deck,

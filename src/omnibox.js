@@ -215,7 +215,7 @@ export function createOmnibox(deps = {}) {
         (row.sub ? `<em class="res-arg">${esc(row.sub)}</em>` : '') +
         `</span><span class="rk">${esc(row.hint ?? '')}</span></div>`;
     }
-    return `<div class="res${on ? ' act' : ''}" data-i="${i}" role="option" aria-selected="${on}">` +
+    return `<div class="res res-${esc(row.item?.kind ?? 'hit')}${on ? ' act' : ''}" data-i="${i}" role="option" aria-selected="${on}">` +
       `${chipFor(row)}<span class="rn">${esc(row.label)}</span><span class="rk">${esc(row.sub ?? '')}</span></div>`;
   }
   function render() {
