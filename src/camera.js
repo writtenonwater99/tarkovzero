@@ -34,6 +34,50 @@ export function zoomOffset(rotationX = CAM.rotationX) {
   return 2.06 - Math.log2(Math.sin(rad(62)) / Math.sin(rad(tilt)));
 }
 
+/**
+ * How big a `width x depth` patch of ground is ON SCREEN, in px per world unit, at a given tilt and
+ * orbit. The ground is turned through `rotationOrbit` and squashed by sin(rotationX) — the same
+ * mapping main.js's target3dFor() inverts — so a corner at world offset (wx, wz) lands at
+ *
+ *   px_right = scale·( wx·cosθ − wz·sinθ )     px_down = −scale·sin(tilt)·( wx·sinθ + wz·cosθ )
+ *
+ * and the extremes over the four corners are the sums of the absolute terms. Fitting a map by its
+ * width alone (what a 2D `getBoundsZoom` does) ignores both of those factors, which is why a
+ * near-square map like Woods used to open with its nose against the camera.
+ */
+export function projectedGroundExtent(width, depth, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit) {
+  const tilt = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, Number(rotationX) || CAM.rotationX));
+  const sin = Math.sin(rad(tilt));
+  const th = rad(Number(rotationOrbit) || 0), c = Math.abs(Math.cos(th)), s = Math.abs(Math.sin(th));
+  const hw = Math.abs(width) / 2, hd = Math.abs(depth) / 2;
+  return { w: 2 * (hw * c + hd * s), d: 2 * sin * (hw * s + hd * c) };
+}
+
+/**
+ * How far past `contain` the fit is allowed to go.
+ *
+ * Fit is cover, not contain: at an oblique tilt the map's footprint is a rhombus, so containing it
+ * leaves big black wedges in every corner. Cover fills the frame and crops the two far corners,
+ * which are void anyway. The cap only exists so a pathological viewport aspect cannot turn "cover"
+ * into "stand on the map": on the three shipped maps cover sits at 1.25x (Woods — the founder's
+ * reference framing), 1.29x (Reserve) and 1.67x (Customs, a 2:1 map) past contain, all under it.
+ */
+export const COVER_BAND = 1.75;
+
+/**
+ * The zoom that frames a `width x depth` ground rect in a `viewportWidth x viewportHeight` box.
+ * Returns null when the inputs cannot produce a finite answer, so callers can keep what they had.
+ */
+export function fitZoom({ width, depth, viewportWidth, viewportHeight, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, coverBand = COVER_BAND }) {
+  const { w, d } = projectedGroundExtent(width, depth, rotationX, rotationOrbit);
+  if (!(w > 0) || !(d > 0) || !(viewportWidth > 0) || !(viewportHeight > 0)) return null;
+  const sx = viewportWidth / w, sy = viewportHeight / d;
+  const contain = Math.min(sx, sy), cover = Math.max(sx, sy);
+  const scale = Math.min(cover, contain * Math.max(1, coverBand));
+  const zoom = Math.log2(scale);
+  return Number.isFinite(zoom) ? zoom : null;
+}
+
 /** deck's OrbitView eye distance in world units for a zoom and a viewport height in px. */
 export function eyeDistance(zoom, viewportHeight, fovy = CAM.fovy) {
   const scale = Math.pow(2, Number(zoom) || 0);
