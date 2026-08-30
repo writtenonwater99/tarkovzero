@@ -14,8 +14,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fogExtensionFor, gradeEffectFor, referenceGroundMeters, backgroundFor, fogParams, postFor,
+  groundDetailExtensionFor, waterExtensionFor, surfaceMaterial, materialTint, shadowRings,
+  voidMargin, skirtRamp,
 } from '../src/atmosphere.js';
-import { FOG, POST, PALETTE } from '../src/render-style.js';
+import { FOG, POST, PALETTE, WATER, BACKDROP, FOG_DESATURATION, FOG_COOL_AMOUNT, specularFor } from '../src/render-style.js';
 
 const CUSTOMS_DIAGONAL = 1223;
 /** The vertex-stage injection the fog extension compiles into every world layer. */
@@ -86,4 +88,130 @@ test('referenceGroundMeters is the heightfield median, in real metres', () => {
   assert.equal(referenceGroundMeters({ heights: new Float32Array([4, 0, 2, 6]) }), 3);
   assert.equal(referenceGroundMeters(null), 0);
   assert.equal(referenceGroundMeters({ heights: [] }), 0);
+});
+
+// ---------------------------------------------------------------------------
+// R1.5 — what the new material state compiles into
+// ---------------------------------------------------------------------------
+test('the fog is AERIAL PERSPECTIVE: desaturate, cool, then wash', () => {
+  const { fs } = fogSource();
+  // The defect this replaces was one `mix(colour, fogColour, t)`: every hue marched to the same
+  // grey at the same rate, which reads as an alpha fade into a hex code rather than as distance.
+  assert.match(fs, /0\.299, 0\.587, 0\.114/, 'the fog must take luma before it can desaturate');
+  assert.ok(fs.includes(String(FOG_DESATURATION.toFixed(6))), 'the contract desaturation is not in the shader');
+  assert.ok(fs.includes(String(FOG_COOL_AMOUNT.toFixed(6))), 'the contract cool shift is not in the shader');
+  // Three mixes, in order, and the LAST one is the wash toward the far-fog colour.
+  const mixes = fs.match(/mix\(/g) ?? [];
+  assert.ok(mixes.length >= 3, `expected desaturate + cool + wash, found ${mixes.length} mixes`);
+  assert.match(fs, /fragColor\.rgb = mix\(tzC, vec3\(/, 'the wash must run last, on the already-graded colour');
+});
+
+test('the ground shader adds a wet-road lobe from an albedo mask', () => {
+  const ext = groundDetailExtensionFor('realistic', { albedo: 1, normal: 1, orm: 1, macro: 1 });
+  assert.ok(ext, 'realistic + textures should produce a ground extension');
+  const { inject } = ext.getShaders(ext);
+  // The mask is read from the BAKE, in the colour filter, before this extension modulates anything.
+  assert.match(inject['fs:DECKGL_FILTER_COLOR'], /tz_roadMask = smoothstep/);
+  assert.ok(inject['fs:DECKGL_FILTER_COLOR'].indexOf('tz_roadMask') < inject['fs:DECKGL_FILTER_COLOR'].indexOf('tzDet'),
+    'the mask must be taken before the detail maps modulate the albedo, or it drifts with the tuning');
+  // It travels to main's tail as a fragment GLOBAL — a hook function cannot see main's locals and
+  // main cannot see a hook's, so a varying would be wrong and a local would not compile.
+  assert.match(inject['fs:#decl'], /float tz_roadMask = 0\.0;/);
+  // …and the lobe itself is added AFTER lighting, or it is a second albedo, not a reflection.
+  const end = inject['fs:#main-end'];
+  assert.match(end, /fragColor\.rgb \+=/, 'a specular is added to the lit colour, never multiplied into it');
+  assert.match(end, /tz_roadMask/);
+  assert.match(end, /pow\(max\(dot\(/, 'no Blinn-Phong term in the road lobe');
+  const spec = specularFor('realistic', 'road');
+  assert.ok(end.includes(spec.shininess.toFixed(6)), `the road exponent ${spec.shininess} is not in the shader`);
+  // Vector never gets the extension at all.
+  assert.equal(groundDetailExtensionFor('vector', { albedo: 1, normal: 1, orm: 1, macro: 1 }), null);
+});
+
+test('water decodes its depth from COLOR_0 in the one hook that can see it', () => {
+  const ext = waterExtensionFor('realistic');
+  assert.ok(ext, 'realistic should produce a water extension');
+  const { inject } = ext.getShaders(ext);
+  // `colors` is a vertex ATTRIBUTE. deck emits a hook injection as a standalone function placed
+  // ahead of the layer's own declarations, so the attribute is only in scope in `vs:#main-start`,
+  // which luma inlines into main(). Reading it from DECKGL_FILTER_GL_POSITION does not compile.
+  assert.match(inject['vs:#main-start'], /tz_wDepth = colors\.r/);
+  assert.match(inject['vs:#main-start'], /tz_wIn = colors\.g/);
+  assert.equal(inject['vs:DECKGL_FILTER_GL_POSITION'], undefined);
+  assert.match(inject['vs:#decl'], /out float tz_wDepth/);
+  assert.match(inject['fs:#decl'], /in float tz_wDepth/);
+  // Depth drives the body colour AND the alpha; the sky term is added after, with a Fresnel lift.
+  const filter = inject['fs:DECKGL_FILTER_COLOR'];
+  assert.match(filter, /color\.rgb = tzBody;/);
+  assert.match(filter, /color\.a = tzIn \* mix\(/, 'the shore fade is alpha, not a stroke');
+  assert.ok(filter.includes(WATER.shoreAlpha.toFixed(6)) && filter.includes(WATER.maxAlpha.toFixed(6)));
+  assert.match(inject['fs:#main-end'], /pow\(1\.0 - clamp\(dot\(tzN, tzV\)/, 'no Fresnel term on the water');
+  // Vector keeps its flat semantic fill.
+  assert.equal(waterExtensionFor('vector'), null);
+});
+
+test('surfaceMaterial carries the frozen lobe, and vector rock is not a hole', () => {
+  for (const kind of ['building', 'roof', 'prop', 'rock', 'boulder', 'foliage', 'trunk', 'slabLike']) {
+    const m = surfaceMaterial('realistic', kind);
+    assert.deepEqual(
+      { shininess: m.shininess, specularColor: m.specularColor },
+      specularFor('realistic', kind),
+      `${kind} is not taking its lobe from the contract`,
+    );
+    assert.deepEqual(surfaceMaterial('vector', kind).specularColor, [0, 0, 0], `${kind} reflects in vector mode`);
+  }
+  // Woods' Mountain Spine read as a HOLE in the vector skin because rock ran ambient 0.36 under a
+  // light whose key is 0.12 — 36% of the albedo and nothing else, against a black void. Part C's
+  // flip table says vector is "unlit or near-unlit high ambient" for every family.
+  for (const kind of ['rock', 'boulder']) {
+    assert.ok(surfaceMaterial('vector', kind).ambient >= 0.7, `vector ${kind} ambient is too low to read on a black void`);
+  }
+  // The player marker is UI, not a world surface, and keeps its own lobe in both looks.
+  assert.deepEqual(surfaceMaterial('realistic', 'player'), surfaceMaterial('vector', 'player'));
+});
+
+test('materialTint separates a wall from its roof, and only the roof folds in the sky', () => {
+  const wall = materialTint('realistic', 'building-concrete-panel');
+  const roofPlain = materialTint('realistic', 'roof-tar');
+  const roofLit = materialTint('realistic', 'roof-tar', 0, true);
+  const luma = (c) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  assert.ok(luma(roofPlain) < luma(wall) - 20, 'a tar roof must read clearly darker than a concrete wall');
+  // Flat caps are drawn by non-extruded SolidPolygonLayers, which deck never lights, so the roof's
+  // broad sky lobe has to arrive in the albedo or it never arrives at all.
+  assert.ok(luma(roofLit) > luma(roofPlain), 'the unlit roof never picked up its sky lobe');
+  // The jitter is deterministic and small.
+  assert.deepEqual(materialTint('realistic', 'building-brick', 421), materialTint('realistic', 'building-brick', 421));
+  const jittered = materialTint('realistic', 'building-brick', 999);
+  const plain = materialTint('realistic', 'building-brick');
+  for (let i = 0; i < 3; i++) assert.ok(Math.abs(jittered[i] - plain[i]) <= Math.ceil(plain[i] * 0.07) + 1);
+  // Vector answers the contract's flat semantic fill, and takes no sky fold.
+  assert.deepEqual(materialTint('vector', 'roof-tar', 0, true), materialTint('vector', 'roof-tar'));
+});
+
+test('the grade adds a sky ramp that can only touch atmosphere', () => {
+  const fs = gradeEffectFor('realistic', { texture: { id: 'fake' } }).module.fs;
+  assert.match(fs, /float skyness = 1\.0 - smoothstep/, 'the sky ramp is missing');
+  assert.match(fs, /1\.0 - uv\.y/, "deck's screen pass puts uv.y = 1 at the top; the zenith belongs there");
+  assert.ok(fs.includes(BACKDROP.realistic.skyTolerance.toFixed(6)), 'the ramp must be bounded by the contract tolerance');
+  // The ramp is applied BEFORE the LUT, so the grade still owns the final colour.
+  assert.ok(fs.indexOf('skyness') < fs.indexOf('tzGrade_lut(c)'));
+  // …and the label/icon/quest layers in the same framebuffer are far from the fog colour, so the
+  // smoothstep gates them out. Assert the gate exists rather than the pixels: this is the same
+  // full-screen pass FXAA was removed from for exactly that reason.
+  assert.match(fs, /skyness \* /);
+});
+
+test('the contact rings widen, and the backdrop margin outruns the fog', () => {
+  const rings = shadowRings('realistic');
+  assert.equal(rings.length, 3);
+  assert.ok(rings[0] < rings[1] && rings[1] < rings[2], 'the penumbra must widen outward');
+  assert.deepEqual(shadowRings('nonsense'), rings, 'an unknown look falls back to the default');
+  // 60 m of apron could never reach the fog's far end; the haze has to.
+  const customsDiagonal = 1223;
+  assert.ok(voidMargin('realistic', customsDiagonal) > fogParams('realistic', customsDiagonal).targetMeters);
+  assert.equal(voidMargin('realistic', 0), Math.max(60, BACKDROP.realistic.voidMarginFactor * 1000));
+  // The skirt ramp darkens downward in realistic and is a no-op in vector.
+  const ramp = skirtRamp('realistic');
+  assert.ok(ramp.bottom[0] < ramp.top[0] && ramp.feather > 0);
+  assert.deepEqual(skirtRamp('vector').top, skirtRamp('vector').bottom);
 });

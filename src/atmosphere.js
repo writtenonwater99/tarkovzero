@@ -33,7 +33,11 @@
 // the layers anyway — so this trades a shader recompile on a rare toggle for zero uniform-block
 // plumbing, and makes every constant visible in one place.
 import { LightingEffect, AmbientLight, DirectionalLight, LayerExtension, PostProcessEffect } from '@deck.gl/core';
-import { styleFor, fogFor, rgb255, rgb01, PALETTE, LIGHT, isStyleMode, DEFAULT_MODE } from './render-style.js';
+import {
+  styleFor, fogFor, rgb255, rgb01, PALETTE, LIGHT, isStyleMode, DEFAULT_MODE,
+  specularFor, specularFamilyFor, SPECULAR, MATERIALS, SHADOW, BACKDROP, WATER, TERRAIN_MACRO,
+  FOG_DESATURATION, FOG_COOL_TINT, FOG_COOL_AMOUNT,
+} from './render-style.js';
 
 // ---------------------------------------------------------------------------- look state
 export const LOOKS = ['realistic', 'vector'];
@@ -49,6 +53,11 @@ const f = (n) => {
   return v.toFixed(6);
 };
 const glslVec3 = (rgb) => `vec3(${rgb.map((c) => f(c)).join(', ')})`;
+/** Scale an 0..1 triple so its Rec.601 luma is exactly 1 — a pure hue/chroma multiplier. */
+const lumaNormalised = (rgb) => {
+  const l = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+  return l > 0 ? rgb.map((c) => c / l) : [1, 1, 1];
+};
 
 // ---------------------------------------------------------------------------- colour tables
 // `vector` is the CURRENT look, value for value — the plan's vector skin has to reproduce today's
@@ -62,9 +71,38 @@ const UI = {
   undergroundOn: [255, 176, 48, 190], glass: [37, 49, 52, 225],
 };
 
+/**
+ * The three contact rings under every footprint, as RGBA fills.
+ *
+ * deck's cast shadows are gated on Stage 7, so this IS the soft shadow: three rings of decreasing
+ * opacity, in the contract's cool damp blue-grey rather than ink, because an overcast shadow is
+ * still lit by the whole sky dome. `shadowRings()` below hands the metric radii to map3d.
+ */
+function shadeColors(mode) {
+  const s = SHADOW[mode];
+  const [r, g, b] = rgb255(s.color);
+  const a = (i) => [r, g, b, Math.round(255 * s.rings[i].alpha)];
+  return { shade: a(0), shadeSoft: a(1), shadeWide: a(2) };
+}
+
+/** Metric radii of the contact rings, widest first, for one look. */
+export const shadowRings = (look) => SHADOW[resolveLook(look)].rings.map((ring) => ring.meters);
+
+/*
+ * R1.5 vector contrast pass.
+ *
+ * The vector skin draws on a BLACK void (that stays — it is what the skin is), but the pre-R1.5
+ * palette was authored against a light sheet: mid-tone pastel terrain against #0a0d0c blew the
+ * contrast ratio out, and every shadow value bottomed out at ink. Woods' Mountain Spine read as a
+ * hole in the map (frame 14) because its rock material ran ambient 0.36 under a light with
+ * keyIntensity 0.12 — 36% of the albedo and nothing else.
+ *
+ * Two rules applied here: no terrain/shadow value drops below the SHADOW.vector floor, and the
+ * field stops come down ~8% so the black ground has something to be darker THAN.
+ */
 const VECTOR_COLORS = {
-  grass1: [57, 82, 58], grass2: [68, 96, 62], grass3: [81, 108, 67], grass4: [101, 121, 73], grass5: [123, 137, 84],
-  grass: [68, 96, 62], grassHigh: [123, 137, 84], land: [68, 96, 62], grassDry: [132, 126, 99], grassShadow: [31, 49, 35],
+  grass1: [52, 74, 53], grass2: [62, 87, 57], grass3: [74, 98, 61], grass4: [92, 110, 67], grass5: [112, 125, 77],
+  grass: [62, 87, 57], grassHigh: [112, 125, 77], land: [62, 87, 57], grassDry: [122, 116, 92], grassShadow: [42, 58, 44],
   water: [38, 86, 105], waterDeep: [25, 59, 76], shore: [99, 151, 161, 185],
   pavement: [112, 115, 108], pavementWorn: [123, 125, 116], road: [137, 142, 133], roadEdge: [86, 91, 83],
   highway: [150, 153, 141], highwayEdge: [96, 101, 91], roadMarking: [230, 226, 207, 190],
@@ -77,17 +115,15 @@ const VECTOR_COLORS = {
   understory: [48, 72, 49, 52], tree: [72, 99, 65], treeShadow: [23, 37, 28, 110], rock: [149, 144, 128],
   bridge: [137, 132, 119], bridgeRail: [88, 83, 73], pier: [112, 107, 96],
   contour: [26, 42, 26, 90], contourMajor: [20, 32, 20, 150],
-  void: [10, 13, 12], oob: [10, 13, 12], voidRing: [24, 28, 26], cliff: [12, 14, 13],
-  shade: [8, 14, 10, 62], shadeSoft: [8, 14, 10, 26], floorLine: [0, 0, 0, 70],
+  void: [10, 13, 12], oob: rgb255(BACKDROP.vector.voidColor), voidRing: [24, 28, 26], cliff: rgb255(BACKDROP.vector.skirtTop),
+  ...shadeColors('vector'), floorLine: [0, 0, 0, 70],
   underground: [46, 44, 40, 120],
   sandbag: [151, 137, 105], rust: [149, 89, 61], bigRed: [163, 70, 59], bigRedTrim: [224, 216, 199],
   concreteRaw: [187, 181, 169], rebar: [159, 140, 108], hazardStripe: [226, 190, 67],
   // Tree fallback tones and trunk (src/trees.js reads these two).
   treeTones: [[72, 99, 65], [84, 112, 72], [96, 124, 79]],
   trunk: [91, 69, 47],
-  // Deterministic generic-building tints (map3d tintBuildings()).
-  boxWallTints: [[193, 185, 171], [182, 176, 164], [172, 166, 155], [162, 158, 149]],
-  boxRoofTints: [[145, 142, 133], [136, 130, 119], [153, 145, 132]],
+  // Deterministic generic-building container tints (map3d propParts()).
   containerTints: [[164, 88, 69], [121, 131, 125], [146, 138, 120], [134, 106, 83]],
   // Target that map3d's liftTone() pulls an authored colour toward, so a data-authored landmark
   // colour still sits in the look's value range instead of staying at its raw saturation.
@@ -107,7 +143,11 @@ const REALISTIC_COLORS = {
   grass: P('grass'), grassHigh: shade(P('forestLitter'), 1.05), land: P('grass'),
   grassDry: shade(P('forestLitter'), 1.08), grassShadow: shade(P('grassWet'), 0.62),
   // Overcast water is mostly reflected sky, so both stops are lifted toward the far-fog value.
-  water: shade(P('waterShallow'), 1.18), waterDeep: shade(P('waterDeep'), 1.22), shore: [...shade(P('dirtWet'), 1.3), 165],
+  water: shade(P('waterShallow'), 1.18), waterDeep: shade(P('waterDeep'), 1.22),
+  // R1.5: the realistic water surface now fades out over its own shore band, so the stroke that
+  // used to DRAW the shoreline is demoted to a wet-bank hint (the plan's "narrow dark wet-bank
+  // band"), not an outline. Vector keeps the full-strength stroke.
+  shore: [...shade(P('dirtWet'), 1.15), 96],
   pavement: rgb255('#6f6f68'), pavementWorn: rgb255('#7a7a72'),
   road: P('asphalt'), roadEdge: shade(P('asphalt'), 0.74),
   highway: shade(P('asphalt'), 1.12), highwayEdge: shade(P('asphalt'), 0.7),
@@ -131,22 +171,27 @@ const REALISTIC_COLORS = {
   bridge: rgb255('#87867d'), bridgeRail: rgb255('#615f58'), pier: rgb255('#78776f'),
   // Contours/hypsometry are OFF in realistic mode; the keys survive so nothing has to branch.
   contour: [26, 42, 26, 0], contourMajor: [20, 32, 20, 0],
-  // The void plane IS the sky: exactly the clear colour, so the map ends in atmosphere rather than
-  // on a grey sheet of paper. The skirt keeps its own darker earth value (and is fogged), so the
-  // diorama still has a visible thickness near the camera and none of it at the far edge.
-  void: rgb255(PALETTE.fogFar), oob: rgb255(PALETTE.fogFar),
-  voidRing: shade(rgb255(PALETTE.fogFar), 0.9),
-  // The cut edge of the diorama: an earth value, not a black wall. It is fogged like the rest of
-  // the world, so the far side of the map still ends in atmosphere.
-  cliff: rgb255('#6b6459'),
-  shade: [10, 12, 10, 74], shadeSoft: [10, 12, 10, 32], floorLine: [0, 0, 0, 58],
+  /*
+   * R1.5: the void plane is no longer exactly the sky.
+   *
+   * Painting it the clear colour made the whole background one flat sheet, which is the read Gemini
+   * called "floating diorama": there was no horizon, only a hard cut where the mesh stopped. It is
+   * now a slightly darker GROUND HAZE (the contract's BACKGROUND.ground) and it is FOGGED, so it
+   * washes to the far-fog value with distance on its own. The frame therefore reads sky at the top
+   * and darkens toward the horizon, without a second sky layer or a screen-space gradient that
+   * would also tint the map.
+   */
+  void: rgb255(BACKDROP.realistic.voidColor), oob: rgb255(BACKDROP.realistic.voidColor),
+  voidRing: shade(rgb255(BACKDROP.realistic.voidColor), 0.92),
+  // The cut edge of the diorama: an earth value, not a black wall, and now a vertical ramp into
+  // the haze below it (terrain.js bakes the ramp into the skirt mesh's COLOR_0).
+  cliff: rgb255(BACKDROP.realistic.skirtTop),
+  ...shadeColors('realistic'), floorLine: [0, 0, 0, 58],
   underground: [46, 44, 40, 120],
   sandbag: rgb255('#8d8370'), rust: shade(P('metalRust'), 1.1), bigRed: rgb255('#8a4a3f'), bigRedTrim: rgb255('#bab4a6'),
   concreteRaw: rgb255('#9d9b90'), rebar: rgb255('#8b7f68'), hazardStripe: rgb255('#b89c50'),
   treeTones: [P('conifer'), rgb255(PALETTE.broadleafLight), rgb255(PALETTE.broadleafDark)],
   trunk: rgb255('#4f4639'),
-  boxWallTints: [rgb255('#8b897f'), rgb255('#82817a'), P('concrete'), rgb255('#767569')],
-  boxRoofTints: [rgb255('#43443f'), rgb255('#4c4d47'), rgb255('#3d3e39')],
   containerTints: [P('metalRust'), rgb255('#5c6a63'), rgb255('#6a6558'), rgb255('#63513f')],
   liftTarget: rgb255('#b6b3a6'),
   ...UI,
@@ -217,8 +262,12 @@ export function lightingFor(look) {
  * EXPOSURE multiplies the AMBIENT coefficient only, so the key still shapes every surface and the
  * palette stays faithful to the plan's Part C table. It lives here, next to the light it
  * compensates for, rather than being smeared through thirty colour literals.
+ *
+ * R1.5 dropped it 1.85 -> 1.72 when LIGHT.realistic.ambientIntensity went 1.05 -> 1.18: the sky
+ * dome carries more of the frame (the plan's overcast softbox) at the same measured ground value,
+ * +4.5% overall. The two numbers are a pair — changing one without the other re-exposes the map.
  */
-const EXPOSURE = 1.85;
+const EXPOSURE = 1.72;
 const lit = (ambient, rest) => ({ ambient: Number((ambient * EXPOSURE).toFixed(3)), ...rest });
 
 /**
@@ -230,33 +279,92 @@ const lit = (ambient, rest) => ({ ambient: Number((ambient * EXPOSURE).toFixed(3
  */
 const MATERIALS_BY_LOOK = {
   realistic: {
-    building: lit(0.5, { diffuse: 0.5, shininess: 8, specularColor: [18, 18, 18] }),
+    building: lit(0.5, { diffuse: 0.5 }),
     roof: lit(0.57, { diffuse: 0.3 }),
     slabLike: lit(0.51, { diffuse: 0.42 }),
     prop: lit(0.51, { diffuse: 0.42 }),
-    rock: lit(0.27, { diffuse: 0.85, shininess: 1 }),
-    boulder: lit(0.3, { diffuse: 0.78, shininess: 3 }),
+    rock: lit(0.27, { diffuse: 0.85 }),
+    boulder: lit(0.3, { diffuse: 0.78 }),
     player: { ambient: 0.55, diffuse: 0.7, shininess: 20, specularColor: [80, 80, 80] },
-    foliage: lit(0.31, { diffuse: 0.76, shininess: 1, specularColor: [6, 8, 6] }),
-    trunk: lit(0.22, { diffuse: 0.8, shininess: 0 }),
+    foliage: lit(0.31, { diffuse: 0.76 }),
+    trunk: lit(0.22, { diffuse: 0.8 }),
   },
   vector: {
-    building: { ambient: 0.7, diffuse: 0.55, shininess: 12, specularColor: [30, 30, 30] },
+    building: { ambient: 0.7, diffuse: 0.55 },
     roof: { ambient: 0.82, diffuse: 0.38 },
     slabLike: { ambient: 0.75, diffuse: 0.45 },
     prop: { ambient: 0.75, diffuse: 0.5 },
-    rock: { ambient: 0.36, diffuse: 0.9, shininess: 1 },
-    boulder: { ambient: 0.42, diffuse: 0.82, shininess: 3 },
-    foliage: { ambient: 0.72, diffuse: 0.58, shininess: 1, specularColor: [8, 10, 7] },
-    trunk: { ambient: 0.48, diffuse: 0.72, shininess: 0 },
+    /*
+     * R1.5: rock honours the look, like foliage already did.
+     *
+     * The vector light is ambient 1.0 with a key at 0.12, so `ambient: 0.36` meant a rock face
+     * rendered at ~40% of its albedo with nothing to lift it — against a black void that is a hole,
+     * and Woods' Mountain Spine was exactly that (frame 14). Part C's flip table says the vector
+     * skin is "unlit or near-unlit high ambient" for EVERY family; these two were the exceptions.
+     */
+    rock: { ambient: 0.78, diffuse: 0.4 },
+    boulder: { ambient: 0.8, diffuse: 0.36 },
+    foliage: { ambient: 0.72, diffuse: 0.58 },
+    trunk: { ambient: 0.48, diffuse: 0.72 },
     player: { ambient: 0.55, diffuse: 0.7, shininess: 20, specularColor: [80, 80, 80] },
   },
 };
 
-/** Phong coefficients for one surface family under one look. */
+/**
+ * Phong coefficients for one surface family under one look.
+ *
+ * R1.5: the `{shininess, specularColor}` half now comes from the frozen SPECULAR table rather than
+ * from ad-hoc literals here, so "wet asphalt reflects the sky, concrete does not" is one reviewable
+ * data block instead of nine scattered numbers. `player` keeps its own lobe — it is a UI token, not
+ * a world surface, and the plan holds UI colours out of the look.
+ */
 export function surfaceMaterial(look, kind) {
-  return MATERIALS_BY_LOOK[resolveLook(look)][kind];
+  const mode = resolveLook(look);
+  const base = MATERIALS_BY_LOOK[mode][kind];
+  if (!base || kind === 'player') return base;
+  return { ...base, ...specularFor(mode, kind) };
 }
+
+/**
+ * The display colour of one material class under one look, as an RGB triple.
+ *
+ * Realistic answers the contract's authored albedo (the palette is already exposure-calibrated by
+ * EXPOSURE above); vector answers the contract's flat semantic fill. `seed` applies a deterministic
+ * +/-6% value jitter so a street of the same material class is not one flat sheet — same input,
+ * same colour, every load.
+ */
+export function materialTint(look, materialId, seed = 0, foldSkyLobe = false) {
+  const mode = resolveLook(look);
+  const m = MATERIALS[materialId] ?? MATERIALS['prop-unresolved'];
+  let rgb = rgb255(mode === 'realistic' ? m.real.baseColor : m.vector.fill);
+  if (mode === 'realistic' && foldSkyLobe) {
+    const strength = SPECULAR.realistic.families[specularFamilyFor(materialId)]?.strength ?? 0;
+    const sky = rgb255(SPECULAR.realistic.skyColor);
+    rgb = rgb.map((c, i) => c + (sky[i] - c) * strength * SKY_LOBE_FOLD);
+  }
+  const k = seed ? 0.94 + ((seed % 1000) / 1000) * 0.12 : 1;
+  return rgb.map((c) => Math.max(0, Math.min(255, Math.round(c * k))));
+}
+
+/**
+ * How much of a family's specular strength is folded into an UNLIT face's albedo.
+ *
+ * Roofs and every other flat cap are drawn by non-extruded SolidPolygonLayers, and deck only calls
+ * `lighting_getLightColor` for extruded ones — so a `material` prop on those layers is inert and a
+ * Phong lobe can never reach them. Under a uniform overcast dome, though, a broad lobe on a
+ * near-horizontal face is view-INDEPENDENT: it is a constant fraction of the sky colour. Folding
+ * that constant into the albedo is the same number a lit pass would produce for this geometry, and
+ * it is what separates a wet corrugated roof from a matte tar one from the concrete wall below.
+ *
+ * 0.9 is calibrated, not chosen: it lands the corrugated class within a value or two of the
+ * exposure-tuned roof grey Stage 1 measured as "still findable from the overview", and keeps tar
+ * clearly the darker of the two. Walls do NOT take it — they are extruded, therefore lit, therefore
+ * already carry their lobe as a real specular.
+ */
+const SKY_LOBE_FOLD = 0.9;
+
+/** The specular family a material id belongs to (re-exported so map3d needs one import). */
+export { specularFamilyFor };
 
 /** Foliage/trunk materials, used by src/trees.js (vector keeps its own pre-Stage-1 numbers). */
 export const foliageMaterialFor = (look) => surfaceMaterial(look, 'foliage');
@@ -264,11 +372,14 @@ export const trunkMaterialFor = (look) => surfaceMaterial(look, 'trunk');
 
 /** The material the terrain mesh is lit with. Realistic lets the scene key carry the relief. */
 export function terrainMaterialFor(look) {
-  return resolveLook(look) === 'realistic'
+  const mode = resolveLook(look);
+  return mode === 'realistic'
     // Lower BASE ambient + higher diffuse than vector: the mesh normals and the 21-degree key do
     // the relief work, because the realistic bake no longer carries a strong cartographic
-    // hillshade. EXPOSURE then lifts the whole thing back to the authored value.
-    ? lit(0.62, { diffuse: 0.86, shininess: 1, specularColor: [8, 9, 8] })
+    // hillshade. EXPOSURE then lifts the whole thing back to the authored value. The lobe is the
+    // contract's `ground` family — high roughness, almost no sky reflection; the WET half (roads)
+    // is added per-fragment by the ground-detail extension's road mask, not by this material.
+    ? lit(0.62, { diffuse: 0.86, ...specularFor('realistic', 'ground') })
     // Vector keeps the pre-Stage-1 numbers exactly: ambient high so the BAKE sets the ground value.
     : { ambient: 0.95, diffuse: 0.55, shininess: 1, specularColor: [10, 12, 10] };
 }
@@ -337,6 +448,8 @@ class FogExtension extends LayerExtension {
   getShaders(extension) {
     const { startMeters, k, maxDensity, heightFalloffMeters, color } = extension.opts;
     const FOG = glslVec3(rgb01(color));
+    // Luma-normalised, so the cool shift moves hue and leaves brightness where the lighting put it.
+    const COOL = glslVec3(lumaNormalised(rgb01(FOG_COOL_TINT)));
     return {
       modules: [FOG_MODULE],
       inject: {
@@ -385,9 +498,28 @@ class FogExtension extends LayerExtension {
   }
 `,
         'fs:#decl': 'in float tz_fogAmount;\n',
-        // AFTER the layer's own lighting: SimpleMeshLayer lights inside main(), past the colour
-        // filter hook, so mixing there would put the sun on top of the fog.
-        'fs:#main-end': `  fragColor.rgb = mix(fragColor.rgb, ${FOG}, tz_fogAmount);\n`,
+        /*
+         * AFTER the layer's own lighting: SimpleMeshLayer lights inside main(), past the colour
+         * filter hook, so mixing there would put the sun on top of the fog.
+         *
+         * R1.5 — this is AERIAL PERSPECTIVE, not a wash. A single `mix(colour, fogColour, t)` is
+         * what Gemini read as "a flat, linear alpha fade into a solid hex-code background": every
+         * hue marches to the same grey at the same rate and nothing loses saturation on the way.
+         * Real distance takes chroma FIRST (scattering fills in the gaps between an object's colour
+         * and the sky's) and casts what is left toward the cool end. So: desaturate toward a
+         * luma-preserving cool grey, then take the sky's cast, and only then wash toward far-fog.
+         * ${f(FOG_DESATURATION)} / ${f(FOG_COOL_AMOUNT)} are the frozen contract's constants.
+         */
+        'fs:#main-end': `
+  {
+    vec3 tzC = fragColor.rgb;
+    float tzL = dot(tzC, vec3(0.299, 0.587, 0.114));
+    vec3 tzCool = vec3(tzL) * ${COOL};
+    tzC = mix(tzC, tzCool, tz_fogAmount * ${f(FOG_DESATURATION)});
+    tzC = mix(tzC, tzC * ${COOL}, tz_fogAmount * ${f(FOG_COOL_AMOUNT)});
+    fragColor.rgb = mix(tzC, ${FOG}, tz_fogAmount);
+  }
+`,
       },
     };
   }
@@ -468,6 +600,27 @@ export const GROUND_DETAIL = Object.freeze({
   bumpMix: 0.55,       // how much of the detail-normal shading ratio reaches the albedo
   aoStrength: 0.3,
   slopeDarken: 0.22,   // slope-based darkening, the plan's third ground cue
+  /*
+   * R1.5 — the wet-asphalt lobe, and the mask that decides where it lands.
+   *
+   * Roads are not a layer: terrain.js paints them into the ONE baked ground texture, so there is no
+   * road geometry to hang a material on. But the BAKED ALBEDO is the mask — asphalt is the only
+   * thing on this ground that is both dark and neutral. Measured on the shipped palette:
+   *
+   *   asphalt   #4a4e4d  luma 0.302  sat 0.052   -> mask 0.63
+   *   road edge (asphalt x0.74)  luma 0.212  sat 0.055  -> mask ~1
+   *   pavement  #6f6f68  luma 0.432  sat 0.062   -> 0 (too light)
+   *   rail      #6d6a63  luma 0.416  sat 0.091   -> 0 (too light)
+   *   grass     #586149  luma 0.362  sat 0.247   -> 0 (too green)
+   *   sleeper   (dirtWet x1.02)     luma 0.271  sat 0.203  -> 0 (too brown)
+   *
+   * The mask is read from the ALBEDO the bake handed us, at the top of the colour filter and before
+   * this extension modulates anything — not from the lit fragment, whose values move with the
+   * exposure and would need re-fitting every time the light changes. Because it selects exactly the
+   * pixels the bake painted, it cannot drift out of register with the road it is shading.
+   */
+  roadSatLo: 0.07, roadSatHi: 0.16,  // saturation window (neutral end)
+  roadLumLo: 0.22, roadLumHi: 0.42,  // luminance window (dark end)
 });
 
 class GroundDetailExtension extends LayerExtension {
@@ -475,6 +628,8 @@ class GroundDetailExtension extends LayerExtension {
     const t = extension.opts.tuning;
     // Direction TOWARD the key, in deck space — the negated travel direction.
     const KEY = glslVec3(extension.opts.keyDirection.map((v) => -v));
+    const SPEC = specularFor('realistic', 'road');
+    const SPEC_COLOR = glslVec3(SPEC.specularColor.map((c) => c / 255));
     return {
       modules: [GROUND_MODULE],
       inject: {
@@ -496,12 +651,21 @@ class GroundDetailExtension extends LayerExtension {
   tz_gPos = geometry.position.xyz;
   tz_gNormal = geometry.normal;
 `,
-        'fs:#decl': 'in vec3 tz_gPos;\nin vec3 tz_gNormal;\n',
+        // `tz_roadMask` is a fragment-scope GLOBAL, not a varying: the two injections below run in
+        // the same fragment invocation (DECKGL_FILTER_COLOR first, then main's tail), and a global
+        // is the only way to carry a value from a hook FUNCTION into main's inlined tail. It is
+        // initialised at declaration so a layer that somehow skipped the filter still links.
+        'fs:#decl': 'in vec3 tz_gPos;\nin vec3 tz_gNormal;\nfloat tz_roadMask = 0.0;\n',
         // Runs before the layer lights the fragment, so this modulates ALBEDO — which is what a
         // detail map is for. The normal map arrives as a shading ratio (see below) rather than as
         // a real normal perturbation, because main()'s `normal` is out of reach from here.
         'fs:DECKGL_FILTER_COLOR': `
   {
+    // Wet-asphalt mask, taken from the untouched bake albedo (see GROUND_DETAIL above).
+    float tzMx = max(color.r, max(color.g, color.b));
+    float tzMn = min(color.r, min(color.g, color.b));
+    tz_roadMask = smoothstep(${f(t.roadSatHi)}, ${f(t.roadSatLo)}, (tzMx - tzMn) / max(tzMx, 0.0001))
+                * smoothstep(${f(t.roadLumHi)}, ${f(t.roadLumLo)}, dot(color.rgb, vec3(0.299, 0.587, 0.114)));
     vec3 tzP = tz_gPos;
     vec3 tzN = normalize(tz_gNormal);
     vec3 tzW = abs(tzN);
@@ -529,6 +693,25 @@ class GroundDetailExtension extends LayerExtension {
     float tzFlatL = max(0.0, dot(tzN, ${KEY})) + 0.35;
     float tzBumpL = max(0.0, dot(tzPert, ${KEY})) + 0.35;
     color.rgb *= clamp(mix(1.0, tzBumpL / tzFlatL, ${f(t.bumpMix)}), 0.72, 1.32);
+  }
+`,
+        /*
+         * The specular half of the ground, added AFTER lighting so it is a reflection and not a
+         * second albedo. `cameraPosition` and `position_commonspace` are the SimpleMeshLayer's own
+         * varyings: `fs:#main-end` is inlined into main(), unlike DECKGL_FILTER_COLOR above, so
+         * everything the layer declared is in scope here. This extension is only ever attached to
+         * the terrain mesh, which is what makes that safe to rely on.
+         *
+         * The lobe is Blinn-Phong against the frozen key, tinted the SKY colour, gated on the road
+         * mask — the plan's "broad, low-roughness specular lobe to reflect the overcast sky" for
+         * wet asphalt, with nothing added on grass, dirt or gravel.
+         */
+        'fs:#main-end': `
+  if (tz_roadMask > 0.0) {
+    vec3 tzV = normalize(cameraPosition - position_commonspace.xyz);
+    vec3 tzHv = normalize(tzV + ${KEY});
+    float tzSpec = pow(max(dot(normalize(tz_gNormal), tzHv), 0.0), ${f(SPEC.shininess)});
+    fragColor.rgb += ${SPEC_COLOR} * (tzSpec * tz_roadMask);
   }
 `,
       },
@@ -561,6 +744,95 @@ export function groundDetailExtensionFor(look, textures) {
   if (mode !== 'realistic' || !textures) return null;
   return new GroundDetailExtension({ tuning: GROUND_DETAIL, textures, keyDirection: toDeckDirection(LIGHT[mode].keyDirection) });
 }
+
+// ---------------------------------------------------------------------------- water
+/**
+ * The realistic water surface: translucent, depth-tinted, sky-reflecting, soft at the shore.
+ *
+ * This is a MATERIAL on the mesh terrain.js welds out of the ground grid, not a second scene. Every
+ * vertex carries two numbers in `COLOR_0`:
+ *   r = depth of the CARVED BED below the water plane, in real game metres / WATER.depthMaxMeters
+ *   g = 1 inside the water polygon, 0 at a grid vertex outside it
+ * so the shore fade is the mesh's own 2.5 m interpolation across the boundary cells, and the depth
+ * tint is the surveyed bathymetry the heightfield already carries — not a distance-to-outline
+ * guess. The layer draws with `getColor: [255,255,255]`, which makes `vColor.rgb` those two numbers
+ * verbatim; this extension replaces them with the water colour.
+ *
+ * Reading them needs `vs:#main-start`, not the FILTER hooks: a deck hook injection is emitted as a
+ * standalone function ahead of the layer's `in vec3 colors;` declaration, so `colors` is only in
+ * scope in the one place that is inlined into main(). Same trap as the ground detail above.
+ */
+class WaterExtension extends LayerExtension {
+  getShaders() {
+    const lift = (hex) => rgb01(hex).map((c) => Math.min(1, c * WATER.exposureLift));
+    const SHALLOW = glslVec3(lift(WATER.shallow));
+    const DEEP = glslVec3(lift(WATER.deep));
+    const SKY = glslVec3(rgb01(WATER.sky));
+    return {
+      inject: {
+        'vs:#decl': 'out float tz_wDepth;\nout float tz_wIn;\n',
+        'vs:#main-start': '  tz_wDepth = colors.r;\n  tz_wIn = colors.g;\n',
+        'fs:#decl': 'in float tz_wDepth;\nin float tz_wIn;\n',
+        // Before lighting (the layer runs `material: false`, so this IS the surface colour).
+        'fs:DECKGL_FILTER_COLOR': `
+  {
+    float tzD = clamp(tz_wDepth, 0.0, 1.0);
+    float tzIn = clamp(tz_wIn, 0.0, 1.0);
+    // Shallow tea/olive over the bank, blue-grey once the bed drops away.
+    vec3 tzBody = mix(${SHALLOW}, ${DEEP}, smoothstep(${f(WATER.shallowAt)}, ${f(WATER.deepAt)}, tzD));
+    float tzShore = smoothstep(0.0, ${f(WATER.shoreFade)}, tzD);
+    color.rgb = tzBody;
+    // Thin at the bank so the carved bed reads through it, opaque over the channel.
+    color.a = tzIn * mix(${f(WATER.shoreAlpha)}, ${f(WATER.maxAlpha)}, tzShore);
+  }
+`,
+        /*
+         * The environmental reflection, added after the surface colour: a flat sky term plus a
+         * Fresnel lift at grazing angle. The plan calls this out as "a convincing environmental
+         * reflection cue, not a true scene reflection" — there is no planar pass and none is
+         * claimed. The surface is level, so the normal is deck-space up.
+         */
+        'fs:#main-end': `
+  {
+    vec3 tzN = vec3(0.0, 0.0, 1.0);
+    vec3 tzV = normalize(cameraPosition - position_commonspace.xyz);
+    float tzF = pow(1.0 - clamp(dot(tzN, tzV), 0.0, 1.0), ${f(WATER.fresnelPower)});
+    float tzMix = clamp(${f(WATER.reflectBase)} + tzF * ${f(WATER.reflectFresnel)}, 0.0, 1.0);
+    fragColor.rgb = mix(fragColor.rgb, ${SKY}, tzMix * clamp(tz_wIn, 0.0, 1.0));
+  }
+`,
+      },
+    };
+  }
+}
+WaterExtension.extensionName = 'TzWaterExtension';
+
+/** The realistic water material, or `null` in vector mode (which keeps its flat semantic fill). */
+export function waterExtensionFor(look) {
+  return resolveLook(look) === 'realistic' ? new WaterExtension() : null;
+}
+
+/** The frozen water contract, so terrain.js can encode depth on the scale the shader decodes. */
+export const waterTuning = () => WATER;
+
+// ---------------------------------------------------------------------------- backdrop
+/** How far past the playable limit the void plane reaches, in metres, for one look. */
+export function voidMargin(look, diagonalMeters) {
+  const b = BACKDROP[resolveLook(look)];
+  // A map with no usable diagonal falls back to 1 km rather than to a 60 m apron: too little haze
+  // is the bug this replaces, and a too-large quad costs two triangles.
+  const d = Number.isFinite(diagonalMeters) && diagonalMeters > 0 ? diagonalMeters : 1000;
+  return Math.max(60, b.voidMarginFactor * d);
+}
+
+/** The skirt's top and bottom colours plus how far the ramp reaches, for one look. */
+export function skirtRamp(look) {
+  const b = BACKDROP[resolveLook(look)];
+  return { top: rgb255(b.skirtTop), bottom: rgb255(b.skirtBottom), feather: b.skirtFeather };
+}
+
+/** The frozen terrain macro-variation patches (src/terrain.js bakes them). */
+export const terrainMacro = () => TERRAIN_MACRO;
 
 // ---------------------------------------------------------------------------- asset loading
 const ASSET_ROOT = '/assets/3d/';
@@ -639,9 +911,16 @@ const LUT_SIZE = 16; // scripts/lib/imagegen.mjs GRADE_DEFAULTS.size
  * The grain is a hash of the pixel coordinate ONLY — no time term — so a screenshot of the same
  * frame is byte-identical on every run, which the plan's comparison harness depends on.
  */
-function gradeModule(post) {
+function gradeModule(post, backdrop, fogColor) {
   const N = LUT_SIZE;
   const fxaa = post.fxaa ? 1 : 0;
+  // The sky ramp, expressed as a MULTIPLIER on the far-fog value so it can be applied to whatever
+  // shade of atmosphere a pixel happens to be sitting at. Zero strength compiles to a no-op branch.
+  const ratio = (hex) => rgb01(hex).map((c, i) => (rgb01(fogColor)[i] > 0 ? c / rgb01(fogColor)[i] : 1));
+  const ZENITH = glslVec3(ratio(backdrop.skyZenith));
+  const HORIZON = glslVec3(ratio(backdrop.skyHorizon));
+  const FOGFAR = glslVec3(rgb01(fogColor));
+  const sky = backdrop.skyStrength > 0 && backdrop.skyTolerance > 0;
   return {
     name: 'tzGrade',
     fs: `
@@ -686,7 +965,14 @@ vec3 tzGrade_fxaa(sampler2D src, vec2 texSize, vec2 uv) {
 
 vec4 tzGrade_sampleColor(sampler2D src, vec2 texSize, vec2 uv) {
   vec3 c = ${fxaa ? 'tzGrade_fxaa(src, texSize, uv)' : 'texture(src, uv).rgb'};
-  c = tzGrade_lut(c);
+${sky ? `  {
+    // Sky ramp: only pixels that ARE atmosphere (already at the far-fog value) take it.
+    float skyness = 1.0 - smoothstep(0.0, ${f(backdrop.skyTolerance)}, length(c - ${FOGFAR}));
+    // deck's screen pass puts uv.y = 1 at the TOP of the frame, so the zenith is at 1 - uv.y = 0.
+    vec3 ramp = mix(${ZENITH}, ${HORIZON}, clamp(1.0 - uv.y, 0.0, 1.0));
+    c = mix(c, c * ramp, skyness * ${f(backdrop.skyStrength)});
+  }
+` : ''}  c = tzGrade_lut(c);
   vec2 d = uv - 0.5;
   float vig = 1.0 - ${f(post.vignette)} * dot(d, d) * 2.0;
   c *= clamp(vig, 0.0, 1.0);
@@ -704,9 +990,10 @@ vec4 tzGrade_sampleColor(sampler2D src, vec2 texSize, vec2 uv) {
  * the LUT has not uploaded yet.
  */
 export function gradeEffectFor(look, lut) {
-  const post = styleFor(resolveLook(look)).post;
-  if (!post.enabled || !lut?.texture) return null;
-  return new PostProcessEffect(gradeModule(post), { lut: lut.texture });
+  const mode = resolveLook(look);
+  const style = styleFor(mode);
+  if (!style.post.enabled || !lut?.texture) return null;
+  return new PostProcessEffect(gradeModule(style.post, BACKDROP[mode], style.fog.color), { lut: lut.texture });
 }
 
 /** The post block from the contract, so callers can report what was applied. */
