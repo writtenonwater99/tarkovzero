@@ -145,7 +145,7 @@ bets, not facts.
 | 9 | Duplicate View triggers; shortcut `3` | accepted — single View trigger (toolbar); drop bare 1–6, layer toggles via omnibox `>` commands |
 | 10 | Icon-only discovery | accepted — tooltips on hover+focus, aria, persistent labels until first use |
 | 11 | Live state conflation | accepted — disconnected/connecting/stale/streaming + last-update age; primary-player selector |
-| 12 | LOD by zoom jumps; clustering unbudgeted | accepted — metres-per-pixel thresholds with hysteresis; spawn clustering in the marker task; extracts/live/selected quests exempt |
+| 12 | LOD by zoom jumps; clustering unbudgeted | accepted — metres-per-pixel thresholds with hysteresis; spawn clustering in the marker task; extracts/live/selected quests exempt. **Amended 2026-08-29 (269e9ae, Gemini pass):** the quest exemption is from clustering and hiding only — below `full` a selected quest's hexes are 30% smaller and show the plain glyph instead of the number. Extracts and live players stay fully exempt. Written out in src/lod.js's header |
 | 13 | Large-panel blur GPU bet | accepted — panels flat 92% opacity; blur only on small chips |
 | 14 | Scope drift (active quests) | accepted — active-quest ingestion moves to its own spec `docs/plans/ACTIVE-QUESTS.md`, not in this commitment |
 
