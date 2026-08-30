@@ -33,8 +33,9 @@ const levelTag = (level) => (level === 'underground' ? '<span class="qtag qtag-u
  * @param {{setOpen(on:boolean):void, isOpen():boolean}} [deps.panel]  the shell's Quests panel
  * @param {(n:number)=>void} [deps.onSelection]  number of selected quests changed
  * @param {()=>{left:number,top:number,right:number,bottom:number}} [deps.safeRect]  stage area nothing floats over
+ * @param {()=>void} [deps.afterDraw]   the 2D pins moved — whatever de-conflicts against them re-runs
  */
-export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, project3d, panel, onSelection, safeRect }) {
+export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, project3d, panel, onSelection, safeRect, afterDraw }) {
   let all = [];                       // every quest in the file
   let loaded = false, loading = null;
   let selected = [];                  // slugs, in selection order (colour = index)
@@ -316,6 +317,25 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
       m.addTo(layer);
       markerOf.set(p.id, m);
     }
+    // The place labels de-conflict against these boxes; adding markers to a Leaflet layer raises no
+    // map event, so nothing else would re-run that pass on a fresh selection (QA D6).
+    afterDraw?.();
+  }
+  /**
+   * Where the 2D pins are on screen right now, in map-container px, as boxes a place label must
+   * not print through (QA D6 — a pin landed centred on CRACKHOUSE). Empty in 3D: map3d.js runs the
+   * same de-confliction against the projected pins in its own screen-space pass.
+   */
+  function pinBoxes() {
+    if (!visible || is3d()) return [];
+    const box = currentTier() === 'full' ? 34 : 24;
+    const out = [];
+    for (const p of points()) {
+      const q = map.latLngToContainerPoint([p.pin.z, p.pin.x]);
+      if (!Number.isFinite(q?.x)) continue;
+      out.push({ left: q.x - box / 2, top: q.y - box / 2, right: q.x + box / 2, bottom: q.y + box / 2 });
+    }
+    return out;
   }
 
   /* --------------------------------------------------------- 3D data feed --- */
@@ -372,14 +392,37 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
           (mine.length ? `<button type="button" class="qfly" data-qfly="${esc(mine[0].id)}" title="Fly to" aria-label="Fly to objective">➤</button>` : '') +
         `</label>`;
       }).join('');
+      /*
+       * QA D7. A quest picked on Customs and then looked at on Woods has NOTHING to draw here, and
+       * the panel used to answer that with every one of its objectives listed, greyed, with a dash
+       * where the number goes — ten-plus dead rows burying the search field on a map where not one
+       * of them applies. The count and the map names are the whole answer; the rows stay one click
+       * away for the player who wants to read the quest anyway.
+       */
+      const body = pts.length ? `<div class="qobjs">${objs}</div>` : (() => {
+        const n = (q.objectives ?? []).length;
+        const maps = [...new Set((q.objectives ?? []).flatMap((o) => o.maps ?? []))].filter(Boolean).sort();
+        const where = maps.length ? maps.slice(0, 3).join(', ') + (maps.length > 3 ? ` +${maps.length - 3}` : '')
+          : 'another map';
+        return `<div class="qaway"><span class="qaway-t">${n} objective${n === 1 ? '' : 's'} on ${esc(where)}</span>` +
+          `<button type="button" class="qaway-x" data-qshow="${esc(q.slug)}" aria-expanded="false">Show</button></div>` +
+          `<div class="qobjs" data-qaway="${esc(q.slug)}" hidden>${objs}</div>`;
+      })();
       return `<div class="qsel-q" style="--qc:${esc(color)}">` +
         `<div class="qsel-head"><span class="qdot" style="background:${esc(color)}"></span>` +
           `<b>${esc(q.name)}</b>` +
           `<span class="qmeta">${esc(q.trader ?? '')}${q.minLevel ? ` · Lv ${q.minLevel}` : ''}</span>` +
           `<button type="button" class="qx" data-qremove="${esc(q.slug)}" aria-label="Remove quest">✕</button></div>` +
-        `<div class="qobjs">${objs}</div></div>`;
+        body + '</div>';
     }).join('');
 
+    for (const b of el.list.querySelectorAll('[data-qshow]')) b.onclick = () => {
+      const rows = el.list.querySelector(`[data-qaway="${CSS.escape(b.dataset.qshow)}"]`);
+      if (!rows) return;
+      rows.hidden = !rows.hidden;
+      b.textContent = rows.hidden ? 'Show' : 'Hide';
+      b.setAttribute('aria-expanded', String(!rows.hidden));
+    };
     for (const b of el.list.querySelectorAll('[data-qremove]')) b.onclick = () => deselect(b.dataset.qremove);
     for (const b of el.list.querySelectorAll('.qfly')) b.onclick = (e) => { e.preventDefault(); flyToPoint(b.dataset.qfly); };
     for (const c of el.list.querySelectorAll('input[data-qdone]')) c.onchange = () => markObjective(c.dataset.qdone, c.checked);
@@ -618,7 +661,7 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
 
   return {
     layer, load, init, setOpen,
-    points, deckData, colorOf,
+    points, deckData, colorOf, pinBoxes,
     select, deselect, toggle, markObjective, flyToObjective, flyToPoint,
     openCardFor, closeCard, positionCard, setVisible,
     draw2d,
