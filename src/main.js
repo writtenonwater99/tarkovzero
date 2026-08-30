@@ -29,7 +29,9 @@ function is3d() { return document.body.classList.contains('view-3d'); }
 let view3d = null;
 let assistant = null;   // the AI card; created once window.tz exists (bottom of this file)
 let omni = null;        // the omnibox controller; created last — it drives everything above
-let v3 = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -3, maxZoom: 8 };
+// The zoom limits mirror src/map3d.js's own — deck applies its copy, so a wider pair here would
+// only ever be a lie about what a zoom key can reach.
+let v3 = { target: [0, 0, 0], zoom: 0, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit, minZoom: -2, maxZoom: 5 };
 
 /* ------------------------------------------------------------------ shell -- */
 // Floating HUD: right icon toolbar, docked panels, pin model, safe-viewport rect. Everything the
@@ -697,12 +699,40 @@ function matchLayers(query) {
   return [...hit].filter((k) => layerOf.has(k));
 }
 
+/**
+ * The 3D orbit target that lands the game point (x, z) in the middle of the SAFE rect.
+ *
+ * The 2D branch of a fly just subtracts safeOffset() in screen px, because Leaflet's screen is the
+ * ground plane. In 3D the ground is rotated by the orbit and foreshortened by the tilt, so the same
+ * pixel offset is a different world offset. deck's OrbitView puts one common-space unit on one
+ * screen pixel at the target, with the ground turned through `rotationOrbit` and squashed by
+ * sin(rotationX), which inverts to:
+ *
+ *   A = px_right / 2^zoom                    B = -px_down / (2^zoom · sin(tilt))
+ *   world = ( A·cosθ + B·sinθ , −A·sinθ + B·cosθ )        θ = rotationOrbit
+ *
+ * (The mapping is exact at the target's own depth and drifts slightly across a perspective frame;
+ * over a half-dock offset that is a few pixels, against the ~215 px of not doing it at all.)
+ */
+function target3dFor(x, z, zoom, rotationX = v3.rotationX, rotationOrbit = v3.rotationOrbit) {
+  const off = safeOffset();
+  const scale = Math.pow(2, Number(zoom) || 0);
+  const tilt = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, Number(rotationX) || CAM.rotationX));
+  const sin = Math.sin((tilt * Math.PI) / 180);
+  if (!Number.isFinite(scale) || scale <= 0 || !(sin > 0)) return [-x, -z, 0];
+  const th = ((Number(rotationOrbit) || 0) * Math.PI) / 180, c = Math.cos(th), s = Math.sin(th);
+  const A = off.x / scale, B = -off.y / (scale * sin);
+  return [-x - (A * c + B * s), -z - (-A * s + B * c), 0];
+}
+
 function flyTo(x, z) {
   const z2 = Math.max(map.getZoom(), 4.4);
-  if (is3d()) set3d({ target: [-x, -z, 0], zoom: z2 - zOff(v3.rotationX) });
-  else {
-    // Land the target in the middle of the *safe* rect, not the middle of the window: with a panel
-    // docked on the right, the geometric centre is behind it.
+  // Land the target in the middle of the *safe* rect, not the middle of the window: with a panel
+  // docked on the right, the geometric centre is behind it. Both views owe the player that.
+  if (is3d()) {
+    const zoom = z2 - zOff(v3.rotationX);
+    set3d({ target: target3dFor(x, z, zoom), zoom });
+  } else {
     const centre = map.unproject(map.project([z, x], z2).subtract(safeOffset()), z2);
     map.setView(centre, z2, { animate: true });
   }
@@ -896,11 +926,15 @@ renderLivePanel();
 const visibleKinds = () => new Set([...$$('#layers input[data-kind]')].filter((i) => i.checked && i.dataset.kind).map((i) => i.dataset.kind));
 function set3d(patch) {
   v3 = { ...v3, ...patch };
-  // Programmatic flies obey the same floor as a right-drag: the eye stays above the ground plane.
-  v3.rotationX = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, v3.rotationX ?? CAM.rotationX));
+  // Programmatic flies obey the same floor as a right-drag: the eye stays above the ground plane —
+  // and *only* map3d.js knows how high the terrain under the orbit target is, so it owns the clamp
+  // and its answer is authoritative. v3 is re-seeded from what it actually applied; pushing a second
+  // viewState at deck here would throw the ground clamp away and leave the two states disagreeing.
   if (view3d) {
-    try { view3d.setView({ target: v3.target, zoom: v3.zoom }); } catch {}
-    try { view3d.deck?.setProps({ viewState: { ...v3 } }); } catch {}
+    try { v3 = { ...v3, ...view3d.setView(v3) }; } catch {}
+  } else {
+    // Before deck exists there is no terrain to clear — the flat horizon floor is all there is.
+    v3.rotationX = Math.min(CAM.maxRotationX, Math.max(CAM.minRotationX, v3.rotationX ?? CAM.rotationX));
   }
   map.setView([-v3.target[1], -v3.target[0]], v3.zoom + zOff(v3.rotationX), { animate: false });
   updateHud();
@@ -967,14 +1001,18 @@ const stepFloor = (d) => { const i = floorBtns.findIndex((b) => b.classList.cont
 
 /* ------------------------------------------------------- HUD controls ---- */
 function zoomBy(d) {
-  if (is3d()) set3d({ zoom: Math.max(-2, Math.min(8, (v3.zoom ?? 0) + d)) });
+  if (is3d()) set3d({ zoom: Math.max(v3.minZoom ?? -2, Math.min(v3.maxZoom ?? 5, (v3.zoom ?? 0) + d)) });
   else map.setZoom(map.getZoom() + d, { animate: true });
 }
 $('#hud-zin').onclick = () => zoomBy(0.5);
 $('#hud-zout').onclick = () => zoomBy(-0.5);
 $('#hud-fit').onclick = () => {
-  // Fit in 3D also restores the default framing: cover zoom, oblique tilt, the diorama's near corner.
-  if (is3d()) set3d({ target: [-fitState.center.lng, -fitState.center.lat, 0], zoom: fitState.zoom - zOff(CAM.rotationX), rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
+  // Fit in 3D also restores the default framing: cover zoom, oblique tilt, the diorama's near
+  // corner — centred on the safe rect, exactly as the 2D fit() is.
+  if (is3d()) {
+    const zoom = fitState.zoom - zOff(CAM.rotationX);
+    set3d({ target: target3dFor(fitState.center.lng, fitState.center.lat, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
+  }
   else { autoFit = true; fit(); }
 };
 $('#hud-north').onclick = () => {
