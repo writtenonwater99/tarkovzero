@@ -65,6 +65,83 @@ export function projectedGroundExtent(width, depth, rotationX = CAM.rotationX, r
 }
 
 /**
+ * Where a ground point lands on screen — the camera the app ACTUALLY has.
+ *
+ * `projectedGroundExtent` above models the ground as an affine map: a turn by `rotationOrbit` and a
+ * `sin(rotationX)` squash. deck's OrbitView is a PERSPECTIVE camera (`CAM.fovy`), so the near half
+ * of the tilted rhombus projects further from the centre than the affine model says, and the error
+ * grows with how much of the frame the map fills — i.e. it grows with the window, which is exactly
+ * the shape of the defect the contain fit was supposed to end (QA H1). Fitting against the affine
+ * model therefore under-frames on the near side: on Woods the map's own bounds corner sat 55 px off
+ * the left edge at 1400x985 and 119 px off at 2560x1440, with real terrain on it.
+ *
+ * This is deck's own arithmetic, restated. OrbitViewport builds
+ *   `viewMatrix = lookAt(eye=[0,-f,0], up=[0,0,1]) · Rx(rotationX) · Rz(rotationOrbit) · scale(2^zoom/H)`
+ * with `f = fovyToAltitude(fovy) = 0.5 / tan(fovy/2)`, then a standard perspective divide. Carrying
+ * a ground offset `(dx, dz)` (game metres, the world point is `[-x, -z, y]`) through it gives
+ *
+ *   px = k·a / (1 + ε·b)      py = −k·c / (1 + ε·b)      k = 2^zoom,  ε = k / (f · H)
+ *
+ * where `a`, `b`, `c` are the offset turned by the orbit and tilted, and `H` is the height of the
+ * DECK CANVAS — not of whatever sub-rect we are framing into, because ε is about how close the eye
+ * stands, and that is set by the canvas. `ε → 0` is the affine model, which is why the old one is
+ * right at the centre of the frame and wrong at its corners.
+ *
+ * Verified against a real `OrbitViewport.project()` in scripts/camera-test.mjs — to within 1e-9 px.
+ */
+export function groundOffsetPx({ dx = 0, dz = 0, dy = 0, zoom = 0, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, fovy = CAM.fovy, containerHeight = 800 }) {
+  const th = rad(Number(rotationOrbit) || 0), ph = rad(Number(rotationX) || 0);
+  // world = [-x, -z, y]: the sign flip is irrelevant to a symmetric box, but this function is also
+  // used to project one named corner, so it has to be the app's mapping and not a convenience.
+  const wx = -dx, wy = -dz, wz = dy;
+  const ux = wx * Math.cos(th) - wy * Math.sin(th);
+  const uy = wx * Math.sin(th) + wy * Math.cos(th);
+  const a = ux;
+  const b = uy * Math.cos(ph) - wz * Math.sin(ph);
+  const c = uy * Math.sin(ph) + wz * Math.cos(ph);
+  const k = Math.pow(2, Number(zoom) || 0);
+  const f = 0.5 / Math.tan(rad(fovy) / 2);
+  const w = 1 + (k * b) / (f * Math.max(1, containerHeight));
+  if (!(w > 0)) return null;   // behind the eye — there is no screen point
+  return [(k * a) / w, -(k * c) / w];
+}
+
+/**
+ * The largest scale at which every corner of a `width x depth` ground rect, centred on the camera
+ * target, is still inside a `viewportWidth x viewportHeight` box — under the perspective camera.
+ *
+ * Monotone in scale (closing in can only push a corner further out, on both sides of the rhombus),
+ * so a bisection between "nothing" and the affine answer — which is always an over-estimate — lands
+ * on it. 60 halvings takes a 1e18 bracket to floating-point noise; the loop is ~2 µs.
+ */
+function containScale({ width, depth, viewportWidth, viewportHeight, rotationX, rotationOrbit, fovy, containerHeight }) {
+  const hw = Math.abs(width) / 2, hd = Math.abs(depth) / 2;
+  const corners = [[hw, hd], [hw, -hd], [-hw, hd], [-hw, -hd]];
+  // How far past the box the worst corner sits, as a ratio. <= 1 is contained.
+  const overflow = (scale) => {
+    const zoom = Math.log2(scale);
+    let worst = 0;
+    for (const [dx, dz] of corners) {
+      const p = groundOffsetPx({ dx, dz, zoom, rotationX, rotationOrbit, fovy, containerHeight });
+      if (!p) return Infinity;
+      worst = Math.max(worst, Math.abs(p[0]) / (viewportWidth / 2), Math.abs(p[1]) / (viewportHeight / 2));
+    }
+    return worst;
+  };
+  const { w, d } = projectedGroundExtent(width, depth, rotationX, rotationOrbit);
+  if (!(w > 0) || !(d > 0)) return null;
+  let hi = Math.min(viewportWidth / w, viewportHeight / d);   // the affine fit: never too small
+  if (!(hi > 0) || !Number.isFinite(hi)) return null;
+  if (overflow(hi) <= 1) return hi;                            // no perspective correction needed
+  let lo = 0;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (overflow(mid) > 1) hi = mid; else lo = mid;
+  }
+  return lo > 0 ? lo : null;
+}
+
+/**
  * How far past `contain` a fit is allowed to go — the ceiling on cover, never the target.
  *
  * The fit used to BE cover: at an oblique tilt the map's footprint is a rhombus, so containing it
@@ -93,15 +170,28 @@ export const COVER_BAND = 1.75;
  * two stay live for a caller that frames a fit box tighter than the terrain (the wedges are void, so
  * cropping them is free); the band is what stops that turning into "stand on the map".
  *
+ * The binding term — contain of the fit box — is solved against the PERSPECTIVE camera (see
+ * `groundOffsetPx`), so "contained" means contained in the frame deck actually draws. The other two
+ * are ceilings on a fit, not the fit, and stay on the cheap affine extent.
+ *
+ * `containerHeight` is the deck canvas' height; `viewportWidth/Height` is the box being framed
+ * inside it (main.js frames the SAFE rect, which is smaller). They differ by the chrome, and the
+ * perspective term needs the canvas — pass it, or the eye is assumed to stand where the smaller box
+ * would put it.
+ *
  * Returns null when the inputs cannot produce a finite answer, so callers can keep what they had.
  */
-export function fitZoom({ width, depth, fitWidth = width, fitDepth = depth, viewportWidth, viewportHeight, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, coverBand = COVER_BAND }) {
+export function fitZoom({ width, depth, fitWidth = width, fitDepth = depth, viewportWidth, viewportHeight, containerHeight = viewportHeight, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, fovy = CAM.fovy, coverBand = COVER_BAND }) {
   const { w, d } = projectedGroundExtent(width, depth, rotationX, rotationOrbit);
   const fit = projectedGroundExtent(fitWidth, fitDepth, rotationX, rotationOrbit);
   if (!(w > 0) || !(d > 0) || !(fit.w > 0) || !(fit.d > 0) || !(viewportWidth > 0) || !(viewportHeight > 0)) return null;
   const sx = viewportWidth / w, sy = viewportHeight / d;
   const contain = Math.min(sx, sy), cover = Math.max(sx, sy);
-  const containFit = Math.min(viewportWidth / fit.w, viewportHeight / fit.d);
+  const containFit = containScale({
+    width: fitWidth, depth: fitDepth, viewportWidth, viewportHeight,
+    rotationX, rotationOrbit, fovy, containerHeight: containerHeight > 0 ? containerHeight : viewportHeight,
+  });
+  if (containFit == null) return null;
   const scale = Math.min(cover, contain * Math.max(1, coverBand), containFit);
   const zoom = Math.log2(scale);
   return Number.isFinite(zoom) ? zoom : null;
@@ -141,7 +231,13 @@ export function minFitZoom({ margin = MIN_ZOOM_MARGIN, ...box }) {
 let FIT_BOX = null;
 export function setFitBox(box) {
   const ok = box && box.width > 0 && box.depth > 0 && box.viewportWidth > 0 && box.viewportHeight > 0;
-  FIT_BOX = ok ? { width: box.width, depth: box.depth, fitWidth: box.fitWidth, fitDepth: box.fitDepth, viewportWidth: box.viewportWidth, viewportHeight: box.viewportHeight } : null;
+  FIT_BOX = ok ? {
+    width: box.width, depth: box.depth, fitWidth: box.fitWidth, fitDepth: box.fitDepth,
+    viewportWidth: box.viewportWidth, viewportHeight: box.viewportHeight,
+    // The canvas the perspective term is measured against — see fitZoom(). Defaulted rather than
+    // required, so a caller that does not know the canvas still registers a usable box.
+    containerHeight: box.containerHeight > 0 ? box.containerHeight : box.viewportHeight,
+  } : null;
 }
 export const getFitBox = () => (FIT_BOX ? { ...FIT_BOX } : null);
 
@@ -194,10 +290,10 @@ export function clampTilt(viewState, floor = CAM.minRotationX) {
  * which is what a caller with no map loaded wants.
  */
 export function clampCamera(viewState, {
-  width, depth, viewportWidth, viewportHeight = 800, ground = 0, clearance = 3,
+  width, depth, viewportWidth, viewportHeight = 800, containerHeight = viewportHeight, ground = 0, clearance = 3,
 } = {}) {
   const floor = minFitZoom({
-    ...(FIT_BOX ?? { width, depth, viewportWidth, viewportHeight }),
+    ...(FIT_BOX ?? { width, depth, viewportWidth, viewportHeight, containerHeight }),
     rotationX: viewState.rotationX ?? CAM.rotationX,
     rotationOrbit: viewState.rotationOrbit ?? CAM.rotationOrbit,
   });

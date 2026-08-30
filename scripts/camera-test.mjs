@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { CAM, COVER_BAND, DEFAULT_ZOOM_OFFSET, MIN_ZOOM_MARGIN, zoomOffsetFor, projectedGroundExtent, fitZoom, minFitZoom, eyeDistance, groundFloorAngle, clampTilt, clampCamera, setFitBox, getFitBox } from '../src/camera.js';
+import { OrbitView } from '@deck.gl/core';
+import { CAM, COVER_BAND, DEFAULT_ZOOM_OFFSET, MIN_ZOOM_MARGIN, zoomOffsetFor, projectedGroundExtent, groundOffsetPx, fitZoom, minFitZoom, eyeDistance, groundFloorAngle, clampTilt, clampCamera, setFitBox, getFitBox } from '../src/camera.js';
 import { MAPS } from '../src/mapdata.js';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -45,11 +46,45 @@ function footprintOf(m) {
   return { ...extentOf(m), fitWidth: b.x1 - b.x0, fitDepth: b.z1 - b.z0, box: b };
 }
 const close = (a, b, tol, what) => assert.ok(Math.abs(a - b) <= tol, `${what}: ${a} is not within ${tol} of ${b}`);
-/** What fraction of the fit box's projected footprint is inside the viewport at `zoom`. */
-function visibleFraction({ fitWidth, fitDepth, viewportWidth, viewportHeight }, zoom) {
-  const { w, d } = projectedGroundExtent(fitWidth, fitDepth, CAM.rotationX, CAM.rotationOrbit);
-  const scale = Math.pow(2, zoom);
-  return Math.min(1, viewportWidth / (w * scale)) * Math.min(1, viewportHeight / (d * scale));
+
+/* ---------------------------------------------------------- the real camera -- */
+/**
+ * The app's own camera, in Node. `OrbitViewport` is pure @math.gl arithmetic — no GL, no DOM — so
+ * the projection the browser applies is importable here, and every containment claim below is made
+ * against IT rather than against camera.js's own model.
+ *
+ * That distinction is the whole reason this block exists. The test this replaces computed the
+ * on-screen footprint from `projectedGroundExtent()`, the same function `fitZoom()` chooses the zoom
+ * with, and then asserted the fraction was 1.0 — true by algebra for any zoom fitZoom could return,
+ * for any map, aspect or tilt. Sixteen green camera tests coexisted with a default Woods framing
+ * that ran real terrain off the left edge of the window.
+ *
+ * `dy` is a height in world units: the ground plane is y = 0 and the app's world point for a game
+ * coordinate is `[-x, -z, y]` (src/map3d.js's `P`).
+ */
+const CANVAS = { width: 1400, height: 985 };
+function project({ dx, dz, dy = 0 }, { zoom, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, width, height }) {
+  const view = new OrbitView({ orbitAxis: 'Z', fovy: CAM.fovy });
+  const vp = view.makeViewport({ width, height, viewState: { target: [0, 0, 0], zoom, rotationX, rotationOrbit } });
+  const p = vp.project([-dx, -dz, dy]);
+  // offsets from the projection centre, plus deck's depth: > 1 is behind the far plane, which is
+  // where a point the eye has closed past ends up.
+  return { px: p[0] - width / 2, py: p[1] - height / 2, depth: p[2] };
+}
+/** The four corners of a `width x depth` ground box centred on the camera target. */
+const cornersOf = (width, depth) => [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sz]) => ({ dx: (sx * width) / 2, dz: (sz * depth) / 2 }));
+/**
+ * How far the worst corner of the fit box sits past the box we asked to frame it in, measured
+ * through deck. <= 1 is contained; 1.08 means 8% of a half-frame of map is off screen.
+ */
+function containment({ fitWidth, fitDepth, viewportWidth, viewportHeight, containerHeight = viewportHeight }, zoom, rotationX, rotationOrbit) {
+  let worst = 0;
+  for (const c of cornersOf(fitWidth, fitDepth)) {
+    const { px, py, depth } = project(c, { zoom, rotationX, rotationOrbit, width: CANVAS.width, height: containerHeight });
+    if (!(depth <= 1)) return Infinity;   // a corner the eye has closed past is not "contained"
+    worst = Math.max(worst, Math.abs(px) / (viewportWidth / 2), Math.abs(py) / (viewportHeight / 2));
+  }
+  return worst;
 }
 
 test('zoomOffsetFor is the map CRS scale, not a constant tuned on Customs', () => {
@@ -82,31 +117,91 @@ test('the mirrored 2D zoom of a 3D fit is reachable on every map', () => {
   }
 });
 
+test('groundOffsetPx is deck OrbitViewport.project(), not an approximation of it', () => {
+  // camera.js may not import deck.gl (main.js seeds the view state without it), so the projection
+  // is restated there. This is the assertion that the restatement is exact — every framing claim
+  // below rests on it.
+  for (const zoom of [-2, -0.5, 0, 1.3, 3]) {
+    for (const [rotationX, rotationOrbit] of [[32, -20], [9, 0], [50, 75], [89, -160]]) {
+      for (const [dx, dz, dy] of [[0, 0, 0], [700, -900, 0], [-500, 300, 40], [120, 240, -30]]) {
+        for (const height of [800, 985, 1440]) {
+          const mine = groundOffsetPx({ dx, dz, dy, zoom, rotationX, rotationOrbit, containerHeight: height });
+          const real = project({ dx, dz, dy }, { zoom, rotationX, rotationOrbit, width: CANVAS.width, height });
+          const what = `zoom ${zoom} tilt ${rotationX} orbit ${rotationOrbit} at ${dx},${dz},${dy} in ${height}px`;
+          if (mine === null) {   // the point is behind the eye; deck agrees by putting it past the far plane
+            assert.ok(real.depth > 1, `${what}: null for a point deck projects in front (depth ${real.depth})`);
+            continue;
+          }
+          close(mine[0], real.px, 1e-9, `${what}: px`);
+          close(mine[1], real.py, 1e-9, `${what}: py`);
+        }
+      }
+    }
+  }
+});
+
 test('fitZoom frames each shipped map at the default oblique camera', () => {
-  // The numbers the fix claimed. A regression in projectedGroundExtent or COVER_BAND moves them.
-  close(fitZoom({ ...extentOf(MAPS.woods), ...STAGE }), -0.3512, 5e-3, 'woods fit');
-  close(fitZoom({ ...extentOf(MAPS.reserve), ...STAGE }), 0.9199, 5e-3, 'reserve fit');
-  close(fitZoom({ ...extentOf(MAPS.customs), ...STAGE }), 0.2326, 5e-3, 'customs fit');
+  // The numbers the fix claimed. A regression in the projection or COVER_BAND moves them.
+  close(fitZoom({ ...extentOf(MAPS.woods), ...STAGE }), -0.4940, 5e-3, 'woods fit');
+  close(fitZoom({ ...extentOf(MAPS.reserve), ...STAGE }), 0.7881, 5e-3, 'reserve fit');
+  close(fitZoom({ ...extentOf(MAPS.customs), ...STAGE }), 0.1920, 5e-3, 'customs fit');
   // The pre-fix path — a 2D cover zoom minus a constant — is what these must NOT be.
   assert.ok(Math.abs(fitZoom({ ...extentOf(MAPS.woods), ...STAGE }) - 1.16) > 0.5, 'woods is back on the 2D cover zoom');
 });
 
-test('fitZoom contains the whole footprint and never exceeds the cover band', () => {
+test('fitZoom contains the whole footprint IN DECK, and never exceeds the cover band', () => {
   for (const m of Object.values(MAPS)) {
     const box = footprintOf(m);
     const zoom = fitZoom({ ...box, ...STAGE });
     const scale = Math.pow(2, zoom);
-    const { w, d } = projectedGroundExtent(box.fitWidth, box.fitDepth);
-    // Contain: BOTH axes of the fit box are inside the frame, which is the whole point (QA H1/H5).
-    assert.ok(w * scale <= STAGE.viewportWidth + 1e-6, `${m.key}: the footprint is ${(w * scale).toFixed(0)}px wide in a ${STAGE.viewportWidth}px frame`);
-    assert.ok(d * scale <= STAGE.viewportHeight + 1e-6, `${m.key}: the footprint is ${(d * scale).toFixed(0)}px deep in a ${STAGE.viewportHeight}px frame`);
-    // and one axis is filled — a contain fit is the LARGEST scale that fits, not merely a small one.
-    close(Math.max((w * scale) / STAGE.viewportWidth, (d * scale) / STAGE.viewportHeight), 1, 1e-9, `${m.key}: fit fills an axis`);
+    // Contain, measured through the app's own camera: no corner of the fit box is off the frame
+    // (QA H1/H5). Under the affine model this held by construction; under the perspective camera
+    // the near corner used to hang 4–8% of a half-frame past the edge, which on Woods is real
+    // terrain running off the left of the window.
+    const seen = containment({ ...box, ...STAGE }, zoom, CAM.rotationX, CAM.rotationOrbit);
+    assert.ok(seen <= 1 + 1e-9, `${m.key}: the worst footprint corner sits ${((seen - 1) * 100).toFixed(1)}% of a half-frame outside the window`);
+    // and the frame is FILLED — a contain fit is the largest scale that fits, not merely a small
+    // one. (A fit that just zoomed out would pass the line above and be useless.)
+    assert.ok(seen > 0.999, `${m.key}: the fit leaves the map floating (worst corner at ${(seen * 100).toFixed(1)}% of the half-frame)`);
     // The band is still the ceiling: the fit may never sit more than COVER_BAND past the terrain's
     // own contain, whatever box it was handed.
     const terrain = projectedGroundExtent(box.width, box.depth);
     const containTerrain = Math.min(STAGE.viewportWidth / terrain.w, STAGE.viewportHeight / terrain.d);
     assert.ok(scale <= containTerrain * COVER_BAND + 1e-9, `${m.key}: fit is ${(scale / containTerrain).toFixed(2)}x past contain`);
+  }
+});
+
+test('the perspective fit is TIGHTER than the affine one it replaced, and only near the edges', () => {
+  // Guards the direction of the correction: the affine model under-frames, so the honest fit must
+  // sit at or below it — and by a real amount on the maps the defect was filed against.
+  for (const m of Object.values(MAPS)) {
+    const box = { ...footprintOf(m), ...STAGE };
+    const { w, d } = projectedGroundExtent(box.fitWidth, box.fitDepth);
+    const affine = Math.log2(Math.min(STAGE.viewportWidth / w, STAGE.viewportHeight / d));
+    const real = fitZoom(box);
+    assert.ok(real <= affine + 1e-9, `${m.key}: the perspective fit (${real.toFixed(4)}) is looser than the affine one (${affine.toFixed(4)})`);
+    // At the affine zoom the corner really is outside — i.e. the correction is not cosmetic.
+    assert.ok(containment(box, affine, CAM.rotationX, CAM.rotationOrbit) > 1.01,
+      `${m.key}: the affine fit already contained the map; this correction has no defect to fix`);
+  }
+});
+
+test('the fit contains the map inside the SAFE RECT, not merely inside the canvas', () => {
+  // The app frames the safe rect (the part of the stage nothing floats over) inside a TALLER
+  // canvas, and the perspective term belongs to the canvas — it is about how close the eye stands,
+  // and that is set by the surface deck renders onto, not by the sub-rect we chose to fill.
+  const SAFE = { viewportWidth: 1338, viewportHeight: 867, containerHeight: 985 };
+  for (const m of Object.values(MAPS)) {
+    const box = { ...footprintOf(m), ...SAFE };
+    const zoom = fitZoom(box);
+    const seen = containment(box, zoom, CAM.rotationX, CAM.rotationOrbit);
+    assert.ok(seen <= 1 + 1e-9, `${m.key}: ${((seen - 1) * 100).toFixed(1)}% of a half-frame of map is outside the safe rect`);
+    assert.ok(seen > 0.999, `${m.key}: the safe-rect fit leaves the map floating (${(seen * 100).toFixed(1)}%)`);
+    // Getting it wrong in the safe direction still costs framing: assuming the canvas is only as
+    // tall as the safe rect over-states how close the eye stands, so the fit comes back needlessly
+    // wide. It must never come back TIGHTER than the honest one, which would be a crop.
+    const naive = fitZoom({ ...box, containerHeight: SAFE.viewportHeight });
+    assert.ok(naive <= zoom + 1e-9, `${m.key}: the safe-rect-as-canvas fit (${naive.toFixed(4)}) is closer in than the honest one (${zoom.toFixed(4)})`);
   }
 });
 
@@ -119,16 +214,43 @@ test('a wider window never shows less map', () => {
   const VIEWPORTS = [[1200, 800], [1400, 985], [1920, 1165], [2560, 1440]];
   for (const m of Object.values(MAPS)) {
     const box = footprintOf(m);
-    let prev = -Infinity, prevW = 0;
+    let prevMetres = 0, prevW = 0;
     for (const [viewportWidth, viewportHeight] of VIEWPORTS) {
       const stage = { ...box, viewportWidth, viewportHeight };
-      const seen = visibleFraction(stage, fitZoom(stage));
-      assert.ok(seen >= prev - 1e-9,
-        `${m.key}: ${viewportWidth}x${viewportHeight} shows ${(seen * 100).toFixed(1)}% of the footprint, down from ${(prev * 100).toFixed(1)}% at ${prevW}px wide`);
-      // Contain means the answer is the whole map at every one of them, not merely a non-decreasing
-      // slice of it.
-      close(seen, 1, 1e-9, `${m.key} at ${viewportWidth}x${viewportHeight}`);
-      prev = seen; prevW = viewportWidth;
+      const zoom = fitZoom(stage);
+      // Every corner inside the frame, measured through deck — at EVERY aspect, which is what the
+      // cover fit this replaced could not do (Customs: 1.086 at 1400x985 -> 1.328 at 1920x1165,
+      // both edges clipped, top and bottom fifths empty fog).
+      const seen = containment(stage, zoom, CAM.rotationX, CAM.rotationOrbit);
+      assert.ok(seen <= 1 + 1e-9,
+        `${m.key} at ${viewportWidth}x${viewportHeight}: ${((seen - 1) * 100).toFixed(1)}% of a half-frame of map is off screen`);
+      // "Never shows less map" with the whole map already on screen has to be about SIZE: the map
+      // may not get smaller in metres-on-screen terms as the window grows.
+      const metres = Math.pow(2, zoom);   // px per game metre at the target
+      assert.ok(metres >= prevMetres - 1e-9,
+        `${m.key}: ${viewportWidth}x${viewportHeight} draws the map at ${metres.toFixed(4)} px/m, down from ${prevMetres.toFixed(4)} at ${prevW}px wide`);
+      prevMetres = metres; prevW = viewportWidth;
+    }
+  }
+});
+
+/* ------------------------------------------------------------------ QA H2 -- */
+// The 2D first visit owes the player the whole map, and Leaflet clamps `setView` to its own
+// `minZoom` without saying so. Woods' contain zoom is 1.69: against the old floor of 2 the fit
+// silently did nothing and the first frame of the biggest shipped map had its north and south rims
+// cut off. main.js's containZoom() is Leaflet arithmetic and cannot be imported here, so the rule
+// is restated against the same shipped numbers: m/px = 1 / (|transform[0]| * 2^zoom2d).
+test('every map can reach its own 2D contain fit — the Leaflet zoom floor is under it', () => {
+  const CHROME = { w: 62, h: 118 };   // the safe rect's inset from the stage at the reference window
+  for (const [viewportWidth, viewportHeight] of [[1200, 800], [1400, 985], [1920, 1165]]) {
+    for (const m of Object.values(MAPS)) {
+      const box = footprintOf(m);
+      const t = Math.abs(m.transform[0]);
+      const zoom2d = Math.log2(Math.min((viewportWidth - CHROME.w) / (t * box.fitWidth), (viewportHeight - CHROME.h) / (t * box.fitDepth)));
+      assert.ok(zoom2d >= m.minZoom,
+        `${m.key} at ${viewportWidth}x${viewportHeight}: the contain fit is ${zoom2d.toFixed(3)}, under Leaflet's minZoom ${m.minZoom} — it will clamp and crop`);
+      assert.ok(m.minNativeZoom >= m.minZoom,
+        `${m.key}: minZoom ${m.minZoom} is under minNativeZoom ${m.minNativeZoom} with no upscaling range declared`);
     }
   }
 });
@@ -143,10 +265,9 @@ test('the fit contains the extract furniture, not just the terrain', () => {
   const withFurniture = fitZoom({ ...woods, ...STAGE });
   const terrainOnly = fitZoom({ ...extentOf(MAPS.woods), ...STAGE });
   assert.ok(withFurniture < terrainOnly, 'the furniture did not pull the fit out at all');
-  // Every extract, plus its 40 m of margin, is inside the frame at the fit.
-  const scale = Math.pow(2, withFurniture);
-  const { w, d } = projectedGroundExtent(woods.fitWidth, woods.fitDepth);
-  assert.ok(w * scale <= STAGE.viewportWidth + 1e-6 && d * scale <= STAGE.viewportHeight + 1e-6, 'the furniture is still clipped');
+  // Every extract, plus its 40 m of margin, is inside the frame at the fit — through deck.
+  assert.ok(containment({ ...woods, ...STAGE }, withFurniture, CAM.rotationX, CAM.rotationOrbit) <= 1 + 1e-9,
+    'the furniture is still clipped');
 });
 
 test('fitZoom returns null rather than a NaN camera on degenerate input', () => {
@@ -227,7 +348,7 @@ test('the registered fit box is the box the floor is measured from', () => {
   const safe = { viewportWidth: 1338, viewportHeight: 867 };   // a stage minus the toolbar/chips/omnibox
   try {
     setFitBox({ ...woods, ...safe });
-    assert.deepEqual(getFitBox(), { width: woods.width, depth: woods.depth, fitWidth: woods.fitWidth, fitDepth: woods.fitDepth, ...safe });
+    assert.deepEqual(getFitBox(), { width: woods.width, depth: woods.depth, fitWidth: woods.fitWidth, fitDepth: woods.fitDepth, ...safe, containerHeight: safe.viewportHeight });
     const fit = fitZoom({ ...woods, ...safe });
     // clampCamera is handed map3d's OWN box (the terrain ring in the full container) and must ignore
     // it in favour of the registered one.
@@ -288,11 +409,9 @@ test('the Woods #1.4 permalink is honoured verbatim, and a far wilder one still 
     const wild = clampCamera({ ...view, zoom: floor - 2 }, { ...extentOf(woods), ...STAGE });
     close(wild.zoom, floor, 1e-12, 'a wild permalink lands on the floor');
     // At the floor the map still all but fills the frame — no ring of void for the underside to
-    // show through, which is what the floor is for.
-    const { w, d } = projectedGroundExtent(box.fitWidth, box.fitDepth, CAM.rotationX, CAM.rotationOrbit);
-    const scale = Math.pow(2, wild.zoom);
-    assert.ok(Math.max((w * scale) / box.viewportWidth, (d * scale) / box.viewportHeight) > 0.6,
-      'the clamped framing leaves the map floating in the viewport');
+    // show through, which is what the floor is for. Measured through deck, like the fit.
+    const seen = containment(box, wild.zoom, CAM.rotationX, CAM.rotationOrbit);
+    assert.ok(seen > 0.6, `the clamped framing leaves the map floating in the viewport (worst corner at ${(seen * 100).toFixed(0)}% of the half-frame)`);
   } finally { setFitBox(null); }
 });
 
@@ -304,7 +423,9 @@ test('clampCamera applies the tilt floor at the zoom it actually lands on', () =
   const e = extentOf(MAPS.customs);
   const GROUND = 900;
   const stage = { ...e, ...STAGE, ground: GROUND, clearance: 3 };
-  const floor = minFitZoom({ ...e, ...STAGE });
+  // The floor is measured at the camera's OWN tilt (the projected footprint is a function of it),
+  // so the expected number is the floor at the tilt this view state carries, not at the default.
+  const floor = minFitZoom({ ...e, ...STAGE, rotationX: CAM.minRotationX });
   const out = clampCamera({ zoom: floor - 3, rotationX: CAM.minRotationX, rotationOrbit: CAM.rotationOrbit }, stage);
   close(out.zoom, floor, 1e-12, 'zoom floor');
   close(out.rotationX, groundFloorAngle({ zoom: floor, ground: GROUND, viewportHeight: STAGE.viewportHeight }), 1e-12, 'tilt floor at the lifted zoom');
@@ -318,7 +439,11 @@ test('the min zoom follows the tilt, because the projected footprint does', () =
   const flat = minFitZoom({ ...e, ...STAGE, rotationX: 12 });
   const steep = minFitZoom({ ...e, ...STAGE, rotationX: 80 });
   assert.ok(steep <= flat, `steep ${steep} should not sit above flat ${flat}`);
-  // At the flat end the width binds, so the floor stops moving with the tilt entirely.
+  // At the flat end the WIDTH binds, so the affine answer is `log2(viewportWidth / w) - margin`.
+  // The real floor sits a little under it — the near corner of a flat rhombus is the closest thing
+  // in the frame to the eye, so perspective magnifies it most — but not by a zoom level.
   const { w } = projectedGroundExtent(e.width, e.depth, 12, CAM.rotationOrbit);
-  close(flat, Math.log2(STAGE.viewportWidth / w) - MIN_ZOOM_MARGIN, 1e-12, 'width-bound floor');
+  const affine = Math.log2(STAGE.viewportWidth / w) - MIN_ZOOM_MARGIN;
+  assert.ok(flat <= affine + 1e-9, `the flat floor ${flat} is above the affine width-bound answer ${affine}`);
+  assert.ok(flat > affine - 0.25, `the flat floor ${flat} is a long way under the affine width-bound answer ${affine}`);
 });
