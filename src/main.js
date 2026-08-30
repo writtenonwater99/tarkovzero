@@ -1030,21 +1030,38 @@ function togglePop(pop, trigger) {
   const open = pop.hidden;
   closePops();
   pop.hidden = !open;
-  if (open) clampPop(pop);
+  if (open) placePop(pop, trigger);
   trigger?.setAttribute('aria-expanded', String(open));
 }
 /**
- * Keep a popover on screen. Both popovers hang off panels in the top-anchored dock, so a tall one
- * (the 13-row Controls list) can run past the bottom of a short window — it slides up by exactly
- * the overshoot, and never past the top edge, which is the failure this replaced.
+ * Put a popover on screen and keep it there.
+ *
+ * A `fixed` popover (the Controls list) is placed by hand: it hangs off a button inside a panel,
+ * and .panel/.panel-body clip their content, so it has to escape the panel box entirely. It goes
+ * under the button, right-aligned with it, flips above if it will not fit below, and is squared up
+ * with the window edges either way. An `absolute` one (the status chip's) is already where it
+ * belongs and only needs the same last nudge.
  */
-function clampPop(pop) {
+function placePop(pop, trigger) {
   pop.style.transform = '';
-  const M = 10;
+  const M = 10;                                   // margin from the window edge
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (getComputedStyle(pop).position === 'fixed') {
+    if (!trigger) return;
+    const t = trigger.getBoundingClientRect();
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    let top = t.bottom + 8;
+    if (top + h > vh - M) top = t.top - 8 - h;    // no room below: flip above the button
+    top = Math.min(Math.max(M, top), Math.max(M, vh - M - h));
+    const left = Math.min(Math.max(M, t.right - w), Math.max(M, vw - M - w));
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.top = `${Math.round(top)}px`;
+    return;
+  }
   const r = pop.getBoundingClientRect();
   if (!r.height) return;
   let dy = 0;
-  if (r.bottom > window.innerHeight - M) dy = window.innerHeight - M - r.bottom;
+  if (r.bottom > vh - M) dy = vh - M - r.bottom;
   if (r.top + dy < M) dy = M - r.top;
   if (dy) pop.style.transform = `translateY(${Math.round(dy)}px)`;
 }
