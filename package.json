@@ -9,6 +9,7 @@
     "preview": "vite preview --configLoader runner",
     "check:dom": "node scripts/dom-contract-check.mjs",
     "test:omnibox": "node scripts/omnibox-routing-test.mjs",
+    "test:lod": "node scripts/lod-test.mjs",
     "fetch-data": "node scripts/fetch-data.mjs",
     "warm-tiles": "node scripts/warm-tiles.mjs",
     "build-community-data": "node scripts/build-community-data.mjs",
