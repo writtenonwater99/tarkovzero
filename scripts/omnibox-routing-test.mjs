@@ -7,7 +7,7 @@
  * must always mean the model. Plain node, no deps — src/omnibox.js only imports src/icons.js and
  * neither touches the DOM at module scope.
  */
-import { route, matchCommand, COMMANDS } from '../src/omnibox.js';
+import { route, matchCommand, runCommand, COMMANDS, HANDLED } from '../src/omnibox.js';
 
 /* ------------------------------------------------------------- fixtures -- */
 const INDEX = [
@@ -139,6 +139,100 @@ console.log('commands');
 {
   eq('a command never falls through to lookup', route('> fit', ctx).mode, 'command');
   check('matchCommand rejects an unrelated word', matchCommand(COMMANDS.find((c) => c.name === 'floor'), 'wxyz') === null);
+}
+
+/* ------------------------------------------------- `>` command execution */
+// route() decides which row Enter lands on; runCommand() is the wire from that row to something
+// happening. Both halves need covering — deleting a `case` used to leave every routing check green.
+console.log('command execution');
+/** A recording stand-in for main.js's action handles. */
+function stubActions(over = {}) {
+  const calls = [];
+  const rec = (name) => (...args) => { calls.push([name, ...args]); return true; };
+  return {
+    calls,
+    setView: rec('setView'), fit: rec('fit'), north: rec('north'), panel: rec('panel'),
+    myQuests: rec('myQuests'), help: rec('help'), clearTrails: rec('clearTrails'), pin: rec('pin'),
+    goMap: rec('goMap'), mapKeys: () => ['customs', 'reserve', 'woods'],
+    setFloor: rec('setFloor'), setRelief: rec('setRelief'), setNature: rec('setNature'),
+    setLabels: rec('setLabels'), setLayers: (...a) => { calls.push(['setLayers', ...a]); return 2; },
+    ...over,
+  };
+}
+/** Type `text` into the box, then press Enter on whatever it highlighted. */
+function enter(text, actions) {
+  const r = route(text, ctx);
+  const row = r.rows[r.index];
+  if (!row || row.type !== 'command') return { note: null, row };
+  return { note: runCommand(row.cmd, row.arg, actions), row };
+}
+
+{
+  const a = stubActions();
+  const { note } = enter('> my quests', a);
+  eq('`> my quests` + Enter reaches the quest log', a.calls[0]?.[0], 'myQuests');
+  eq('…and says so', note, 'My quests');
+}
+{
+  const a = stubActions();
+  enter('> quests', a);
+  check('`> quests` opens the panel instead', a.calls[0]?.[0] === 'panel' && a.calls[0][1] === 'quests', JSON.stringify(a.calls));
+}
+{
+  // The one that reloaded the page onto Customs: `k.startsWith('')` matches every key, so a bare
+  // `> map` used to navigate. `> m` highlights `map` with an empty argument, one keystroke from Enter.
+  const a = stubActions();
+  const bare = enter('> map', a);
+  eq('a bare `> map` navigates nowhere', a.calls.length, 0);
+  check('…and asks which map', /which map/i.test(bare.note ?? ''), String(bare.note));
+  const m = stubActions();
+  eq('`> m` highlights the map command', route('> m', ctx).rows[0].cmd.name, 'map');
+  enter('> m', m);
+  eq('…and it is just as inert', m.calls.length, 0);
+}
+{
+  const a = stubActions();
+  const { note } = enter('> map woods', a);
+  check('a named map still loads', a.calls[0]?.[0] === 'goMap' && a.calls[0][1] === 'woods', JSON.stringify(a.calls));
+  check('and the toast names it', /woods/.test(note));
+}
+{
+  const a = stubActions();
+  const { note } = enter('> map atlantis', a);
+  eq('an unknown map navigates nowhere', a.calls.length, 0);
+  check('…and says so', /no map called/i.test(note), String(note));
+}
+{
+  const a = stubActions();
+  enter('> layers scav', a);
+  check('`> layers <name>` flips layers', a.calls[0]?.[0] === 'setLayers' && a.calls[0][1] === 'scav' && a.calls[0][2] === true, JSON.stringify(a.calls));
+  const b = stubActions();
+  enter('> hide scav', b);
+  eq('`> hide` flips them the other way', b.calls[0]?.[2], false);
+  const c = stubActions();
+  enter('> layers', c);
+  check('a bare `> layers` opens the panel, it does not guess', c.calls[0]?.[0] === 'panel' && c.calls[0][1] === 'layers', JSON.stringify(c.calls));
+}
+{
+  const a = stubActions();
+  enter('> floor 2', a);
+  eq('`> floor 2` asks for floor 2', a.calls[0]?.[1], '2');
+  const u = stubActions();
+  enter('> floor u', u);
+  eq('`> floor u` means underground', u.calls[0]?.[1], 'U');
+  const bare = stubActions();
+  enter('> floor', bare);
+  eq('a bare `> floor` means all — never a NaN floor', bare.calls[0]?.[1], 'all');
+}
+// The generalisation: a command in the vocabulary with no case in the switch renders a selectable
+// row and then silently does nothing on Enter.
+{
+  const missing = COMMANDS.map((c) => c.name).filter((n) => !HANDLED.includes(n));
+  check('every command in the vocabulary has a handler', missing.length === 0, `unhandled: ${missing.join(', ')}`);
+  const stale = HANDLED.filter((n) => !COMMANDS.some((c) => c.name === n));
+  check('and every handler still has a command', stale.length === 0, `orphaned: ${stale.join(', ')}`);
+  const silent = COMMANDS.filter((c) => !runCommand(c, '', stubActions()));
+  check('every command answers with a toast line', silent.length === 0, `silent: ${silent.map((c) => c.name).join(', ')}`);
 }
 
 /* ------------------------------------------------------------ `?` -> AI */
