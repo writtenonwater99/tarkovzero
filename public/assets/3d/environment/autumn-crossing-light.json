@@ -7,7 +7,13 @@
     "elevation": "degrees above the horizon",
     "equirect": "row 0 = zenith; theta = polar angle from +Y; phi = azimuth",
     "shBasis": "real SH, bands 0..2, order [0, y, z, x, xy, yz, 3y^2-1, xz, x^2-z^2]",
-    "units": "linear radiance from the HDRI, before tone mapping"
+    "units": "linear radiance from the HDRI, before tone mapping",
+    "shConvolution": "shRadiance holds the UNCONVOLVED projection L_lm. For a Lambertian irradiance environment multiply band l by A_l = [pi, 2pi/3, pi/4] (Ramamoorthi/Hanrahan) — i.e. coefficient 0 by A_0, coefficients 1..3 by A_1, coefficients 4..8 by A_2. Skipping this makes the ambient both too dark and too directional.",
+    "shLambertA": [
+      3.141593,
+      2.094395,
+      0.785398
+    ]
   },
   "sourceSize": [
     1024,
@@ -15,7 +21,7 @@
   ],
   "meanLuminance": 0.937487,
   "previewExposure": 0.448006,
-  "shIrradiance": [
+  "shRadiance": [
     [
       3.219683,
       3.274708,
