@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "cacheVersion": "2026-08-29-e9e411d572ae-a1d400843b10",
+  "fetchedDate": "2026-08-29",
+  "sources": [
+    {
+      "name": "maps",
+      "url": "https://json.tarkov.dev/regular/maps",
+      "cachePath": "scripts/data/tarkov-dev-exact/2026-08-29/maps-e9e411d572ae5493.json",
+      "sha256": "e9e411d572ae54938f23f79b6e46dc3f1eece74335e64d5cbcdb914b70637db7",
+      "bytes": 9568353,
+      "etag": "W/\"d87334b7cd3dce58c1ae184d8c16f6a3\"",
+      "lastModified": "Sun, 30 Aug 2026 00:14:27 GMT"
+    },
+    {
+      "name": "maps_en",
+      "url": "https://json.tarkov.dev/regular/maps_en",
+      "cachePath": "scripts/data/tarkov-dev-exact/2026-08-29/maps_en-a1d400843b10f867.json",
+      "sha256": "a1d400843b10f8677eabe59acb4833716506fb571d7f27e73bd550cb7c25a21e",
+      "bytes": 22962,
+      "etag": "W/\"ea6c4650564958dc2edd01b40e984fb2\"",
+      "lastModified": "Wed, 26 Aug 2026 09:04:31 GMT"
+    }
+  ]
+}

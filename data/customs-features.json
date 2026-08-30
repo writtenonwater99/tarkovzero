@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "map": "customs",
+  "markerDuplicateWhitelist": [
+    { "kind": "lock", "name": "5da743f586f7744014504f72", "count": 2 },
+    { "kind": "lock", "name": "5448ba0b4bdc2d02308b456c", "count": 3 },
+    { "kind": "hazard", "name": "Sniper", "count": 3 },
+    { "kind": "hazard", "name": "Landmine", "count": 2 },
+    { "kind": "lootContainer", "name": "Toolbox", "count": 52 },
+    { "kind": "lootContainer", "name": "Wooden crate", "count": 59 },
+    { "kind": "lootContainer", "name": "Weapon box", "count": 87 },
+    { "kind": "lootContainer", "name": "Duffle bag", "count": 78 },
+    { "kind": "lootContainer", "name": "PMC body", "count": 17 },
+    { "kind": "lootContainer", "name": "Medical supply crate", "count": 5 },
+    { "kind": "lootContainer", "name": "Grenade box", "count": 7 },
+    { "kind": "lootContainer", "name": "Jacket", "count": 56 },
+    { "kind": "lootContainer", "name": "PC block", "count": 14 },
+    { "kind": "lootContainer", "name": "Drawer", "count": 56 },
+    { "kind": "lootContainer", "name": "Dead Scav", "count": 10 },
+    { "kind": "lootContainer", "name": "Safe", "count": 8 },
+    { "kind": "lootContainer", "name": "Medbag SMU06", "count": 5 },
+    { "kind": "lootContainer", "name": "Medcase", "count": 8 },
+    { "kind": "lootContainer", "name": "Technical supply crate", "count": 8 },
+    { "kind": "lootContainer", "name": "Wooden ammo box", "count": 8 },
+    { "kind": "lootContainer", "name": "Ground cache", "count": 9 },
+    { "kind": "lootContainer", "name": "Cash register", "count": 6 },
+    { "kind": "lootContainer", "name": "Ration supply crate", "count": 2 },
+    { "kind": "lootContainer", "name": "Buried barrel cache", "count": 56 },
+    { "kind": "lootContainer", "name": "Sports Bag", "count": 34 },
+    { "kind": "lootContainer", "name": "PC", "count": 8 },
+    { "kind": "lootContainer", "name": "Ammo Box", "count": 3 },
+    { "kind": "lootContainer", "name": "Barrel Cache", "count": 4 },
+    { "kind": "lootContainer", "name": "Medbag", "count": 3 },
+    { "kind": "lootContainer", "name": "Health Resort East Wing Room 310 Key", "count": 2 },
+    { "kind": "lootContainer", "name": "TerraGroup Labs Arsenal Storage Room Key", "count": 2 },
+    { "kind": "looseLoot", "name": "Loose loot", "count": 416 },
+    { "kind": "stationaryWeapon", "name": "NSV Utyos 12.7x108 heavy machine gun", "count": 3 },
+    { "kind": "stationaryWeapon", "name": "NSV \"Utyos\" heavy machine gun", "count": 2 }
+  ],
+  "features": [
+    {
+      "featureId": "customs.dorms.two_story.main",
+      "match": { "centroid": [230.95, 149.82], "toleranceM": 0.35 },
+      "set": { "featureClass": "building", "name": "Dorms 2-Story", "place": "Dorms 2-Story", "floorCount": 2, "heightM": 7.2, "style": "box" },
+      "assert": { "count": 1, "floorCount": 2, "minHeightM": 7, "maxHeightM": 7.5 },
+      "evidence": { "method": "exact-lock-clusters+named-landmark", "status": "exact-floor-count; shell-needs-survey" }
+    },
+    {
+      "featureId": "customs.water_pump.cooling_towers",
+      "match": {
+        "centroids": [[603.67, -98.19], [618.55, -100], [611.5, -130.15]],
+        "toleranceM": 0.4
+      },
+      "set": {
+        "featureClass": "cooling-tower",
+        "name": "Water Pump Cooling Tower",
+        "place": "Water Pump",
+        "kind": "cooling_tower",
+        "style": "cooling-tower",
+        "floorCount": 1,
+        "heightM": 30,
+        "heightSource": "exact-top-or-fallback",
+        "minimumExactHeightM": 12
+      },
+      "assert": { "count": 3, "floorCount": 1, "minHeightM": 24, "style": "cooling-tower", "kind": "cooling_tower" },
+      "evidence": { "method": "exact-cache-top-when-physical+audit-silhouette", "status": "30m fallback needs first-party survey" }
+    }
+  ],
+  "anchors": [
+    { "name": "Big Red", "position": [-205.9, -114.2] },
+    { "name": "Dorms 2-Story", "position": [230.95, 149.82] },
+    { "name": "Fortress", "position": [203, -128] },
+    { "name": "Old Gas", "position": [330, -177] },
+    { "name": "Water Pump", "position": [603.67, -98.19] },
+    { "name": "Main Bridge", "position": [-71.6, 7] }
+  ]
+}

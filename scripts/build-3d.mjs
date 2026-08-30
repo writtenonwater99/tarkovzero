@@ -1,8 +1,10 @@
 // Build public/data/<map>-3d.json from a tarkov.dev SVG and floor extents.
 // Everything is emitted in GAME coordinates (x, z) so the 3D view shares data with the 2D map.
 import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { LABELS } from '../src/labels.js';
 import { carveWaterHeightfield, pointInWater, waterRings } from '../src/water.js';
+import { exactPosition, loadExactMap, primitiveRows, stableStringify } from './lib/exact-map-primitives.mjs';
 
 const CUSTOMS_COLORS = { 'Big Red': [142, 58, 50], 'Crackhouse': [139, 110, 90], 'Dorms 2-Story': [185, 169, 143], 'Dorms 3-Story': [185, 169, 143], 'New Gas': [196, 191, 180], 'Old Gas': [150, 146, 134], 'Fortress': [162, 158, 148], 'Skeleton': [162, 158, 148], 'Repair Shop': [138, 140, 136], 'Warehouse 3': [138, 140, 136], 'Warehouse 4': [138, 140, 136], 'Warehouse 7': [138, 140, 136], 'Warehouse 17': [138, 140, 136], 'Depot': [146, 142, 132], 'Boiler': [150, 130, 118], 'Oil Rig': [146, 138, 124], 'Streamer House': [139, 110, 90], 'Bus Station': [176, 172, 160], 'Storage': [144, 146, 142], 'Powerline Tower': [126, 126, 122], 'Water Pump': [140, 148, 152], 'Military Checkpoint': [160, 156, 146] };
 const CUSTOMS_ROOFS = { 'Warehouse 3': [92, 102, 106], 'Warehouse 4': [92, 102, 106], 'Warehouse 7': [92, 102, 106], 'Warehouse 17': [92, 102, 106], 'Depot': [98, 100, 102], 'Storage': [96, 99, 100], 'Crackhouse': [126, 76, 52], 'Streamer House': [126, 76, 52], 'Repair Shop': [92, 102, 106], 'Boiler': [104, 96, 88] };
@@ -17,7 +19,6 @@ const CONFIG = {
     roadGroups: [['High_Roads', 12, 'highway'], ['Main_Roads', 8, 'main'], ['Roads', 5, 'small'], ['Dirt_Roads', 5, 'dirt']],
     buildingHeights: { 'Garages-2': 4, 'Big_Buildings-2': 9, 'Small_Buildings-2': 3.5, 'Powerline_Towers': 22 },
     underground: /Underground/i, colors: CUSTOMS_COLORS, roofs: CUSTOMS_ROOFS, styles: CUSTOMS_STYLES, autoSmallTracks: true,
-    terrainFilter: (p) => p.y < 30 && p.y > -8 && !/snipe/i.test(p.zone),
     terrain: [
       { name: 'west hill (behind Big Red, up to Crossroads)', x: -360, z: -80, rx: 95, rz: 150, h: 11 },
       { name: 'Sniper Hill', x: 110, z: 85, rx: 45, rz: 40, h: 9 },
@@ -36,7 +37,6 @@ const CONFIG = {
     colors: { 'White Pawn': [180, 174, 158], 'Black Pawn': [136, 126, 116], 'White Bishop': [184, 179, 166], 'Black Bishop': [138, 128, 118], 'White King': [154, 153, 145], 'White Knight': [156, 158, 151], 'Black Knight': [124, 126, 122], 'White Rook / Train Station': [174, 166, 143], 'White Queen / Dome': [184, 184, 176], 'Military Guard Barracks': [142, 136, 124] },
     roofs: { 'White Pawn': [112, 92, 78], 'Black Pawn': [92, 82, 74], 'White Rook / Train Station': [92, 98, 96], 'White Queen / Dome': [132, 134, 132] },
     styles: { 'White Rook / Train Station': 'gable' },
-    terrainFilter: (p) => p.y > -9 && !/ZoneSub(Command|Storage)/i.test(p.zone) && !/snipe/i.test(p.zone),
     terrain: [
       { name: 'Dome summit', x: -8, z: 183, rx: 72, rz: 62, h: 20 },
       { name: 'Dome approach ridge', x: -55, z: 125, rx: 115, rz: 70, h: 11 },
@@ -60,8 +60,6 @@ const CONFIG = {
       ...[[583.4,97], [520.5,-33.2], [450.3,-160.1], [354.8,-268], [250.6,-368.8], [116.3,-405.4], [-27.4,-424.5], [-160.5,-478.7], [-286.2,-550.7]].map(([x, z]) => ({ poly: [[x-2,z-2], [x+2,z-2], [x+2,z+2], [x-2,z+2]], height: 20, floors: 1, kind: 'powerline_towers', name: 'power pylon' })),
     ],
     proceduralTrees: true,
-    terrainFilter: (p) => p.y > -25 && p.y < 55 && !/snipe/i.test(p.zone) && !/Zone(?:Big|High)Rocks/i.test(p.zone),
-    rockEvidence: /Zone(?:Big|High)Rocks/i,
     terrain: [
       { name: 'Sniper Rock ground shoulder', x: 85, z: -147, rx: 95, rz: 90, h: 14 },
       { name: 'USEC ridge', x: 290, z: -475, rx: 165, rz: 105, h: 26 },
@@ -78,6 +76,11 @@ const key = (process.argv.slice(2).find((a) => !a.startsWith('-')) || 'customs')
 const cfg = CONFIG[key];
 if (!cfg) throw new Error(`unknown map ${key}; expected ${Object.keys(CONFIG).join(', ')}`);
 const BOUNDS = cfg.bounds;
+const exactSource = await loadExactMap(key);
+const featureManifest = JSON.parse(await readFile(`data/${key}-features.json`, 'utf8'));
+if (featureManifest.schemaVersion !== 1 || featureManifest.map !== key || !Array.isArray(featureManifest.features) || !Array.isArray(featureManifest.anchors)) {
+  throw new Error(`${key}: invalid data/${key}-features.json manifest`);
+}
 
 let svg;
 try { svg = await readFile(`.cache/maps/svg/${cfg.svgName}.svg`, 'utf8'); } catch { svg = await (await fetch(cfg.svgUrl)).text(); }
@@ -131,14 +134,24 @@ function flatten(d) {
 }
 
 // Walk the SVG, collecting shapes with their group path and accumulated transform.
-const shapes = []; const stack = [];
+const shapes = []; const stack = []; let sourceElementIndex = 0;
 for (const el of elements(svg)) {
   if (el.tag === 'g') { const t = parseTransform(attr(el.attrs, 'transform')); const parent = stack[stack.length - 1] ?? { ids: [], tx: 0, ty: 0, s: 1 }; stack.push({ ids: [...parent.ids, attr(el.attrs, 'id') || ''], tx: parent.tx + t.tx * parent.s, ty: parent.ty + t.ty * parent.s, s: parent.s * t.s, cls: attr(el.attrs, 'class') || '' }); continue; }
   if (el.tag === '/g') { stack.pop(); continue; }
   const g = stack[stack.length - 1]; if (!g) continue;
   const apply = ([x, y]) => [g.tx + x * g.s, g.ty + y * g.s];
-  if (el.tag === 'path') { const d = attr(el.attrs, 'd'); if (!d) continue; for (const poly of flatten(d)) shapes.push({ ids: g.ids, cls: g.cls, pts: poly.map(apply) }); }
-  if (el.tag === 'circle') { const cx = +attr(el.attrs, 'cx'), cy = +attr(el.attrs, 'cy'), r = +attr(el.attrs, 'r'); const pts = []; for (let a = 0; a < 16; a++) pts.push(apply([cx + r * Math.cos(a / 16 * 2 * Math.PI), cy + r * Math.sin(a / 16 * 2 * Math.PI)])); shapes.push({ ids: g.ids, cls: g.cls, pts, circle: true }); }
+  const sourceElementId = attr(el.attrs, 'id') || `element-${sourceElementIndex}`;
+  const sourcePrefix = `svg:${g.ids.filter(Boolean).join('/')}:${sourceElementId}`;
+  sourceElementIndex++;
+  if (el.tag === 'path') {
+    const d = attr(el.attrs, 'd'); if (!d) continue;
+    for (const [subpath, poly] of flatten(d).entries()) shapes.push({ ids: g.ids, cls: g.cls, pts: poly.map(apply), sourceKey: `${sourcePrefix}:subpath-${subpath}` });
+  }
+  if (el.tag === 'circle') {
+    const cx = +attr(el.attrs, 'cx'), cy = +attr(el.attrs, 'cy'), r = +attr(el.attrs, 'r'); const pts = [];
+    for (let a = 0; a < 16; a++) pts.push(apply([cx + r * Math.cos(a / 16 * 2 * Math.PI), cy + r * Math.sin(a / 16 * 2 * Math.PI)]));
+    shapes.push({ ids: g.ids, cls: g.cls, pts, circle: true, sourceKey: sourcePrefix });
+  }
 }
 const inGroup = (s, id) => s.ids.includes(id);
 const ground = shapes.filter((s) => inGroup(s, cfg.base));
@@ -163,7 +176,7 @@ for (const s of ground) {
   const floors = covering.length ? 1 + new Set(covering.map((f) => f.layer)).size : 1;
   const tank = s.circle;
   const height = topY > 0 ? +(topY + 0.5).toFixed(1) : tank ? 6 : defaultHeight[grp];
-  const building = { poly, height, floors, kind: tank ? 'tank' : grp.replace(/-2$/, '').toLowerCase(), name: covering[0]?.name ?? null };
+  const building = { sourceKey: s.sourceKey, poly, height, floors, kind: tank ? 'tank' : grp.replace(/-2$/, '').toLowerCase(), name: covering[0]?.name ?? null };
   // Reserve floor extents are absolute game Y (the rail yard itself is around -7 m),
   // unlike Customs' legacy relative-height interpretation. Retain the authoritative top
   // until the terrain grid exists, then convert it to a height above the local ground.
@@ -201,6 +214,37 @@ for (const b of buildings) {
   let best = null, bd = cfg.labelRadius ?? 45;
   for (const l of labels) { const d = Math.hypot(l.position[0] - c[0], l.position[1] - c[1]); if (d < bd) { bd = d; best = l.text; } }
   if (best) b.place = best;
+}
+// ---- canonical identity manifest -------------------------------------------------------
+// Nearest-label/floor rectangles remain useful hints, but these reviewed records
+// are the final verdict for high-salience features. Centroid drift is a hard
+// failure so an upstream SVG change cannot silently retarget an override.
+const featureAssignments = [];
+for (const definition of featureManifest.features) {
+  const targets = definition.match?.centroids ?? (definition.match?.centroid ? [definition.match.centroid] : []);
+  const tolerance = definition.match?.toleranceM ?? 0.5;
+  if (!definition.featureId || !targets.length) throw new Error(`${key}: feature ${definition.featureId ?? '(missing id)'} has no centroid target`);
+  const matches = [];
+  for (const [targetIndex, target] of targets.entries()) {
+    const candidates = buildings.map((building) => ({ building, distance: Math.hypot(centroid(building.poly)[0] - target[0], centroid(building.poly)[1] - target[1]) }))
+      .filter(({ building, distance }) => distance <= tolerance && !featureAssignments.some((assignment) => assignment.building === building))
+      .sort((a, b) => a.distance - b.distance || String(a.building.sourceKey ?? '').localeCompare(String(b.building.sourceKey ?? '')));
+    if (candidates.length !== 1) throw new Error(`${key}: ${definition.featureId} target ${target.join(',')} matched ${candidates.length} buildings within ${tolerance} m`);
+    const building = candidates[0].building;
+    const featureId = targets.length === 1 ? definition.featureId : `${definition.featureId}.${targetIndex + 1}`;
+    const set = definition.set ?? {};
+    building.featureId = featureId;
+    if (set.featureClass) building.featureClass = set.featureClass;
+    if (set.name) building.name = set.name;
+    if (set.place) building.place = set.place;
+    if (set.kind) building.kind = set.kind;
+    if (set.style) building.style = set.style;
+    if (Number.isInteger(set.floorCount)) building.floors = set.floorCount;
+    if (Number.isFinite(set.heightM)) building.height = set.heightM;
+    featureAssignments.push({ definition, building, targetIndex });
+    matches.push(building);
+  }
+  if (definition.assert?.count != null && matches.length !== definition.assert.count) throw new Error(`${key}: ${definition.featureId} expected ${definition.assert.count} matches, got ${matches.length}`);
 }
 // ---- bridges: parts of roads/rail that run over water become elevated decks
 const inPoly = ([x, z], poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
@@ -323,7 +367,7 @@ const resampleRing = (ring, step = 2) => {
   }
   return out;
 };
-const MARKER_GROUPS = ['extracts', 'spawns', 'hazards', 'stationaryWeapons', 'switches', 'locks', 'containers'];
+const MARKER_GROUPS = ['extracts', 'spawns', 'hazards', 'stationaryWeapons', 'switches', 'locks', 'containers', 'btrStops'];
 const markerPoints = MARKER_GROUPS.flatMap((group) => (community[group] || []).map((marker, index) => ({
   group, index, name: marker.name || marker.key?.name || marker.stationaryWeapon?.name || marker.zoneName || marker.type || `${group} #${index + 1}`,
   point: [marker.position?.x, marker.position?.z],
@@ -517,7 +561,7 @@ const ROOF_COLORS = cfg.roofs || {};
 const PLACE_STYLE = cfg.styles || {};
 const area = (poly) => Math.abs(poly.reduce((a, [x, z], i) => { const [nx, nz] = poly[(i + 1) % poly.length]; return a + x * nz - nx * z; }, 0)) / 2;
 for (const b of buildings) {
-  const st = b.place && PLACE_STYLE[b.place];
+  const st = b.style || (b.place && PLACE_STYLE[b.place]);
   if (!st) { b.style = b.kind === 'tank' ? 'tank' : 'box'; continue; }
   const siblings = buildings.filter((o) => o.place === b.place);
   const largest = siblings.reduce((m, o) => (area(o.poly) > area(m.poly) ? o : m), siblings[0]);
@@ -528,32 +572,56 @@ for (const b of buildings) {
   if (b.style === 'canopy') b.height = 4.8;
   if (b.style === 'gable' && ROOF_COLORS[b.place]) b.roof = ROOF_COLORS[b.place];
 }
-// ---- terrain: true-scale 5 m surface from merged survey / spawn / loose-loot evidence.
-// Loose loot contains shelves, rooftops and underground rooms, so classify it against a local
-// robust median before fitting. Hand-authored terrain features only contribute where evidence is
-// sparse; they no longer flatten or override a well-sampled real hill.
+// ---- terrain: typed exact/SPT/survey evidence ------------------------------------------
+// Every finite point is retained with a bucket and reason code. Only the ground
+// bucket is deduplicated into the single-valued heightfield; rock/floor/roof/
+// underground remain available to their corresponding hard-surface classifiers.
 const spt = JSON.parse(await readFile(cfg.spt, 'utf8'));
-const sptPoints = spt.SpawnPointParams.map((s) => ({ x: s.Position.x, z: s.Position.z, y: s.Position.y, zone: s.BotZoneName || '' }));
-const rockEvidence = cfg.rockEvidence ? sptPoints.filter((p) => cfg.rockEvidence.test(p.zone)) : [];
 const TERRAIN_FEATURES = cfg.terrain;
-const SAMPLE_SOURCE_WEIGHT = { looseLoot: 1, spawn: 2.5, survey: 4 };
-let evidenceInput;
+const SAMPLE_SOURCE_WEIGHT = { exactSpawn: 3, sptSpawn: 2.5, exactLoot: 1.5, sptLoot: 1, survey: 4, exactInteractive: 1.25 };
+const evidenceInput = [];
+const evidenceIds = new Map();
+const addEvidence = (point) => {
+  if (![point.x, point.y, point.z].every(Number.isFinite)) throw new Error(`${key}: non-finite elevation evidence from ${point.sourceKind}`);
+  const base = point.sourceId || `generated:${createHash('sha256').update(stableStringify(point)).digest('hex').slice(0, 24)}`;
+  const seen = (evidenceIds.get(`${point.provider}:${base}`) ?? 0) + 1;
+  evidenceIds.set(`${point.provider}:${base}`, seen);
+  evidenceInput.push({ ...point, sourceId: seen === 1 ? base : `${base}#${seen}` });
+};
+for (const row of primitiveRows(exactSource.exact)) {
+  const p = exactPosition(row.raw); if (!p) continue;
+  addEvidence({
+    ...p, provider: 'tarkov.dev-json', source: row.kind === 'spawn' ? 'exactSpawn' : ['lootContainer', 'looseLoot'].includes(row.kind) ? 'exactLoot' : 'exactInteractive',
+    sourceKind: row.kind, sourceId: `${row.collection}:${row.sourceId}`, zone: row.raw.zoneName || '',
+  });
+}
+for (const spawn of spt.SpawnPointParams ?? []) addEvidence({
+  x: spawn.Position.x, y: spawn.Position.y, z: spawn.Position.z,
+  provider: 'spt-4.1.2', source: 'sptSpawn', sourceKind: 'spawn', zone: spawn.BotZoneName || '',
+  sourceId: `spawn:${createHash('sha256').update(stableStringify(spawn)).digest('hex').slice(0, 24)}`,
+});
+try {
+  const loose = JSON.parse(await readFile(`scripts/data/${key}/loose-loot-samples.json`, 'utf8'));
+  for (const [index, point] of (loose.points ?? []).entries()) if (Array.isArray(point) && point.length >= 3) addEvidence({
+    x: point[0], y: point[1], z: point[2], provider: 'spt-4.1.2', source: 'sptLoot', sourceKind: 'looseLoot', zone: '',
+    sourceId: `looseLoot:${createHash('sha256').update(stableStringify(point)).digest('hex').slice(0, 24)}:${index}`,
+  });
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error;
+}
 try {
   const doc = JSON.parse(await readFile(`scripts/data/${key}/elevation-samples.json`, 'utf8'));
   const names = doc.sourceTypes || ['looseLoot', 'spawn', 'survey'];
-  evidenceInput = doc.samples.map(([x, y, z, source = 1]) => ({ x, y, z, source: names[source] || 'spawn', zone: '' }));
-} catch {
-  evidenceInput = sptPoints.filter(cfg.terrainFilter).map((p) => ({ ...p, source: 'spawn' }));
+  const rows = doc.points ?? doc.samples ?? [];
+  for (const [index, point] of rows.entries()) {
+    if (!Array.isArray(point) || point.length < 3 || names[point[3] ?? 2] !== 'survey') continue;
+    addEvidence({ x: point[0], y: point[1], z: point[2], provider: 'companion-survey', source: 'survey', sourceKind: 'survey', zone: point[4] || '', sourceId: `survey:${index}` });
+  }
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error;
 }
 const rawRockPolys = cfg.groups.rocks ? polysIn(cfg.groups.rocks) : [];
-const hardReject = { range: 0, building: 0, rock: 0, underground: 0, rooftop: 0, belowSurface: 0, isolated: 0 };
-const candidates = evidenceInput.filter((p) => {
-  if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z) || !cfg.terrainFilter(p) || !inside([p.x, p.z])) { hardReject.range++; return false; }
-  if (p.source === 'looseLoot' && buildings.some((b) => inPoly([p.x, p.z], b.poly))) { hardReject.building++; return false; }
-  if (p.source === 'looseLoot' && rawRockPolys.some((poly) => inPoly([p.x, p.z], poly))) { hardReject.rock++; return false; }
-  if (p.source === 'looseLoot' && underground.some((u) => inPoly([p.x, p.z], u.poly))) { hardReject.underground++; return false; }
-  return true;
-});
+const hardRockRegions = (featureManifest.hardRocks ?? []).map((rock) => ({ ...rock, poly: circleRing(rock.contactCenter, rock.contactRadiusM, 3) }));
 const median = (values) => { const a = [...values].sort((x, y) => x - y), m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
 const percentile = (values, p) => {
   const a = [...values].sort((x, y) => x - y);
@@ -570,22 +638,64 @@ function spatialIndex(points, size = 20) {
     return out;
   };
 }
-const nearbyCandidate = spatialIndex(candidates, 18);
-const groundPts = candidates.filter((p) => {
-  let neighbours = nearbyCandidate(p.x, p.z, 16);
-  if (neighbours.length < 5) neighbours = nearbyCandidate(p.x, p.z, 32);
-  if (neighbours.length < 4) {
-    // Trusted ground spawns/survey traces are still useful in sparse forest. A lone loot
-    // point is much more likely to be a table, vehicle or detached underground sample.
-    if (p.source === 'looseLoot') { hardReject.isolated++; return false; }
-    return true;
+const undergroundExtentAt = (p) => floorBoxes.some((ext) => cfg.underground.test(ext.layer)
+  && p.x >= ext.x1 && p.x <= ext.x2 && p.z >= ext.z1 && p.z <= ext.z2
+  && Number.isFinite(ext.y?.[0]) && Number.isFinite(ext.y?.[1]) && p.y >= Math.min(...ext.y) - 1 && p.y <= Math.max(...ext.y) + 1);
+const buildingAt = (p) => buildings.find((building) => inPoly([p.x, p.z], building.poly));
+const rockReasons = (p) => [
+  ...(/(?:Zone)?(?:Big|High)Rocks/i.test(p.zone) ? ['semantic-rock-zone'] : []),
+  ...(rawRockPolys.some((poly) => inPoly([p.x, p.z], poly)) ? ['svg-rock-footprint'] : []),
+  ...(hardRockRegions.some((rock) => inPoly([p.x, p.z], rock.poly)) ? ['manifest-hard-rock-region'] : []),
+];
+const bootstrap = evidenceInput.filter((p) => inside([p.x, p.z]) && !buildingAt(p) && !rockReasons(p).length
+  && !undergroundExtentAt(p) && !/ZoneSub(Command|Storage)/i.test(p.zone));
+const nearbyBootstrap = spatialIndex(bootstrap, 24);
+const localGround = (p) => {
+  for (const radius of [18, 40, 90]) {
+    const neighbours = nearbyBootstrap(p.x, p.z, radius);
+    if (neighbours.length >= (radius === 18 ? 4 : 2)) return median(neighbours.map((candidate) => candidate.y));
   }
-  const local = median(neighbours.map((q) => q.y));
-  if (p.y - local > 2.5) { hardReject.rooftop++; return false; }
-  if (p.y - local < -2.5) { hardReject.belowSurface++; return false; }
-  return true;
-});
-if (!groundPts.length) throw new Error(`${key}: elevation filtering removed every sample`);
+  return null;
+};
+const evidenceBuckets = { ground: [], rock: [], floor: [], roof: [], underground: [] };
+for (const p of evidenceInput) {
+  const reasons = [], local = localGround(p), building = buildingAt(p), rocks = rockReasons(p);
+  let bucket;
+  if (!inside([p.x, p.z])) { bucket = 'roof'; reasons.push('outside-playable-nonterrain'); }
+  else if (undergroundExtentAt(p) || /ZoneSub(Command|Storage)/i.test(p.zone)) { bucket = 'underground'; reasons.push(undergroundExtentAt(p) ? 'exact-underground-extent' : 'semantic-underground-zone'); }
+  else if (['hazard', 'artilleryZone'].includes(p.sourceKind)) { bucket = 'roof'; reasons.push('interaction-volume-center-nonterrain'); }
+  else if (rocks.length) { bucket = 'rock'; reasons.push(...rocks); }
+  else if (building) {
+    const delta = local == null ? null : p.y - local;
+    if (delta != null && delta < -2.5) { bucket = 'underground'; reasons.push('building-below-local-ground'); }
+    else if (delta != null && delta >= Math.max(4, building.height - 1.25)) { bucket = 'roof'; reasons.push('building-roof-band'); }
+    else { bucket = 'floor'; reasons.push(delta == null ? 'building-no-ground-context' : 'building-floor-band'); }
+  } else if (local == null) {
+    if (['exactLoot', 'sptLoot', 'exactInteractive'].includes(p.source)) { bucket = 'roof'; reasons.push('isolated-object-no-ground-context'); }
+    else { bucket = 'ground'; reasons.push('trusted-isolated-ground'); }
+  } else if (p.y - local > 2.5) { bucket = 'roof'; reasons.push('elevated-local-outlier'); }
+  else if (p.y - local < -2.5) { bucket = 'underground'; reasons.push('below-local-ground'); }
+  else { bucket = 'ground'; reasons.push('within-local-ground-band'); }
+  evidenceBuckets[bucket].push({ ...p, reasonCodes: reasons });
+}
+// A trusted source wins each 2 m ground cell. Retaining the uncollapsed ground
+// bucket above keeps every observation auditable while preventing duplicate
+// current/legacy samples from overweighting one location in the fit.
+const groundCells = new Map();
+for (const point of evidenceBuckets.ground) {
+  const cell = `${Math.round(point.x / 2)},${Math.round(point.z / 2)}`;
+  if (!groundCells.has(cell)) groundCells.set(cell, []);
+  groundCells.get(cell).push(point);
+}
+const groundPts = [];
+for (const points of groundCells.values()) {
+  const priority = Math.max(...points.map((point) => SAMPLE_SOURCE_WEIGHT[point.source] ?? 0));
+  const chosen = points.filter((point) => (SAMPLE_SOURCE_WEIGHT[point.source] ?? 0) === priority);
+  groundPts.push({ ...chosen[0], x: median(chosen.map((p) => p.x)), y: median(chosen.map((p) => p.y)), z: median(chosen.map((p) => p.z)) });
+}
+groundPts.sort((a, b) => a.z - b.z || a.x - b.x || a.sourceId.localeCompare(b.sourceId));
+const rockEvidence = evidenceBuckets.rock;
+if (!groundPts.length) throw new Error(`${key}: typed elevation routing produced no ground samples`);
 const nearGround = spatialIndex(groundPts, 30);
 const STEP = 5, x0 = BOUNDS.xMin - 40, z0 = BOUNDS.zMin - 40, cols = Math.ceil((BOUNDS.xMax - BOUNDS.xMin + 80) / STEP) + 1, rows = Math.ceil((BOUNDS.zMax - BOUNDS.zMin + 80) / STEP) + 1;
 // deterministic value noise so hills are irregular instead of perfect ellipses
@@ -699,20 +809,128 @@ if (profile && waterSampleSets.length) {
   const carved = carveWaterHeightfield(heights, { x0, z0, step: STEP, cols, rows }, out0.water);
   for (let i = 0; i < heights.length; i++) heights[i] = +carved[i].toFixed(2);
 }
-const terrain = { x0, z0, step: STEP, cols, rows, heights: Array.from(heights), evidence: { input: evidenceInput.length, accepted: groundPts.length, rejected: hardReject } };
+for (const bucket of Object.values(evidenceBuckets)) bucket.sort((a, b) => a.z - b.z || a.x - b.x || a.y - b.y || a.sourceId.localeCompare(b.sourceId));
+const reasonCodeCounts = {};
+for (const bucket of Object.values(evidenceBuckets)) for (const point of bucket) for (const code of point.reasonCodes) reasonCodeCounts[code] = (reasonCodeCounts[code] ?? 0) + 1;
+const bucketCounts = Object.fromEntries(Object.entries(evidenceBuckets).map(([bucket, points]) => [bucket, points.length]));
+const terrain = {
+  x0, z0, step: STEP, cols, rows, heights: Array.from(heights),
+  // Canonical heights and every source Y remain 1x metres. The renderer's relief
+  // multiplier is a sampler-only view skin and is never serialized here.
+  units: { horizontal: 'metre', vertical: 'metre', scale: 1 },
+  evidence: {
+    schemaVersion: 2,
+    input: evidenceInput.length,
+    heightfieldSamples: groundPts.length,
+    bucketCounts,
+    reasonCodeCounts: Object.fromEntries(Object.entries(reasonCodeCounts).sort(([a], [b]) => a.localeCompare(b))),
+    buckets: evidenceBuckets,
+  },
+};
 for (const b of buildings) if (b._topY != null) {
   const c = centroid(b.poly), fallback = b.kind === 'tank' ? 6 : defaultHeight[Object.keys(defaultHeight).find((k) => k.replace(/-2$/, '').toLowerCase() === b.kind)] ?? 4;
   b.height = +Math.max(fallback, b._topY - terrainHeight(c[0], c[1]) + 0.5).toFixed(1);
   delete b._topY;
 }
+// Floor extents can assign a plausible shell before the terrain fit exists, but
+// reviewed identities are the final authority. Reapply their assertions after
+// absolute top-Y conversion and use exact primitive tops only when they describe
+// a physically tall volume inside the reviewed footprint.
+for (const { definition, building } of featureAssignments) {
+  const set = definition.set ?? {};
+  if (Number.isInteger(set.floorCount)) building.floors = set.floorCount;
+  if (Number.isFinite(set.heightM)) building.height = set.heightM;
+  if (set.heightSource === 'exact-top-or-fallback') {
+    const exactTops = primitiveRows(exactSource.exact).flatMap((row) => {
+      const position = exactPosition(row.raw);
+      if (!position || !Number.isFinite(row.raw.top) || !inPoly([position.x, position.z], building.poly)) return [];
+      const heightM = row.raw.top - terrainHeight(position.x, position.z);
+      return [{ sourceId: `${row.collection}:${row.sourceId}`, kind: row.kind, topY: row.raw.top, heightM }];
+    }).filter((candidate) => candidate.heightM >= (set.minimumExactHeightM ?? 0))
+      .sort((a, b) => b.heightM - a.heightM || a.sourceId.localeCompare(b.sourceId));
+    if (exactTops.length) {
+      building.height = +exactTops[0].heightM.toFixed(2);
+      building.heightEvidence = { method: 'exact-primitive-top', ...exactTops[0] };
+    } else {
+      building.heightEvidence = { method: 'manifest-fallback', heightM: building.height, reasonCode: 'no-qualifying-exact-top-in-footprint' };
+    }
+  }
+}
+function assertReviewedFeatures(stage, propsOut = []) {
+  for (const definition of featureManifest.features) {
+    const assignments = featureAssignments.filter((assignment) => assignment.definition === definition);
+    const expected = definition.assert ?? {};
+    if (expected.count != null && assignments.length !== expected.count) throw new Error(`${key}: ${definition.featureId} expected ${expected.count} assignments at ${stage}, got ${assignments.length}`);
+    for (const { building } of assignments) {
+      if (expected.floorCount != null && building.floors !== expected.floorCount) throw new Error(`${key}: ${definition.featureId} expected ${expected.floorCount} floors at ${stage}, got ${building.floors}`);
+      if (expected.minHeightM != null && building.height < expected.minHeightM) throw new Error(`${key}: ${definition.featureId} expected height >=${expected.minHeightM} m at ${stage}, got ${building.height}`);
+      if (expected.maxHeightM != null && building.height > expected.maxHeightM) throw new Error(`${key}: ${definition.featureId} expected height <=${expected.maxHeightM} m at ${stage}, got ${building.height}`);
+      if (expected.style != null && building.style !== expected.style) throw new Error(`${key}: ${definition.featureId} expected style ${expected.style} at ${stage}, got ${building.style}`);
+      if (expected.kind != null && building.kind !== expected.kind) throw new Error(`${key}: ${definition.featureId} expected kind ${expected.kind} at ${stage}, got ${building.kind}`);
+      if (expected.notPlace != null && building.place === expected.notPlace) throw new Error(`${key}: ${definition.featureId} must not be labelled ${expected.notPlace}`);
+      if (building.floors * 2.5 > building.height + 0.25) throw new Error(`${key}: ${definition.featureId} contradicts its own floor/height shell (${building.floors} floors, ${building.height} m)`);
+    }
+    if (expected.emitAsProp && stage === 'output') {
+      const emitted = propsOut.filter((prop) => prop.featureRoot === definition.featureId && prop.type === expected.emitAsProp);
+      if (emitted.length !== expected.count) throw new Error(`${key}: ${definition.featureId} expected ${expected.count} ${expected.emitAsProp} props, got ${emitted.length}`);
+    }
+  }
+}
+assertReviewedFeatures('post-height-fit');
+// Route the non-ground vertical observations into a compact floor-classification
+// index. The full exact-Y records remain in terrain.evidence.buckets; this index
+// is the derived answer used by floor-aware geometry and future UI work.
+const floorGroups = new Map();
+for (const bucketName of ['floor', 'roof', 'underground']) for (const point of evidenceBuckets[bucketName]) {
+  const building = buildingAt(point);
+  const extent = floorBoxes.find((candidate) => point.x >= candidate.x1 && point.x <= candidate.x2 && point.z >= candidate.z1 && point.z <= candidate.z2
+    && (!Number.isFinite(candidate.y?.[0]) || point.y >= Math.min(...candidate.y) - 1)
+    && (!Number.isFinite(candidate.y?.[1]) || point.y <= Math.max(...candidate.y) + 1));
+  const relativeY = point.y - terrainHeight(point.x, point.z);
+  const floorIndex = bucketName === 'underground' ? 'U' : building
+    ? Math.max(0, Math.min(Math.max(0, building.floors - 1), Math.round(relativeY / FLOOR_H)))
+    : bucketName === 'roof' ? 'roof' : 0;
+  const scope = building ? `building:${building.sourceKey ?? building.featureId ?? 'unknown'}`
+    : extent ? `extent:${extent.layer}:${extent.name}`
+      : `cell:${Math.floor(point.x / 20)},${Math.floor(point.z / 20)}`;
+  const groupKey = `${scope}|${bucketName}|${floorIndex}`;
+  if (!floorGroups.has(groupKey)) floorGroups.set(groupKey, {
+    scope, classification: bucketName, floorIndex,
+    ...(building?.featureId ? { featureId: building.featureId } : {}),
+    ...(extent ? { layer: extent.layer, name: extent.name } : {}),
+    points: [],
+  });
+  floorGroups.get(groupKey).points.push(point);
+}
+const floorSurfaces = [...floorGroups.values()].map(({ points, ...surface }) => ({
+  ...surface,
+  surfaceY: +median(points.map((point) => point.y)).toFixed(4),
+  minY: +Math.min(...points.map((point) => point.y)).toFixed(4),
+  maxY: +Math.max(...points.map((point) => point.y)).toFixed(4),
+  evidenceSourceIds: points.map((point) => `${point.provider}:${point.sourceId}`).sort(),
+})).sort((a, b) => a.scope.localeCompare(b.scope) || String(a.floorIndex).localeCompare(String(b.floorIndex)) || a.classification.localeCompare(b.classification));
 console.log(`props ${props.length + svgProps.length}`);
-console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length}/${evidenceInput.length} points, rejected ${JSON.stringify(hardReject)}, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
+console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length}/${evidenceInput.length} points, buckets ${JSON.stringify(bucketCounts)}, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 // drop anything whose centroid is outside the playable boundary
 const insideC = (poly) => inside(centroid(poly));
 const edgeDist = (pt) => ringDistance(pt, LIMIT).distance;
 // towers hugging the boundary are outside the real playable area (the SVG limit is slightly generous)
 const keepB = buildings.filter((b) => insideC(b.poly) && !(b.kind === 'powerline_towers' && edgeDist(centroid(b.poly)) < 10)); buildings.length = 0; buildings.push(...keepB);
-const propsIn = [...props, ...svgProps].filter((p) => p.poly ? insideC(p.poly) : (p.path ? inside(p.path[0]) : inside([p.x, p.z])));
+const manifestProps = [];
+for (const { definition, building } of featureAssignments) {
+  const type = definition.set?.emitAsProp;
+  if (!type) continue;
+  const index = buildings.indexOf(building);
+  if (index < 0) throw new Error(`${key}: ${definition.featureId} was clipped before ${type} prop conversion`);
+  buildings.splice(index, 1);
+  manifestProps.push({
+    type, name: building.name, place: building.place, featureId: building.featureId,
+    featureRoot: definition.featureId, poly: building.poly, h: building.height,
+    sourceKey: building.sourceKey, evidence: definition.evidence,
+  });
+}
+const propsIn = [...props, ...svgProps, ...manifestProps].filter((p) => p.poly ? insideC(p.poly) : (p.path ? inside(p.path[0]) : inside([p.x, p.z])));
+assertReviewedFeatures('output', propsIn);
 if (key === 'woods') for (const p of propsIn) if (/^Sawmill log stack/i.test(p.name || '')) p.color = [116, 88, 58];
 const undergroundIn = underground.filter((u) => insideC(u.poly));
 const rockPolys = (cfg.groups.rocks ? polysIn(cfg.groups.rocks) : []).filter(insideC);
@@ -764,7 +982,53 @@ function splitWoodsRock({ poly, height, evidence }, index) {
 }
 const ROCK_COLORS = [[126, 122, 108], [112, 112, 102], [138, 130, 112], [102, 106, 98]];
 const rocksRaw = key === 'woods' ? rockMasses.flatMap(splitWoodsRock) : rockMasses.map(({ evidence, ...rock }) => rock);
-const rocksOut = rocksRaw.map((rock, index) => ({ ...rock, color: ROCK_COLORS[Math.floor(hash2(index + 101, 43) * ROCK_COLORS.length) % ROCK_COLORS.length] }));
+// Reviewed hard-rock regions replace, rather than stack on, the older decorative
+// SVG extrusion at the same centroid. Otherwise the legacy form would be draped
+// on the new summit surface and double the mountain's visible height.
+const rocksOut = rocksRaw.filter((rock) => !hardRockRegions.some((region) => inPoly(centroid(rock.poly), region.poly)))
+  .map((rock, index) => ({ ...rock, color: ROCK_COLORS[Math.floor(hash2(index + 101, 43) * ROCK_COLORS.length) % ROCK_COLORS.length] }));
+// Hard rock is a separate canonical surface, not heightfield noise. A broad
+// contact mass comes from the routed rock bucket; nested shoulder/summit caps
+// land the reviewed exact-Y anchors without baking the renderer's relief skin.
+const hardRocksOut = hardRockRegions.flatMap((region) => {
+  const evidence = rockEvidence.filter((point) => inPoly([point.x, point.z], region.poly));
+  const observedRises = evidence.map((point) => point.y - terrainHeight(point.x, point.z)).filter((rise) => rise > 0);
+  const evidenceContact = observedRises.length ? percentile(observedRises, 0.25) : null;
+  const contactHeight = +Math.max(region.contactRiseM, Math.min(region.contactRiseM + 4, evidenceContact ?? region.contactRiseM)).toFixed(4);
+  const common = {
+    featureRoot: region.featureId,
+    name: region.name,
+    evidenceSourceIds: evidence.map((point) => `${point.provider}:${point.sourceId}`).sort(),
+  };
+  const forms = [{ ...common, featureId: `${region.featureId}.contact`, form: 'contact', poly: region.poly, height: contactHeight, color: ROCK_COLORS[1] }];
+  for (const [index, anchor] of region.anchors.entries()) {
+    const rise = anchor.topY - terrainHeight(anchor.position[0], anchor.position[1]);
+    if (rise <= 0) throw new Error(`${key}: ${anchor.name} exact top ${anchor.topY} is below fitted terrain`);
+    const shoulderHeight = +Math.max(contactHeight + 1, contactHeight + (rise - contactHeight) * 0.58).toFixed(4);
+    forms.push({
+      ...common, featureId: `${region.featureId}.shoulder.${index + 1}`, form: 'shoulder',
+      poly: circleRing(anchor.position, region.shoulderRadiusM, 2), height: shoulderHeight,
+      anchor: anchor.position, topY: anchor.topY, sourceId: anchor.sourceId, color: ROCK_COLORS[2],
+    });
+    forms.push({
+      ...common, featureId: `${region.featureId}.summit.${index + 1}`, form: 'summit',
+      poly: circleRing(anchor.position, region.summitRadiusM, 1.5), height: +rise.toFixed(4),
+      anchor: anchor.position, topY: anchor.topY, surfaceY: anchor.topY, sourceId: anchor.sourceId, color: ROCK_COLORS[0],
+    });
+  }
+  return forms;
+});
+const hardRockSurface = (x, z) => Math.max(terrainHeight(x, z), ...hardRocksOut.filter((rock) => inPoly([x, z], rock.poly))
+  .map((rock) => Number.isFinite(rock.surfaceY) ? rock.surfaceY : terrainHeight(x, z) + rock.height));
+for (const region of hardRockRegions) for (const anchor of region.anchors) {
+  const actual = hardRockSurface(anchor.position[0], anchor.position[1]);
+  if (Math.abs(actual - anchor.topY) > 0.011) throw new Error(`${key}: ${anchor.name} hard-rock top is ${actual.toFixed(3)} m, expected ${anchor.topY.toFixed(3)} m`);
+}
+const anchorHeights = featureManifest.anchors.map((anchor) => ({
+  name: anchor.name, position: anchor.position,
+  terrainY: +terrainHeight(anchor.position[0], anchor.position[1]).toFixed(4),
+  surfaceY: +hardRockSurface(anchor.position[0], anchor.position[1]).toFixed(4),
+}));
 const output = `public/data/${key}-3d.json`;
 let builtAt = new Date().toISOString();
 if (!process.argv.includes('--stamp')) { try { builtAt = JSON.parse(await readFile(output, 'utf8')).builtAt || builtAt; } catch {} }
@@ -832,8 +1096,22 @@ for (let index = 0; index < treePolys.length; index++) {
   }
 }
 const out = {
-  props: propsIn, terrain, bridges, limit: LIMIT,
-  map: key, builtAt, source: 'tarkov.dev SVG/maps.json + SPT 4.1.2 loose-loot/spawn elevation samples + companion survey samples',
+  map: key, builtAt,
+  source: 'tarkov.dev exact JSON cache + tarkov.dev SVG/maps.json + SPT 4.1.2 spawn/loot elevation + reviewed feature manifests',
+  canonicalScale: 1,
+  exact: exactSource.exact,
+  features: {
+    schemaVersion: featureManifest.schemaVersion,
+    manifestSha256: createHash('sha256').update(stableStringify(featureManifest)).digest('hex'),
+    assignments: featureAssignments.map(({ definition, building }) => ({
+      featureRoot: definition.featureId, featureId: building.featureId,
+      sourceKey: building.sourceKey, class: building.featureClass, kind: building.kind,
+      name: building.name, place: building.place, floors: building.floors, heightM: building.height,
+      emittedAs: definition.set?.emitAsProp ?? 'building',
+    })),
+    anchors: anchorHeights,
+  },
+  props: propsIn, terrain, floorSurfaces, hardRocks: hardRocksOut, bridges, limit: LIMIT,
   land: [LIMIT], water: out0.water, pavement: (cfg.groups.pavement ? polysIn(cfg.groups.pavement) : []).filter(insideC), understory: treePolys, trees: treeCrowns, rocks: rocksOut,
   roads, railway: clipLines((cfg.groups.railway ? linesIn(cfg.groups.railway) : []).map((p) => ({ path: p }))), fences: fencesCut, powerlines: clipLines((cfg.groups.powerlines ? linesIn(cfg.groups.powerlines) : []).map((p) => ({ path: p }))),
   buildings, underground: undergroundIn, floorBoxes,
@@ -844,4 +1122,4 @@ await writeFile(output, JSON.stringify(out));
 const multi = buildings.filter((b) => b.floors > 1);
 console.log(`styles: ${JSON.stringify(buildings.reduce((a, b) => ((a[b.style] = (a[b.style] || 0) + 1), a), {}))}`);
 console.log(`bridges ${bridges.length} (${bridges.map((b) => (b.name || b.kind) + (b.ford ? ' [ford]' : '')).join(', ')}), named ${buildings.filter((b) => b.place).length}, coloured ${buildings.filter((b) => b.color).length}`);
-console.log(`buildings ${buildings.length} (multi-floor ${multi.length}: ${multi.map((b) => `${b.name}×${b.floors}`).join(', ')}), trees ${out.trees.length}, rocks ${out.rocks.length}, roads ${roads.length}, water ${out.water.length}, land ${out.land.length} → ${output} (${(JSON.stringify(out).length / 1024).toFixed(0)} KB)`);
+console.log(`buildings ${buildings.length} (multi-floor ${multi.length}: ${multi.map((b) => `${b.name}×${b.floors}`).join(', ')}), trees ${out.trees.length}, rocks ${out.rocks.length}+${out.hardRocks.length} hard, floor surfaces ${out.floorSurfaces.length}, roads ${roads.length}, water ${out.water.length}, land ${out.land.length} → ${output} (${(JSON.stringify(out).length / 1024).toFixed(0)} KB)`);
