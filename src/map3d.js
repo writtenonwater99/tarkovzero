@@ -1008,12 +1008,19 @@ export async function createView3d(container, mapData, src) {
     }
     if (clusters.length) {
       const anchor = (d) => Pg([d.x, d.z], t === 'dot' ? 0.65 : 0.7);
+      // One id per LAYER CLASS. deck matches layers across renders by id and transfers the old
+      // layer's state onto the new one; hand it the same id for a ScatterplotLayer one frame and an
+      // IconLayer the next and the IconLayer inherits a state with no iconManager in it — "Cannot
+      // read properties of undefined (reading 'setProps')", then a getTexture throw on every draw
+      // and every picking pass. It only stayed hidden because a `dot` -> `full` step deletes the
+      // cluster layers entirely; `dot` -> `icon` (which is what a fly-to lands on now that the two
+      // views agree about metres per pixel) swaps the class under one id.
       out.push(t === 'dot'
-        ? new ScatterplotLayer({ id: 'cluster-marks', data: clusters, getPosition: anchor, getRadius: 4.5, radiusUnits: 'pixels', radiusMinPixels: 4.5, radiusMaxPixels: 4.5,
+        ? new ScatterplotLayer({ id: 'cluster-marks-dot', data: clusters, getPosition: anchor, getRadius: 4.5, radiusUnits: 'pixels', radiusMinPixels: 4.5, radiusMaxPixels: 4.5,
           stroked: true, lineWidthUnits: 'pixels', getLineWidth: 1, getLineColor: [...C.ink, 220], getFillColor: dotColour,
           pickable: true, onClick: (i) => { if (!i.object) return false; zoomIntoCluster(i.object); return true; },
           parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })
-        : new IconLayer({ id: 'cluster-marks', data: clusters, getPosition: anchor, iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => d.kind, getSize: 24, sizeUnits: 'pixels', sizeMinPixels: 18, sizeMaxPixels: 32, billboard: true,
+        : new IconLayer({ id: 'cluster-marks-icon', data: clusters, getPosition: anchor, iconAtlas: iconAtlas.canvas, iconMapping: iconAtlas.mapping, getIcon: (d) => d.kind, getSize: 24, sizeUnits: 'pixels', sizeMinPixels: 18, sizeMaxPixels: 32, billboard: true,
           pickable: true, onClick: (i) => { if (!i.object) return false; zoomIntoCluster(i.object); return true; },
           parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }));
       // The count bubble, from the `icon` tier in. A TextLayer with a background is the whole
