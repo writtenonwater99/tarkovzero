@@ -433,6 +433,18 @@ async function main() {
       return { twoDShot: flat, zoom: { before: before.zoom, after: after.zoom }, frameMean: Number(stats.mean.toFixed(1)) };
     });
 
+    /* -- 9 ------------------------------------------- the page threw nothing along the way -- */
+    // The chain above drives the real app for a couple of minutes; every uncaught exception and
+    // console error it produced is already in `pageLog`. It used to be collected and then only ever
+    // printed when some *other* assertion had already failed — a page throwing on every frame could
+    // walk the whole chain and report PASS. This is the assertion that arms it.
+    await step(page, '9. no page console errors during the walkthrough', 'console-clean', async () => {
+      // Deduped: one broken frame can log the same line hundreds of times.
+      const seen = [...new Set(pageLog)];
+      assert(seen.length === 0, `${pageLog.length} console error(s) during the run:\n    ${seen.slice(0, 8).join('\n    ')}`);
+      return { errors: 0 };
+    });
+
     console.log(`\n✓ walkthrough passed — ${steps.length} steps in ${fmt(Date.now() - t0)}`);
   } catch (e) {
     console.error(`\n✗ WALKTHROUGH FAILED at step: ${e.step ?? '(setup)'}\n  ${e.message}`);
