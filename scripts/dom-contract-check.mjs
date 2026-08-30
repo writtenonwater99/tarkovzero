@@ -49,6 +49,7 @@ export const CONTRACT = {
   ],
   'view panel (main.js)': [
     '#base-toggle', '#base-toggle .seg-cell[data-base=satellite]', '#base-toggle .seg-cell[data-base=map]',
+    '#look-toggle', '#look-toggle .seg-cell[data-look=realistic]', '#look-toggle .seg-cell[data-look=vector]',
     '#relief-toggle', '#relief-toggle .seg-cell[data-relief=1]', '#relief-toggle .seg-cell[data-relief=2]',
     '#relief-toggle .seg-cell[data-relief=3]',
     '#trees-toggle', '#trees-toggle .seg-cell[data-trees=1]', '#trees-toggle .seg-cell[data-trees=0]',

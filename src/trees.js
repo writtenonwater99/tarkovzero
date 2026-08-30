@@ -3,11 +3,13 @@
 import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
+import { paletteFor, resolveLook, foliageMaterialFor, trunkMaterialFor } from './atmosphere.js';
 
-const FALLBACK_TONES = [[72, 99, 65], [84, 112, 72], [96, 124, 79]];
-const TRUNK = [91, 69, 47];
 const FAR_ZOOM = -0.55;
-const brighten = (c) => c.map((v, i) => i < 3 ? Math.round(v + ([158, 174, 137][i] - v) * 0.18) : v);
+// Vector lifts every crown toward a bright sage so the canopy reads as one map symbol; realistic
+// leaves the authored/species tone alone (the plan wants muted species tints, not a wash).
+const LIFT = { vector: [158, 174, 137, 0.18], realistic: [120, 128, 106, 0.06] };
+const toward = (c, [tr, tg, tb, k]) => c.map((v, i) => (i < 3 ? Math.round(v + ([tr, tg, tb][i] - v) * k) : v));
 
 const hash = (a, b) => {
   const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
@@ -98,11 +100,14 @@ export function prepareTrees(source, mapKey) {
   const coniferChance = mapKey === 'woods' ? 0.64 : mapKey === 'reserve' ? 0.42 : 0.5;
   const all = (source || []).filter((t) => Number.isFinite(t.x) && Number.isFinite(t.z)).map((t, i) => {
     const type = t.type === 'conifer' || t.type === 'broadleaf' ? t.type : (hash(t.x + 17, t.z - 31) < coniferChance ? 'conifer' : 'broadleaf');
-    const tone = Math.floor(hash(t.x - 53, t.z + 89) * FALLBACK_TONES.length) % FALLBACK_TONES.length;
+    // The tone is a deterministic INDEX, not a colour: the look resolves it at layer time, so
+    // flipping the skin never touches a tree's identity, position, scale or rotation.
+    const tone = Math.floor(hash(t.x - 53, t.z + 89) * 3) % 3;
     return {
       ...t,
       type,
-      color: t.color ? brighten(t.color) : FALLBACK_TONES[tone],
+      tone,
+      sourceColor: t.color ?? null,
       rotation: t.rotation ?? hash(t.x + 101, t.z - 73) * 360,
       aspect: t.aspect ?? 0.84 + hash(t.x - 11, t.z + 37) * 0.3,
       trunkRadius: t.trunkRadius ?? 0.15 + hash(t.x + 7, t.z + 13) * 0.1,
@@ -113,7 +118,13 @@ export function prepareTrees(source, mapKey) {
   return { all, far: all.filter((t) => t.lodKeep) };
 }
 
-export function treeLayers({ treeSet, H, zoom, relief }) {
+export function treeLayers({ treeSet, H, zoom, relief, look, fogExtension }) {
+  const mode = resolveLook(look);
+  const C = paletteFor(mode);
+  const lift = LIFT[mode];
+  // Foliage tone: the authored per-tree colour when the data has one, otherwise the look's own
+  // three-stop canopy set indexed by the tree's frozen hash. Same instance, different material.
+  const tone = (d) => (d.sourceColor ? toward(d.sourceColor, lift) : C.treeTones[d.tone % C.treeTones.length]);
   // LOD is intentionally a function of camera zoom only. Relief changes placement, never density.
   const source = zoom < FAR_ZOOM ? treeSet.far : treeSet.all;
   const conifers = source.filter((t) => t.type === 'conifer');
@@ -124,23 +135,28 @@ export function treeLayers({ treeSet, H, zoom, relief }) {
     coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
     getPosition: (d) => [-d.x, -d.z, H(d.x, d.z)],
     getOrientation: (d) => [0, d.rotation, 0],
-    updateTriggers: { getPosition: relief },
+    updateTriggers: { getPosition: relief, getColor: mode },
+    extensions: fogExtension ? [fogExtension] : [],
   };
-  const foliageMaterial = { ambient: 0.72, diffuse: 0.58, shininess: 1, specularColor: [8, 10, 7] };
+  // Realistic overcast: a lower base ambient and more directional response than vector, so a canopy
+  // has a lit side; atmosphere.js's EXPOSURE puts the overall value back where the palette says.
+  const foliageMaterial = mode === 'realistic'
+    ? foliageMaterialFor('realistic')
+    : { ambient: 0.72, diffuse: 0.58, shininess: 1, specularColor: [8, 10, 7] };
   return [
     new SimpleMeshLayer({
-      ...common, id: 'tree-trunks', data: source, mesh: TRUNK_MESH, getColor: TRUNK,
+      ...common, id: 'tree-trunks', data: source, mesh: TRUNK_MESH, getColor: C.trunk,
       getScale: (d) => [d.trunkRadius / 0.2, d.trunkRadius / 0.2, d.trunkHeight / 2.5],
-      material: { ambient: 0.48, diffuse: 0.72, shininess: 0 },
+      material: mode === 'realistic' ? trunkMaterialFor('realistic') : { ambient: 0.48, diffuse: 0.72, shininess: 0 },
     }),
     // Retain the historical `trees` id on the dominant canopy layer for integrations/tests.
     new SimpleMeshLayer({
-      ...common, id: 'trees', data: conifers, mesh: CONIFER_MESH, getColor: (d) => d.color,
+      ...common, id: 'trees', data: conifers, mesh: CONIFER_MESH, getColor: tone,
       getScale: (d) => [(d.radius / 2.35) * d.aspect, (d.radius / 2.35) / d.aspect, d.height / 10],
       material: foliageMaterial,
     }),
     new SimpleMeshLayer({
-      ...common, id: 'trees-broadleaf', data: broadleaf, mesh: BROADLEAF_MESH, getColor: (d) => d.color,
+      ...common, id: 'trees-broadleaf', data: broadleaf, mesh: BROADLEAF_MESH, getColor: tone,
       getScale: (d) => [(d.radius / 2.6) * d.aspect, (d.radius / 2.6) / d.aspect, d.height / 7.6],
       material: foliageMaterial,
     }),
