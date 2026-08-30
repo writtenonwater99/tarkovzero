@@ -44,7 +44,14 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   // ?quests=) hands one over — the section stays out of the panel until then.
   let mine = { active: [], done: [], failed: [], since: null, ts: 0 };
   let autoOn = store.get('questsAuto', true) !== false;
-  const autoApplied = new Set();   // slugs auto-select has already put on the map once this session
+  // Slugs auto-select has already put on the map once. Persisted per map, because a page load is
+  // not a new decision: a quest the player deliberately took off the map used to come straight back
+  // on the next load (and a map switch IS a load), appended at the end of `selected` — which also
+  // reshuffled every selected quest's colour, since colourOf is the index in that list. Cleared for
+  // a slug once the game stops reporting it as active, so re-accepting a quest re-adds it.
+  const AUTO_KEY = 'questsAutoApplied';
+  const autoApplied = new Set((store.get(AUTO_KEY, {}) ?? {})[mapKey] ?? []);
+  const saveAutoApplied = () => store.set(AUTO_KEY, { ...(store.get(AUTO_KEY, {}) ?? {}), [mapKey]: [...autoApplied] });
   let mineForced = false;          // `> my quests` on an empty set: show the section and say why
   const layer = L.layerGroup();
   // Quest pins get their own pane, explicitly above the place-label panes (450) — a marker should
@@ -431,6 +438,14 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     const slugs = autoSelectSlugs({ all, activeIds: mine.active, mapKey, selected, applied: autoApplied, auto: autoOn });
     const fresh = slugs.filter((s) => bySlug(s) && !selected.includes(s));
     for (const s of slugs) autoApplied.add(s);
+    // Forget a quest the game no longer calls active: the next time it appears is a new decision.
+    // Only when there is a live set to judge against — an empty one means "no companion", not
+    // "no quests", and must never wipe the record of what the player already took off the map.
+    if (loaded && all.length && mine.active.length) {
+      const live = new Set(activeRows(all, mine.active, mapKey).here.map((r) => r.slug));
+      for (const s of [...autoApplied]) if (!live.has(s)) autoApplied.delete(s);
+    }
+    saveAutoApplied();
     if (!fresh.length) return 0;
     selected = [...selected, ...fresh];
     sync();                     // one redraw for the whole batch, not one per quest
