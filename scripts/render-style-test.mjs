@@ -25,6 +25,21 @@ import {
   materialFor,
   rgb255,
   styleFor,
+  // R1.5
+  BACKDROP,
+  FOG_COOL_AMOUNT,
+  FOG_COOL_TINT,
+  FOG_DESATURATION,
+  FOLIAGE_VARIATION,
+  ROAD_RIM,
+  SHADOW,
+  SPECULAR,
+  TERRAIN_MACRO,
+  WATER,
+  buildingMaterialId,
+  roofMaterialId,
+  specularFamilyFor,
+  specularFor,
 } from '../src/render-style.js';
 
 // Playable-map diagonals measured from public/data/<map>-3d.json `limit`
@@ -371,4 +386,151 @@ test('the Stage 1 ground detail set is wired to the shipped material assets', ()
   assert.equal(ground.baseColorTexture, 'ground106-albedo');
   assert.equal(ground.normalTexture, 'ground106-normal');
   assert.equal(ground.ormTexture, 'ground106-orm');
+});
+
+// ---------------------------------------------------------------------------
+// R1.5 — materials and atmosphere polish
+// ---------------------------------------------------------------------------
+test('every specular lobe is BROAD and sky-coloured, and vector has none', () => {
+  const sky = rgb255(SPECULAR.realistic.skyColor);
+  const families = Object.keys(SPECULAR.realistic.families);
+  assert.ok(families.length >= 8, `expected a populated specular table, got ${families.length}`);
+  for (const family of families) {
+    const { shininess, specularColor } = specularFor('realistic', family);
+    // A single directional key stands in for the whole sky dome here, so the lobe has to be as
+    // wide as the dome. At a point-light exponent (~100) the wettest road in the contract returns
+    // 0.02% of the sky under the fixed 21-degree key — i.e. nothing reaches the screen.
+    assert.ok(shininess >= 1 && shininess <= 32, `${family}: exponent ${shininess} is a point-light lobe, not a sky dome`);
+    // The lobe reflects the SKY, never a neutral grey: every channel is that fraction of skyFar.
+    const k = SPECULAR.realistic.families[family].strength;
+    for (let i = 0; i < 3; i++) assert.equal(specularColor[i], Math.round(sky[i] * k), `${family} channel ${i}`);
+    // Vector is unlit by contract.
+    const v = specularFor('vector', family);
+    assert.deepEqual(v.specularColor, [0, 0, 0], `${family} must not reflect anything in vector mode`);
+  }
+  // Rough surfaces get a WIDER lobe than smooth ones, and a weaker one.
+  assert.ok(specularFor('realistic', 'ground').shininess < specularFor('realistic', 'water').shininess);
+  assert.ok(SPECULAR.realistic.families.ground.strength < SPECULAR.realistic.families.road.strength);
+  assert.ok(SPECULAR.realistic.families.building.strength < SPECULAR.realistic.families.roof.strength);
+  // An unknown family is a dead lobe, never a guess.
+  assert.deepEqual(specularFor('realistic', 'nope'), { shininess: 1, specularColor: [0, 0, 0] });
+});
+
+test('water is depth-ordered, translucent at the bank, and reflects the sky', () => {
+  assert.equal(WATER.shallow, PALETTE.waterShallow);
+  assert.equal(WATER.deep, PALETTE.waterDeep);
+  assert.equal(WATER.sky, PALETTE.skyFar);
+  // Deep really is deeper: the blue-grey stop is darker than the tea/olive one.
+  const luma = (hex) => { const [r, g, b] = rgb255(hex); return 0.299 * r + 0.587 * g + 0.114 * b; };
+  assert.ok(luma(WATER.deep) < luma(WATER.shallow), 'the deep stop must be darker than the shallow one');
+  assert.ok(WATER.depthMaxMeters > 0 && WATER.shallowAt < WATER.deepAt);
+  // The shore is where the bed reads through; the channel is not.
+  assert.ok(WATER.shoreAlpha < WATER.maxAlpha, 'water must thin toward the bank');
+  assert.ok(WATER.shoreFade > 0, 'a hard alpha step at the shoreline is the shoreline stroke this replaces');
+  assert.ok(WATER.reflectBase > 0 && WATER.reflectFresnel > 0 && WATER.fresnelPower >= 2);
+  assert.ok(WATER.exposureLift > 1, 'the unlit water surface never sees EXPOSURE and must carry its own lift');
+});
+
+test('a building resolves a wall material and a DIFFERENT roof material, deterministically', () => {
+  const cases = [
+    { style: 'box', kind: 'building' },
+    { style: 'gable', kind: 'building' },
+    { style: 'frame', kind: 'building' },
+    { style: 'tank', kind: 'tank' },
+    { style: 'box', place: 'Dorms 3-Story' },
+    { style: 'gable', place: 'Crackhouse' },
+    { style: 'box' },
+    {},
+  ];
+  for (const b of cases) {
+    const wall = buildingMaterialId(b), roof = roofMaterialId(b);
+    assert.ok(MATERIALS[wall], `wall material ${wall} is not in the table`);
+    assert.ok(MATERIALS[roof], `roof material ${roof} is not in the table`);
+    assert.notEqual(wall, roof, `${JSON.stringify(b)}: a roof must not be the same material as its wall`);
+    assert.ok(roof.startsWith('roof-'), `${JSON.stringify(b)} resolved a non-roof material for its roof`);
+    // Pure: same feature in, same class out.
+    assert.equal(buildingMaterialId({ ...b }), wall);
+    assert.equal(roofMaterialId({ ...b }), roof);
+  }
+  // The documented priority order: landmark override beats kind beats form style.
+  assert.equal(buildingMaterialId({ place: 'Dorms 2-Story', kind: 'tank', style: 'gable' }), 'building-brick');
+  assert.equal(buildingMaterialId({ kind: 'tank', style: 'gable' }), 'building-steel-tank');
+  assert.equal(buildingMaterialId({ style: 'gable' }), 'building-corrugated');
+  assert.equal(buildingMaterialId({ style: 'box' }), 'building-concrete-panel');
+  // Every family the specular table knows about is reachable from a material id.
+  for (const id of MATERIAL_IDS) assert.ok(typeof specularFamilyFor(id) === 'string');
+  assert.equal(specularFamilyFor('roof-tar'), 'roof');
+  assert.equal(specularFamilyFor('water-deep'), 'water');
+  assert.equal(specularFamilyFor('foliage-conifer'), 'foliage');
+  assert.equal(specularFamilyFor('bark'), 'trunk');
+});
+
+test('the contact shadow widens, fades, and is never black in either look', () => {
+  for (const mode of STYLE_MODES) {
+    const s = SHADOW[mode];
+    assert.equal(s.rings.length, 3, `${mode}: a penumbra needs more than one step`);
+    for (let i = 1; i < s.rings.length; i++) {
+      assert.ok(s.rings[i].meters > s.rings[i - 1].meters, `${mode}: ring ${i} must be wider`);
+      assert.ok(s.rings[i].alpha < s.rings[i - 1].alpha, `${mode}: ring ${i} must be fainter`);
+    }
+    // The Woods defect in one assertion: an overcast shadow is sky-lit, so it is never ink. If a
+    // shadow value falls to black the vector skin's BLACK void turns it into a hole in the map.
+    const [r, g, b] = rgb255(s.color);
+    assert.ok(r + g + b >= 60, `${mode}: shadow ${s.color} is effectively black`);
+  }
+  // Realistic pushes the shadow COOL — blue-grey, not neutral, not warm.
+  const [r, , b] = rgb255(SHADOW.realistic.color);
+  assert.ok(b > r + 12, `realistic shadow ${SHADOW.realistic.color} is not a cool blue-grey`);
+});
+
+test('foliage drift turns broadleaves and leaves conifers the darker half', () => {
+  const { conifer, broadleaf } = FOLIAGE_VARIATION;
+  assert.ok(isHexColor(FOLIAGE_VARIATION.autumn) && isHexColor(FOLIAGE_VARIATION.dead));
+  assert.ok(conifer.autumn < broadleaf.autumn, 'a spruce does not turn like a birch');
+  assert.ok(conifer.value < broadleaf.value);
+  assert.ok(conifer.darken > 0, 'conifers must stay the darker half of the canopy');
+});
+
+test('the backdrop is a ground haze under a sky, not a second sheet of the sky', () => {
+  const luma = (hex) => { const [r, g, b] = rgb255(hex); return 0.299 * r + 0.587 * g + 0.114 * b; };
+  const b = BACKDROP.realistic;
+  // Darker than the far fog, or the frame is one flat value again and the diorama floats.
+  assert.ok(luma(b.voidColor) < luma(FOG.realistic.color) - 8, 'the void plane must read darker than the fog it fades into');
+  assert.ok(luma(b.skirtBottom) < luma(b.skirtTop), 'the skirt must darken downward into the haze');
+  assert.ok(b.skirtFeather > 0 && b.skirtFeather <= 1);
+  assert.ok(b.voidMarginFactor >= 1, 'the haze must outrun the fog ramp, not stop 60 m past the limit');
+  // The sky ramp comes from the contract's own gradient, and an overcast zenith is DARKER.
+  assert.equal(b.skyZenith, BACKGROUND.realistic.zenith);
+  assert.equal(b.skyHorizon, BACKGROUND.realistic.horizon);
+  assert.ok(luma(b.skyZenith) < luma(b.skyHorizon), 'an overcast sky darkens upward');
+  assert.ok(b.skyTolerance > 0 && b.skyStrength > 0);
+  // Vector keeps its black void and takes no ramp at all.
+  assert.equal(BACKDROP.vector.skyStrength, 0);
+  assert.ok(luma(BACKDROP.vector.voidColor) < 20, 'the vector skin keeps its black void');
+});
+
+test('the fog mixes COLOUR — desaturate, cool, then wash', () => {
+  assert.ok(FOG_DESATURATION > 0 && FOG_DESATURATION <= 1);
+  assert.ok(FOG_COOL_AMOUNT > 0 && FOG_COOL_AMOUNT <= 1);
+  assert.ok(isHexColor(FOG_COOL_TINT));
+  const [r, , b] = rgb255(FOG_COOL_TINT);
+  assert.ok(b > r, 'the aerial-perspective tint has to be COOL to shift anything');
+});
+
+test('the terrain macro patches break up the field without reading elevation', () => {
+  assert.ok(TERRAIN_MACRO.patches.length >= 3, 'one splotch field is a pattern, not a breakup');
+  const seen = new Set();
+  for (const p of TERRAIN_MACRO.patches) {
+    assert.ok(isHexColor(p.color), `patch colour ${p.color}`);
+    assert.ok(p.wavelength >= 40, `${p.color}: ${p.wavelength} m is detail, not MACRO variation`);
+    assert.ok(p.threshold > 0 && p.threshold < 1 && p.gain > 0);
+    assert.ok(p.strength > 0 && p.strength <= 0.5, `${p.color} strength ${p.strength} would repaint the land cover`);
+    assert.equal(seen.has(p.wavelength), false, 'two patches at one wavelength beat in step');
+    seen.add(p.wavelength);
+    assert.equal(p.seed.length, 2);
+  }
+  // The dirt rim darkens ground the road already touches; it never widens the road itself.
+  assert.ok(isHexColor(ROAD_RIM.color));
+  assert.ok(ROAD_RIM.passes >= 2, 'one pass is a second hard edge, not a gradient');
+  assert.ok(ROAD_RIM.widthMeters > 0 && ROAD_RIM.alpha > 0 && ROAD_RIM.alpha < 1);
 });
