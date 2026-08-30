@@ -884,7 +884,10 @@ function renderLivePanel() {
   liveEl.innerHTML =
     list.map((s) => playerRowHtml(s, primaryCode)).join('') +
     `<div class="live-add-row">` +
-      `<input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX" aria-label="Pairing code">` +
+      // "pairing code, e.g. K7P3QX" was clipped to "PAIRING CODE, E." at the dock width — a
+      // placeholder cut mid-example teaches nothing (QA D9). The short form fits; the full
+      // sentence lives in the title tooltip and the aria-label.
+      `<input type="text" id="live-code" maxlength="7" placeholder="code e.g. K7P3QX" title="Pairing code, e.g. K7P3QX" aria-label="Pairing code">` +
       `<input type="text" id="live-name" maxlength="24" placeholder="name (optional)" aria-label="Your name">` +
     `</div>` +
     `<button class="btn-primary" id="live-add">${list.length ? 'Add another' : 'Connect'}</button>` +
