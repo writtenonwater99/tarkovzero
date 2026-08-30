@@ -19,6 +19,11 @@ import {
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
+// The `since` caveat is a LOCAL calendar date — it is read against EFT's own log filenames, which
+// the game writes in local time. Pin a zone west of Greenwich so the assertions below are the same
+// on every machine AND actually discriminate: 1785903953 is 2026-08-05 in UTC and 2026-08-04 here.
+process.env.TZ = 'America/Denver';
+
 /* ---------------------------------------------------------------- harness */
 let pass = 0;
 const fails = [];
@@ -130,10 +135,16 @@ same('another map picks that map’s quests', autoSelectSlugs({ all: ALL, mapKey
 console.log('since caveat');
 eq('ISO date', sinceLabel('2026-08-04'), '2026-08-04');
 eq('ISO timestamp', sinceLabel('2026-08-04T21:25:52.179Z'), '2026-08-04');
-eq('seconds epoch', sinceLabel(1785903953), '2026-08-05');
-eq('ms epoch', sinceLabel(1785903953000), '2026-08-05');
+eq('seconds epoch', sinceLabel(1785903953), '2026-08-04');
+eq('ms epoch', sinceLabel(1785903953000), '2026-08-04');
 eq('nothing means nothing', sinceLabel(null), '');
 eq('unparseable is echoed, not crashed', sinceLabel('whenever'), 'whenever');
+// The bug this pins: an evening-local log was reported as the NEXT day, which is the one direction
+// a "data only reaches back this far" line must never round.
+eq('an evening-local instant stays on its own day',
+  sinceLabel(new Date('2026-08-04T21:00:00-06:00').getTime()), '2026-08-04');
+eq('a date-only string is passed through, never re-parsed as UTC midnight',
+  sinceLabel('2026-01-01'), '2026-01-01');
 check('the caveat names the date', sinceCaveat('2026-08-04').includes('2026-08-04'));
 eq('no since, no caveat line', sinceCaveat(null), '');
 
