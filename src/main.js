@@ -105,6 +105,10 @@ const bounds = toLatLngBounds(mapData.bounds);
 // Base layer: satellite tiles.
 const tiles = L.tileLayer(mapData.tilePath, {
   tileSize: mapData.tileSize,
+  // The tileset's own range. Outside it Leaflet upscales the nearest real tile instead of asking
+  // the CDN for one that was never rendered — which is what lets the map zoom out past z2 to frame
+  // Woods' whole footprint (see MAPS.minZoom in mapdata.js).
+  minNativeZoom: mapData.minNativeZoom ?? mapData.minZoom,
   maxNativeZoom: mapData.maxZoom,
   keepBuffer: 4,          // keep more off-screen tiles so panning/zooming doesn't blank
   updateWhenZooming: false,
