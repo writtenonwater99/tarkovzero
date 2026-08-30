@@ -9,6 +9,14 @@ import L from 'leaflet';
 // measured and either nudged back inside the rect — a small slide only, so the word stays on its
 // landmark — or hidden until the camera or the chrome gives it room again.
 const NUDGE_MAX = 22;   // px a label may slide to escape the chrome before it is dropped instead
+// QA D3: the slide stopped the moment the ink was inside the rect, which put "POWERLINE TOWER" and
+// "SNIPER RIDGE" flush against x=0 — inside by the letter of it, and still reading as a word
+// falling off the frame. The rect is inset by this before anything is measured against it, so a
+// label always keeps a margin of air. Same number as the 3D pass (map3d.js LABEL_INSET).
+const INSET = 12;
+// QA D6: a quest pin landed centred on CRACKHOUSE and ate a letter. Pins are not moved — the label
+// is lifted clear of one instead, by its own height plus this.
+const LIFT_GAP = 4;
 
 /**
  * @param {import('leaflet').Map} map
@@ -17,8 +25,11 @@ const NUDGE_MAX = 22;   // px a label may slide to escape the chrome before it i
  * @param {string} [opts.pane]
  * @param {()=>{left:number,top:number,right:number,bottom:number}} [opts.safeRect]
  *        stage area nothing floats over, in stage CSS px. Omit it and labels are never clipped.
+ * @param {()=>Array<{left:number,top:number,right:number,bottom:number}>} [opts.obstacles]
+ *        boxes in stage CSS px that own their pixels outright — the quest pins. A label that lands
+ *        on one is lifted above it; if it cannot be lifted clear it is hidden, never overprinted.
  */
-export function placeLabelsLayer(map, labels, { pane = 'labels', safeRect = null } = {}) {
+export function placeLabelsLayer(map, labels, { pane = 'labels', safeRect = null, obstacles = null } = {}) {
   if (!map.getPane(pane)) { map.createPane(pane); map.getPane(pane).style.zIndex = 450; map.getPane(pane).style.pointerEvents = 'none'; }
   const group = L.layerGroup();
   const markers = [];
@@ -49,7 +60,11 @@ export function placeLabelsLayer(map, labels, { pane = 'labels', safeRect = null
     }
     if (!els.length) return;
     const s = map.getContainer().getBoundingClientRect();
-    const r = safeRect();
+    const raw = safeRect();
+    const r = { left: raw.left + INSET, top: raw.top + INSET, right: raw.right - INSET, bottom: raw.bottom - INSET };
+    if (r.right - r.left < 60 || r.bottom - r.top < 60) return;
+    let blocks = [];
+    try { blocks = obstacles?.() ?? []; } catch { blocks = []; }
     const boxes = els.map((el) => el.getBoundingClientRect());
     for (let i = 0; i < els.length; i++) {
       const b = boxes[i];
@@ -57,10 +72,24 @@ export function placeLabelsLayer(map, labels, { pane = 'labels', safeRect = null
       const left = b.left - s.left, right = b.right - s.left;
       const top = b.top - s.top, bottom = b.bottom - s.top;
       const dx = right > r.right ? r.right - right : left < r.left ? r.left - left : 0;
-      const dy = bottom > r.bottom ? r.bottom - bottom : top < r.top ? r.top - top : 0;
+      let dy = bottom > r.bottom ? r.bottom - bottom : top < r.top ? r.top - top : 0;
       // Too big to ever fit, or too far in to slide out: hidden beats half a word.
       if (b.width > r.right - r.left || b.height > r.bottom - r.top
         || Math.abs(dx) > NUDGE_MAX || Math.abs(dy) > NUDGE_MAX) { els[i].style.visibility = 'hidden'; continue; }
+      // A pin on the word: lift the label its own height above the pin, then re-check the rect.
+      // Up first, because the pin's own point is at its bottom — moving the name down would put it
+      // under the marker's stem rather than clear of it.
+      if (blocks.length) {
+        const hits = (o) => left + dx < o.right && o.left < right + dx
+          && top + dy < o.bottom && o.top < bottom + dy;
+        let blocked = blocks.find(hits);
+        for (let k = 0; blocked && k < 2; k++) {
+          const lift = bottom + dy - blocked.top + LIFT_GAP;
+          dy -= lift;
+          blocked = blocks.find(hits);
+        }
+        if (blocked || top + dy < r.top || Math.abs(dy) > NUDGE_MAX + 30) { els[i].style.visibility = 'hidden'; continue; }
+      }
       if (dx) els[i].style.setProperty('--dx', `${dx}px`);
       if (dy) els[i].style.setProperty('--dy', `${dy}px`);
     }
