@@ -232,8 +232,11 @@ const scaleBar = $('#scale .scale-line i');
 const compass = $('#hud-north svg');
 const showCoords = (x, z) => { coordsEl.innerHTML = `X <b>${num(x)}</b>&nbsp;&nbsp; Z <b>${num(z)}</b>`; };
 const idleCoords = () => { coordsEl.textContent = '—'; };
-map.on('mousemove', (e) => showCoords(e.latlng.lng, e.latlng.lat));
-map.on('mouseout', idleCoords);
+// While a primary live player is streaming/stale, #coords is their read-out, not the cursor — the
+// live section below flips this on/off through updateTelemetry().
+let liveTelemetryActive = false;
+map.on('mousemove', (e) => { if (!liveTelemetryActive) showCoords(e.latlng.lng, e.latlng.lat); });
+map.on('mouseout', () => { if (!liveTelemetryActive) idleCoords(); });
 
 const SNAP = [10, 25, 50, 100, 200, 500, 1000, 2000];
 function metresPerPixel() {
@@ -442,15 +445,18 @@ applyLabels();
 // All / None with a 3s undo.
 let undoState = null, undoTimer = 0;
 const toastEl = $('#toast');
-function toast(msg, undo) {
+/** `action` is either the old bare undo callback, or `{label, run, sticky}` for a non-undo action
+ *  (e.g. the raid-map-switch toast's "Switch" button) — never performed until the button is clicked. */
+function toast(msg, action) {
   toastEl.hidden = false;
   toastEl.textContent = '';
   const s = document.createElement('span'); s.textContent = msg; toastEl.appendChild(s);
-  if (undo) {
-    const b = document.createElement('button'); b.textContent = 'Undo'; b.onclick = () => { undo(); hideToast(); };
+  const act = typeof action === 'function' ? { label: 'Undo', run: action } : action;
+  if (act) {
+    const b = document.createElement('button'); b.textContent = act.label ?? 'Undo'; b.onclick = () => { act.run(); hideToast(); };
     toastEl.appendChild(b);
   }
-  clearTimeout(undoTimer); undoTimer = setTimeout(hideToast, 3000);
+  clearTimeout(undoTimer); undoTimer = setTimeout(hideToast, act?.sticky ? 8000 : 3000);
 }
 const hideToast = () => { toastEl.hidden = true; clearTimeout(undoTimer); };
 function setAll(on) {
@@ -593,7 +599,12 @@ quests.layer.addTo(map);
 quests.init();
 
 /* --------------------------------------------------------- live panel ---- */
+// State model (red team #11): disconnected -> connecting -> streaming -> stale -> connecting again on
+// reconnect. src/live.js owns the machine (`live.state()`, `live.summary()`, `live.primary()`); this
+// section is the view — toolbar GPS indicator, the panel list, the telemetry chip, and the raid-map
+// mismatch toast (never auto-switches, per red team #6).
 const liveEl = $('#live'), liveToggle = $('#live-toggle'), liveSum = $('#live-sum');
+const tbLive = $('#tb-live'), tbLiveTip = $('.tb-item[data-tb="live"] .tb-tip');
 let liveCollapseTimer = 0;
 function setLiveOpen(o) {
   store.set('liveOpen', o);
@@ -601,42 +612,140 @@ function setLiveOpen(o) {
   liveToggle.setAttribute('aria-expanded', String(o));
 }
 liveToggle.onclick = () => setLiveOpen(!shell.isOpen('live'));
-const ui = { render() {
-  const ps = [...live.players.values()];
-  liveSum.textContent = ps.length ? `${ps[0].code} · ${ps.length} player${ps.length > 1 ? 's' : ''}` : 'Not connected';
-  liveToggle.classList.toggle('armed', ps.length > 0);
-  shell.setIndicator('live', ps.length > 0);
-  if (ps.length && !shell.isOpen('live')) setLiveOpen(true);
-  if (!ps.length && shell.isOpen('live')) { clearTimeout(liveCollapseTimer); liveCollapseTimer = setTimeout(() => { if (!live.players.size) setLiveOpen(false); }, 8000); }
+
+const LIVE_STATE_LABEL = { disconnected: 'Not connected', connecting: 'Connecting…', streaming: 'Streaming', stale: 'Stale' };
+function ageSuffix(ms) {
+  if (ms == null) return '';
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
+}
+/** Per-row status text: a map mismatch always wins (it explains why the dot isn't green here). */
+function rowStatus(s) {
+  if (s.map && s.map !== mapData.key) return `on ${MAPS[s.map]?.name ?? s.map}`;
+  if (s.state === 'connecting') return 'connecting…';
+  const age = ageSuffix(s.ageMs);
+  return `${s.state}${age ? ' · ' + age : ''}`;
+}
+function updateLiveToolbar(st) {
+  tbLive.dataset.liveState = st.state;
+  const age = st.state === 'streaming' || st.state === 'stale' ? ` — updated ${ageSuffix(st.ageMs)}` : '';
+  const label = `Live position — ${LIVE_STATE_LABEL[st.state]}${age}`;
+  tbLive.setAttribute('aria-label', label);
+  if (tbLiveTip) tbLiveTip.textContent = st.state === 'disconnected' ? 'Live' : `${LIVE_STATE_LABEL[st.state]}${age}`;
+}
+/** #coords becomes the primary player's read-out while streaming/stale; cursor coords own it otherwise. */
+function updateTelemetry(st) {
+  const p = (st.state === 'streaming' || st.state === 'stale') ? live.primary() : null;
+  if (p?.last) {
+    const hdg = Math.round(((p.last.yaw ?? 0) % 360 + 360) % 360);
+    const mapName = MAPS[p.map]?.name ?? mapData.name;
+    const age = ageSuffix(p.ageMs) || 'just now';
+    coordsEl.innerHTML = `X <b>${num(p.last.x)}</b>&nbsp;&nbsp; Z <b>${num(p.last.z)}</b> · HDG <b>${hdg}°</b> · ${esc(mapName)} · ` +
+      `<span class="tele-age${p.state === 'stale' ? ' stale' : ''}">${esc(age)}</span>`;
+    liveTelemetryActive = true;
+    return;
+  }
+  if (liveTelemetryActive) { liveTelemetryActive = false; idleCoords(); }
+}
+/** Raid detection (red team #6 spirit): tell, never switch. One toast per distinct mismatched map. */
+let raidToastFor = null;
+function checkRaidSwitch() {
+  const p = live.primary();
+  if (!p || !p.map || p.map === mapData.key) { raidToastFor = null; return; }
+  if (raidToastFor === p.map) return;
+  raidToastFor = p.map;
+  const target = MAPS[p.map];
+  if (target) toast(`Companion is on ${target.name} — switch?`, { label: 'Switch', run: () => goMap(target.key), sticky: true });
+  else toast(`Companion is on ${p.map} — not on TarkovZero yet`);
+}
+function playerRowHtml(s, primaryCode) {
+  return `<div class="player p-${s.state}" data-row="${esc(s.code)}">` +
+    `<span class="pcol" style="background:${esc(s.color)}"></span>` +
+    `<label class="prad" title="Follow this player"><input type="radio" name="live-primary" data-primary="${esc(s.code)}"${s.code === primaryCode ? ' checked' : ''}><span class="prad-mark"></span></label>` +
+    `<b title="double-click to rename" data-rn="${esc(s.code)}">${esc(s.name)}</b>` +
+    `<span class="code">${s.name !== s.code ? esc(s.code) : ''}</span>` +
+    `<span class="st" data-status="${esc(s.code)}">${esc(rowStatus(s))}</span>` +
+    `<button class="rm" data-rm="${esc(s.code)}" aria-label="Remove">✕</button></div>`;
+}
+/** The 1 Hz path from live.js's ticker: text/class updates only. It must never touch the add-code /
+ *  add-name inputs or rebuild rows — a full innerHTML replace every second would blow away whatever
+ *  the player is mid-typing (and their focus) the moment a tick lands between keystrokes. */
+function tickLivePanel() {
+  const list = live.summary();
+  const st = live.state();
+  liveSum.textContent = list.length ? `${LIVE_STATE_LABEL[st.state]} · ${list.length} player${list.length > 1 ? 's' : ''}` : LIVE_STATE_LABEL.disconnected;
+  liveToggle.dataset.liveState = st.state;
+  for (const s of list) {
+    const row = liveEl.querySelector(`[data-row="${s.code}"]`);
+    if (!row) continue; // a structural change is coming through ui.render(); this tick just skips it
+    row.className = `player p-${s.state}`;
+    const stEl = row.querySelector('[data-status]');
+    if (stEl) stEl.textContent = rowStatus(s);
+    // The companion's name can arrive after the row was first drawn (it rides a position message,
+    // which is tick-only) — keep the visible name/code in sync here too, not just the map tooltip.
+    const nameEl = row.querySelector('b[data-rn]');
+    if (nameEl && nameEl.textContent !== s.name) nameEl.textContent = s.name;
+    const codeEl = row.querySelector('.code');
+    if (codeEl) codeEl.textContent = s.name !== s.code ? s.code : '';
+  }
+  updateLiveToolbar(st);
+  updateTelemetry(st);
+  checkRaidSwitch();
+  // Every position — matched map or not — flows through this cheap path (see live.js onPos), so the
+  // 3D live-player arrow/trail has to refresh here, not only on the rarer structural rebuild.
+  view3d?.refresh();
+}
+/** Full rebuild — only for structural events (add/remove/rename/(re)connect/first position). */
+function renderLivePanel() {
+  const list = live.summary();
+  const primaryCode = live.primary()?.code ?? null;
+  if (list.length && !shell.isOpen('live')) setLiveOpen(true);
+  if (!list.length && shell.isOpen('live')) { clearTimeout(liveCollapseTimer); liveCollapseTimer = setTimeout(() => { if (!live.players.size) setLiveOpen(false); }, 8000); }
+
   liveEl.innerHTML =
-    ps.map((p) => `<div class="player"><span class="pcol" style="background:${esc(p.color)}"></span>` +
-      `<b title="double-click to rename" data-rn="${esc(p.code)}">${esc(p.name)}</b>` +
-      `<span class="code">${p.name !== p.code ? esc(p.code) : ''}</span>` +
-      `<span class="st">${esc(p.status)}</span>` +
-      `<button class="rm" data-rm="${esc(p.code)}" aria-label="Remove">✕</button></div>`).join('') +
-    `<input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX" aria-label="Pairing code">` +
-    `<button class="btn-primary" id="live-add">${ps.length ? 'Add another' : 'Connect'}</button>` +
+    list.map((s) => playerRowHtml(s, primaryCode)).join('') +
+    `<div class="live-add-row">` +
+      `<input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX" aria-label="Pairing code">` +
+      `<input type="text" id="live-name" maxlength="24" placeholder="your name (optional)" aria-label="Your name">` +
+    `</div>` +
+    `<button class="btn-primary" id="live-add">${list.length ? 'Add another' : 'Connect'}</button>` +
     `<div class="err" id="live-err"></div>` +
     `<div class="opts">` +
       `<label class="sw"><input type="checkbox" id="live-follow" ${live.opts.follow ? 'checked' : ''}><span class="track"></span>follow</label>` +
       `<label class="sw"><input type="checkbox" id="live-trail" ${live.opts.trail ? 'checked' : ''}><span class="track"></span>trail</label>` +
       `<button class="ghost" id="live-clear">clear trail</button>` +
-    `</div>`;
-  const input = $('#live-code', liveEl);
-  const tryAdd = () => { try { live.add(input.value); input.value = ''; ui.render(); } catch (e) { $('#live-err', liveEl).textContent = e.message; } };
+    `</div>` +
+    `<p class="live-hint">No code yet? Run the companion on the game PC — ` +
+      `<a href="https://github.com/writtenonwater99/tarkovzero/blob/main/companion/README.md" target="_blank" rel="noopener">companion/README.md</a>.</p>`;
+  const codeInput = $('#live-code', liveEl), nameInput = $('#live-name', liveEl);
+  const tryAdd = () => {
+    try { live.add(codeInput.value, nameInput.value, { override: !!nameInput.value.trim() }); codeInput.value = ''; nameInput.value = ''; renderLivePanel(); }
+    catch (e) { $('#live-err', liveEl).textContent = e.message; }
+  };
   $('#live-add', liveEl).onclick = tryAdd;
-  input.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
+  codeInput.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
+  nameInput.onkeydown = (e) => { if (e.key === 'Enter') tryAdd(); };
   $$('[data-rm]', liveEl).forEach((b) => (b.onclick = () => live.remove(b.dataset.rm)));
   $$('[data-rn]', liveEl).forEach((b) => (b.ondblclick = () => { const n = prompt('Name for this player (empty = use companion name / code)', b.textContent); if (n !== null) live.rename(b.dataset.rn, n); }));
+  $$('[data-primary]', liveEl).forEach((r) => (r.onchange = () => live.setPrimary(r.dataset.primary)));
   $('#live-follow', liveEl).onchange = (e) => (live.opts.follow = e.target.checked);
   $('#live-trail', liveEl).onchange = (e) => (live.opts.trail = e.target.checked);
   $('#live-clear', liveEl).onclick = () => live.clearTrails();
-} };
-const live = createLive(map, mapData, ui);
-ui.render();
+
+  tickLivePanel();
+}
+// ui.render is the full rebuild — only for structural events (add/remove/rename/connect status).
+// ui.tick is everything position-driven: live.js's onPos calls it directly on every incoming position
+// (matched map or not — that can be several times a second) and its own 1 Hz ticker calls it too, so
+// age text keeps advancing between positions. Both paths end inside tickLivePanel(), which is also
+// where the 3D live-player refresh lives — but tick never touches the add-code/add-name inputs or
+// rebuilds a row, so a position arriving mid-keystroke can't steal focus or the field's value.
+const ui = { render: renderLivePanel, tick: tickLivePanel };
+const live = createLive(map, mapData, ui, { onFollow: (x, z) => { if (is3d()) set3d({ target: [-x, -z, 0] }); } });
+renderLivePanel();
 live.restore();
 for (const c of (new URLSearchParams(location.search).get('live') || '').split(',').filter(Boolean)) { try { live.add(c); } catch {} }
-ui.render();
+renderLivePanel();
 
 /* ----------------------------------------------------------- 3D view ----- */
 const visibleKinds = () => new Set([...$$('#layers input[data-kind]')].filter((i) => i.checked && i.dataset.kind).map((i) => i.dataset.kind));
@@ -707,7 +816,7 @@ floorBtns.forEach((b) => (b.onclick = () => setFloor(b.dataset.floor)));
 setFloor(floor);
 const stepFloor = (d) => { const i = floorBtns.findIndex((b) => b.classList.contains('on')); setFloor(floorBtns[Math.max(0, Math.min(floorBtns.length - 1, i + d))].dataset.floor); };
 
-const origRender = ui.render; ui.render = () => { origRender(); view3d?.refresh(); };
+// (view3d refresh lives inside tickLivePanel() now — both ui.render and ui.tick end up there, see above.)
 
 /* ------------------------------------------------------- HUD controls ---- */
 function zoomBy(d) {
@@ -790,6 +899,10 @@ window.tz = {
   /** The part of the stage nothing floats over — {left, top, right, bottom} in stage CSS px. */
   safeRect,
   panel: { open: (n) => shell.open(n), close: (n) => shell.close(n), isOpen: (n) => shell.isOpen(n) },
+  live: {
+    /** {state:'disconnected'|'connecting'|'streaming'|'stale', lastAt, ageMs, players:[{code,name,map,lastAt}]} */
+    state: () => live.state(),
+  },
   quests: {
     /** Select a quest by slug (adds it to the map). Returns false if the slug is unknown. */
     select: (slug) => quests.select(slug),

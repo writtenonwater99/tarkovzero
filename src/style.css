@@ -622,3 +622,57 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
   :root{--dock-w:320px}
   #omnibox{width:min(460px,calc(100vw - 140px))}
 }
+
+/* ==========================================================================
+   live (step 3) — GPS-style state on the toolbar button, panel and status
+   strip; the telemetry chip's "streaming" read-out; primary-player radios.
+   idle = grey (no override needed, falls through to the normal .tb-btn /
+   .live-head colours); connecting = amber pulse; streaming = green slow
+   pulse; stale = amber steady. Never overrides .tb-btn.on's cream tint
+   unless a live-state is actually set, so an idle Live button opened as a
+   panel still reads as "open", not "live".
+   ========================================================================== */
+@keyframes live-pulse-fast{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes live-pulse-slow{0%,100%{opacity:.7}50%{opacity:1}}
+
+#tb-live[data-live-state=connecting]{color:var(--warn);border-color:rgba(224,135,43,.45)}
+#tb-live[data-live-state=connecting] .fillN{animation:live-pulse-fast 1.1s ease-in-out infinite}
+#tb-live[data-live-state=streaming]{color:var(--acc);border-color:var(--acc-dim)}
+#tb-live[data-live-state=streaming] .fillN{animation:live-pulse-slow 2.6s ease-in-out infinite}
+#tb-live[data-live-state=stale]{color:var(--warn);border-color:rgba(224,135,43,.45)}
+
+.live-head[data-live-state=connecting] .dot.live{background:var(--warn);animation:live-pulse-fast 1.1s ease-in-out infinite}
+.live-head[data-live-state=streaming] .dot.live{background:var(--acc);animation:live-pulse-slow 2.6s ease-in-out infinite}
+.live-head[data-live-state=stale] .dot.live{background:var(--warn)}
+
+/* panel: code + name side by side, primary radio, per-row state colour */
+#live .player{grid-template-columns:8px 16px 1fr auto auto auto}
+.live-add-row{display:flex;gap:6px}
+.live-add-row #live-code,.live-add-row #live-name{flex:1 1 auto;min-width:0}
+.player.p-connecting .st{color:var(--text-ghost)}
+.player.p-streaming .st{color:var(--acc)}
+.player.p-stale .st{color:var(--warn)}
+.prad{display:grid;place-items:center;width:16px;height:16px;flex:none;cursor:pointer}
+.prad input{position:absolute;opacity:0;width:0;height:0}
+.prad-mark{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--text-ghost);position:relative;
+  transition:border-color var(--t-fast)}
+.prad-mark::after{content:'';position:absolute;inset:2px;border-radius:50%;background:var(--acc);
+  transform:scale(0);transition:transform var(--t-fast)}
+.prad input:checked + .prad-mark{border-color:var(--acc)}
+.prad input:checked + .prad-mark::after{transform:scale(1)}
+.prad input:focus-visible + .prad-mark{outline:2px solid var(--focus);outline-offset:2px}
+.live-hint{margin:10px 0 0;font:400 11px/1.5 var(--f-body);color:var(--text-ghost)}
+.live-hint a{color:var(--text-mute);text-decoration:none;border-bottom:1px solid var(--line)}
+.live-hint a:hover{color:var(--text-dim)}
+
+/* telemetry chip: the primary player's read-out replaces the cursor coords */
+.tele-age.stale{color:var(--warn)}
+
+/* The Live tooltip is now state text ("Streaming — updated 0s ago"), much wider than the other three
+   toolbar items' static labels. #toolbar sits above #dock (z-index 600 vs 590), and .tb-item's own box
+   grows to fit its (often-invisible) .tb-tip — wide enough at some states to reach over the dock panel
+   and silently eat clicks meant for it. .tb-tip was already pointer-events:none; extending that to the
+   whole item (button excepted) lets a click pass through to the panel underneath, whichever toolbar
+   item it belongs to. Hover-to-reveal is unaffected: hovering the visible .tb-btn still hovers .tb-item. */
+.tb-item{pointer-events:none}
+.tb-item .tb-btn{pointer-events:auto}
