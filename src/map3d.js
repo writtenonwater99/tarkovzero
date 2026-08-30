@@ -761,28 +761,55 @@ export async function createView3d(container, mapData, src) {
   const clippedVerts = (() => {
     const ring = data.limit;
     if (!Array.isArray(ring) || ring.length < 3) return 0;
-    const INSET_M = 0.4;
+    /*
+     * A bridge deck is allowed to run to the rim — it is a road, and the rim is where the road
+     * leaves the map. A WATER SURFACE is not: snapping it flush to the limit put the Woods lake's
+     * south shore exactly on the boundary, where the ground mesh's cliff skirt drops away under
+     * it, so the sheet was seen overhanging the void with a fold along the last row of cells and a
+     * black notch under it (QA M2). Water is therefore clipped to a LAND RING inset from the
+     * limit, which is the only inset that guarantees ground beneath every water vertex. The
+     * realistic mesh grows a ~5 m shore pad back outward from the polygon, so the inset has to
+     * cover that and still leave a visible rim.
+     */
+    const BRIDGE_INSET_M = 0.4, WATER_INSET_M = 14;
     const SPLIT_PASSES = 4;
-    const snap = (pt) => {
-      if (!Array.isArray(pt) || pt.length < 2 || inPolyXZ(pt, ring)) return pt;
+    /** Pull a point onto the ring inset by `inset`, or leave it where it is if already that deep. */
+    const snapTo = (pt, inset) => {
+      if (!Array.isArray(pt) || pt.length < 2) return pt;
+      const inside = inPolyXZ(pt, ring);
+      // Every water vertex AND every split midpoint asks for this now (an inside point has to know
+      // how deep inside it is), so the 2,636-segment scan gets a bbox reject against the best
+      // distance so far. Same answer, a fraction of the arithmetic.
       let bx = pt[0], bz = pt[1], bd = Infinity;
       for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const ax = ring[j][0], az = ring[j][1];
-        const dx = ring[i][0] - ax, dz = ring[i][1] - az;
+        const ax = ring[j][0], az = ring[j][1], cx = ring[i][0], cz = ring[i][1];
+        if (bd < Infinity) {
+          const r = Math.sqrt(bd);
+          if (pt[0] < Math.min(ax, cx) - r || pt[0] > Math.max(ax, cx) + r
+            || pt[1] < Math.min(az, cz) - r || pt[1] > Math.max(az, cz) + r) continue;
+        }
+        const dx = cx - ax, dz = cz - az;
         const len = dx * dx + dz * dz;
         const t = len > 0 ? Math.max(0, Math.min(1, ((pt[0] - ax) * dx + (pt[1] - az) * dz) / len)) : 0;
         const qx = ax + dx * t, qz = az + dz * t;
         const d = (qx - pt[0]) ** 2 + (qz - pt[1]) ** 2;
         if (d < bd) { bd = d; bx = qx; bz = qz; }
       }
-      const vx = bx - pt[0], vz = bz - pt[1], vl = Math.hypot(vx, vz) || 1;
-      return [bx + (vx / vl) * INSET_M, bz + (vz / vl) * INSET_M];
+      if (inside && bd >= inset * inset) return pt;
+      const vx = bx - pt[0], vz = bz - pt[1], vl = Math.hypot(vx, vz);
+      if (!(vl > 1e-6)) return pt;
+      // `b - pt` points outward from an inside point and inward from an outside one, so the sign
+      // of the step is the only difference between pulling a stray vertex in and pushing a
+      // too-shallow one deeper.
+      const s = (inside ? -inset : inset) / vl;
+      return [bx + vx * s, bz + vz * s];
     };
     let moved = 0;
     /** @param {boolean} closed a water ring wraps back to its first point; a bridge path does not. */
-    const clipRing = (poly, closed) => {
+    const clipRing = (poly, closed, inset) => {
       if (!Array.isArray(poly)) return poly;
-      let out = poly.map((p) => { const q = snap(p); if (q !== p) moved++; return q; });
+      const deepEnough = (pt) => snapTo(pt, inset) === pt;
+      let out = poly.map((p) => { const q = snapTo(p, inset); if (q !== p) moved++; return q; });
       for (let pass = 0; pass < SPLIT_PASSES && out.length >= 2; pass++) {
         const next = [];
         let split = false;
@@ -793,8 +820,8 @@ export async function createView3d(container, mapData, src) {
           if (i >= last) continue;
           const b = out[(i + 1) % out.length];
           const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-          if (inPolyXZ(mid, ring)) continue;
-          next.push(snap(mid)); moved++; split = true;
+          if (deepEnough(mid)) continue;
+          next.push(snapTo(mid, inset)); moved++; split = true;
         }
         out = next;
         if (!split) break;
@@ -802,10 +829,10 @@ export async function createView3d(container, mapData, src) {
       return out;
     };
     for (const w of data.water || []) {
-      w.poly = clipRing(w.poly, true);
-      if (Array.isArray(w.holes)) w.holes = w.holes.map((h) => clipRing(h, true));
+      w.poly = clipRing(w.poly, true, WATER_INSET_M);
+      if (Array.isArray(w.holes)) w.holes = w.holes.map((h) => clipRing(h, true, WATER_INSET_M));
     }
-    for (const b of data.bridges || []) b.path = clipRing(b.path, false);
+    for (const b of data.bridges || []) b.path = clipRing(b.path, false, BRIDGE_INSET_M);
     return moved;
   })();
 

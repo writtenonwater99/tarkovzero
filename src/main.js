@@ -190,15 +190,18 @@ $$('#relief-toggle .seg-cell').forEach((b) => (b.onclick = () => setRelief(b.dat
 setRelief(relief, false);
 
 /* ------------------------------------------------------------------- look ----- */
-// The render style (docs/plans/RENDER-REALISM.md Stage 1): `realistic` is the default, `vector` is
-// the old map-board skin over exactly the same geometry. Like Relief/Trees/Rocks, `?look=` overrides
-// the persisted choice for one visit without rewriting it.
+// The render style (docs/plans/RENDER-REALISM.md Stage 1): `vector` is the default and the cheap
+// skin, `realistic` is the R1 look over exactly the same geometry. Like Relief/Trees/Rocks,
+// `?look=` overrides the persisted choice for one visit without rewriting it.
 const looks = new Set(['realistic', 'vector']);
 const lookQuery = new URLSearchParams(location.search).get('look');
 let look = looks.has(lookQuery) ? lookQuery : String(store.get('look', 'vector'));
 if (!looks.has(look)) look = 'vector';
 function setLook(next, persist = true) {
-  next = looks.has(next) ? next : 'realistic';
+  // The fallback is the DEFAULT, and the default is vector. It used to be 'realistic', two lines
+  // under a loader that falls back to 'vector' — so `window.tz.renderStyle('typo')` silently moved
+  // the reader into the beta look and persisted it to `tz:look` (QA M12).
+  next = looks.has(next) ? next : 'vector';
   look = next;
   $$('#look-toggle .seg-cell').forEach((b) => {
     const active = b.dataset.look === look;
@@ -658,6 +661,21 @@ function applyLod(force = false) {
 const SURFACE_LABELS = mapLabels.filter((l) => l.floor !== 'U');
 const MAJOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) >= 100);
 const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
+/*
+ * An extract OWNS its own name.
+ *
+ * Its badge already draws the name as a caption, so a hand-written place label carrying the same
+ * text renders the POI twice at one anchor — green above the badge, white below it. QA M1 caught
+ * Woods' BRIDGE V-EX and RAILWAY BRIDGE TO TARKOV; QA M3 caught the Customs ZB-013 ghost half-way
+ * up its own beam. It is not two typos: eleven rows across the three shipped maps collide this way
+ * (customs Trailer Park / Warehouse 4 / Warehouse 17 / ZB-1011 / ZB-013; woods Scav House /
+ * Bridge V-Ex / Railway Bridge to Tarkov; reserve Bunker Hermetic Door / Depot Hermetic Door /
+ * D-2), and the extract list is fetched data that can grow a new collision at any time. So the
+ * rule lives here and reads the live marker set, rather than being edited out of labels.js.
+ */
+const extractNames = new Set();
+const labelKey = (t) => String(t ?? '').trim().toLowerCase();
+const ownedByExtract = (l) => extractNames.has(labelKey(l?.text));
 // A quest pin and an extract badge own their pixels; a place name is moved off one rather than
 // printed through it (QA D6 — a pin centred on CRACKHOUSE, an extract badge eating "OLD GAS").
 // Lazy on purpose — `quests` and `markerPoints` are created further down, and a label clip only
@@ -679,8 +697,8 @@ function labelObstacles() {
   return out;
 }
 const labelLayers = {
-  major: placeLabelsLayer(map, MAJOR, { safeRect: avoidRect, obstacles: labelObstacles }),
-  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect: avoidRect, obstacles: labelObstacles }),
+  major: placeLabelsLayer(map, MAJOR, { safeRect: avoidRect, obstacles: labelObstacles, hidden: ownedByExtract }),
+  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect: avoidRect, obstacles: labelObstacles, hidden: ownedByExtract }),
 };
 // The chrome can move without the map moving at all (a dock panel opens), so the label clip has to
 // be re-run from the layout hook too — see updateHud().
@@ -694,7 +712,8 @@ const effectiveDensity = () => (density !== 'auto' ? density : currentTier() ===
 function labelSet() {
   const d = effectiveDensity();
   if (!labelsShown || d === 'off') return [];
-  return d === 'key' ? mapLabels.filter((l) => (l.size ?? 100) >= 100) : mapLabels;
+  const rows = mapLabels.filter((l) => !ownedByExtract(l));
+  return d === 'key' ? rows.filter((l) => (l.size ?? 100) >= 100) : rows;
 }
 function applyLabels() {
   const d = effectiveDensity();
@@ -884,6 +903,9 @@ statusEl.onclick = () => togglePop(statusPop, statusEl);
 const CACHE_KEY = `tarkovzero:${mapData.key}`;
 function renderMarkers(data, source) {
   markerPoints = classify(data);
+  // Every extract name is now spoken for; the place label with the same text stands down.
+  extractNames.clear();
+  for (const m of markerPoints) if (m.kind.startsWith('extract') && m.name) extractNames.add(labelKey(m.name));
   layerOf.clear(); countOf.clear(); pointsOf.clear();
   for (const m of markerPoints) {
     if (!KINDS[m.kind]) continue;
@@ -900,6 +922,7 @@ function renderMarkers(data, source) {
   for (const [kind, layer] of layerOf) if (onKinds.has(kind)) layer.addTo(map);
   view3d?.refresh();
   buildSearchIndex();
+  labelClip?.();   // extractNames just changed: the place labels an extract owns stand down now
 
   const bosses = [...(data.bosses ?? [])].sort((a, b) => b.spawnChance - a.spawnChance);
   const top = bosses[0];
@@ -954,7 +977,7 @@ function buildSearchIndex() {
     seen.add('l:' + m.name);
     index.push({ kind: 'lock', label: m.name, sub: `key · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
   }
-  for (const l of mapLabels) index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] });
+  for (const l of mapLabels) { if (ownedByExtract(l)) continue; index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] }); }
   for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'layer', mk: k });
   omni?.refresh();
 }

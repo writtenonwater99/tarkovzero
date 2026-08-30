@@ -29,8 +29,12 @@ const LIFT_GAP = 4;
  * @param {()=>Array<{left:number,top:number,right:number,bottom:number}>} [opts.obstacles]
  *        boxes in stage CSS px that own their pixels outright — the quest pins. A label that lands
  *        on one is lifted above it; if it cannot be lifted clear it is hidden, never overprinted.
+ * @param {(label:object)=>boolean} [opts.hidden]
+ *        a label this list should not draw right now, decided per clip rather than at construction:
+ *        the marker data that settles it (which names an EXTRACT already owns) lands after the
+ *        layer is built. Returning true hides the label without disturbing the rest of the pass.
  */
-export function placeLabelsLayer(map, labels, { pane = 'labels', safeRect = null, obstacles = null } = {}) {
+export function placeLabelsLayer(map, labels, { pane = 'labels', safeRect = null, obstacles = null, hidden = null } = {}) {
   if (!map.getPane(pane)) { map.createPane(pane); map.getPane(pane).style.zIndex = 450; map.getPane(pane).style.pointerEvents = 'none'; }
   const group = L.layerGroup();
   const markers = [];
@@ -51,12 +55,13 @@ export function placeLabelsLayer(map, labels, { pane = 'labels', safeRect = null
   function clip() {
     if (!safeRect) return;
     const els = [];
-    for (const m of markers) {
-      const el = m.getElement()?.firstElementChild;
+    for (let i = 0; i < markers.length; i++) {
+      const el = markers[i].getElement()?.firstElementChild;
       if (!el) continue;
       el.style.removeProperty('--dx');
       el.style.removeProperty('--dy');
       el.style.removeProperty('visibility');
+      if (hidden?.(labels[i])) { el.style.visibility = 'hidden'; continue; }
       els.push(el);
     }
     if (!els.length) return;
