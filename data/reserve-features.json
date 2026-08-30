@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "map": "reserve",
+  "markerDuplicateWhitelist": [
+    { "kind": "lock", "name": "5d8e0e0e86f774321140eb56", "count": 2 },
+    { "kind": "lock", "name": "5d95d6be86f77424444eb3a7", "count": 2 },
+    { "kind": "lock", "name": "5d80cb3886f77440556dbf09", "count": 2 },
+    { "kind": "hazard", "name": "Sniper", "count": 3 },
+    { "kind": "lootContainer", "name": "Duffle bag", "count": 178 },
+    { "kind": "lootContainer", "name": "Drawer", "count": 268 },
+    { "kind": "lootContainer", "name": "Ration supply crate", "count": 27 },
+    { "kind": "lootContainer", "name": "Medical supply crate", "count": 10 },
+    { "kind": "lootContainer", "name": "Technical supply crate", "count": 9 },
+    { "kind": "lootContainer", "name": "Dead Scav", "count": 8 },
+    { "kind": "lootContainer", "name": "Jacket", "count": 31 },
+    { "kind": "lootContainer", "name": "PC block", "count": 15 },
+    { "kind": "lootContainer", "name": "Weapon box", "count": 136 },
+    { "kind": "lootContainer", "name": "Safe", "count": 4 },
+    { "kind": "lootContainer", "name": "Grenade box", "count": 62 },
+    { "kind": "lootContainer", "name": "Medbag SMU06", "count": 10 },
+    { "kind": "lootContainer", "name": "Toolbox", "count": 124 },
+    { "kind": "lootContainer", "name": "Wooden crate", "count": 102 },
+    { "kind": "lootContainer", "name": "Wooden ammo box", "count": 3 },
+    { "kind": "lootContainer", "name": "Medcase", "count": 4 },
+    { "kind": "lootContainer", "name": "Sports Bag", "count": 8 },
+    { "kind": "looseLoot", "name": "Loose loot", "count": 766 },
+    { "kind": "stationaryWeapon", "name": "NSV Utyos 12.7x108 heavy machine gun", "count": 5 },
+    { "kind": "stationaryWeapon", "name": "AGS-30 30x29mm automatic grenade launcher", "count": 3 }
+  ],
+  "features": [
+    {
+      "featureId": "reserve.white_pawn.main",
+      "match": { "centroid": [-103.4, 93.55], "toleranceM": 0.35 },
+      "set": { "featureClass": "building", "name": "White Pawn", "place": "White Pawn", "floorCount": 5, "heightM": 16.5, "style": "box" },
+      "assert": { "count": 1, "floorCount": 5, "minHeightM": 16.5 },
+      "evidence": { "method": "named-building+exact-lock/loot-floor-clusters", "status": "floor-count exact; shell-needs-survey" }
+    },
+    {
+      "featureId": "reserve.helipad.service_footprint",
+      "match": { "centroid": [-96.18, 36.6], "toleranceM": 0.35 },
+      "set": { "featureClass": "service-building", "name": "Helipad Service Footprint", "place": "Helipad / Helicopter", "floorCount": 1, "heightM": 4, "style": "box" },
+      "assert": { "count": 1, "floorCount": 1, "maxHeightM": 4.5 },
+      "evidence": { "method": "exact-loot-surface-band+centroid-identity", "status": "broad pawn extent explicitly rejected" }
+    }
+  ],
+  "anchors": [
+    { "name": "White Pawn", "position": [-103.4, 93.55] },
+    { "name": "Helipad", "position": [-96.18, 36.6] },
+    { "name": "White Queen / Dome", "position": [-10.3, 175.3] },
+    { "name": "D-2", "position": [-82, 157] },
+    { "name": "White Rook / Train Station", "position": [161.1, -151.1] },
+    { "name": "Bunker Hermetic Door", "position": [48, -184] }
+  ]
+}
