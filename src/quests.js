@@ -11,7 +11,7 @@ import { iconHtml } from './icons.js';
 import { currentTier } from './lod.js';
 // "My quests" is fed by the game itself (companion -> relay -> src/live.js). Everything that turns
 // a set of task ids into rows, and decides what auto-select may add, is pure and lives next door.
-import { activeRows, doneRows, autoSelectSlugs, sinceCaveat } from './active-quests.js';
+import { activeRows, doneRows, autoSelectSlugs, sinceCaveat, objectiveRows } from './active-quests.js';
 
 // One hue per selected quest so two quests on screen at once stay readable. Deliberately not the
 // extract greens/oranges: a quest pin must never be mistaken for a way out.
@@ -380,15 +380,19 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     el.list.innerHTML = selectedQuests().map((q) => {
       const color = colorOf(q.slug);
       const pts = pointsOf(q);
-      const objs = (q.objectives ?? []).map((o) => {
-        const mine = pts.filter((p) => p.objectiveId === o.id);
+      // QA M4: runs of the same synthesised line under a `(n of 7)` counter, with no zone between
+      // them, are one row carrying every id — see objectiveRows() for the rule.
+      const objs = objectiveRows(q.objectives ?? []).map((row) => {
+        const o = row.objective;
+        const mine = pts.filter((p) => row.ids.includes(p.objectiveId));
         const nums = mine.length ? (mine.length > 1 ? `${mine[0].badge}–${mine[mine.length - 1].badge}` : mine[0].badge) : '';
         const off = (o.maps ?? []).length && !(o.maps ?? []).includes(mapKey);
-        return `<label class="qobj${done.has(o.id) ? ' done' : ''}${mine.length ? '' : ' qoff'}" data-obj="${esc(o.id)}">` +
-          `<input type="checkbox" class="vh" data-qdone="${esc(o.id)}"${done.has(o.id) ? ' checked' : ''}>` +
+        const allDone = row.ids.every((id) => done.has(id));
+        return `<label class="qobj${allDone ? ' done' : ''}${mine.length ? '' : ' qoff'}" data-obj="${esc(row.ids[0])}">` +
+          `<input type="checkbox" class="vh" data-qdone="${esc(row.ids.join(' '))}"${allDone ? ' checked' : ''}>` +
           `<span class="qbox" aria-hidden="true"></span>` +
           (nums ? `<span class="qnum" style="background:${esc(color)}">${esc(nums)}</span>` : `<span class="qnum qnum-off">${off ? '—' : '·'}</span>`) +
-          `<span class="qtext">${esc(o.text)}${o.optional ? ' <i>(optional)</i>' : ''}</span>` +
+          `<span class="qtext">${esc(row.text)}${row.count > 1 ? ` <i>×${row.count}</i>` : ''}${row.optional ? ' <i>(optional)</i>' : ''}</span>` +
           (mine.length ? `<button type="button" class="qfly" data-qfly="${esc(mine[0].id)}" title="Fly to" aria-label="Fly to objective">➤</button>` : '') +
         `</label>`;
       }).join('');
@@ -425,7 +429,8 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
     };
     for (const b of el.list.querySelectorAll('[data-qremove]')) b.onclick = () => deselect(b.dataset.qremove);
     for (const b of el.list.querySelectorAll('.qfly')) b.onclick = (e) => { e.preventDefault(); flyToPoint(b.dataset.qfly); };
-    for (const c of el.list.querySelectorAll('input[data-qdone]')) c.onchange = () => markObjective(c.dataset.qdone, c.checked);
+    // One checkbox can stand for a folded run, so `data-qdone` is a space-separated id list.
+    for (const c of el.list.querySelectorAll('input[data-qdone]')) c.onchange = () => { for (const id of c.dataset.qdone.split(' ')) markObjective(id, c.checked); };
   }
 
   /* ---------------------------------------------------------- my quests ---- */
