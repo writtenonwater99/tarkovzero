@@ -10,8 +10,13 @@
   --bg-void:#070A09; --bg-app:#0B0F0D; --panel:#111614; --panel-2:#161C19; --panel-hi:#1D2521;
   --line:#232D28; --line-soft:#1A211E;
   --glass:rgba(11,15,13,.72); --glass-blur:blur(8px) saturate(.9);
-  /* large panels are flat, not frosted — a full-height blur is a GPU tax for no reading gain */
-  --panel-flat:rgba(15,20,18,.92); --panel-flat-2:rgba(20,26,23,.92);
+  /* Large panels are flat, not frosted — a full-height blur is a GPU tax for no reading gain, and
+     blur belongs to the small chips only. ONE surface value does every panel, the omnibox field,
+     the results list and the ask card, so nothing reads as more (or less) see-through than the box
+     next to it over a bright 3D scene (QA D10). Anything sitting INSIDE that surface — a panel
+     header, a hovered/active row — is a tint that rides on it, never a second translucent layer:
+     stacking two 92% fills composited to 99% and made headers look opaque beside their own body. */
+  --panel-flat:rgba(15,20,18,.92); --panel-tint:rgba(255,255,255,.032); --row-hi:rgba(255,255,255,.055);
   /* text */
   --text:#E6E3D7; --text-dim:#9BA79C; --text-mute:#6C7A70; --text-ghost:#4A554E; --cream:#E6E3D7;
   /* accents — only actionable things get chroma */
@@ -219,7 +224,7 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .panel{display:flex;flex-direction:column;min-height:0;flex:0 1 auto;overflow:hidden;
   background:var(--panel-flat);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel)}
 .panel-hd{display:flex;align-items:center;gap:8px;height:32px;flex:none;padding:0 6px 0 11px;
-  border-bottom:1px solid var(--line-soft);background:var(--panel-flat-2)}
+  border-bottom:1px solid var(--line-soft);background:var(--panel-tint)}
 .panel-name{font:600 var(--fs-cap)/1 var(--f-display);text-transform:uppercase;letter-spacing:var(--ls-cap);color:var(--text-dim)}
 .panel-hd .ghosts{margin-left:auto}
 .panel-pin,.panel-x{appearance:none;background:none;border:0;cursor:pointer;width:22px;height:22px;flex:none;
@@ -272,8 +277,10 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 /* ---------- omnibox (bottom-centre) ---------- */
 #omnibox{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;z-index:600;
   width:min(560px,calc(100vw - 160px));display:flex;flex-direction:column;justify-content:flex-end}
-#omnibox .find{height:42px;background:var(--panel-flat);backdrop-filter:var(--glass-blur);
-  -webkit-backdrop-filter:var(--glass-blur);box-shadow:var(--shadow-panel);border-radius:var(--r-lg);padding-left:11px}
+/* no backdrop-filter: the field and the results list stacked above it are one surface, and only
+   one of them was frosted — the seam showed as soon as anything bright was underneath (QA D10) */
+#omnibox .find{height:42px;background:var(--panel-flat);
+  box-shadow:var(--shadow-panel);border-radius:var(--r-lg);padding-left:11px}
 #omnibox .find input{font-size:14px}
 .find-ico{flex:none;color:var(--text-mute)}
 #omnibox .find:focus-within .find-ico{color:var(--acc)}
@@ -311,7 +318,7 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .askcard{margin:0 0 7px;display:flex;flex-direction:column;min-height:0;max-height:40vh;overflow:hidden;
   background:var(--panel-flat);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel)}
 .askcard-hd{display:flex;align-items:center;gap:7px;height:28px;flex:none;padding:0 5px 0 10px;
-  border-bottom:1px solid var(--line-soft);background:var(--panel-flat-2)}
+  border-bottom:1px solid var(--line-soft);background:var(--panel-tint)}
 .askcard-ico{color:var(--acc);flex:none}
 .askcard-name{font:600 var(--fs-cap)/1 var(--f-display);text-transform:uppercase;letter-spacing:var(--ls-cap);color:var(--text-dim)}
 .askcard-hist{margin-left:auto;height:19px;font-size:10px;padding:0 6px}
@@ -350,10 +357,17 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 #quest-results{margin-top:6px}
 .res{display:flex;align-items:center;gap:7px;height:30px;padding:0 9px;cursor:pointer;border-bottom:1px solid var(--line-soft)}
 .res:last-child{border-bottom:0}
-.res:hover,.res.act{background:var(--panel-hi)}
+/* a tint on the surface, not an opaque plate: --panel-hi made the highlighted row solid while the
+   rows above and below it stayed 92% see-through, which read as three different materials (QA D10) */
+.res:hover,.res.act{background:var(--row-hi)}
 .res .rn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px var(--f-body);color:var(--text)}
 /* result kind + the "enter" hint on the Ask row — both were black-on-black at --text-ghost */
 .res .rk{font:400 10.5px var(--f-mono);color:var(--text-mute);text-transform:lowercase}
+.res .rk:empty{display:none}
+/* the Enter keycap rides the HIGHLIGHTED row, whichever one that is (QA D7) */
+.res .res-enter{flex:none;margin-left:7px;font:400 9.5px/1 var(--f-mono);color:var(--text);
+  background:var(--panel-hi);border:1px solid var(--line);border-radius:3px;padding:3px 5px}
+.res-ask .res-enter{color:var(--acc);border-color:var(--acc-dim);background:rgba(45,190,108,.14)}
 .res .badge{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;
   font:700 10px/1 var(--f-display);color:var(--cream);background:var(--panel-hi);border:1px solid var(--line)}
 .res-empty{padding:8px 9px;font:400 12.5px var(--f-body);color:var(--text-ghost)}
@@ -486,22 +500,33 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .leaflet-popup-close-button:hover{color:var(--text)!important}
 .leaflet-bar,.leaflet-control-attribution{display:none}
 
-/* place labels */
+/* place labels
+   --dx/--dy are the safe-rect nudge from placeLabelsLayer(): a label that would otherwise be read
+   as a truncated word under the toolbar/dock slides back into the clear (or is hidden outright).
+   The halo is a full ring, not three stacked drop shadows — at the minor tier the type is small
+   enough that a one-sided shadow leaves the left edge of every glyph unlit against pale terrain. */
 .place-label-wrap{background:none;border:none}
 .place-label{
   --z:var(--label-zoom,3);
-  position:absolute;transform:translate(-50%,-50%) rotate(var(--r,0deg));
-  font:700 calc((12px + 3px*(var(--z) - 2))*var(--s,1)) var(--f-display);
+  position:absolute;
+  transform:translate(calc(-50% + var(--dx,0px)),calc(-50% + var(--dy,0px))) rotate(var(--r,0deg));
+  font:700 max(12.5px,calc((12px + 3px*(var(--z) - 2))*var(--s,1))) var(--f-display);
   letter-spacing:.085em;text-transform:uppercase;white-space:nowrap;color:#EEEBE2;
-  text-shadow:0 0 3px #0E1110,0 0 3px #0E1110,0 1px 2px #0E1110;
+  text-shadow:0 0 3px #0E1110,0 0 3px #0E1110,1px 0 1.5px #0E1110,-1px 0 1.5px #0E1110,
+    0 1px 1.5px #0E1110,0 -1px 1.5px #0E1110;
 }
 .place-label.minor{font-weight:600;letter-spacing:.045em;text-transform:none;color:#CFCCC1;
-  font-size:calc((10.5px + 2.4px*(var(--z) - 2))*var(--s,1))}
-#map.base-roadmap .place-label{color:#2B3130;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 4px #fff}
-/* minor place names live in their own Leaflet pane so they can be quieter */
-.leaflet-labelsMinor-pane .place-label{font-weight:600;letter-spacing:.045em;text-transform:none;color:#CFCCC1;
-  font-size:calc((10.5px + 2.4px*(var(--z) - 2))*var(--s,1))}
-#map.base-roadmap .leaflet-labelsMinor-pane .place-label{color:#4A524F;text-shadow:0 0 3px #fff,0 0 3px #fff}
+  font-size:max(11px,calc((10.5px + 2.4px*(var(--z) - 2))*var(--s,1)))}
+#map.base-roadmap .place-label{color:#2B3130;
+  text-shadow:0 0 3px #fff,0 0 3px #fff,1px 0 1.5px #fff,-1px 0 1.5px #fff,0 1px 1.5px #fff,0 -1px 1.5px #fff}
+/* minor place names live in their own Leaflet pane so they can be quieter — quieter, not smaller
+   than 11 px: below that the sentence-case secondary names stopped being readable at all (QA D13) */
+.leaflet-labelsMinor-pane .place-label{font-weight:600;letter-spacing:.045em;text-transform:none;color:#D6D3C8;
+  font-size:max(11px,calc((10.5px + 2.4px*(var(--z) - 2))*var(--s,1)));
+  text-shadow:0 0 2px #0E1110,0 0 3px #0E1110,1px 0 2px #0E1110,-1px 0 2px #0E1110,
+    0 1px 2px #0E1110,0 -1px 2px #0E1110}
+#map.base-roadmap .leaflet-labelsMinor-pane .place-label{color:#3E4643;
+  text-shadow:0 0 3px #fff,0 0 3px #fff,1px 0 1.5px #fff,-1px 0 1.5px #fff,0 1px 1.5px #fff,0 -1px 1.5px #fff}
 
 /* live players */
 .player-arrow{width:30px;height:30px;transform-origin:center;filter:drop-shadow(0 0 3px #000);transition:transform .2s}
@@ -748,10 +773,10 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 /* panel: code + name side by side, primary radio, per-row state colour */
 #live .player{grid-template-columns:8px 16px 1fr auto auto auto}
 .live-add-row{display:flex;gap:6px}
-/* the code field only ever holds/hints a 6-char code; give the longer "name (optional)" placeholder
-   the extra room so it doesn't get clipped at the dock width */
-.live-add-row #live-code{flex:0.85 1 0;min-width:0}
-.live-add-row #live-name{flex:1.15 1 0;min-width:0}
+/* both placeholders are now the same length ("CODE E.G. K7P3QX" / "NAME (OPTIONAL)"), so the two
+   fields split the row evenly instead of one of them truncating its own hint (QA D9) */
+.live-add-row #live-code{flex:1 1 0;min-width:0}
+.live-add-row #live-name{flex:1 1 0;min-width:0}
 .player.p-connecting .st{color:var(--text-ghost)}
 .player.p-streaming .st{color:var(--acc)}
 .player.p-stale .st{color:var(--warn)}
