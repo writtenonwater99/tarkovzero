@@ -167,8 +167,8 @@
       "colorSpace": "srgb",
       "channels": "rgb",
       "purpose": "Self-authored 16x16x16 colour-grade LUT (256x16 horizontal strip, blue slices left to right) for the combined post pass: desaturate, cool the shadows toward the fog colour, warm the highlights slightly.",
-      "bytes": 3470,
-      "sha256": "b08c5d63a3405fb4ea91c49d941fd9cfbdc2953d8313c5b7069d3139167d0bc1"
+      "bytes": 3177,
+      "sha256": "0b37497d6d2b57d7de6f1db1d185c3465099666cda9a37be048faaa591e31690"
     }
   ],
   "toolchain": {
@@ -182,7 +182,7 @@
   },
   "totals": {
     "sourceBytes": 22182864,
-    "shippedBytes": 1722128,
+    "shippedBytes": 1721835,
     "shippedBudgetBytes": 12582912
   }
 }
