@@ -11,6 +11,8 @@
     "test:omnibox": "node scripts/omnibox-routing-test.mjs",
     "test:lod": "node scripts/lod-test.mjs",
     "test:active-quests": "node scripts/active-quests-test.mjs",
+    "test:assistant": "node scripts/test-assistant.mjs",
+    "test": "npm run check:dom && npm run test:omnibox && npm run test:lod && npm run test:active-quests && npm run test:assistant",
     "e2e": "node scripts/e2e-walkthrough.mjs",
     "fetch-data": "node scripts/fetch-data.mjs",
     "warm-tiles": "node scripts/warm-tiles.mjs",

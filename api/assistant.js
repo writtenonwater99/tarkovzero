@@ -170,6 +170,47 @@ export function rank(entries, message, map, { limit = TOP_K, activeIds = null } 
   return scored.slice(0, limit);
 }
 
+/* ------------------------------------------------- the game's active set --- */
+// Three tiny pure functions, exported so scripts/test-assistant.mjs can hold the whole
+// active-quest feature to account: what the request body is allowed to contain, which of those ids
+// the model is told about, and the fact that the answer cache is keyed on them.
+
+/** Task ids the client sent, as a list this server will act on. Untrusted input. */
+export const MAX_ACTIVE = 60;
+export function normalizeActiveIds(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((s) => typeof s === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.trim()))
+    .map((s) => s.trim())
+    .slice(0, MAX_ACTIVE);
+}
+
+/**
+ * The names behind those ids, for the prompt. Ids with no row in quests.json are dropped: the same
+ * message shape carries trader chatter, and the model must never be told about a quest we cannot
+ * name. Capped so the system prompt stays small.
+ */
+export function activeQuestNames(entries, activeIds, limit = 12) {
+  const want = activeIds instanceof Set ? activeIds : new Set(normalizeActiveIds(activeIds));
+  if (!want.size) return [];
+  return entries.filter((e) => want.has(e.q.id)).map((e) => e.q.name).slice(0, limit);
+}
+
+/**
+ * The answer-cache key. The active set rides in the prompt, so it rides in the key: the same
+ * question asked before and after the player accepts a quest is not the same question.
+ *
+ * The fields are joined on U+0001 — an invisible byte in the source, and deliberately one that no
+ * map key, message or task id can contain, so two different requests can never collide on it.
+ */
+export function cacheKeyFor({ map, message, history = [], activeIds = [] }) {
+  return [
+    map,
+    String(message ?? '').toLowerCase(),
+    history.map((h) => h.role + h.content.length).join('.'),
+    [...activeIds].join('.'),
+  ].join('');
+}
+
 /* ---------------------------------------------------------- grounding ----- */
 
 const clip = (s, n) => (String(s ?? '').length > n ? String(s).slice(0, n - 1) + '…' : String(s ?? ''));
@@ -353,19 +394,15 @@ export default async function handler(req, res) {
   const selected = Array.isArray(body.selectedQuests) ? body.selectedQuests.filter((s) => typeof s === 'string').slice(0, 12) : [];
   // Optional grounding: task ids the player's own game reports as active. Untrusted input, so it is
   // only ever *matched* against quests.json — an id that resolves to nothing is silently dropped.
-  const activeIds = (Array.isArray(body.activeQuests) ? body.activeQuests : [])
-    .filter((s) => typeof s === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.trim()))
-    .map((s) => s.trim())
-    .slice(0, 60);
+  const activeIds = normalizeActiveIds(body.activeQuests);
   const history = (Array.isArray(body.history) ? body.history : [])
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .slice(-MAX_HISTORY)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
 
   // identical (message, map) inside 10 min is served from memory; the history fingerprint keeps
-  // a follow-up question from picking up an earlier answer. The active set rides in the prompt, so
-  // it rides in the key too — the same question before and after accepting a quest is not the same.
-  const key = [map, message.toLowerCase(), history.map((h) => h.role + h.content.length).join('.'), activeIds.join('.')].join('\u0001');
+  // a follow-up question from picking up an earlier answer; cacheKeyFor() folds in the active set.
+  const key = cacheKeyFor({ map, message, history, activeIds });   // (fields joined on '\u0001');
   const cached = cacheGet(key);
   if (cached) return send(res, 200, { ...cached, cached: true });
 
@@ -374,11 +411,7 @@ export default async function handler(req, res) {
   catch { return send(res, 502, { error: 'quest data unavailable' }); }
 
   const activeSet = new Set(activeIds);
-  // Ids the player's game reported that we can actually name. Unknown ids (trader chatter carries
-  // the same shape) never reach the model, and the list is capped so the prompt stays small.
-  const activeNames = activeSet.size
-    ? entries.filter((e) => activeSet.has(e.q.id)).map((e) => e.q.name).slice(0, 12)
-    : [];
+  const activeNames = activeQuestNames(entries, activeSet);
   const hits = rank(entries, message, map, { activeIds: activeSet });
   const grounding = hits.length
     ? `QUEST DATA (the only facts you may use):\n${groundingFor(hits, map)}`
