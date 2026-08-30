@@ -12,7 +12,7 @@ import { makeWaterHeightCapper, waterLevelAt, waterRings, waterSurfaceAt } from 
 import { CAM, clampTilt, groundFloorAngle } from './camera.js';
 import {
   resolveLook, DEFAULT_LOOK, paletteFor, lightingFor, backgroundFor, backgroundCss,
-  fogExtensionFor, limitDiagonal, fogParams, postFor, surfaceMaterial,
+  fogExtensionFor, limitDiagonal, fogParams, postFor, surfaceMaterial, referenceGroundMeters,
   loadRenderAssets, createGroundTextures, createLutTexture, groundDetailExtensionFor, gradeEffectFor,
 } from './atmosphere.js';
 
@@ -565,10 +565,15 @@ export async function createView3d(container, mapData, src) {
    */
   let look = applyLook(src.look ?? DEFAULT_LOOK);
   const mapDiagonal = limitDiagonal(data.limit);
+  // The fog's height term is metres above the ground, so it needs the map's own ground level (real
+  // game metres, relief applied in the shader) and the relief the camera is drawing at. Read live,
+  // so changing relief does not mean a new extension and a recompile of every world shader.
+  const groundMeters = referenceGroundMeters(data.terrain);
+  const fogScene = () => ({ groundMeters, relief: RELIEF });
   // ONE extension instance per look. Creating a fresh one on every render() would make deck see
   // `extensionsChanged` every frame and recompile every world shader — the extensions are cached
   // here and only replaced by setLook().
-  let fogExt = fogExtensionFor(look, mapDiagonal);
+  let fogExt = fogExtensionFor(look, mapDiagonal, fogScene);
   let groundExt = null;   // realistic ground detail; armed once the textures upload
   let gradeEffect = null; // the combined post pass; armed once the LUT uploads
   let renderAssets = null, groundTextures = null, lutTexture = null;
@@ -1164,7 +1169,7 @@ export async function createView3d(container, mapData, src) {
     const wanted = resolveLook(next);
     if (wanted === look) return look;
     look = applyLook(wanted);
-    fogExt = fogExtensionFor(look, mapDiagonal);
+    fogExt = fogExtensionFor(look, mapDiagonal, fogScene);
     groundExt = groundDetailExtensionFor(look, groundTextures);
     gradeEffect = gradeEffectFor(look, lutTexture);
     lighting = sceneLighting();

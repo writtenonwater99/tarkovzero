@@ -318,14 +318,19 @@ export function limitDiagonal(limit) {
 // See the note in FogExtension for why the fog depth is measured from the target and not the eye.
 // A single scalar in its own std140 block — all-scalar so luma's packing and the driver's cannot
 // disagree about vec3 padding.
+// `ground` and `relief` are the second pair the shader cannot know as literals: the height term is
+// specified in REAL metres above the ground (src/render-style.js), and deck-space Z is game altitude
+// already multiplied by the relief preference, measured from world zero.
 const FOG_MODULE = {
   name: 'tzFog',
   vs: `layout(std140) uniform tzFogUniforms {
   float origin;
+  float ground;
+  float relief;
 } tzFog;
 `,
-  uniformTypes: { origin: 'f32' },
-  defaultUniforms: { origin: 0 },
+  uniformTypes: { origin: 'f32', ground: 'f32', relief: 'f32' },
+  defaultUniforms: { origin: 0, ground: 0, relief: 1 },
 };
 
 class FogExtension extends LayerExtension {
@@ -352,12 +357,30 @@ class FogExtension extends LayerExtension {
          * inspect a building puts everything inside the clear zone. That is aerial perspective,
          * and it is the only reading of "start near max(250 m, 0.12D)" that survives a real camera.
          */
+        /*
+         * The height term is ELEVATION ABOVE THE GROUND REFERENCE, in REAL metres — not altitude.
+         *
+         * `tzWorld.z` is deck space: game altitude times the relief preference (3 by default),
+         * measured from world zero. Feeding that straight into `exp(-z / 120)` got both halves
+         * wrong. The 120 is 120 real metres in the contract, so dividing exaggerated metres by it
+         * made the falloff 40 m; and measuring from world zero de-fogged ground by how high it sits,
+         * which inverts aerial perspective on a map with real relief — on Woods a ridge at +82.8
+         * kept 50% of its fog and a valley at 0 kept 100%, so the far ridge read CLEARER than the
+         * near valley.
+         *
+         * `tzFog.ground` is the map's own reference ground level (the median of its heightfield,
+         * pushed in relief-scaled), which is the closest thing to "the ground under this vertex"
+         * that a vertex shader with no terrain sampler can have. What it buys is that the terrain
+         * fogs by distance, as the plan intends, and only things genuinely standing above the
+         * landscape — roofs, treetops, a rock summit — thin out.
+         */
         'vs:DECKGL_FILTER_GL_POSITION': `
   {
     vec3 tzWorld = geometry.position.xyz;
     float tzDepth = length(tzWorld - project.cameraPosition) - tzFog.origin;
     float tzBase = 1.0 - exp(-${f(k)} * max(0.0, tzDepth - ${f(startMeters)}));
-    float tzHeight = exp(-max(0.0, tzWorld.z) / ${f(heightFalloffMeters)});
+    float tzAbove = max(0.0, (tzWorld.z - tzFog.ground) / max(tzFog.relief, 0.001));
+    float tzHeight = exp(-tzAbove / ${f(heightFalloffMeters)});
     tz_fogAmount = clamp(tzBase * tzHeight, 0.0, ${f(maxDensity)});
   }
 `,
@@ -377,7 +400,12 @@ class FogExtension extends LayerExtension {
     const origin = cam && target
       ? Math.hypot(cam[0] - target[0], cam[1] - target[1], cam[2] - target[2])
       : 0;
-    this.setShaderModuleProps({ tzFog: { origin } });
+    // The scene reads live, so a relief change needs no new extension (and therefore no shader
+    // recompile on every world layer).
+    const scene = extension.opts.scene?.() ?? null;
+    const relief = Number(scene?.relief) > 0 ? Number(scene.relief) : 1;
+    const ground = Number.isFinite(scene?.groundMeters) ? scene.groundMeters * relief : 0;
+    this.setShaderModuleProps({ tzFog: { origin, ground, relief } });
   }
 }
 FogExtension.extensionName = 'TzFogExtension';
@@ -385,8 +413,11 @@ FogExtension.extensionName = 'TzFogExtension';
 /**
  * The world-layer fog extension for one look and map, or `null` when the look has fog off.
  * Callers spread it: `extensions: fogExt ? [fogExt] : []`.
+ *
+ * `scene` is read every draw and answers `{groundMeters, relief}` — the map's reference ground level
+ * in real game metres, and the relief preference the camera is currently drawing at.
  */
-export function fogExtensionFor(look, diagonalMeters) {
+export function fogExtensionFor(look, diagonalMeters, scene = null) {
   const p = fogParams(look, diagonalMeters);
   if (!p.enabled || !(p.k > 0)) return null;
   return new FogExtension({
@@ -395,7 +426,23 @@ export function fogExtensionFor(look, diagonalMeters) {
     maxDensity: p.maxDensity,
     heightFalloffMeters: p.heightFalloffMeters,
     color: p.color,
+    scene,
   });
+}
+
+/**
+ * The map's reference ground level in real game metres: the median of its heightfield.
+ *
+ * Median, not mean: a map whose relief is one big ridge (Woods) should not have its whole valley
+ * floor counted as "below ground". Returns 0 when there is no heightfield to read.
+ */
+export function referenceGroundMeters(terrain) {
+  const h = terrain?.heights;
+  if (!h || !h.length) return 0;
+  const sorted = Array.prototype.slice.call(h).sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const m = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return Number.isFinite(m) ? m : 0;
 }
 
 // ---------------------------------------------------------------------------- ground detail
