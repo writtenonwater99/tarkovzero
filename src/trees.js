@@ -4,6 +4,7 @@ import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
 import { paletteFor, resolveLook, foliageMaterialFor, trunkMaterialFor } from './atmosphere.js';
+import { FOLIAGE_VARIATION, rgb255 } from './render-style.js';
 
 const FAR_ZOOM = -0.55;
 // Vector lifts every crown toward a bright sage so the canopy reads as one map symbol; realistic
@@ -15,6 +16,46 @@ const hash = (a, b) => {
   const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
   return n - Math.floor(n);
 };
+
+/**
+ * Deterministic [0,1) from an INSTANCE INDEX — integer mixing, no Math.random, no float drift.
+ *
+ * R1.5 seeds the per-tree autumn drift from the index rather than the position hash the rest of
+ * this module uses, because index is the one seed that is stable when two trees land on the same
+ * coordinate and, unlike a position hash, cannot correlate the tint with where a tree stands (which
+ * would draw a colour map of the terrain instead of a forest).
+ */
+const indexHash = (i) => {
+  let n = Math.imul(i | 0, 2654435761) | 0;
+  n = Math.imul(n ^ (n >>> 15), 2246822519);
+  n = Math.imul(n ^ (n >>> 13), 3266489917);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+};
+
+const AUTUMN = rgb255(FOLIAGE_VARIATION.autumn);
+const DEAD = rgb255(FOLIAGE_VARIATION.dead);
+const clamp255 = (v) => Math.max(0, Math.min(255, Math.round(v)));
+
+/**
+ * One tree's crown colour: the look's species tone, drifted toward autumn browns/yellows and dead
+ * greens by that instance's own frozen pair of hashes.
+ *
+ * The drift is quadratic in the hash, so most of the canopy stays close to its species colour and a
+ * minority has properly turned — which is what a Russian autumn looks like, and what an even spread
+ * does not. Conifers get a fraction of the amplitude and a small darkening, so they stay the darker
+ * half of the canopy however far a birch beside them has turned.
+ */
+function autumnDrift(rgb, tree) {
+  const p = tree.type === 'conifer' ? FOLIAGE_VARIATION.conifer : FOLIAGE_VARIATION.broadleaf;
+  const a = tree.vary * tree.vary * p.autumn;
+  const b = tree.vary2 * tree.vary2 * p.dead;
+  const k = 1 + (tree.vary2 - 0.5) * 2 * p.value - (p.darken ?? 0);
+  return rgb.map((v, i) => {
+    let c = v + (AUTUMN[i] - v) * a;
+    c += (DEAD[i] - c) * b;
+    return clamp255(c * k);
+  });
+}
 
 function geometry(positions, normals, indices) {
   return new Geometry({
@@ -113,6 +154,10 @@ export function prepareTrees(source, mapKey) {
       trunkRadius: t.trunkRadius ?? 0.15 + hash(t.x + 7, t.z + 13) * 0.1,
       trunkHeight: t.trunkHeight ?? 2 + hash(t.x - 19, t.z - 23),
       lodKeep: t.lodKeep ?? hash(t.x + i * 0.17, t.z - i * 0.11) >= 0.5,
+      // Frozen per-instance autumn seeds. Computed here, once, so LOD filtering, talus culling and
+      // a look flip can never renumber a tree out of its own colour.
+      vary: indexHash(i),
+      vary2: indexHash(i + 977),
     };
   });
   return { all, far: all.filter((t) => t.lodKeep) };
@@ -124,7 +169,9 @@ export function treeLayers({ treeSet, H, zoom, relief, look, fogExtension }) {
   const lift = LIFT[mode];
   // Foliage tone: the authored per-tree colour when the data has one, otherwise the look's own
   // three-stop canopy set indexed by the tree's frozen hash. Same instance, different material.
-  const tone = (d) => (d.sourceColor ? toward(d.sourceColor, lift) : C.treeTones[d.tone % C.treeTones.length]);
+  // Vector keeps FLAT species colours (Part C's flip table); only realistic gets the drift.
+  const base = (d) => (d.sourceColor ? toward(d.sourceColor, lift) : C.treeTones[d.tone % C.treeTones.length]);
+  const tone = mode === 'realistic' ? (d) => autumnDrift(base(d), d) : base;
   // LOD is intentionally a function of camera zoom only. Relief changes placement, never density.
   const source = zoom < FAR_ZOOM ? treeSet.far : treeSet.all;
   const conifers = source.filter((t) => t.type === 'conifer');
