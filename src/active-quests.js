@@ -146,15 +146,28 @@ export function autoSelectSlugs({ all, activeIds, mapKey, selected = [], applied
   return out;
 }
 
-/** `since` as a date, whether it arrives as an ISO string, a seconds epoch or a ms epoch. */
+/**
+ * `since` as a calendar date, whether it arrives as an ISO string, a seconds epoch or a ms epoch.
+ *
+ * The date is the player's OWN, not UTC's. It is rendered straight into sinceCaveat's "quests
+ * started before then may be missing", and the companion reads EFT's log filenames, which the game
+ * writes in local time — so formatting an instant through toISOString() told a player in UTC−6
+ * whose oldest log is from the evening that the data starts the NEXT day. That is the wrong
+ * direction for a line whose whole job is to say how far back the data can be trusted.
+ */
 export function sinceLabel(since) {
   if (since == null || since === '') return '';
   const raw = String(since).trim();
+  // Already a plain calendar date — it came from a log filename. Re-parsing it would read it as UTC
+  // midnight and hand back the day before, west of Greenwich.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const n = Number(raw);
   const d = /^\d{13}$/.test(raw) ? new Date(n)
     : /^\d{10}$/.test(raw) ? new Date(n * 1000)
     : new Date(raw);
-  return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : raw.slice(0, 40);
+  if (!Number.isFinite(d.getTime())) return raw.slice(0, 40);
+  const p = (v) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 /**
