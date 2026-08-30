@@ -40,7 +40,12 @@ export function mdLite(src) {
   return out.join('') || `<p>${inline(src)}</p>`;
 }
 
-export function createAssistant({ mapKey, tz, store, panel }) {
+/**
+ * @param {object} deps
+ * @param {{setOpen(on:boolean):void, isOpen():boolean}} deps.panel  the omnibox card
+ * @param {(x:{answer:string,actions:object[],note:string})=>void} [deps.onAnswer]  render action chips
+ */
+export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
   const el = {
     block: document.getElementById('ask-block'),
     toggle: document.getElementById('ask-toggle'),
@@ -50,7 +55,7 @@ export function createAssistant({ mapKey, tz, store, panel }) {
     form: document.getElementById('ask-form'),
     input: document.getElementById('ask-input'),
   };
-  if (!el.block) return { setOpen() {}, ask() {}, focus() {} };
+  if (!el.block) return { init() {}, setOpen() {}, ask() {}, preview() {}, switchMap: () => false, getHistory: () => [], focus() {} };
 
   let history = [];       // [{role, content}] — memory only
   let busy = false;
@@ -108,23 +113,25 @@ export function createAssistant({ mapKey, tz, store, panel }) {
       if (p && tz.quests.flyTo(fly.objectiveId)) notes.push(`flew to #${p.badge}`);
     }
 
+    // A map switch reloads the page and throws away everything on screen, so the assistant may ask
+    // for it but never do it (red team #6): the card offers a chip and the player decides.
     const jump = actions.find((a) => a.type === 'switchMap' && typeof a.map === 'string' && a.map !== mapKey);
-    if (jump) {
-      notes.push(`switching to ${jump.map}…`);
-      // the quest slugs are already in ?quest= (quests.js writes them), so the reload keeps them
-      try {
-        sessionStorage.setItem(HANDOFF, JSON.stringify({
-          map: jump.map,
-          objectiveId: fly?.objectiveId ?? null,
-          turns: history.slice(-2),
-        }));
-      } catch { /* private mode — the switch still works, just without the transcript */ }
-      const url = new URL(location.href);
-      url.searchParams.set('map', jump.map);
-      url.hash = '';
-      setTimeout(() => location.assign(url), 700);
-    }
+    if (jump) notes.push(`this one is on ${jump.map}`);
     return notes.join(' · ');
+  }
+
+  /** Perform the switch the answer asked for. Called from the card's chip — never automatically. */
+  function switchMap(map, objectiveId = null) {
+    if (!map || map === mapKey) return false;
+    // the quest slugs are already in ?quest= (quests.js writes them), so the reload keeps them
+    try {
+      sessionStorage.setItem(HANDOFF, JSON.stringify({ map, objectiveId, turns: history.slice(-2) }));
+    } catch { /* private mode — the switch still works, just without the transcript */ }
+    const url = new URL(location.href);
+    url.searchParams.set('map', map);
+    url.hash = '';
+    location.assign(url);
+    return true;
   }
 
   /* ----------------------------------------------------------------- ask --- */
@@ -165,8 +172,10 @@ export function createAssistant({ mapKey, tz, store, panel }) {
       history.push({ role: 'assistant', content: data.answer });
       if (history.length > MAX_TURNS * 2) history = history.slice(-MAX_TURNS * 2);
       const msg = bubble('bot', mdLite(data.answer));
-      const note = await perform(data.actions);
+      const actions = Array.isArray(data.actions) ? data.actions : [];
+      const note = await perform(actions);
       if (note) msg.insertAdjacentHTML('beforeend', `<div class="ask-did">${esc(note)}</div>`);
+      onAnswer?.({ answer: data.answer, actions, note });
       scroll();
     } catch (e) {
       wait.remove();
@@ -195,13 +204,22 @@ export function createAssistant({ mapKey, tz, store, panel }) {
     scroll();
   }
 
+  /** Show a question and the waiting state without calling the API (QA screenshots, ?q=?…). */
+  function preview(text) {
+    setOpen(true);
+    el.chips.hidden = true;
+    sayUser(String(text ?? ''));
+    thinking();
+  }
+
   function init() {
     renderChips();
     el.toggle.onclick = () => setOpen(!panelOpen());
     el.form.onsubmit = (e) => { e.preventDefault(); ask(el.input.value); };
-    // ?ask=1 opens the panel; ?ask=<question> opens it and asks — a shareable "show me this" link.
+    // ?ask=1 opens the card; ?ask=<question> opens it and asks — a shareable "show me this" link.
+    // The card is an overlay over the map, so unlike the old panel it does not reopen on load.
     const param = new URLSearchParams(location.search).get('ask');
-    if (param != null || store.get('askOpen', false) === true) setOpen(true);
+    if (param != null) setOpen(true);
     else el.toggle.setAttribute('aria-expanded', String(panelOpen()));
     if (param && param !== '1') setTimeout(() => ask(param.slice(0, 2000)), 300);
 
@@ -229,5 +247,9 @@ export function createAssistant({ mapKey, tz, store, panel }) {
     }
   }
 
-  return { init, setOpen, ask, focus: () => { setOpen(true); el.input.focus(); } };
+  return {
+    init, setOpen, ask, preview, switchMap,
+    getHistory: () => history.slice(-10),
+    focus: () => { setOpen(true); el.input.focus(); },
+  };
 }

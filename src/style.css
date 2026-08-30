@@ -273,7 +273,7 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 .askcard .ask-chips{margin-top:6px}
 .askcard .ask-foot{flex:none;padding:6px 10px 7px;margin-top:6px;border-top:1px solid var(--line-soft)}
 .ask-acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.ask-acts:empty{display:none}
+.ask-acts:empty,.ask-chips:empty{display:none}
 .ask-act{appearance:none;background:var(--panel-hi);border:1px solid var(--line);border-radius:var(--r-sm);
   height:24px;padding:0 9px;cursor:pointer;color:var(--text);font:600 11px/1 var(--f-display);
   letter-spacing:var(--ls-btn);text-transform:uppercase;transition:border-color var(--t-fast),color var(--t-fast)}

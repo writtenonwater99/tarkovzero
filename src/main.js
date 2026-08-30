@@ -10,6 +10,7 @@ import { createLive, esc } from './live.js';
 import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
 import { createShell } from './shell.js';
+import { createOmnibox } from './omnibox.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -21,7 +22,8 @@ const num = (n, p = 1) => n.toFixed(p).replace('-', '−');
 function is3d() { return document.body.classList.contains('view-3d'); }
 // Declared up here: rail helpers below run during module init and poke at both.
 let view3d = null;
-let assistant = null;   // the Ask panel; created once window.tz exists (bottom of this file)
+let assistant = null;   // the AI card; created once window.tz exists (bottom of this file)
+let omni = null;        // the omnibox controller; created last — it drives everything above
 let v3 = { target: [0, 0, 0], zoom: 0, rotationX: 50, rotationOrbit: 0, minZoom: -3, maxZoom: 8 };
 
 /* ------------------------------------------------------------------ shell -- */
@@ -193,7 +195,11 @@ function fit() {
 
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
 const hash = location.hash.slice(1).split('/').map(Number);
-const starts3d = new URLSearchParams(location.search).get('view') === '3d' || localStorage.getItem('view') === '3d';
+// 3D is the site's default view (founder, 2026-08-29): with no ?view= and nothing remembered we
+// open the diorama. 2D stays one click — or `3` — away, and both choices persist.
+const viewParam = new URLSearchParams(location.search).get('view');
+const savedView = localStorage.getItem('view');
+const starts3d = viewParam ? viewParam !== '2d' : savedView ? savedView === '3d' : true;
 let initial3dHash = starts3d && hash.length === 3 && hash.every(Number.isFinite)
   ? { target: [-hash[1], -hash[2], 0], zoom: hash[0] - 2.06 }
   : null;
@@ -435,9 +441,12 @@ let undoState = null, undoTimer = 0;
 const toastEl = $('#toast');
 function toast(msg, undo) {
   toastEl.hidden = false;
-  toastEl.innerHTML = `<span>${msg}</span>`;
-  const b = document.createElement('button'); b.textContent = 'Undo'; b.onclick = () => { undo(); hideToast(); };
-  toastEl.appendChild(b);
+  toastEl.textContent = '';
+  const s = document.createElement('span'); s.textContent = msg; toastEl.appendChild(s);
+  if (undo) {
+    const b = document.createElement('button'); b.textContent = 'Undo'; b.onclick = () => { undo(); hideToast(); };
+    toastEl.appendChild(b);
+  }
   clearTimeout(undoTimer); undoTimer = setTimeout(hideToast, 3000);
 }
 const hideToast = () => { toastEl.hidden = true; clearTimeout(undoTimer); };
@@ -504,63 +513,44 @@ async function loadMarkers(attempt = 0) {
 }
 loadMarkers();
 
-/* --------------------------------------------------------------- find ---- */
-const findEl = $('#find'), resEl = $('#find-results');
-let index = [], results = [], active = 0;
+/* ------------------------------------------------------- search index ---- */
+// What the omnibox looks things up in: everything on this map that has a name and a position,
+// plus the layer rows so "scav" can also mean "the scav spawn filter". Quests are added on the
+// omnibox side (they load out of band). See src/omnibox.js.
+let index = [];
 function buildSearchIndex() {
   index = [];
+  const seen = new Set();
   for (const m of markerPoints) {
-    if (!m.kind.startsWith('extract') || !m.name) continue;
-    if (index.some((i) => i.kind === 'extract' && i.label === m.name)) continue;
+    if (!m.kind.startsWith('extract') || !m.name || seen.has('e:' + m.name)) continue;
+    seen.add('e:' + m.name);
     index.push({ kind: 'extract', label: m.name, sub: `${m.kind.replace('extract-', '')} · ${safeLevel(m.level)}`, level: safeLevel(m.level), x: m.position.x, z: m.position.z, badge: extractLetter(m.name) ?? '', mk: m.kind });
   }
   for (const m of markerPoints) {
-    if (m.kind !== 'stash' || !m.name) continue;
-    index.push({ kind: 'marker', label: m.name, sub: `stash · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
+    if (!['stash', 'switch'].includes(m.kind) || !m.name) continue;
+    index.push({ kind: 'marker', label: m.name, sub: `${m.kind} · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
+  }
+  // Locks and their keys: "ZB-1011" is how a player asks for a door, not "lock".
+  for (const m of markerPoints) {
+    if (m.kind !== 'lock' || !m.name || seen.has('l:' + m.name)) continue;
+    seen.add('l:' + m.name);
+    index.push({ kind: 'lock', label: m.name, sub: `key · ${safeLevel(m.level)}`, x: m.position.x, z: m.position.z, mk: m.kind });
   }
   for (const l of mapLabels) index.push({ kind: 'place', label: l.text, sub: 'place', x: l.position[0], z: l.position[1] });
-  for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'filter', mk: k });
+  for (const k of MARKER_KINDS) if (KINDS[k]) index.push({ kind: 'layer', label: KINDS[k].label, sub: 'layer', mk: k });
+  omni?.refresh();
 }
 buildSearchIndex();
-function renderResults() {
-  if (!results.length) { resEl.hidden = !findEl.value; resEl.innerHTML = '<div class="res-empty">No match</div>'; return; }
-  resEl.hidden = false;
-  resEl.innerHTML = results.map((r, i) => {
-    const chip = r.kind === 'layer' || r.kind === 'marker' ? iconHtml(r.mk, 17)
-      : r.kind === 'extract' ? `<span class="badge">${esc(r.badge || '·')}</span>`
-      : `<span class="badge">${esc((r.label[0] || '·').toUpperCase())}</span>`;
-    return `<div class="res${i === active ? ' act' : ''}" data-i="${i}" role="option">${chip}<span class="rn">${esc(r.label)}</span><span class="rk">${esc(r.sub)}</span></div>`;
-  }).join('');
-  $$('.res', resEl).forEach((el) => (el.onclick = () => choose(Number(el.dataset.i))));
+
+/** `> show scav` / `> hide loot` — every layer whose group, kind or label matches. */
+function matchLayers(query) {
+  const s = query.trim().toLowerCase();
+  if (!s) return [];
+  const hit = new Set();
+  for (const g of GROUPS) if (g.id.startsWith(s) || g.title.toLowerCase().includes(s)) for (const k of g.kinds) hit.add(k);
+  for (const k of MARKER_KINDS) if (k.includes(s) || KINDS[k].label.toLowerCase().includes(s)) hit.add(k);
+  return [...hit].filter((k) => layerOf.has(k));
 }
-function search(q) {
-  const s = q.trim().toLowerCase();
-  if (!s) { results = []; resEl.hidden = true; return; }
-  results = index
-    .map((r) => ({ r, i: r.label.toLowerCase().indexOf(s) }))
-    .filter((o) => o.i >= 0)
-    .sort((a, b) => a.i - b.i || a.r.label.length - b.r.label.length)
-    .slice(0, 8).map((o) => o.r);
-  active = 0;
-  renderResults();
-}
-function choose(i) {
-  const r = results[i]; if (!r) return;
-  if (r.kind === 'layer') setKind(r.mk, true);
-  else {
-    if (r.kind === 'marker') setKind(r.mk, true);
-    flyTo(r.x, r.z);
-  }
-  findEl.blur(); resEl.hidden = true; findEl.value = ''; results = [];
-}
-findEl.oninput = () => search(findEl.value);
-findEl.onkeydown = (e) => {
-  if (e.key === 'ArrowDown') { active = Math.min(active + 1, results.length - 1); renderResults(); e.preventDefault(); }
-  else if (e.key === 'ArrowUp') { active = Math.max(active - 1, 0); renderResults(); e.preventDefault(); }
-  else if (e.key === 'Enter') { choose(active); e.preventDefault(); }
-  else if (e.key === 'Escape') { findEl.value = ''; results = []; resEl.hidden = true; findEl.blur(); }
-};
-if (!/Mac|iPhone|iPad/.test(navigator.platform)) $('#find-kbd').textContent = 'Ctrl K';
 
 function flyTo(x, z) {
   const z2 = Math.max(map.getZoom(), 4.4);
@@ -754,21 +744,23 @@ document.addEventListener('click', (e) => { if (!e.target.closest('.pop') && !e.
 /* ------------------------------------------------------------ keyboard --- */
 document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
-  if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); findEl.focus(); findEl.select(); return; }
+  if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); omni?.focus(); return; }
   if (e.key === 'Escape') {
-    // Peel one layer at a time: popovers and cards, then the transient panel. Pinned workspaces stay.
+    // Peel one layer at a time: popovers and cards, then the omnibox, then the transient panel.
+    // Pinned workspaces stay. (Esc inside the omnibox never reaches here — it stops propagation.)
     const hadPop = $$('.pop').some((p) => !p.hidden) || !mapMenu.hidden;
-    const hadCard = !$('#quest-card').hidden || !!$('.leaflet-popup') || !resEl.hidden;
+    const hadCard = !$('#quest-card').hidden || !!$('.leaflet-popup');
     closePops(); map.closePopup(); quests.closeCard();
-    if (!resEl.hidden) { findEl.value = ''; results = []; resEl.hidden = true; findEl.blur(); }
-    if (!hadPop && !hadCard) shell.closeTransient();
+    if (hadPop || hadCard) return;
+    if (omni?.escape()) return;
+    shell.closeTransient();
     return;
   }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === '/') { e.preventDefault(); findEl.focus(); return; }
+  if (e.key === '/') { e.preventDefault(); omni?.focus(); return; }
   if (e.key === '3') { setView(is3d() ? '2d' : '3d'); return; }
   if (e.key === 'q' || e.key === 'Q') { quests.setOpen(true); $('#quest-find')?.focus(); return; }
-  if (e.key === 'a' || e.key === 'A') { assistant?.focus(); return; }
+  if (e.key === 'a' || e.key === 'A') { e.preventDefault(); omni?.focusAsk(); return; }
   if (e.key === 'l' || e.key === 'L') { setLabels(!labelsShown); return; }
   if (e.key === 'f' || e.key === 'F') { $('#hud-fit').click(); return; }
   if (e.key === 'n' || e.key === 'N') { if (is3d()) $('#hud-north').click(); return; }
@@ -811,20 +803,70 @@ window.tz = {
   },
 };
 
-/* ------------------------------------------------------- ask (AI) panel -- */
+/* --------------------------------------------------------- ask (AI) ------ */
 // Grounded quest Q&A: src/assistant.js posts to /api/assistant and replays the actions it gets
-// back through window.tz (select a quest, fly to an objective, switch map). See api/assistant.js.
+// back through window.tz (select a quest, fly to an objective). It answers into the omnibox card;
+// a map switch is offered as a chip and never performed on its own. See api/assistant.js.
 assistant = createAssistant({
   mapKey: mapData.key,
   tz: window.tz,
   store,
-  panel: { setOpen: (on) => shell.setOpen('ask', on), isOpen: () => shell.isOpen('ask') },
+  panel: { setOpen: (on) => omni?.setCardOpen(on), isOpen: () => !!omni?.isCardOpen() },
+  onAnswer: (x) => omni?.onAnswer(x),
 });
 assistant.init();
 
+/* --------------------------------------------------------- omnibox ------- */
+// One field for three jobs: lookup (no prefix), commands (`>`), the assistant (`?`). It owns the
+// bottom-centre strip and the card above it; everything it can do to the map goes through the
+// handles below, so the routing module never touches Leaflet or deck directly.
+omni = createOmnibox({
+  mapKey: mapData.key,
+  index: () => index,
+  quests,
+  assistant,
+  flyTo,
+  toast: (m) => toast(m),
+  onLayout: () => { if (booted) updateHud(); },
+  camera: {
+    get: () => (is3d() ? { mode: '3d', v3: { ...v3 } } : { mode: '2d', center: map.getCenter(), zoom: map.getZoom() }),
+    set: (s) => {
+      if (!s) return;
+      if (s.mode === '3d') { if (!is3d()) setView('3d'); set3d(s.v3); }
+      else { if (is3d()) setView('2d'); map.setView(s.center, s.zoom, { animate: true }); }
+    },
+  },
+  actions: {
+    setView,
+    fit: () => $('#hud-fit').click(),
+    north: () => $('#hud-north').click(),
+    setKind: (kind, on) => setKind(kind, on),
+    setLayers: (query, on) => {
+      const s = query.trim().toLowerCase();
+      if ('labels'.startsWith(s) || 'places'.startsWith(s) || 'names'.startsWith(s)) { setLabels(on); return 1; }
+      if ('quests'.startsWith(s) || 'objectives'.startsWith(s)) { quests.setVisible(on); return 1; }
+      const kinds = matchLayers(query);
+      for (const k of kinds) setKind(k, on, { refresh: false });
+      if (kinds.length) { store.set('kinds', [...onKinds]); syncGroupCounts(); view3d?.refresh(); }
+      return kinds.length;
+    },
+    setFloor: (f) => { if (!allowedFloors.has(String(f))) return false; setFloor(String(f)); return true; },
+    setRelief: (n) => setRelief(n),
+    setNature: (kind, on) => setNature(kind, on),
+    setLabels: (d) => { density = d; store.set('density', density); if (d !== 'off' && !labelsShown) setLabels(true); else applyLabels(); },
+    panel: (name, on) => shell.setOpen(name, on),
+    pin: (name, on) => shell.setPinned(name, on),
+    clearTrails: () => live.clearTrails(),
+    help: () => { shell.open('view'); closePops(); togglePop($('#hint3d'), $('#help-btn')); },
+    goMap,
+    mapKeys: () => Object.keys(MAPS),
+  },
+});
+
 booted = true;
 updateHud();
-if (starts3d) setView('3d');
+setView(starts3d ? '3d' : '2d');
+omni.applyQaQuery();
 
 // ?debug=roads — draw the 3D road/track network over the 2D map to check it against the satellite
 if (new URLSearchParams(location.search).get('debug') === 'roads') {
