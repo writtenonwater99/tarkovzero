@@ -1,7 +1,10 @@
 /**
  * TarkovZero — AI quest assistant (Vercel Node serverless function).
  *
- * POST /api/assistant  { message, map, selectedQuests?, history? }
+ * POST /api/assistant  { message, map, selectedQuests?, activeQuests?, history? }
+ *   `activeQuests` are tarkov.dev task ids the player's game reports as active (the companion
+ *   reads them out of EFT's own logs). Optional in every sense: absent, empty or unknown ids
+ *   change nothing except a line of context and a small ranking nudge.
  *   -> { answer, actions:[{type,...}], quests:[slug], sources:[...] }
  *
  * How it works: retrieval over public/data/quests.json (fuzzy rank against name / trader /
@@ -111,7 +114,8 @@ function dice(a, b) {
  * Signals: exact/fuzzy quest-name match (dominant), trader name, item and objective-text tokens,
  * plus a bonus when the quest actually has objectives on the map the player is looking at.
  */
-export function rank(entries, message, map, { limit = TOP_K } = {}) {
+export function rank(entries, message, map, { limit = TOP_K, activeIds = null } = {}) {
+  const activeSet = activeIds instanceof Set ? activeIds : new Set(Array.isArray(activeIds) ? activeIds : []);
   const msg = norm(message);
   const words = msg.split(' ').filter(Boolean).slice(0, 24);
   const msgTokens = new Set(tokens(message));
@@ -150,6 +154,9 @@ export function rank(entries, message, map, { limit = TOP_K } = {}) {
     score += Math.min(obj, 12);
 
     if (score <= 0) continue;
+    // "How do I finish part 3" from a player whose game says they are ON part 3 should not land on
+    // part 1. A nudge, not an override: a quest the message names outright still wins.
+    if (activeSet.size && activeSet.has(e.q.id)) score += 5;
     if (mapKey) {
       if ((e.q.siteMaps ?? []).includes(mapKey)) score += 6;
       else if ((e.q.maps ?? []).includes(mapKey)) score += 2.5;
@@ -195,8 +202,9 @@ export function groundingFor(hits, map) {
   }).join('\n');
 }
 
-const SYSTEM = (map, selected) => `You are the quest assistant built into TarkovZero, an interactive Escape from Tarkov map (Customs, Reserve, Woods).
-The player is looking at the ${map} map right now.${selected.length ? ` Already on their map: ${selected.join(', ')}.` : ''}
+const SYSTEM = (map, selected, activeNames = []) => `You are the quest assistant built into TarkovZero, an interactive Escape from Tarkov map (Customs, Reserve, Woods).
+The player is looking at the ${map} map right now.${selected.length ? ` Already on their map: ${selected.join(', ')}.` : ''}${
+  activeNames.length ? `\nTheir game reports these quests as ACTIVE right now: ${activeNames.join(', ')}. Prefer them when the question is vague ("what next?", "where do I go?"), but never claim a quest is active or finished beyond this list.` : ''}
 
 Rules:
 - Use ONLY the QUEST DATA block for anything factual: objectives, where they are, trader, level, items, photos.
@@ -343,14 +351,21 @@ export default async function handler(req, res) {
 
   const map = SITE_MAPS.includes(String(body.map)) ? String(body.map) : 'customs';
   const selected = Array.isArray(body.selectedQuests) ? body.selectedQuests.filter((s) => typeof s === 'string').slice(0, 12) : [];
+  // Optional grounding: task ids the player's own game reports as active. Untrusted input, so it is
+  // only ever *matched* against quests.json — an id that resolves to nothing is silently dropped.
+  const activeIds = (Array.isArray(body.activeQuests) ? body.activeQuests : [])
+    .filter((s) => typeof s === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.trim()))
+    .map((s) => s.trim())
+    .slice(0, 60);
   const history = (Array.isArray(body.history) ? body.history : [])
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .slice(-MAX_HISTORY)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
 
   // identical (message, map) inside 10 min is served from memory; the history fingerprint keeps
-  // a follow-up question from picking up an earlier answer.
-  const key = [map, message.toLowerCase(), history.map((h) => h.role + h.content.length).join('.')].join('\u0001');
+  // a follow-up question from picking up an earlier answer. The active set rides in the prompt, so
+  // it rides in the key too — the same question before and after accepting a quest is not the same.
+  const key = [map, message.toLowerCase(), history.map((h) => h.role + h.content.length).join('.'), activeIds.join('.')].join('\u0001');
   const cached = cacheGet(key);
   if (cached) return send(res, 200, { ...cached, cached: true });
 
@@ -358,7 +373,13 @@ export default async function handler(req, res) {
   try { entries = await loadQuests(req); }
   catch { return send(res, 502, { error: 'quest data unavailable' }); }
 
-  const hits = rank(entries, message, map);
+  const activeSet = new Set(activeIds);
+  // Ids the player's game reported that we can actually name. Unknown ids (trader chatter carries
+  // the same shape) never reach the model, and the list is capped so the prompt stays small.
+  const activeNames = activeSet.size
+    ? entries.filter((e) => activeSet.has(e.q.id)).map((e) => e.q.name).slice(0, 12)
+    : [];
+  const hits = rank(entries, message, map, { activeIds: activeSet });
   const grounding = hits.length
     ? `QUEST DATA (the only facts you may use):\n${groundingFor(hits, map)}`
     : 'QUEST DATA: no quest in the database matched this question.';
@@ -380,7 +401,7 @@ export default async function handler(req, res) {
         max_tokens: 600,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM(map, selected) },
+          { role: 'system', content: SYSTEM(map, selected, activeNames) },
           ...history,
           { role: 'user', content: `${grounding}\n\nPLAYER: ${message}` },
         ],
