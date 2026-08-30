@@ -175,6 +175,29 @@ function setRelief(next, persist = true) {
 $$('#relief-toggle .seg-cell').forEach((b) => (b.onclick = () => setRelief(b.dataset.relief)));
 setRelief(relief, false);
 
+/* ------------------------------------------------------------------- look ----- */
+// The render style (docs/plans/RENDER-REALISM.md Stage 1): `realistic` is the default, `vector` is
+// the old map-board skin over exactly the same geometry. Like Relief/Trees/Rocks, `?look=` overrides
+// the persisted choice for one visit without rewriting it.
+const looks = new Set(['realistic', 'vector']);
+const lookQuery = new URLSearchParams(location.search).get('look');
+let look = looks.has(lookQuery) ? lookQuery : String(store.get('look', 'realistic'));
+if (!looks.has(look)) look = 'realistic';
+function setLook(next, persist = true) {
+  next = looks.has(next) ? next : 'realistic';
+  look = next;
+  $$('#look-toggle .seg-cell').forEach((b) => {
+    const active = b.dataset.look === look;
+    b.classList.toggle('on', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+  if (persist) store.set('look', look);
+  view3d?.setLook(look);
+  return look;
+}
+$$('#look-toggle .seg-cell').forEach((b) => (b.onclick = () => setLook(b.dataset.look)));
+setLook(look, false);
+
 /**
  * Fit = **cover**, not contain.
  *
@@ -996,6 +1019,7 @@ async function setView(mode) {
       const { createView3d } = await import('./map3d.js');
       view3d = await createView3d($('#map3d'), mapData, {
         relief,
+        look,
         markers: () => markerPoints.filter((m) => visibleKinds().has(m.kind)),
         labels: labelSet,
         players: () => [...live.players.values()],
@@ -1164,6 +1188,14 @@ window.tz = {
   get view() { return is3d() ? '3d' : '2d'; },
   setView,
   flyTo,
+  /**
+   * The 3D render style (docs/plans/RENDER-REALISM.md): 'realistic' | 'vector'.
+   * Called with no argument it reports the current one; with one it flips and persists it.
+   * The flip is material-only — geometry, feature ids, picking, floors and the camera do not move.
+   */
+  renderStyle: (mode) => (mode === undefined ? look : setLook(mode)),
+  /** QA hook: draw count, GPU/CPU frame time and texture bytes for the live 3D frame. */
+  renderStats: () => view3d?.renderStats?.() ?? null,
   /** The part of the stage nothing floats over — {left, top, right, bottom} in stage CSS px. */
   safeRect,
   /** QA hook: which marker tier is on screen and the metres-per-pixel it was decided from. */

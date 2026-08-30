@@ -15,36 +15,43 @@
 // limit skirt, contours and every map3d layer therefore consume the same exaggerated ground.
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
 import { Geometry } from '@luma.gl/engine';
-import { COORDINATE_SYSTEM, LightingEffect, AmbientLight, DirectionalLight } from '@deck.gl/core';
+import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import earcut from 'earcut';
 import { allWaterRings, carveWaterHeightfield, makeWaterHeightCapper } from './water.js';
+import { paletteFor, surfaceFor, terrainMaterialFor, groundDetailExtensionFor, toDeckDirection, resolveLook } from './atmosphere.js';
+import { LIGHT, styleFor } from './render-style.js';
 
 // ---------------------------------------------------------------- tunables
 const CELL = 2.5;          // mesh cell size in metres (10 m source grid subdivided 4x)
 const PAD = 8;             // metres of mesh built outside the limit bbox (hidden, gives the skirt room)
 const TEX_W = 2048;        // baked ground texture width
-const SHADE_GAIN = 2.6;    // mild cartographic boost on top of the displayed surface's real normals
 const DEFAULT_VOID_Z = -14;
 
-// Light directions in DECK space (X=-gameX, Y=-gameZ, Z=up). `SUN_DIR` is the travel direction of
-// the sun; the bake's key light is exactly its negation, so the two shading systems agree.
-const SUN_DIR = [-0.62, -0.42, -0.66];
+// Light directions in DECK space (X=-gameX, Y=-gameZ, Z=up). `sunDir` is the travel direction of
+// the key; the bake's key light is exactly its negation, so the two shading systems agree.
+//
+// STAGE 1: both looks now take the direction from the ONE frozen contract in render-style.js
+// (azimuth 230, elevation 21), so the baked shading and the scene light can no longer drift apart
+// — they are literally the same two numbers.
+const sunDir = (look) => toDeckDirection(LIGHT[resolveLook(look)].keyDirection);
 const FILL_DIR = [0.5, 0.35, -0.79];
 
+// How hard the bake pushes relief.
+//   vector     — 2.6, the pre-Stage-1 cartographic boost: the bake IS the relief cue, because the
+//                terrain material runs ambient 0.95 and the scene light barely touches the ground.
+//   realistic  — 1.0 and a tight clamp: the mesh normals plus the 21-degree key do the relief, and
+//                a strong second hillshade on top of real lighting is exactly the "map board" read
+//                Stage 1 exists to remove.
+const SHADE = { vector: { gain: 2.6, lo: 0.60, hi: 1.34, contrast: 1.9 }, realistic: { gain: 1.0, lo: 0.84, hi: 1.14, contrast: 1.0 } };
+
 // Bright field palette: still olive/green and desaturated, but no longer loses its middle values
-// under the baked hillshade and the scene light.
+// under the baked hillshade and the scene light. VECTOR ONLY — this is the hypsometric ramp the
+// realistic look is required to drop.
 const vib = (rgb, k = 1.3) => { const l = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]; return rgb.map((v) => Math.max(0, Math.min(255, l + (v - l) * k))); };
 const GRASS = [[57, 82, 58], [68, 96, 62], [81, 108, 67], [101, 121, 73], [123, 137, 84]].map((c) => vib(c));
 const GRASS_DRY = [132, 126, 99];
 const GRASS_ROCK = [145, 138, 120];
 const YARD_EARTH = [133, 101, 68];
-const SURFACE = {
-  pavement: [112, 115, 108],
-  road: [137, 142, 133], roadEdge: [86, 91, 83],
-  highway: [150, 153, 141], highwayEdge: [96, 101, 91], marking: [230, 226, 207],
-  dirt: [139, 121, 88], dirtEdge: [103, 88, 64], track: [126, 105, 73],
-  rail: [132, 130, 121], sleeper: [99, 91, 75],
-};
 
 // ---------------------------------------------------------------- small maths helpers
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -194,7 +201,7 @@ function drawSleepers(ctx, path, spacing = 2.4, halfWidth = 1.25) {
  * Filling the ring instead draws the thing the outline describes.
  */
 const isAreaRing = (path) => path.length > 3 && Math.hypot(path[0][0] - path[path.length - 1][0], path[0][1] - path[path.length - 1][1]) < 1;
-function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz) {
+function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz, SURFACE) {
   ctx.save();
   ctx.setTransform(1 / mx, 0, 0, 1 / mz, -X0 / mx, -Z0 / mz);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -236,7 +243,8 @@ function drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz) {
 }
 
 // ---------------------------------------------------------------- main
-export function buildTerrain(data, relief = 3) {
+export function buildTerrain(data, relief = 3, options = {}) {
+  const look = resolveLook(options.look);
   const t = data.terrain;
   const { x0, z0, step, cols, rows } = t;
   relief = [1, 2, 3].includes(Number(relief)) ? Number(relief) : 3;
@@ -307,79 +315,137 @@ export function buildTerrain(data, relief = 3) {
     return raster[j * aw + i] * AOC; // metres
   };
 
-  const canvas = document.createElement('canvas');
-  canvas.width = TEX_W; canvas.height = TH;
-  const ctx = canvas.getContext('2d', { willReadFrequently: false });
-  const img = ctx.createImageData(TEX_W, TH);
-  const px8 = img.data;
+  /**
+   * Bake the ground texture for ONE look.
+   *
+   * Everything above this point — the conditioned height field, H(), the fine raster, the AO
+   * distance fields, and (below) the mesh — is look-independent and is built exactly once. The look
+   * flip therefore changes a TEXTURE and a MATERIAL, never a vertex: the plan's rule that the
+   * geometry cache key excludes `skin` holds by construction, and the two looks are guaranteed to
+   * have an identical silhouette because they share one buffer.
+   *
+   *   vector    — the pre-Stage-1 cartographic sheet: 5-stop hypsometric ramp, strong two-light
+   *               hillshade, slope tint, 2 m contours, then the road/rail symbols on top.
+   *   realistic — no hypsometry and no contours at all. The base colour is a world-space blend of
+   *               the contract's grass / forest-litter / dirt over macro noise, darkened on slope
+   *               toward wet grass and then rock; the hillshade drops to a whisper because the
+   *               scene key now lights the real mesh normals, and the Ground106 detail arrives in
+   *               the shader (see atmosphere.js) rather than in this bake.
+   */
+  const bakeTexture = (mode) => {
+    const C = paletteFor(mode);
+    const realistic = mode === 'realistic';
+    const S = realistic ? SHADE.realistic : SHADE.vector;
+    const canvas = document.createElement('canvas');
+    canvas.width = TEX_W; canvas.height = TH;
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    const img = ctx.createImageData(TEX_W, TH);
+    const px8 = img.data;
 
-  const KEY = norm3([-SUN_DIR[0], -SUN_DIR[1], -SUN_DIR[2]]);
-  const FILL = norm3([-FILL_DIR[0], -FILL_DIR[1], -FILL_DIR[2]]);
-  const flatRaw = KEY[2] + 0.28 * FILL[2];      // response of a flat surface, so shade ~1 on the flats
-  const GRAD_PX = 3;
+    const SUN_DIR = sunDir(mode);
+    const KEY = norm3([-SUN_DIR[0], -SUN_DIR[1], -SUN_DIR[2]]);
+    const FILL = norm3([-FILL_DIR[0], -FILL_DIR[1], -FILL_DIR[2]]);
+    const flatRaw = KEY[2] + 0.28 * FILL[2];      // response of a flat surface, so shade ~1 on the flats
+    const GRAD_PX = 3;
+    // Realistic ground stops, all from the frozen palette.
+    const R_GRASS = C.grass, R_LITTER = C.grassHigh, R_DIRT = C.dirt, R_WET = C.grass1, R_ROCK = C.rock;
+    const R_YARD = C.pavement;
 
-  for (let py = 0; py < TH_T; py++) {
-    const gz = Z0 + (py + 0.5) * mz, o = py * TEX_W;
-    const pyA = clamp(py - GRAD_PX, 0, TH_T - 1) * TEX_W, pyB = clamp(py + GRAD_PX, 0, TH_T - 1) * TEX_W;
-    const dzSpan = (clamp(py + GRAD_PX, 0, TH_T - 1) - clamp(py - GRAD_PX, 0, TH_T - 1)) * mz || 1;
-    for (let px = 0; px < TEX_W; px++) {
-      const gx = X0 + (px + 0.5) * mx;
-      const h = fine[o + px];
-      // (a) hypsometry — smoothstep across the 5 grass stops
-      const f = clamp((h - hmin) / hspan, 0, 1) * (GRASS.length - 1);
-      const k = Math.min(GRASS.length - 2, Math.floor(f)), u = smoothstep(f - k);
-      const A = GRASS[k], B = GRASS[k + 1];
-      let r = A[0] + (B[0] - A[0]) * u, g = A[1] + (B[1] - A[1]) * u, b = A[2] + (B[2] - A[2]) * u;
-      // gradient of the true field
-      const ia = clamp(px - GRAD_PX, 0, TEX_W - 1), ib = clamp(px + GRAD_PX, 0, TEX_W - 1);
-      const dhdx = (fine[o + ib] - fine[o + ia]) / ((ib - ia) * mx || 1);
-      const dhdz = (fine[pyB + px] - fine[pyA + px]) / dzSpan;
-      // (c) slope tint toward dry khaki — an independent relief cue
-      const slope = Math.hypot(dhdx, dhdz), dry = Math.min(0.56, slope * 2.8);
-      r += (GRASS_DRY[0] - r) * dry; g += (GRASS_DRY[1] - g) * dry; b += (GRASS_DRY[2] - b) * dry;
-      const rocky = Math.min(0.34, Math.max(0, slope - 0.28) * 1.2);
-      r += (GRASS_ROCK[0] - r) * rocky; g += (GRASS_ROCK[1] - g) * rocky; b += (GRASS_ROCK[2] - b) * rocky;
-      if (yardMask?.[o + px]) {
-        const earth = 0.82 + (vnoise(gx - 43, gz + 17, 11) - 0.5) * 0.12;
-        r += (YARD_EARTH[0] * earth - r) * 0.88;
-        g += (YARD_EARTH[1] * earth - g) * 0.88;
-        b += (YARD_EARTH[2] * earth - b) * 0.88;
+    for (let py = 0; py < TH_T; py++) {
+      const gz = Z0 + (py + 0.5) * mz, o = py * TEX_W;
+      const pyA = clamp(py - GRAD_PX, 0, TH_T - 1) * TEX_W, pyB = clamp(py + GRAD_PX, 0, TH_T - 1) * TEX_W;
+      const dzSpan = (clamp(py + GRAD_PX, 0, TH_T - 1) - clamp(py - GRAD_PX, 0, TH_T - 1)) * mz || 1;
+      for (let px = 0; px < TEX_W; px++) {
+        const gx = X0 + (px + 0.5) * mx;
+        const h = fine[o + px];
+        let r, g, b;
+        // gradient of the true field (both looks need it: slope drives colour AND the hillshade)
+        const ia = clamp(px - GRAD_PX, 0, TEX_W - 1), ib = clamp(px + GRAD_PX, 0, TEX_W - 1);
+        const dhdx = (fine[o + ib] - fine[o + ia]) / ((ib - ia) * mx || 1);
+        const dhdz = (fine[pyB + px] - fine[pyA + px]) / dzSpan;
+        const slope = Math.hypot(dhdx, dhdz);
+        if (realistic) {
+          // (a') land cover, NOT elevation. Two wide world-space noise fields decide how much of a
+          // texel is open grass, forest litter or bare dirt. Nothing here reads `h`, so there are no
+          // bands and no hypsometric read at any zoom.
+          const cover = smoothstep(clamp((vnoise(gx + 211, gz - 137, 165) - 0.28) * 1.9, 0, 1));
+          const bare = smoothstep(clamp((vnoise(gx - 389, gz + 57, 62) - 0.55) * 2.4, 0, 1));
+          r = R_GRASS[0] + (R_LITTER[0] - R_GRASS[0]) * cover;
+          g = R_GRASS[1] + (R_LITTER[1] - R_GRASS[1]) * cover;
+          b = R_GRASS[2] + (R_LITTER[2] - R_GRASS[2]) * cover;
+          r += (R_DIRT[0] - r) * bare * 0.5; g += (R_DIRT[1] - g) * bare * 0.5; b += (R_DIRT[2] - b) * bare * 0.5;
+          // (c') slope: damp hollows first, then exposed rock on the steep faces.
+          const wet = Math.min(0.35, Math.max(0, 0.09 - slope) * 3.4);
+          r += (R_WET[0] - r) * wet; g += (R_WET[1] - g) * wet; b += (R_WET[2] - b) * wet;
+          const rocky = Math.min(0.62, Math.max(0, slope - 0.22) * 1.5);
+          r += (R_ROCK[0] - r) * rocky; g += (R_ROCK[1] - g) * rocky; b += (R_ROCK[2] - b) * rocky;
+          if (yardMask?.[o + px]) {
+            const earth = 0.92 + (vnoise(gx - 43, gz + 17, 11) - 0.5) * 0.1;
+            r += (R_YARD[0] * earth - r) * 0.85; g += (R_YARD[1] * earth - g) * 0.85; b += (R_YARD[2] * earth - b) * 0.85;
+          }
+        } else {
+          // (a) hypsometry — smoothstep across the 5 grass stops
+          const f = clamp((h - hmin) / hspan, 0, 1) * (GRASS.length - 1);
+          const k = Math.min(GRASS.length - 2, Math.floor(f)), u = smoothstep(f - k);
+          const A = GRASS[k], B = GRASS[k + 1];
+          r = A[0] + (B[0] - A[0]) * u; g = A[1] + (B[1] - A[1]) * u; b = A[2] + (B[2] - A[2]) * u;
+          // (c) slope tint toward dry khaki — an independent relief cue
+          const dry = Math.min(0.56, slope * 2.8);
+          r += (GRASS_DRY[0] - r) * dry; g += (GRASS_DRY[1] - g) * dry; b += (GRASS_DRY[2] - b) * dry;
+          const rocky = Math.min(0.34, Math.max(0, slope - 0.28) * 1.2);
+          r += (GRASS_ROCK[0] - r) * rocky; g += (GRASS_ROCK[1] - g) * rocky; b += (GRASS_ROCK[2] - b) * rocky;
+          if (yardMask?.[o + px]) {
+            const earth = 0.82 + (vnoise(gx - 43, gz + 17, 11) - 0.5) * 0.12;
+            r += (YARD_EARTH[0] * earth - r) * 0.88;
+            g += (YARD_EARTH[1] * earth - g) * 0.88;
+            b += (YARD_EARTH[2] * earth - b) * 0.88;
+          }
+        }
+        // (b) two-light hillshade in deck space (Nx = +VE*dh/dx because deck X = -gameX)
+        const nx = S.gain * dhdx, ny = S.gain * dhdz;
+        const nl = Math.sqrt(nx * nx + ny * ny + 1);
+        const horizontalFacing = (nx * KEY[0] + ny * KEY[1]) / nl;
+        const raw = (Math.max(0, nx * KEY[0] + ny * KEY[1] + KEY[2]) + 0.28 * Math.max(0, nx * FILL[0] + ny * FILL[1] + FILL[2])) / nl;
+        const lee = smoothstep(clamp((-horizontalFacing - 0.03) * 2.1, 0, 1)) * Math.min(1, slope * 5);
+        const shade = clamp((1 + (raw - flatRaw) * S.contrast) * (1 - lee * 0.13), S.lo, S.hi);
+        r *= shade; g *= shade; b *= shade;
+        // (d) mottle, two octaves
+        const m = 1 + (vnoise(gx, gz, 28) - 0.5) * 0.085;
+        const m2 = (vnoise(gx + 91, gz - 37, 7) - 0.5) * 0.04;
+        r *= m; g *= m * (1 + m2); b *= m;
+        // (e) edge / shoreline ambient occlusion
+        const ao = (1 - 0.14 * clamp(1 - sampleAO(dEdge, px, py) / 8, 0, 1))
+                 * (1 - 0.10 * clamp(1 - sampleAO(dWater, px, py) / 3, 0, 1));
+        r *= ao; g *= ao; b *= ao;
+        // (f) dither — the ramp spans ~60 values, it WILL band on 8-bit without this
+        const dth = (hash2(px, py) - 0.5) * 5;
+        const q = (o + px) * 4;
+        px8[q] = clamp(r + dth, 0, 255); px8[q + 1] = clamp(g + dth, 0, 255); px8[q + 2] = clamp(b + dth, 0, 255); px8[q + 3] = 255;
       }
-      // (b) two-light hillshade in deck space (Nx = +VE*dh/dx because deck X = -gameX)
-      const nx = SHADE_GAIN * dhdx, ny = SHADE_GAIN * dhdz;
-      const nl = Math.sqrt(nx * nx + ny * ny + 1);
-      const horizontalFacing = (nx * KEY[0] + ny * KEY[1]) / nl;
-      const raw = (Math.max(0, nx * KEY[0] + ny * KEY[1] + KEY[2]) + 0.28 * Math.max(0, nx * FILL[0] + ny * FILL[1] + FILL[2])) / nl;
-      const lee = smoothstep(clamp((-horizontalFacing - 0.03) * 2.1, 0, 1)) * Math.min(1, slope * 5);
-      const shade = clamp((1 + (raw - flatRaw) * 1.9) * (1 - lee * 0.13), 0.60, 1.34);
-      r *= shade; g *= shade; b *= shade;
-      // (d) mottle, two octaves
-      const m = 1 + (vnoise(gx, gz, 28) - 0.5) * 0.085;
-      const m2 = (vnoise(gx + 91, gz - 37, 7) - 0.5) * 0.04;
-      r *= m; g *= m * (1 + m2); b *= m;
-      // (e) edge / shoreline ambient occlusion
-      const ao = (1 - 0.14 * clamp(1 - sampleAO(dEdge, px, py) / 8, 0, 1))
-               * (1 - 0.10 * clamp(1 - sampleAO(dWater, px, py) / 3, 0, 1));
-      r *= ao; g *= ao; b *= ao;
-      // (f) dither — the ramp spans ~60 values, it WILL band on 8-bit without this
-      const dth = (hash2(px, py) - 0.5) * 5;
-      const q = (o + px) * 4;
-      px8[q] = clamp(r + dth, 0, 255); px8[q + 1] = clamp(g + dth, 0, 255); px8[q + 2] = clamp(b + dth, 0, 255); px8[q + 3] = 255;
     }
-  }
-  ctx.putImageData(img, 0, 0);
+    ctx.putImageData(img, 0, 0);
 
-  // (g) contours, drawn into the same canvas — perfectly smooth at any zoom, zero layers, no z-fighting
-  drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax, relief);
-  // Roads/rail/pavement are last so map symbols cover contours exactly as they would on a printed
-  // topographic sheet. This is still the terrain's one texture, not a second draped surface.
-  drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz);
+    // (g) contours, drawn into the same canvas — perfectly smooth at any zoom, zero layers, no
+    // z-fighting. Realistic mode draws none: contours are the single strongest "this is a map
+    // board" signal, and Top-look decision 1 keeps them as a VECTOR-only parameter.
+    if (styleFor(mode).flags.contours) drawContours(ctx, fine, TEX_W, TH_T, hmin, hmax, relief);
+    // Roads/rail/pavement are last so map symbols cover contours exactly as they would on a printed
+    // topographic sheet. This is still the terrain's one texture, not a second draped surface.
+    drawSurfaceNetwork(ctx, data, X0, Z0, mx, mz, surfaceFor(mode));
 
-  // dev aid: ?debugtex shows the complete baked ground texture at 1:1.
-  if (typeof location !== 'undefined' && location.search.includes('debugtex')) {
-    canvas.style.cssText = 'position:fixed;left:280px;top:0;width:1100px;height:auto;z-index:9999;image-rendering:pixelated';
-    setTimeout(() => document.body.appendChild(canvas), 0);
-  }
+    // dev aid: ?debugtex shows the complete baked ground texture at 1:1.
+    if (typeof location !== 'undefined' && location.search.includes('debugtex')) {
+      canvas.style.cssText = 'position:fixed;left:280px;top:0;width:1100px;height:auto;z-index:9999;image-rendering:pixelated';
+      setTimeout(() => document.body.appendChild(canvas), 0);
+    }
+    return canvas;
+  };
+  const bakes = new Map();
+  const textureFor = (mode) => {
+    const key = resolveLook(mode);
+    if (!bakes.has(key)) bakes.set(key, bakeTexture(key));
+    return bakes.get(key);
+  };
 
   // ================================================================ mesh
   const NCX = Math.round(W / CELL), NCZ = Math.round(D / CELL);
@@ -526,33 +592,43 @@ export function buildTerrain(data, relief = 3) {
     indices: { value: cliffIdx, size: 1 },
   });
 
-  const layer = () => new SimpleMeshLayer({
-    id: 'terrain',
-    data: [{ p: [0, 0, 0] }],
-    getPosition: (d) => d.p,
-    mesh,
-    texture: canvas,
-    getColor: [255, 255, 255],
-    sizeScale: 1,
-    shadowEnabled: false, // see the shadow note below
-    pickable: false,
-    coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-    textureParameters: {
-      minFilter: 'linear', mipmapFilter: 'linear', magFilter: 'linear',
-      addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', maxAnisotropy: 16,
-    },
-    material: { ambient: 0.95, diffuse: 0.55, shininess: 1, specularColor: [10, 12, 10] }, // ambient is high so the baked shading (not the flat-normal diffuse) sets the ground value
-  });
-  const cliffLayer = () => new SimpleMeshLayer({
+  /**
+   * The ground mesh layer for one look.
+   *
+   * `extra.groundExtension` is the realistic-mode Ground106 triplanar material from atmosphere.js;
+   * `extra.fogExtension` is the shared world fog. Both are LayerExtensions on the SAME mesh, so a
+   * look flip changes `extensions` + `texture` + `material` and nothing else.
+   */
+  const layer = (mode = look, extra = {}) => {
+    const extensions = [extra.groundExtension, extra.fogExtension].filter(Boolean);
+    return new SimpleMeshLayer({
+      id: 'terrain',
+      data: [{ p: [0, 0, 0] }],
+      getPosition: (d) => d.p,
+      mesh,
+      texture: textureFor(mode),
+      getColor: [255, 255, 255],
+      sizeScale: 1,
+      shadowEnabled: false, // see the shadow note below
+      pickable: false,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      textureParameters: {
+        minFilter: 'linear', mipmapFilter: 'linear', magFilter: 'linear',
+        addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', maxAnisotropy: 16,
+      },
+      material: terrainMaterialFor(mode),
+      extensions,
+    });
+  };
+  const cliffLayer = (mode = look, extra = {}) => new SimpleMeshLayer({
     id: 'cliff', data: [{ p: [0, 0, 0] }], getPosition: (d) => d.p, mesh: cliffMesh,
-    getColor: [12, 14, 13], sizeScale: 1, material: false, shadowEnabled: false, pickable: false,
+    // Realistic: the skirt is the far edge of the world, so it takes the void value, which is
+    // itself the far-fog colour darkened — the map stops at atmosphere, not at a black band.
+    getColor: paletteFor(mode).cliff.slice(0, 3), sizeScale: 1, material: false, shadowEnabled: false, pickable: false,
     parameters: { cullMode: 'none' }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+    extensions: extra.fogExtension ? [extra.fogExtension] : [],
   });
 
-  const lighting = new LightingEffect({
-    ambient: new AmbientLight({ color: [214, 224, 232], intensity: 0.62 }),
-    sun: new DirectionalLight({ color: [255, 246, 226], intensity: 1.05, direction: SUN_DIR }),
-  });
   // NOTE on cast shadows (`_shadow: true` on the sun): they render correctly under OrbitView, but
   // deck gates casting AND receiving on the same `shadowEnabled` prop, so a ground surface that
   // receives building shadows also shadow-maps itself. Over a kilometre-scale relief surface lit at ~40
@@ -561,7 +637,17 @@ export function buildTerrain(data, relief = 3) {
   // two-light hillshade, which need no extra pass.
 
   const maxBoundaryStep = limit.reduce((largest, point, i) => Math.max(largest, Math.hypot(point[0] - limit[(i + 1) % limit.length][0], point[1] - limit[(i + 1) % limit.length][1])), 0);
-  return { H, voidZ, layers: () => [cliffLayer(), layer()], lighting, stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, cliffSegments: cliffEdges.length, boundaryVerts: limit.length, boundaryBandTris: bandIndices.length / 3, fullCells: full.reduce((sum, value) => sum + value, 0), maxBoundaryStep, tex: [TEX_W, TH] } };
+  return {
+    H,
+    voidZ,
+    /** `layers(look, {fogExtension, groundExtension})` — geometry is shared, only material changes. */
+    layers: (mode = look, extra = {}) => [cliffLayer(mode, extra), layer(mode, extra)],
+    /** Pre-bake a look's texture so a toggle does not stall on 2048x1110 of canvas work. */
+    prebake: (mode) => { textureFor(mode); },
+    /** Resident bytes of every baked ground texture currently held (RGBA8, no mips). */
+    textureBytes: () => bakes.size * TEX_W * TH * 4,
+    stats: { relief, range: [hmin, hmax], verts: TOT, tris: indices.length / 3, cliffSegments: cliffEdges.length, boundaryVerts: limit.length, boundaryBandTris: bandIndices.length / 3, fullCells: full.reduce((sum, value) => sum + value, 0), maxBoundaryStep, tex: [TEX_W, TH] },
+  };
 }
 
 // ---------------------------------------------------------------- contours (baked, not a layer)
