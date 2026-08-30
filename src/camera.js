@@ -65,53 +65,85 @@ export function projectedGroundExtent(width, depth, rotationX = CAM.rotationX, r
 }
 
 /**
- * How far past `contain` the fit is allowed to go.
+ * How far past `contain` a fit is allowed to go — the ceiling on cover, never the target.
  *
- * Fit is cover, not contain: at an oblique tilt the map's footprint is a rhombus, so containing it
- * leaves big black wedges in every corner. Cover fills the frame and crops the two far corners,
- * which are void anyway. The cap only exists so a pathological viewport aspect cannot turn "cover"
- * into "stand on the map": on the three shipped maps cover sits at 1.25x (Woods — the founder's
- * reference framing), 1.29x (Reserve) and 1.67x (Customs, a 2:1 map) past contain, all under it.
+ * The fit used to BE cover: at an oblique tilt the map's footprint is a rhombus, so containing it
+ * leaves black wedges in the corners, and cover fills the frame by cropping the two far ones. What
+ * that ignores is that cover is `max(sx, sy)` — it grows with whichever axis the viewport has to
+ * spare. On a 2:1 map like Customs the binding axis is the height, so a TALLER window zoomed the
+ * camera IN and sliced the map off both sides (QA H1: 1.086 at 1400x985 -> 1.328 at 1920x1165, with
+ * the top and bottom fifths of the frame empty fog). A window that grows must never show less map.
+ *
+ * So the fit contains the FIT BOX (`fitWidth x fitDepth` — the playable footprint plus the marker
+ * furniture that hangs off its rim, see main.js) and cover may only lift it back toward the frame
+ * while the fit box is SMALLER than the terrain box, and then by no more than this band.
  */
 export const COVER_BAND = 1.75;
 
 /**
- * The zoom that frames a `width x depth` ground rect in a `viewportWidth x viewportHeight` box.
+ * The zoom that frames a ground rect in a `viewportWidth x viewportHeight` box.
+ *
+ * Two rects, because they answer different questions:
+ *   `width x depth`         the terrain box — what cover would like to fill;
+ *   `fitWidth x fitDepth`   the fit box — what MUST be inside the frame (defaults to the terrain box).
+ *
+ * The answer is the smallest of: cover of the terrain, `COVER_BAND` past its contain, and contain of
+ * the fit box. With the footprints main.js ships today the fit box always holds the terrain box, so
+ * the third term binds at every aspect and the fit is a contain fit — which is the H1 fix. The other
+ * two stay live for a caller that frames a fit box tighter than the terrain (the wedges are void, so
+ * cropping them is free); the band is what stops that turning into "stand on the map".
+ *
  * Returns null when the inputs cannot produce a finite answer, so callers can keep what they had.
  */
-export function fitZoom({ width, depth, viewportWidth, viewportHeight, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, coverBand = COVER_BAND }) {
+export function fitZoom({ width, depth, fitWidth = width, fitDepth = depth, viewportWidth, viewportHeight, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, coverBand = COVER_BAND }) {
   const { w, d } = projectedGroundExtent(width, depth, rotationX, rotationOrbit);
-  if (!(w > 0) || !(d > 0) || !(viewportWidth > 0) || !(viewportHeight > 0)) return null;
+  const fit = projectedGroundExtent(fitWidth, fitDepth, rotationX, rotationOrbit);
+  if (!(w > 0) || !(d > 0) || !(fit.w > 0) || !(fit.d > 0) || !(viewportWidth > 0) || !(viewportHeight > 0)) return null;
   const sx = viewportWidth / w, sy = viewportHeight / d;
   const contain = Math.min(sx, sy), cover = Math.max(sx, sy);
-  const scale = Math.min(cover, contain * Math.max(1, coverBand));
+  const containFit = Math.min(viewportWidth / fit.w, viewportHeight / fit.d);
+  const scale = Math.min(cover, contain * Math.max(1, coverBand), containFit);
   const zoom = Math.log2(scale);
   return Number.isFinite(zoom) ? zoom : null;
 }
 
 /**
- * How far past `contain` the camera is allowed to zoom OUT — the floor under every zoom.
+ * How far below the FIT the camera is allowed to zoom out — the floor under every zoom.
  *
- * Fit is cover, so a fitted map fills the frame; nothing else in the app ever asks for a zoom
- * below it. A permalink can (`#1.4/-209/-280` on Woods is 1.5 zoom levels under contain) and so
- * can a wheel, and what you get is the diorama as a small slab floating in the void with the
- * terrain mesh's underside/skirt on show along the bottom — the one framing the renderer was never
- * built for. The floor is `contain` minus a small margin: contain still leaves the corner wedges
- * the oblique rhombus cannot fill, the margin gives the map a little air inside the frame, and one
- * more zoom level out is where the underside starts to appear.
+ * Below the floor the diorama is a small slab in the void with the terrain mesh's underside and
+ * skirt on show, which is the one framing the renderer was never built for. But the floor is also
+ * the thing a pasted permalink lands on, and 0.12 of a zoom level of headroom made it a wall: Woods'
+ * `#1.4/-209/-280` came back as `#1.95` AND rewrote the sender's address bar (QA H4). 0.6 is the
+ * band a permalink is honoured verbatim inside — a little air around the map, well short of the
+ * zoom level where the underside appears — and only under it does the clamp fire.
  */
-export const MIN_ZOOM_MARGIN = 0.12;
+export const MIN_ZOOM_MARGIN = 0.6;
 /**
- * The lowest zoom that still keeps the whole ground rect inside the viewport, minus the margin.
- * Same inputs as fitZoom(); returns null when they cannot produce a finite answer.
+ * The floor: the fit minus the margin. Same inputs as fitZoom(), so the two cannot drift apart —
+ * whatever box the fit frames is the box the floor is measured from. Null on unusable input.
  */
-export function minFitZoom({ width, depth, viewportWidth, viewportHeight, rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit, margin = MIN_ZOOM_MARGIN }) {
-  const { w, d } = projectedGroundExtent(width, depth, rotationX, rotationOrbit);
-  if (!(w > 0) || !(d > 0) || !(viewportWidth > 0) || !(viewportHeight > 0)) return null;
-  const contain = Math.min(viewportWidth / w, viewportHeight / d);
-  const zoom = Math.log2(contain) - margin;
+export function minFitZoom({ margin = MIN_ZOOM_MARGIN, ...box }) {
+  const fit = fitZoom(box);
+  if (fit == null) return null;
+  const zoom = fit - margin;
   return Number.isFinite(zoom) ? zoom : null;
 }
+
+/**
+ * The fit box the FLOOR is measured from, registered by whoever computed the fit.
+ *
+ * main.js owns the framing: it knows the safe rect (the part of the stage nothing floats over) and
+ * the marker furniture that hangs off the map's rim, and map3d.js — the only caller of clampCamera —
+ * knows neither. When the two computed their own boxes the floor could sit ABOVE the fit, so a
+ * permalink "clamped" to a camera CLOSER than the default framing. Registering the box makes the
+ * floor exactly `fit - MIN_ZOOM_MARGIN` by construction. Pass null to go back to the caller's box.
+ */
+let FIT_BOX = null;
+export function setFitBox(box) {
+  const ok = box && box.width > 0 && box.depth > 0 && box.viewportWidth > 0 && box.viewportHeight > 0;
+  FIT_BOX = ok ? { width: box.width, depth: box.depth, fitWidth: box.fitWidth, fitDepth: box.fitDepth, viewportWidth: box.viewportWidth, viewportHeight: box.viewportHeight } : null;
+}
+export const getFitBox = () => (FIT_BOX ? { ...FIT_BOX } : null);
 
 /** deck's OrbitView eye distance in world units for a zoom and a viewport height in px. */
 export function eyeDistance(zoom, viewportHeight, fovy = CAM.fovy) {
@@ -156,15 +188,16 @@ export function clampTilt(viewState, floor = CAM.minRotationX) {
  * after the lift is the one that actually holds. Doing it the other way round lets a below-floor
  * permalink pick its tilt floor at an eye distance the camera never ends up at.
  *
- * `extent` is the ground rect being framed (`{width, depth}` in game metres); pass nothing for it
- * and the zoom floor is skipped and this is exactly `clampTilt`, which is what a caller with no
- * map loaded wants.
+ * `extent` is the ground rect being framed (`{width, depth}` in game metres) — or, better, nothing
+ * at all once main.js has registered the real fit box with setFitBox(), which is the same box the
+ * default framing uses. Pass neither and the zoom floor is skipped and this is exactly `clampTilt`,
+ * which is what a caller with no map loaded wants.
  */
 export function clampCamera(viewState, {
   width, depth, viewportWidth, viewportHeight = 800, ground = 0, clearance = 3,
 } = {}) {
   const floor = minFitZoom({
-    width, depth, viewportWidth, viewportHeight,
+    ...(FIT_BOX ?? { width, depth, viewportWidth, viewportHeight }),
     rotationX: viewState.rotationX ?? CAM.rotationX,
     rotationOrbit: viewState.rotationOrbit ?? CAM.rotationOrbit,
   });
