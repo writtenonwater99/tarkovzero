@@ -37,6 +37,11 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
   let done = new Set(store.get('questDone', []));
   let visible = store.get('questsVisible', true) !== false; // the "Quest objectives" filter row
   const layer = L.layerGroup();
+  // Quest pins get their own pane, explicitly above the place-label panes (450) — a marker should
+  // never be the thing a place name reads THROUGH. Leaflet's default markerPane (600) already sits
+  // above them; this just makes that ordering an explicit, named fact instead of an implicit default.
+  const QUEST_PANE = 'quests';
+  if (!map.getPane(QUEST_PANE)) { map.createPane(QUEST_PANE); map.getPane(QUEST_PANE).style.zIndex = 620; }
   const markerOf = new Map();         // pointId -> L.Marker (for flyTo / popup)
   let card = null;                    // { objectiveId, questSlug, pointId, img }
   let cardRaf = 0;
@@ -263,7 +268,7 @@ export function createQuests({ map, mapKey, store, flyTo, is3d, refresh3d, proje
           dashArray: p.level === 'underground' ? '5 4' : null, interactive: false, className: 'qzone',
         }).addTo(layer);
       }
-      const m = L.marker([p.pin.z, p.pin.x], { icon: questIcon(p), riseOnHover: true, zIndexOffset: 500 })
+      const m = L.marker([p.pin.z, p.pin.x], { icon: questIcon(p), pane: QUEST_PANE, riseOnHover: true, zIndexOffset: 500 })
         .bindPopup('', { className: 'qpopup', maxWidth: 320, minWidth: 240, autoPanPadding: [24, 24] })
         .bindTooltip(`${esc(p.badge)}. ${esc(p.objective.text)}`, { direction: 'top', offset: [0, -15], className: 'qtip', opacity: 1 });
       m.on('popupopen', (e) => {

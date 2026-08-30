@@ -808,7 +808,7 @@ function renderLivePanel() {
     list.map((s) => playerRowHtml(s, primaryCode)).join('') +
     `<div class="live-add-row">` +
       `<input type="text" id="live-code" maxlength="7" placeholder="pairing code, e.g. K7P3QX" aria-label="Pairing code">` +
-      `<input type="text" id="live-name" maxlength="24" placeholder="your name (optional)" aria-label="Your name">` +
+      `<input type="text" id="live-name" maxlength="24" placeholder="name (optional)" aria-label="Your name">` +
     `</div>` +
     `<button class="btn-primary" id="live-add">${list.length ? 'Add another' : 'Connect'}</button>` +
     `<div class="err" id="live-err"></div>` +

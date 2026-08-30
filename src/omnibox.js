@@ -164,6 +164,7 @@ export function createOmnibox(deps = {}) {
   let state = route('');
   let hintAt = 0, hintTimer = 0;
   let undo = null;                      // camera + quest selection from before the last answer
+  let openedForText = null;             // input value at the moment the card opened — see render()
 
   /* ------------------------------------------------------------- lookup --- */
   function questIndex() {
@@ -219,7 +220,10 @@ export function createOmnibox(deps = {}) {
       `${chipFor(row)}<span class="rn">${esc(row.label)}</span><span class="rk">${esc(row.sub ?? '')}</span></div>`;
   }
   function render() {
-    const show = state.rows.length > 0;
+    // The card, once open, answers the query it was opened for — the row list beneath it (the
+    // "Ask AI: …" row, or leftover lookup hits) is redundant until the input text actually changes.
+    const staleBehindCard = isCardOpen() && el.input.value === openedForText;
+    const show = state.rows.length > 0 && !staleBehindCard;
     el.results.hidden = !show;
     el.results.innerHTML = show ? state.rows.map(rowHtml).join('') : '';
     el.box.classList.toggle('has-results', show);
@@ -316,8 +320,9 @@ export function createOmnibox(deps = {}) {
   /* ----------------------------------------------------------- assistant -- */
   function setCardOpen(on) {
     el.card.hidden = !on;
-    if (!on) el.card.classList.remove('show-history');
-    deps.onLayout?.();
+    if (!on) { el.card.classList.remove('show-history'); openedForText = null; }
+    else openedForText = el.input.value;
+    render();
   }
   const isCardOpen = () => !el.card.hidden;
 

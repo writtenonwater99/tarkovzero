@@ -67,7 +67,11 @@ body.view-3d .tb-floors.only-3d{display:flex}
 
 /* ---------- floating chips (top strip) ---------- */
 .chipbar{position:absolute;top:var(--edge);z-index:600;display:flex;align-items:flex-start;gap:8px}
-.chipbar-tl{left:var(--edge)}
+/* the id chip sizes to its own name — short names like WOODS read as flush against the status chip
+   next to them, especially over a bright terrain background, even though the flex gap is the same
+   8px as Customs/Reserve get. Widen just this bar's gap so the separation reads consistently
+   regardless of how wide the map name is. */
+.chipbar-tl{left:var(--edge);gap:16px}
 .chipbar-tr{right:var(--edge)}
 .chip{display:flex;align-items:center;gap:7px;padding:0 10px;background:var(--glass);
   backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--line);
@@ -536,7 +540,10 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 /* ---------- quest pin (2D) ---------- */
 .qpin{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;
   background:radial-gradient(circle,color-mix(in srgb,var(--qc) 22%,transparent) 40%,transparent 70%);
-  box-shadow:0 0 0 2px var(--qc), 0 0 0 3.5px rgba(10,14,12,.85);filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+  /* the dark ring is also the halo that keeps a pin from reading as text corruption when it lands on
+     a place label (e.g. Customs' Crackhouse) — it stays intentionally readable as "pin over label" */
+  box-shadow:0 0 0 2px var(--qc), 0 0 0 5px rgba(10,14,12,.9), 0 0 7px 5px rgba(10,14,12,.55);
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
 .qpin.qdone{opacity:.5}
 .qtip{background:rgba(11,15,13,.95)!important;border:1px solid var(--line)!important;color:var(--text-dim)!important;
   font:400 12px/1.4 var(--f-body)!important;max-width:230px;box-shadow:var(--shadow-hud)!important}
@@ -648,7 +655,10 @@ body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-t
 /* panel: code + name side by side, primary radio, per-row state colour */
 #live .player{grid-template-columns:8px 16px 1fr auto auto auto}
 .live-add-row{display:flex;gap:6px}
-.live-add-row #live-code,.live-add-row #live-name{flex:1 1 auto;min-width:0}
+/* the code field only ever holds/hints a 6-char code; give the longer "name (optional)" placeholder
+   the extra room so it doesn't get clipped at the dock width */
+.live-add-row #live-code{flex:0.85 1 0;min-width:0}
+.live-add-row #live-name{flex:1.15 1 0;min-width:0}
 .player.p-connecting .st{color:var(--text-ghost)}
 .player.p-streaming .st{color:var(--acc)}
 .player.p-stale .st{color:var(--warn)}
