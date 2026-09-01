@@ -16,15 +16,28 @@
  */
 
 import * as THREE from 'three/webgpu';
+import { attribute, normalMap, texture, uv } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { customsVegetationProxyDimensions } from './customs-local-vegetation-render.js';
+import {
+  CUSTOMS_VEGETATION_LAYER_ATTRIBUTE,
+  applyCustomsVegetationLayerAttributes,
+} from './customs-vegetation-texture-arrays.js';
 
 export const CUSTOMS_AUTHORED_VEGETATION_EXPECTED_ASSETS = 31;
 export const CUSTOMS_AUTHORED_VEGETATION_EXPECTED_BINDINGS = 58;
-// 128 m is the fixed compromise between frustum-culling granularity and prototype/primitive
-// batch count. Cell coordinates are anchored at world metre zero and therefore remain stable
-// across runs and camera motion.
-export const CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M = 128;
+
+/**
+ * There is no spatial cell grid any more.
+ *
+ * The former `CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M = 128` opened one `InstancedMesh` per
+ * (cell x prototype x material), which multiplied the batch count by 703 prototype-cells and put
+ * the measured draw call count at 1,333 (floor) to 2,016 (ceiling) — see
+ * docs/plans/VEGETATION-DRAWCALLS.md §3c. Batching per (family, LOD) instead gives a hard
+ * structural ceiling of 31 families x 3 LOD tiers = 93 objects, and moves LOD selection and
+ * frustum rejection from per-cell to per-instance, which is strictly finer on both axes.
+ */
+export const CUSTOMS_AUTHORED_VEGETATION_BUCKET_CEILING = CUSTOMS_AUTHORED_VEGETATION_EXPECTED_ASSETS * 3;
 
 export const CUSTOMS_AUTHORED_VEGETATION_LOD_POLICY = Object.freeze({
   nearMaxM: 110,
@@ -49,7 +62,13 @@ const GLB_FRAME = Object.freeze({
 });
 const LODS = Object.freeze([0, 1, 2]);
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
-const SAFE_ASSET_FILE = /^assets\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+-lod[0-2]\.glb$/u;
+/**
+ * The adapter's own single source of truth for a legal authored-asset path. Exported so the
+ * dev-only vegetation serving route (scripts/lib/vegetation-authored-dev.mjs) can authorize
+ * requests against exactly the same file shapes this adapter will ever ask for, instead of
+ * re-deriving the pattern independently and risking drift.
+ */
+export const SAFE_ASSET_FILE = /^assets\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+-lod[0-2]\.glb$/u;
 const BINDING_SEPARATOR = '\u0000';
 const GEOMETRY_X_REFLECTION = new THREE.Matrix4().makeScale(-1, 1, 1);
 const GLB_Y_UP_TO_WORLD_Z_UP = new THREE.Matrix4().makeRotationX(Math.PI / 2);
@@ -315,6 +334,52 @@ export function probeCustomsAuthoredVegetationBinding(catalog, placement) {
 }
 
 /**
+ * Recover a placement's `prototypeName` by joining it to the catalog's `prototypeBindings` on the
+ * exact `(tileId, prototypeId)` pair.
+ *
+ * The offline pack's own `placements[]` rows carry only
+ * `{ assetId, instanceIndex, placementOrdinal, prototypeId, tileId }` — no `prototypeName` — so
+ * feeding them straight into `probeCustomsAuthoredVegetationBinding()` makes every one of the
+ * 8,805 rows return `null`, which reads as "0 admitted" rather than as the missing-field error it
+ * really is. `prototypeBindings[]` is the document that owns the name, and `(tileId, prototypeId)`
+ * is its primary key, so the join is exact and total: 8,805/8,805 resolve with 0 unbound.
+ *
+ * The live runtime does not need this — `buildCustomsLocalVegetationRenderPlan` already carries
+ * `prototypeName` from the local package's own per-tile `prototypes` table, which is the source
+ * of placement truth and is never the pack's duplicate mirror. This exists so any caller holding
+ * bare `(tileId, prototypeId)` rows joins them the one correct way instead of guessing, and it
+ * fails closed rather than inventing a name.
+ *
+ * @returns {string|null} the exact bound prototype name, or `null` when the pair is unbound.
+ */
+export function resolveCustomsAuthoredVegetationPrototypeName(catalog, placement) {
+  const tileId = placement?.tileId;
+  const prototypeId = placement?.prototypeId;
+  if (typeof tileId !== 'string' || typeof prototypeId !== 'string') return null;
+  if (tileId.length === 0 || prototypeId.length === 0) return null;
+  if (tileId.includes(BINDING_SEPARATOR) || prototypeId.includes(BINDING_SEPARATOR)) return null;
+  const binding = catalog?.bindingsByKey?.[bindingKey(tileId, prototypeId)];
+  return binding ? binding.prototypeName : null;
+}
+
+/**
+ * Return a placement that is guaranteed to expose `prototypeName`, joining it in from
+ * `prototypeBindings` when the row does not already carry one.
+ *
+ * A row that already has a name is returned untouched — the join never overwrites a declared
+ * identity, because a disagreement between a declared name and its binding is a contract failure
+ * the resolver and the router must still see and reject, not something to silently paper over.
+ */
+export function joinCustomsAuthoredVegetationPrototypeName(catalog, placement) {
+  if (typeof placement?.prototypeName === 'string' && placement.prototypeName.length > 0) {
+    return placement;
+  }
+  const prototypeName = resolveCustomsAuthoredVegetationPrototypeName(catalog, placement);
+  if (prototypeName === null) return placement;
+  return { ...placement, prototypeName };
+}
+
+/**
  * Recover the exact authored width/height multipliers from the current plan.
  *
  * Newer plans may carry the raw values directly. The existing plan carries exact scaled proxy
@@ -378,18 +443,36 @@ function normalizedPlacement(placement, catalog) {
     fail('placement tint channels must be normalized');
   }
   const flatIndex = safeInteger(placement.flatIndex, 'placement.flatIndex');
+  const classification = text(placement.classification, 'placement.classification');
+  const scale = resolveCustomsAuthoredVegetationScale(placement);
+  // Per-instance frustum rejection needs one bounding sphere per placement, and it has to be a
+  // sphere the authored GLB actually fits inside. The authored bake matches
+  // `customsVegetationProxyDimensions` exactly at scale 1 with a base-centre pivot at y = 0
+  // (measured; that is what makes the proxy -> authored swap size-preserving), so the exact
+  // upright box is height x width x width standing on the placement origin, and the smallest
+  // sphere containing it is centred at height/2 with radius hypot(height/2, width/sqrt(2)).
+  const dimensions = customsVegetationProxyDimensions({
+    prototypeName: binding.prototypeName,
+    classification,
+    widthScale: scale.widthScale,
+    heightScale: scale.heightScale,
+  });
+  const halfHeight = dimensions.height / 2;
+  const halfDiagonal = (dimensions.width / 2) * Math.SQRT2;
   return Object.freeze({
     flatIndex,
     tileId: binding.tileId,
     prototypeId: binding.prototypeId,
     prototypeName: binding.prototypeName,
-    classification: text(placement.classification, 'placement.classification'),
+    classification,
     assetId: asset.assetId,
     asset,
     presentationPosition,
     yawRadians: finite(placement.yawRadians ?? 0, 'placement.yawRadians'),
     tint: normalizedTint,
-    scale: resolveCustomsAuthoredVegetationScale(placement),
+    scale,
+    boundsCenterZOffsetM: halfHeight,
+    boundsRadiusM: Math.hypot(halfHeight, halfDiagonal),
   });
 }
 
@@ -530,153 +613,144 @@ function normalizedCameraWorldPosition(value) {
   )));
 }
 
-function spatialCellId(cellX, cellY) {
-  return `${cellX}:${cellY}`;
-}
-
-function assetLodKey(assetId, lod) {
+export function customsAuthoredVegetationBucketKey(assetId, lod) {
   return `${assetId}${BINDING_SEPARATOR}${lod}`;
 }
 
-function normalizedPreviousCellLods(value) {
+/**
+ * Previous per-instance LOD state, index-aligned with `compiledPlan.placements`.
+ *
+ * Index-aligned rather than keyed by `flatIndex` on purpose: `planCustomsAuthoredVegetationInstances`
+ * already sorts placements into one deterministic order, so ordinal position is a stable identity,
+ * and a typed array of 8,805 entries costs 8.8 kB and no hashing. `-1` means "no previous LOD"
+ * (first partition, or a placement whose state was never recorded) and selects the un-hystereticised
+ * branch, which is exactly what a cold start should do.
+ */
+function normalizedPreviousLods(value, length) {
   if (value === null || value === undefined) return null;
-  const source = value instanceof Map ? Object.fromEntries(value) : object(value, 'previousCellLods');
-  const entries = [];
-  for (const [cellId, lod] of Object.entries(source)) {
-    if (!/^-?\d+:-?\d+$/u.test(cellId) || !LODS.includes(lod)) {
-      fail(`previousCellLods contains invalid entry ${cellId}`);
-    }
-    entries.push([cellId, lod]);
+  const isTyped = ArrayBuffer.isView(value) && typeof value.length === 'number';
+  if (!isTyped && !Array.isArray(value)) fail('previousLods must be an array index-aligned with the placements');
+  if (value.length !== length) fail('previousLods must have exactly one entry per compiled placement');
+  for (let index = 0; index < value.length; index += 1) {
+    const lod = value[index];
+    if (lod !== -1 && !LODS.includes(lod)) fail(`previousLods[${index}] is not -1, 0, 1, or 2`);
   }
-  return nullRecord(entries);
-}
-
-function distanceFromCameraToCell(camera, bounds, averageBaseZ) {
-  const axisDistance = (value, minimum, maximum) => (
-    value < minimum ? minimum - value : value > maximum ? value - maximum : 0
-  );
-  const dx = axisDistance(camera[0], bounds.minX, bounds.maxX);
-  const dy = axisDistance(camera[1], bounds.minY, bounds.maxY);
-  const dz = camera[2] - averageBaseZ;
-  return Math.hypot(dx, dy, dz);
+  return value;
 }
 
 /**
- * Partition exact placements into stable 128 m world cells and select one hysteretic LOD per
- * spatial cell. Every placement occurs in exactly one prototype cell; the offline placement
- * mirror remains irrelevant.
+ * Partition exact placements into one bucket per (authored family, LOD), with per-instance LOD
+ * selection and optional per-instance frustum rejection.
+ *
+ * This replaces the 128 m spatial cell grid. The bucket count has a hard structural ceiling of
+ * `families x 3` — 93 for the complete pack — and does not depend on how the placements are spread
+ * across the map, which is the whole reason the cell grid had to go: at 128 m, 136 of its 703
+ * prototype-cells held exactly one instance and 260 held fewer than four, so most of its batches
+ * were carrying nothing.
+ *
+ * LOD is selected for EVERY placement, including ones the frustum rejects, so the returned `lods`
+ * can be fed straight back in as `previousLods` and hysteresis stays coherent across a camera move
+ * that swings something out of view and back.
+ *
+ * `frustum` is anything exposing `intersectsSphere(sphere)` — a `THREE.Frustum` is the intended
+ * caller. Pass `null` to admit everything.
  */
-export function partitionCustomsAuthoredVegetationCells(compiledPlan, {
+export function partitionCustomsAuthoredVegetationByLod(compiledPlan, {
   cameraWorldPosition,
-  previousCellLods = null,
+  previousLods = null,
   lodPolicy = CUSTOMS_AUTHORED_VEGETATION_LOD_POLICY,
+  frustum = null,
 } = {}) {
   const compiled = object(compiledPlan, 'compiledPlan');
   if (!Array.isArray(compiled.placements)) fail('compiledPlan.placements must be an array');
+  const placements = compiled.placements;
   const camera = normalizedCameraWorldPosition(cameraWorldPosition);
-  const previous = normalizedPreviousCellLods(previousCellLods);
   const policy = Object.freeze(normalizedLodPolicy(lodPolicy));
-  const cellsById = new Map();
+  const previous = normalizedPreviousLods(previousLods, placements.length);
+  if (frustum !== null && typeof frustum?.intersectsSphere !== 'function') {
+    fail('frustum must expose intersectsSphere(sphere)');
+  }
+  const sphere = frustum ? new THREE.Sphere() : null;
 
-  for (const placement of compiled.placements) {
-    const worldX = finite(placement.presentationPosition?.[0], 'placement.presentationPosition[0]');
-    const worldY = finite(placement.presentationPosition?.[1], 'placement.presentationPosition[1]');
-    const worldZ = finite(placement.presentationPosition?.[2], 'placement.presentationPosition[2]');
-    const cellX = Math.floor(worldX / CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M);
-    const cellY = Math.floor(worldY / CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M);
-    const cellId = spatialCellId(cellX, cellY);
-    let cell = cellsById.get(cellId);
-    if (!cell) {
-      cell = {
-        cellId,
-        cellX,
-        cellY,
-        baseZSum: 0,
-        placements: [],
-        prototypeGroups: new Map(),
-      };
-      cellsById.set(cellId, cell);
+  const lods = new Int8Array(placements.length);
+  const bucketsByKey = new Map();
+  const lodInstanceCounts = { 0: 0, 1: 0, 2: 0 };
+  const lodVisibleCounts = { 0: 0, 1: 0, 2: 0 };
+  let visibleInstances = 0;
+  let frustumCulledInstances = 0;
+
+  for (let index = 0; index < placements.length; index += 1) {
+    const placement = placements[index];
+    const worldX = placement.presentationPosition[0];
+    const worldY = placement.presentationPosition[1];
+    const worldZ = placement.presentationPosition[2];
+    const centreZ = worldZ + placement.boundsCenterZOffsetM;
+    const distance = Math.hypot(camera[0] - worldX, camera[1] - worldY, camera[2] - centreZ);
+    const lod = selectCustomsAuthoredVegetationLod(
+      distance,
+      previous === null || previous[index] === -1 ? null : previous[index],
+      policy,
+    );
+    lods[index] = lod;
+    lodInstanceCounts[lod] += 1;
+    if (sphere) {
+      sphere.center.set(worldX, worldY, centreZ);
+      sphere.radius = placement.boundsRadiusM;
+      if (!frustum.intersectsSphere(sphere)) {
+        frustumCulledInstances += 1;
+        continue;
+      }
     }
-    cell.baseZSum += worldZ;
-    cell.placements.push(placement);
-    let prototype = cell.prototypeGroups.get(placement.assetId);
-    if (!prototype) {
-      prototype = { asset: placement.asset, placements: [] };
-      cell.prototypeGroups.set(placement.assetId, prototype);
+    visibleInstances += 1;
+    lodVisibleCounts[lod] += 1;
+    const key = customsAuthoredVegetationBucketKey(placement.assetId, lod);
+    let bucket = bucketsByKey.get(key);
+    if (!bucket) {
+      bucket = { key, asset: placement.asset, assetId: placement.assetId, lod, indices: [] };
+      bucketsByKey.set(key, bucket);
     }
-    prototype.placements.push(placement);
+    // `placements` is already in ascending deterministic order, so pushing keeps every bucket
+    // ordered without a sort — which is what makes a full repack cheap enough to run inline.
+    bucket.indices.push(index);
   }
 
-  const requiredByKey = new Map();
-  const cellLodEntries = [];
-  const lodCellCounts = { 0: 0, 1: 0, 2: 0 };
-  const lodPrototypeCellCounts = { 0: 0, 1: 0, 2: 0 };
-  let prototypeCellPlacementInstances = 0;
-  const cells = [...cellsById.values()]
-    .sort((a, b) => a.cellX - b.cellX || a.cellY - b.cellY)
-    .map((cell) => {
-      const bounds = Object.freeze({
-        minX: cell.cellX * CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M,
-        maxX: (cell.cellX + 1) * CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M,
-        minY: cell.cellY * CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M,
-        maxY: (cell.cellY + 1) * CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M,
-      });
-      const averageBaseZ = cell.baseZSum / cell.placements.length;
-      const cameraDistanceM = distanceFromCameraToCell(camera, bounds, averageBaseZ);
-      const lod = selectCustomsAuthoredVegetationLod(
-        cameraDistanceM,
-        previous?.[cell.cellId] ?? null,
-        policy,
-      );
-      cellLodEntries.push([cell.cellId, lod]);
-      lodCellCounts[lod] += 1;
-      const prototypeGroups = [...cell.prototypeGroups.values()]
-        .sort((a, b) => a.asset.assetId.localeCompare(b.asset.assetId))
-        .map((entry) => {
-          const placements = Object.freeze([...entry.placements].sort((a, b) => a.flatIndex - b.flatIndex));
-          prototypeCellPlacementInstances += placements.length;
-          lodPrototypeCellCounts[lod] += 1;
-          const key = assetLodKey(entry.asset.assetId, lod);
-          if (!requiredByKey.has(key)) {
-            requiredByKey.set(key, Object.freeze({ key, asset: entry.asset, lod }));
-          }
-          return Object.freeze({
-            cellId: cell.cellId,
-            asset: entry.asset,
-            lod,
-            placements,
-          });
-        });
-      return Object.freeze({
-        cellId: cell.cellId,
-        cellX: cell.cellX,
-        cellY: cell.cellY,
-        bounds,
-        averageBaseZ,
-        cameraDistanceM,
-        lod,
-        placementCount: cell.placements.length,
-        prototypeGroups: Object.freeze(prototypeGroups),
-      });
-    });
-
-  if (prototypeCellPlacementInstances !== compiled.renderedCount) {
-    fail('spatial vegetation partition duplicated or lost exact placements');
+  // Deliverable invariant, asserted in code rather than only in a test: every exact placement is
+  // either in exactly one bucket or was rejected by the frustum. Nothing is duplicated or lost.
+  if (visibleInstances + frustumCulledInstances !== placements.length) {
+    fail('authored vegetation LOD partition duplicated or lost exact placements');
   }
-  const requiredAssetLods = [...requiredByKey.values()]
-    .sort((a, b) => a.asset.assetId.localeCompare(b.asset.assetId) || a.lod - b.lod);
+  if (placements.length !== compiled.renderedCount) {
+    fail('compiledPlan.placements does not match compiledPlan.renderedCount');
+  }
+  let bucketedInstances = 0;
+  for (const bucket of bucketsByKey.values()) bucketedInstances += bucket.indices.length;
+  if (bucketedInstances !== visibleInstances) {
+    fail('authored vegetation bucket totals disagree with the visible placement count');
+  }
+
+  const buckets = [...bucketsByKey.values()]
+    .sort((a, b) => a.assetId.localeCompare(b.assetId) || a.lod - b.lod)
+    .map((bucket) => Object.freeze({
+      key: bucket.key,
+      asset: bucket.asset,
+      assetId: bucket.assetId,
+      lod: bucket.lod,
+      indices: Object.freeze(bucket.indices),
+      instances: bucket.indices.length,
+    }));
+
   return Object.freeze({
-    cellSizeM: CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M,
     cameraWorldPosition: camera,
     lodPolicy: policy,
-    cells: Object.freeze(cells),
-    cellLods: nullRecord(cellLodEntries),
-    spatialCellCount: cells.length,
-    prototypeCellCount: cells.reduce((sum, cell) => sum + cell.prototypeGroups.length, 0),
-    prototypeCellPlacementInstances,
-    lodCellCounts: Object.freeze(lodCellCounts),
-    lodPrototypeCellCounts: Object.freeze(lodPrototypeCellCounts),
-    requiredAssetLods: Object.freeze(requiredAssetLods),
+    buckets: Object.freeze(buckets),
+    bucketCount: buckets.length,
+    lods,
+    visibleInstances,
+    frustumCulledInstances,
+    sourceInstances: placements.length,
+    frustumCullingApplied: frustum !== null,
+    lodInstanceCounts: Object.freeze(lodInstanceCounts),
+    lodVisibleCounts: Object.freeze(lodVisibleCounts),
   });
 }
 
@@ -778,6 +852,71 @@ export function disposeCustomsAuthoredVegetationGlb(value) {
   };
   if (typeof root?.traverse === 'function') root.traverse(disposeNode);
   else if (root) disposeNode(root);
+}
+
+/**
+ * Estimate the CPU-resident bytes a decoded GLTF `value` still holds, for reporting only — it never
+ * decides what to free; `disposeCustomsAuthoredVegetationGlb` remains the single dispose path.
+ *
+ * Mirrors that function's own traversal (same node walk, same per-geometry/per-material/per-texture
+ * dedup via `Set`s) so the number is "what `disposeCustomsAuthoredVegetationGlb` would free right
+ * now", not a guess. It exists because the per-primitive fallback path (no texture arrays) keeps
+ * `value` alive on purpose — its materials are the merged batch's own `material`, not a clone — so
+ * that memory is genuinely resident for as long as the runtime is, and `residentBytes` must count it
+ * or it understates the pack's real footprint by exactly the amount the array-texture path frees
+ * early (see the `release(loadedEntry.value)` call this mirrors, a few hundred lines below).
+ *
+ * Texture bytes are a decoded-RGBA8 estimate (`width * height * 4`) per unique image, which is what
+ * an ImageBitmap/HTMLImageElement actually costs once decoded — there is no smaller, still-accurate
+ * number to read off a three.js texture without a GPU query. A texture backed by a typed array
+ * (`image.data`) reports that array's own `byteLength` instead, which is exact.
+ */
+function estimateRetainedGlbBytes(value) {
+  const root = value?.scene ?? value;
+  const state = { geometries: new Set(), materials: new Set(), textures: new Set() };
+  let bytes = 0;
+  const addTextureBytes = (candidate) => {
+    if (Array.isArray(candidate)) {
+      for (const entry of candidate) addTextureBytes(entry);
+      return;
+    }
+    if (!candidate?.isTexture || state.textures.has(candidate)) return;
+    state.textures.add(candidate);
+    const image = candidate.image;
+    const data = image?.data;
+    if (data && typeof data.byteLength === 'number') {
+      bytes += data.byteLength;
+      return;
+    }
+    const width = Number(image?.width);
+    const height = Number(image?.height);
+    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+      bytes += width * height * 4;
+    }
+  };
+  const addMaterialBytes = (material) => {
+    if (Array.isArray(material)) {
+      for (const entry of material) addMaterialBytes(entry);
+      return;
+    }
+    if (!material || state.materials.has(material)) return;
+    state.materials.add(material);
+    for (const candidate of Object.values(material)) addTextureBytes(candidate);
+    for (const uniform of Object.values(material.uniforms ?? {})) addTextureBytes(uniform?.value);
+  };
+  const visitNode = (node) => {
+    if (node.geometry && !state.geometries.has(node.geometry)) {
+      state.geometries.add(node.geometry);
+      for (const attribute of Object.values(node.geometry.attributes ?? {})) {
+        bytes += attribute?.array?.byteLength ?? 0;
+      }
+      bytes += node.geometry.index?.array?.byteLength ?? 0;
+    }
+    addMaterialBytes(node.material);
+  };
+  if (typeof root?.traverse === 'function') root.traverse(visitNode);
+  else if (root) visitNode(root);
+  return bytes;
 }
 
 function flipTriangleWinding(geometry) {
@@ -988,6 +1127,50 @@ function authoredPrimitives(value, assetId, lod, alphaPolicy) {
   return primitives;
 }
 
+/**
+ * Merge one (family, LOD) group's primitives into ONE geometry drawn with ONE shared material.
+ *
+ * `useGroups: false` is the whole point: with the 199 pack materials collapsed into one
+ * array-texture material, a merged geometry needs no material groups, and a bucket that carries no
+ * groups is one draw call instead of two or three. The per-vertex `vegLayer` attribute (added by
+ * `applyCustomsVegetationLayerAttributes` before this runs) is what still lets each primitive
+ * sample its own array layer inside that single call.
+ */
+function mergeAuthoredPrimitivesShared(primitives, sharedMaterial, assetId, lod) {
+  const renderOrder = primitives[0].renderOrder;
+  if (primitives.some((primitive) => primitive.renderOrder !== renderOrder)) {
+    for (const primitive of primitives) primitive.geometry.dispose?.();
+    fail(`authored vegetation ${assetId} LOD${lod} primitives disagree on renderOrder`);
+  }
+  let geometry;
+  try {
+    geometry = primitives.length === 1
+      ? primitives[0].geometry
+      : mergeGeometries(primitives.map((primitive) => primitive.geometry), false);
+    if (!geometry) {
+      fail(`authored vegetation ${assetId} LOD${lod} primitives cannot share one array-texture batch`);
+    }
+    if (geometry.groups?.length) geometry.clearGroups();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+  } catch (error) {
+    if (geometry !== primitives[0]?.geometry) geometry?.dispose?.();
+    for (const primitive of primitives) primitive.geometry.dispose?.();
+    throw error;
+  }
+  if (primitives.length > 1) {
+    for (const primitive of primitives) primitive.geometry.dispose?.();
+  }
+  return Object.freeze({
+    geometry,
+    material: sharedMaterial,
+    materialCount: 1,
+    renderOrder,
+    sourceNodes: Object.freeze(primitives.map((primitive) => primitive.sourceNode)),
+    alphaModes: Object.freeze(primitives.map((primitive) => primitive.alpha.mode)),
+  });
+}
+
 function mergeAuthoredPrimitives(primitives, assetId, lod) {
   if (primitives.length === 1) {
     const [primitive] = primitives;
@@ -1092,9 +1275,97 @@ async function loadAssetGroups({
 }
 
 /**
- * Load the cell-local LOD plan atomically and return an unattached Three.Group. A caller can keep
- * the procedural group until this promise resolves, then swap once. Camera-driven LOD changes use
- * `planCells()`/`requiresReload()` and the returned `cellLods` as the next build's hysteresis input.
+ * Build the ONE material a whole LOD tier draws with, backed by that tier's texture arrays.
+ *
+ * All 199 pack materials carry the identical texture-slot signature
+ * (`baseColor + metallicRoughness + normal + occlusion`), the identical double-sidedness, and no
+ * PBR factors at all; they differ only in which small image they sample. A `DataArrayTexture` per
+ * slot plus a per-vertex layer index reproduces that exactly, in one material, and — unlike an
+ * atlas — needs no UV rewriting, because array layers wrap independently and 173 of the 199
+ * primitives tile their UVs outside [0, 1] on REPEAT samplers.
+ *
+ * `normalScale` is pre-baked into the normal layers offline, so nothing per-layer survives into
+ * the runtime material.
+ */
+export function createCustomsAuthoredVegetationArrayMaterial({
+  basecolor,
+  orm,
+  normal,
+  lod,
+  alphaCutoff,
+}) {
+  if (!basecolor?.isTexture || !orm?.isTexture || !normal?.isTexture) {
+    fail('an array-texture vegetation material needs basecolor, orm and normal DataArrayTextures');
+  }
+  // `null` is the honest value for a LOD tier that carries no MASK card at all — the pack's 22
+  // cutouts exist only at LOD0 — and it means "no alpha test", not "test at some default". An
+  // alphaTest of 0 skips the discard branch entirely instead of testing every fragment of 177
+  // fully opaque layers against a threshold none of them can fail.
+  const cutoff = alphaCutoff === null || alphaCutoff === undefined
+    ? 0
+    : finite(alphaCutoff, 'alphaCutoff');
+  if (cutoff < 0 || cutoff >= 1) fail('alphaCutoff must be null or inside [0, 1)');
+  const sampleUv = uv();
+  const layer = attribute(CUSTOMS_VEGETATION_LAYER_ATTRIBUTE, 'float').toInt();
+  const base = texture(basecolor, sampleUv).depth(layer);
+  const ormSample = texture(orm, sampleUv).depth(layer);
+  const packedNormal = texture(normal, sampleUv).depth(layer).rgb;
+
+  const material = new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
+  material.name = `customs-authored-vegetation-lod${lod}`;
+  material.side = THREE.DoubleSide;
+  // MASK, never BLEND: measured over the pack, every card texture is strictly binary alpha (two
+  // histogram buckets, nothing in [32, 224)), so alpha-testing is lossless and buys order
+  // independence. A BLEND material reaching here is a contract failure, not a thing to sort.
+  material.transparent = false;
+  material.alphaTest = cutoff;
+  // A vec3 colorNode is promoted to vec4(rgb, 1.0) by the node builder, so `instanceColor` (the
+  // per-placement authored tint) still multiplies in through NodeMaterial's own instancing path
+  // and the texture's own alpha reaches `diffuseColor.a` through opacityNode untouched.
+  material.colorNode = base.rgb;
+  material.opacityNode = base.a;
+  material.normalNode = normalMap(packedNormal);
+  material.aoNode = ormSample.r;
+  material.roughnessNode = ormSample.g.clamp(0.04, 1);
+  material.metalnessNode = ormSample.b;
+  material.fog = false;
+  material.userData = {
+    kind: 'customs-authored-vegetation-array-material',
+    lod,
+    alphaCutoff: cutoff,
+    layerAttribute: CUSTOMS_VEGETATION_LAYER_ATTRIBUTE,
+    ormChannels: 'r=occlusion,g=roughness,b=metallic',
+    normalScaleBakedOffline: true,
+  };
+  return material;
+}
+
+function residentAssetLodRequests(compiled) {
+  const requests = [];
+  for (const group of compiled.assetGroups) {
+    for (const lod of LODS) {
+      requests.push(Object.freeze({
+        key: customsAuthoredVegetationBucketKey(group.asset.assetId, lod),
+        asset: group.asset,
+        lod,
+      }));
+    }
+  }
+  return Object.freeze(requests);
+}
+
+/**
+ * Load every authored family at every LOD atomically and return an unattached Three.Group holding
+ * one `InstancedMesh` per (family, LOD).
+ *
+ * Atomic by construction: the group is only returned once all 93 GLBs have decoded, merged and
+ * seated. Any failure — a bad fetch, a rejected alpha mode, an aborted signal — disposes every
+ * partial product and rejects, so a caller that keeps its procedural vegetation until this promise
+ * resolves can never end up with a half-swapped scene.
+ *
+ * Every geometry is resident from the first build (≈9 MB for the whole pack), so a camera-driven
+ * LOD change is a buffer repack, never a refetch: `requiresReload()` and the whole reload path are
+ * gone. Call `update()` on camera motion.
  */
 export async function createCustomsAuthoredVegetationRuntime({
   plan,
@@ -1106,10 +1377,12 @@ export async function createCustomsAuthoredVegetationRuntime({
   loadGlb,
   disposeLoadedGlb = disposeCustomsAuthoredVegetationGlb,
   cameraWorldPosition,
-  previousCellLods = null,
+  previousLods = null,
   lodPolicy = CUSTOMS_AUTHORED_VEGETATION_LOD_POLICY,
   shadowPolicy = CUSTOMS_AUTHORED_VEGETATION_SHADOW_POLICY,
   alphaPolicy = CUSTOMS_AUTHORED_VEGETATION_ALPHA_POLICY,
+  textureArrays = null,
+  frustum = null,
   concurrency = 4,
   signal = null,
 } = {}) {
@@ -1120,6 +1393,9 @@ export async function createCustomsAuthoredVegetationRuntime({
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 16) {
     fail('concurrency must be a safe integer from 1 through 16');
   }
+  if (textureArrays !== null && typeof textureArrays?.texture !== 'function') {
+    fail('textureArrays must be the loaded set returned by loadCustomsVegetationTextureArrays()');
+  }
   const catalog = suppliedCatalog ?? normalizeCustomsAuthoredVegetationCatalog(packIndex);
   if (requireCompleteCatalog && !catalog.currentFactoryCoverage.complete) {
     fail(
@@ -1129,16 +1405,20 @@ export async function createCustomsAuthoredVegetationRuntime({
     );
   }
   const compiled = planCustomsAuthoredVegetationInstances(plan, catalog);
-  const cellPlan = partitionCustomsAuthoredVegetationCells(compiled, {
+  const residentRequests = residentAssetLodRequests(compiled);
+  // Fail before a single byte is fetched if the camera or the LOD policy is unusable.
+  const initialPartition = partitionCustomsAuthoredVegetationByLod(compiled, {
     cameraWorldPosition,
-    previousCellLods,
+    previousLods,
     lodPolicy,
+    frustum,
   });
 
   const controller = new AbortController();
   const loadedValues = new Set();
   const createdGeometries = new Set();
   const createdInstancedMeshes = new Set();
+  const createdMaterials = new Set();
   const release = (value) => {
     if (value == null || loadedValues.has(value)) return;
     loadedValues.add(value);
@@ -1162,6 +1442,13 @@ export async function createCustomsAuthoredVegetationRuntime({
       try { geometry.dispose?.(); } catch { /* cleanup remains best effort */ }
     }
     createdGeometries.clear();
+    // Only materials this runtime created are disposed. The pack's own decoded materials belong to
+    // the loaded GLTF value and are released by `disposeLoadedGlb`, and the caller's texture arrays
+    // outlive this runtime.
+    for (const material of createdMaterials) {
+      try { material.dispose?.(); } catch { /* cleanup remains best effort */ }
+    }
+    createdMaterials.clear();
     for (const entry of loaded?.values?.() ?? []) release(entry.value);
   };
 
@@ -1169,7 +1456,7 @@ export async function createCustomsAuthoredVegetationRuntime({
   let group = null;
   try {
     loaded = await loadAssetGroups({
-      assetLodRequests: cellPlan.requiredAssetLods,
+      assetLodRequests: residentRequests,
       baseUrl,
       pageUrl,
       loadGlb,
@@ -1180,16 +1467,39 @@ export async function createCustomsAuthoredVegetationRuntime({
     });
     throwIfAborted(controller.signal);
     group = new THREE.Group();
-    group.name = 'customs-authored-vegetation-cells';
-    let primitiveGroups = 0;
-    let primitiveInstances = 0;
-    let prototypeCellPlacementInstances = 0;
-    let shadowCastingPrimitiveGroups = 0;
+    group.name = 'customs-authored-vegetation';
+
+    // One shared material per LOD tier when the texture arrays are present; otherwise the pack's
+    // own per-primitive authored materials, which still batch per (family, LOD) but cost one draw
+    // call per primitive slice inside each bucket.
+    const arrayIndex = textureArrays?.index ?? null;
+    const sharedMaterialByLod = new Map();
+    if (textureArrays) {
+      for (const lod of LODS) {
+        const declaredCutoff = arrayIndex?.alphaCutoffByLod?.[String(lod)]
+          ?? arrayIndex?.alphaCutoffByLod?.[lod];
+        const cutoff = typeof declaredCutoff === 'number' ? declaredCutoff : null;
+        const material = createCustomsAuthoredVegetationArrayMaterial({
+          basecolor: textureArrays.texture(lod, 'basecolor'),
+          orm: textureArrays.texture(lod, 'orm'),
+          normal: textureArrays.texture(lod, 'normal'),
+          lod,
+          alphaCutoff: cutoff,
+        });
+        createdMaterials.add(material);
+        sharedMaterialByLod.set(lod, material);
+      }
+    }
+
     let receiptTrianglesAcrossLoadedAssetLods = 0;
-    let estimatedRenderedTriangles = 0;
+    // Bytes the per-primitive fallback path keeps alive on purpose (see `estimateRetainedGlbBytes`
+    // above) because it must not release `loadedEntry.value` — its materials are still in use.
+    // Stays 0 whenever `textureArrays` is present, since that path releases every entry instead.
+    let retainedDecodedGlbBytes = 0;
     const preparedByKey = new Map();
     const alphaRecords = [];
-    const loadedAssetUrls = cellPlan.requiredAssetLods.map((entry) => {
+    const boundLayerRecords = [];
+    const loadedAssetUrls = residentRequests.map((entry) => {
       const loadedEntry = loaded.get(entry.key);
       if (!loadedEntry) fail(`authored vegetation load lost ${entry.asset.assetId} LOD${entry.lod}`);
       const primitives = authoredPrimitives(
@@ -1198,73 +1508,178 @@ export async function createCustomsAuthoredVegetationRuntime({
         entry.lod,
         alpha,
       );
-      for (const primitive of primitives) {
-        alphaRecords.push(primitive.alpha);
+      for (const primitive of primitives) alphaRecords.push(primitive.alpha);
+      let batch;
+      if (textureArrays) {
+        // Bind every primitive's array layer BEFORE the merge: `mergeGeometries` demands an
+        // identical attribute set across its inputs, so binding some and not others would fail
+        // far from its cause.
+        const bound = applyCustomsVegetationLayerAttributes(
+          arrayIndex,
+          entry.asset.assetId,
+          entry.lod,
+          primitives,
+        );
+        for (const record of bound) boundLayerRecords.push(record);
+        batch = mergeAuthoredPrimitivesShared(
+          primitives,
+          sharedMaterialByLod.get(entry.lod),
+          entry.asset.assetId,
+          entry.lod,
+        );
+      } else {
+        batch = mergeAuthoredPrimitives(primitives, entry.asset.assetId, entry.lod);
       }
-      const batch = mergeAuthoredPrimitives(primitives, entry.asset.assetId, entry.lod);
       createdGeometries.add(batch.geometry);
-      preparedByKey.set(entry.key, Object.freeze({ loadedEntry, batch }));
+      preparedByKey.set(entry.key, Object.freeze({
+        loadedEntry,
+        batch,
+        primitiveCount: primitives.length,
+      }));
       receiptTrianglesAcrossLoadedAssetLods += loadedEntry.request.triangles;
+      if (textureArrays) {
+        // Under the array material NOTHING of the decoded GLTF survives the merge: the geometries
+        // are deep clones and the pack's 199 materials and 597 decoded images are unreferenced.
+        // Release them now rather than holding ~20 MB of dead ImageBitmaps for the session.
+        // (The per-primitive fallback path DOES keep the pack's materials, so it must not.)
+        release(loadedEntry.value);
+      } else {
+        // Not released — the merged batch's `material` array IS `loadedEntry.value`'s own decoded
+        // materials, referenced directly (see `mergeAuthoredPrimitives`), not a clone. Count what
+        // stays resident here so `residentBytes` reports it instead of silently going quiet about
+        // exactly the memory the array-texture path frees a few lines above.
+        retainedDecodedGlbBytes += estimateRetainedGlbBytes(loadedEntry.value);
+      }
       return loadedEntry.url;
     });
 
-    for (const cell of cellPlan.cells) {
-      for (const prototypeCell of cell.prototypeGroups) {
-        const key = assetLodKey(prototypeCell.asset.assetId, cell.lod);
-        const prepared = preparedByKey.get(key);
-        if (!prepared) fail(`authored vegetation preparation lost ${prototypeCell.asset.assetId} LOD${cell.lod}`);
-        prototypeCellPlacementInstances += prototypeCell.placements.length;
-        estimatedRenderedTriangles += prepared.loadedEntry.request.triangles
-          * prototypeCell.placements.length;
-        const mesh = new THREE.InstancedMesh(
-          prepared.batch.geometry,
-          prepared.batch.material,
-          prototypeCell.placements.length,
-        );
-        createdInstancedMeshes.add(mesh);
-        mesh.name = `${prototypeCell.asset.assetId}:${cell.cellId}:lod${cell.lod}`;
-        mesh.castShadow = shadows.mode === 'near-lod' && cell.lod === 0;
-        mesh.receiveShadow = shadows.receive;
-        mesh.frustumCulled = true;
-        if (mesh.castShadow) shadowCastingPrimitiveGroups += prepared.batch.materialCount;
-        mesh.renderOrder = prepared.batch.renderOrder;
-        mesh.userData = {
-          kind: 'customs-authored-vegetation',
-          assetId: prototypeCell.asset.assetId,
-          prototypeName: prototypeCell.asset.prototypeName,
-          cellId: cell.cellId,
-          cellX: cell.cellX,
-          cellY: cell.cellY,
-          cellBounds: cell.bounds,
-          cellCameraDistanceM: cell.cameraDistanceM,
-          sourceNodes: prepared.batch.sourceNodes,
-          materialCount: prepared.batch.materialCount,
-          alphaModes: prepared.batch.alphaModes,
-          lod: cell.lod,
-          instances: prototypeCell.placements.length,
-          collision: 'none',
-          placementAccuracy: 'exact-scalar-placement',
-          geometryAccuracy: 'original-authored-approximation-not-source-game-topology',
-        };
-        const color = new THREE.Color();
-        prototypeCell.placements.forEach((placement, instanceIndex) => {
-          mesh.setMatrixAt(instanceIndex, customsAuthoredVegetationInstanceMatrix(placement));
-          color.setRGB(placement.tint.r, placement.tint.g, placement.tint.b);
-          mesh.setColorAt(instanceIndex, color);
-        });
-        mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-        mesh.computeBoundingBox();
-        mesh.computeBoundingSphere();
-        group.add(mesh);
-        primitiveGroups += prepared.batch.materialCount;
-        primitiveInstances += prototypeCell.placements.length * prepared.batch.materialCount;
+    // Precompose every instance matrix and tint exactly once. A LOD change copies these 64-byte
+    // rows into a bucket's instance buffer; it never recomposes a matrix, which is what keeps a
+    // full 8,805-placement repack near a millisecond.
+    const placements = compiled.placements;
+    const placementMatrices = new Float32Array(placements.length * 16);
+    const placementColors = new Float32Array(placements.length * 3);
+    for (let index = 0; index < placements.length; index += 1) {
+      const matrix = customsAuthoredVegetationInstanceMatrix(placements[index]);
+      placementMatrices.set(matrix.elements, index * 16);
+      placementColors[index * 3] = placements[index].tint.r;
+      placementColors[index * 3 + 1] = placements[index].tint.g;
+      placementColors[index * 3 + 2] = placements[index].tint.b;
+    }
+
+    // Every bucket is sized to its family's FULL placement count, and `mesh.count` is the live
+    // prefix. That is 3 x 8,805 instance matrices allocated for the complete pack — 1.69 MB — in
+    // exchange for a LOD change that never reallocates a buffer.
+    const capacityByAsset = new Map(
+      compiled.assetGroups.map((entry) => [entry.asset.assetId, entry.placements.length]),
+    );
+    const meshByKey = new Map();
+    let instanceMatrixBytes = 0;
+    for (const entry of residentRequests) {
+      const prepared = preparedByKey.get(entry.key);
+      if (!prepared) fail(`authored vegetation preparation lost ${entry.asset.assetId} LOD${entry.lod}`);
+      const capacity = capacityByAsset.get(entry.asset.assetId) ?? 0;
+      const mesh = new THREE.InstancedMesh(prepared.batch.geometry, prepared.batch.material, capacity);
+      createdInstancedMeshes.add(mesh);
+      mesh.name = `${entry.asset.assetId}:lod${entry.lod}`;
+      mesh.castShadow = shadows.mode === 'near-lod' && entry.lod === 0;
+      mesh.receiveShadow = shadows.receive;
+      // Per-instance frustum rejection happens in the partitioner, which repacks the live prefix.
+      // Three's own object-level cull reads a bounding sphere that the repack invalidates, so it
+      // must stay off; an empty bucket is hidden outright instead.
+      mesh.frustumCulled = false;
+      mesh.renderOrder = prepared.batch.renderOrder;
+      mesh.count = 0;
+      mesh.visible = false;
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
+      mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+      instanceMatrixBytes += mesh.instanceMatrix.array.byteLength + mesh.instanceColor.array.byteLength;
+      mesh.userData = {
+        kind: 'customs-authored-vegetation',
+        assetId: entry.asset.assetId,
+        prototypeName: entry.asset.prototypeName,
+        lod: entry.lod,
+        capacity,
+        instances: 0,
+        sourceNodes: prepared.batch.sourceNodes,
+        materialCount: prepared.batch.materialCount,
+        primitiveCount: prepared.primitiveCount,
+        alphaModes: prepared.batch.alphaModes,
+        receiptTriangles: prepared.loadedEntry.request.triangles,
+        collision: 'none',
+        placementAccuracy: 'exact-scalar-placement',
+        geometryAccuracy: 'original-authored-approximation-not-source-game-topology',
+      };
+      meshByKey.set(entry.key, mesh);
+      group.add(mesh);
+    }
+
+    const live = {
+      partition: null,
+      buckets: 0,
+      drawCalls: 0,
+      instances: 0,
+      frustumCulled: 0,
+      renderedTriangles: 0,
+      lodVisibleCounts: { 0: 0, 1: 0, 2: 0 },
+      lodInstanceCounts: { 0: 0, 1: 0, 2: 0 },
+      frustumCullingApplied: false,
+      repackMs: 0,
+    };
+
+    function applyPartition(partition) {
+      const startedAt = (globalThis.performance ?? Date).now();
+      for (const mesh of meshByKey.values()) {
+        mesh.count = 0;
+        mesh.visible = false;
+        mesh.userData.instances = 0;
       }
+      let buckets = 0;
+      let drawCalls = 0;
+      let instances = 0;
+      let renderedTriangles = 0;
+      for (const bucket of partition.buckets) {
+        const mesh = meshByKey.get(bucket.key);
+        if (!mesh) fail(`authored vegetation partition names an unbuilt bucket ${bucket.key}`);
+        if (bucket.instances > mesh.userData.capacity) {
+          fail(`authored vegetation bucket ${bucket.key} exceeds its family capacity`);
+        }
+        const matrixArray = mesh.instanceMatrix.array;
+        const colorArray = mesh.instanceColor.array;
+        for (let slot = 0; slot < bucket.indices.length; slot += 1) {
+          const source = bucket.indices[slot];
+          matrixArray.set(placementMatrices.subarray(source * 16, source * 16 + 16), slot * 16);
+          colorArray.set(placementColors.subarray(source * 3, source * 3 + 3), slot * 3);
+        }
+        mesh.count = bucket.instances;
+        mesh.visible = bucket.instances > 0;
+        mesh.userData.instances = bucket.instances;
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.instanceColor.needsUpdate = true;
+        buckets += 1;
+        drawCalls += mesh.userData.materialCount;
+        instances += bucket.instances;
+        renderedTriangles += mesh.userData.receiptTriangles * bucket.instances;
+      }
+      if (instances !== partition.visibleInstances) {
+        fail('authored vegetation repack duplicated or lost exact placements');
+      }
+      live.partition = partition;
+      live.buckets = buckets;
+      live.drawCalls = drawCalls;
+      live.instances = instances;
+      live.frustumCulled = partition.frustumCulledInstances;
+      live.renderedTriangles = renderedTriangles;
+      live.lodVisibleCounts = partition.lodVisibleCounts;
+      live.lodInstanceCounts = partition.lodInstanceCounts;
+      live.frustumCullingApplied = partition.frustumCullingApplied;
+      live.repackMs = (globalThis.performance ?? Date).now() - startedAt;
+      return partition;
     }
-    if (prototypeCellPlacementInstances !== compiled.renderedCount) {
-      fail('runtime prototype-cell accounting duplicated or lost exact vegetation placements');
-    }
+
+    applyPartition(initialPartition);
+
     const alphaModeCounts = { OPAQUE: 0, MASK: 0, BLEND: 0 };
     for (const record of alphaRecords) alphaModeCounts[record.mode] += 1;
     const blendMaterials = Object.freeze(alphaRecords.filter((record) => record.mode === 'BLEND'));
@@ -1277,22 +1692,35 @@ export async function createCustomsAuthoredVegetationRuntime({
       ] : []),
       materialsRewritten: false,
     });
-    const usedAssetIds = new Set(cellPlan.requiredAssetLods.map((entry) => entry.asset.assetId));
-    const baseStatus = Object.freeze({
+    const materialMode = textureArrays ? 'shared-array-texture' : 'authored-per-primitive';
+    // What is actually held after the build, not what was downloaded: merged vertex+index buffers,
+    // the instance matrix/colour buffers, and the level-0 texture upload.
+    let geometryBytes = 0;
+    for (const geometry of createdGeometries) {
+      for (const attribute of Object.values(geometry.attributes ?? {})) {
+        geometryBytes += attribute.array?.byteLength ?? 0;
+      }
+      geometryBytes += geometry.index?.array?.byteLength ?? 0;
+    }
+    // `retainedDecodedGlbBytes` is the fallback path's unreleased decoded materials/images/geometry
+    // (see the `else` branch above); it is 0 whenever `textureArrays` is present, since that path
+    // releases every loaded value as it goes. Omitting it here is exactly the bug this fixes: the
+    // reported total would silently understate real residency by the whole retained pack.
+    const residentBytes = instanceMatrixBytes + geometryBytes
+      + (textureArrays?.stats?.uploadBytes ?? 0) + retainedDecodedGlbBytes;
+    const baseStatus = {
       mode: 'exact-scalar-placement-original-authored-vegetation',
       geometry: 'original-authored-approximation-not-source-game-topology',
       collision: 'none',
       packStatus: catalog.status,
       livePromotion: catalog.livePromotion,
       globalLod: false,
-      cellLocalLod: true,
-      cellSizeM: cellPlan.cellSizeM,
-      spatialCells: cellPlan.spatialCellCount,
-      prototypeCells: cellPlan.prototypeCellCount,
-      cellLods: cellPlan.cellLods,
-      lodCellCounts: cellPlan.lodCellCounts,
-      lodPrototypeCellCounts: cellPlan.lodPrototypeCellCounts,
-      lodPolicy: cellPlan.lodPolicy,
+      cellLocalLod: false,
+      perInstanceLod: true,
+      spatialCellGrid: null,
+      materialMode,
+      sharedMaterials: sharedMaterialByLod.size,
+      boundArrayLayers: boundLayerRecords.length,
       sourceInstances: compiled.sourceCount,
       scopedInstances: compiled.renderedCount,
       renderedInstances: compiled.renderedCount,
@@ -1301,47 +1729,68 @@ export async function createCustomsAuthoredVegetationRuntime({
       authoredAssetsInCatalog: catalog.assets.length,
       authoredBindingsInCatalog: catalog.bindings.length,
       currentFactoryCoverage: catalog.currentFactoryCoverage,
-      loadedAssets: usedAssetIds.size,
-      loadedAssetLods: cellPlan.requiredAssetLods.length,
-      unusedCatalogAssets: catalog.assets.length - usedAssetIds.size,
+      loadedAssets: compiled.assetGroups.length,
+      loadedAssetLods: residentRequests.length,
+      unusedCatalogAssets: catalog.assets.length - compiled.assetGroups.length,
+      bucketCeiling: compiled.assetGroups.length * LODS.length,
       instancedMeshes: group.children.length,
-      primitiveGroups,
-      drawCalls: primitiveGroups,
-      primitiveInstances,
-      prototypeCellPlacementInstances,
+      instanceBufferBytes: instanceMatrixBytes,
+      geometryBytes,
+      textureUploadBytes: textureArrays?.stats?.uploadBytes ?? 0,
+      retainedDecodedGlbBytes,
+      residentBytes,
+      decodedGlbReleasedAfterMerge: Boolean(textureArrays),
       receiptTrianglesAcrossLoadedAssetLods,
-      estimatedRenderedTriangles,
-      frustumCullBatches: group.children.length,
       shadowPolicy: shadows,
-      shadowCastingPrimitiveGroups,
       alphaContract,
       scaleSources: compiled.scaleSources,
       classes: compiled.counts,
       duplicateOfflinePlacementListConsumed: false,
       loadedAssetUrls: Object.freeze(loadedAssetUrls),
+    };
+    const liveStatus = () => ({
+      lodPolicy: live.partition.lodPolicy,
+      buckets: live.buckets,
+      liveBuckets: live.buckets,
+      drawCalls: live.drawCalls,
+      frustumCullBatches: live.buckets,
+      visibleInstances: live.instances,
+      frustumCulledInstances: live.frustumCulled,
+      frustumCullingApplied: live.frustumCullingApplied,
+      lodVisibleCounts: live.lodVisibleCounts,
+      lodInstanceCounts: live.lodInstanceCounts,
+      estimatedRenderedTriangles: live.renderedTriangles,
+      lastRepackMs: live.repackMs,
+      cameraWorldPosition: live.partition.cameraWorldPosition,
     });
-    group.userData = { ...baseStatus, kind: 'customs-authored-vegetation-root' };
+    group.userData = { ...baseStatus, ...liveStatus(), kind: 'customs-authored-vegetation-root' };
 
     let disposed = false;
     runtime = {
       group,
       catalog,
-      cellLods: cellPlan.cellLods,
+      compiled,
+      get lods() { return live.partition.lods; },
       get active() { return !disposed; },
-      get status() { return Object.freeze({ ...baseStatus, active: !disposed, disposed }); },
-      planCells(nextCameraWorldPosition, previousCellLods = cellPlan.cellLods) {
-        return partitionCustomsAuthoredVegetationCells(compiled, {
-          cameraWorldPosition: nextCameraWorldPosition,
-          previousCellLods,
-          lodPolicy: cellPlan.lodPolicy,
+      get status() {
+        return Object.freeze({ ...baseStatus, ...liveStatus(), active: !disposed, disposed });
+      },
+      /** Re-select every placement's LOD and repack the live prefixes. No GLB is refetched. */
+      update({
+        cameraWorldPosition: nextCamera,
+        frustum: nextFrustum = null,
+        previousLods: nextPrevious = live.partition.lods,
+      } = {}) {
+        if (disposed) fail('a disposed authored vegetation runtime cannot be updated');
+        const partition = partitionCustomsAuthoredVegetationByLod(compiled, {
+          cameraWorldPosition: nextCamera,
+          previousLods: nextPrevious,
+          lodPolicy: live.partition.lodPolicy,
+          frustum: nextFrustum,
         });
-      },
-      selectCellLods(nextCameraWorldPosition, previousCellLods = cellPlan.cellLods) {
-        return this.planCells(nextCameraWorldPosition, previousCellLods).cellLods;
-      },
-      requiresReload(nextCameraWorldPosition, previousCellLods = cellPlan.cellLods) {
-        const next = this.selectCellLods(nextCameraWorldPosition, previousCellLods);
-        return Object.keys(previousCellLods).some((cellId) => next[cellId] !== previousCellLods[cellId]);
+        applyPartition(partition);
+        Object.assign(group.userData, liveStatus());
+        return this.status;
       },
       dispose() {
         if (disposed) return;

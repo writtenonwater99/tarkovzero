@@ -3,15 +3,18 @@ import test from 'node:test';
 import * as THREE from 'three/webgpu';
 import {
   CustomsAuthoredVegetationContractError,
-  CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M,
+  CUSTOMS_AUTHORED_VEGETATION_BUCKET_CEILING,
   createCustomsAuthoredVegetationRuntime,
+  customsAuthoredVegetationBucketKey,
   customsAuthoredVegetationInstanceMatrix,
   customsAuthoredVegetationWorldMatrix,
+  joinCustomsAuthoredVegetationPrototypeName,
   normalizeCustomsAuthoredVegetationCatalog,
-  partitionCustomsAuthoredVegetationCells,
+  partitionCustomsAuthoredVegetationByLod,
   planCustomsAuthoredVegetationInstances,
   probeCustomsAuthoredVegetationBinding,
   resolveCustomsAuthoredVegetationBinding,
+  resolveCustomsAuthoredVegetationPrototypeName,
   resolveCustomsAuthoredVegetationScale,
   selectCustomsAuthoredVegetationLod,
 } from '../src/customs-authored-vegetation.js';
@@ -119,7 +122,7 @@ function triangleGeometry() {
   return geometry;
 }
 
-function fakeGlb({ primitiveCount = 1, childX = 0, alphaModes = [] } = {}) {
+function fakeGlb({ primitiveCount = 1, childX = 0, alphaModes = [], textureSize = null } = {}) {
   const scene = new THREE.Group();
   const child = new THREE.Group();
   child.name = 'authored-child';
@@ -131,6 +134,10 @@ function fakeGlb({ primitiveCount = 1, childX = 0, alphaModes = [] } = {}) {
     if (alphaModes[index] === 'MASK') material.alphaTest = 0.5;
     if (alphaModes[index] === 'BLEND') material.transparent = true;
     if (alphaModes[index] === 'HASH') material.alphaHash = true;
+    // A decoded GLTF's texture: a real THREE.Texture (so `.isTexture`/`.dispose()` behave exactly
+    // like the runtime's production case), backed by a plain `{width,height}` image stand-in
+    // (undecoded pixel data is irrelevant here — only the declared dimensions are read).
+    if (textureSize) material.map = new THREE.Texture({ width: textureSize, height: textureSize });
     const mesh = new THREE.Mesh(triangleGeometry(), material);
     mesh.name = `primitive-${index}`;
     mesh.position.z = index;
@@ -276,8 +283,10 @@ test('selects a cell LOD with explicit hysteresis at both transition seams', () 
   assert.equal(selectCustomsAuthoredVegetationLod(259, 2), 1);
 });
 
-test('partitions exact placements into deterministic 128 m cells with per-cell LOD and no duplicates', () => {
+function lodPartitionFixture() {
   const catalog = normalizeCustomsAuthoredVegetationCatalog(pack());
+  // Every placement's bounding sphere centre is its base plus half its authored height, so these
+  // z values are chosen to keep the LOD bands unambiguous while the camera sits on the z = 0 plane.
   const placements = [
     placement({ flatIndex: 0, presentationPosition: [10, 10, 0] }),
     placement({ flatIndex: 1, presentationPosition: [20, 20, 0] }),
@@ -288,39 +297,116 @@ test('partitions exact placements into deterministic 128 m cells with per-cell L
       classification: 'deciduous',
       presentationPosition: [30, 30, 0],
     }),
-    placement({ flatIndex: 3, presentationPosition: [300, 0, 0] }),
+    placement({ flatIndex: 3, presentationPosition: [200, 0, 0] }),
     placement({ flatIndex: 4, presentationPosition: [700, 0, 0] }),
   ];
+  return { catalog, placements };
+}
+
+test('batches per (family, LOD) with per-instance LOD, and never duplicates or loses a placement', () => {
+  const { catalog, placements } = lodPartitionFixture();
   const compiled = planCustomsAuthoredVegetationInstances(renderPlan(placements), catalog);
-  const cells = partitionCustomsAuthoredVegetationCells(compiled, {
+  const partition = partitionCustomsAuthoredVegetationByLod(compiled, {
     cameraWorldPosition: [0, 0, 0],
   });
-  assert.equal(cells.cellSizeM, 128);
-  assert.equal(CUSTOMS_AUTHORED_VEGETATION_CELL_SIZE_M, 128);
-  assert.equal(cells.spatialCellCount, 3);
-  assert.equal(cells.prototypeCellCount, 4);
-  assert.equal(cells.prototypeCellPlacementInstances, 5);
-  assert.deepEqual(cells.lodCellCounts, { 0: 1, 1: 1, 2: 1 });
-  assert.deepEqual(cells.cells.map((cell) => cell.cellId), ['0:0', '2:0', '5:0']);
-  assert.deepEqual(cells.cells.map((cell) => cell.lod), [0, 1, 2]);
-  assert.equal(cells.requiredAssetLods.length, 4, 'pine needs three LODs and tree needs near LOD0');
+
+  // Three near pines/trees at LOD0, one pine at 200 m -> LOD1, one at 700 m -> LOD2.
+  assert.deepEqual(partition.buckets.map((bucket) => bucket.key), [
+    customsAuthoredVegetationBucketKey('customs.vegetation.pine01', 0),
+    customsAuthoredVegetationBucketKey('customs.vegetation.pine01', 1),
+    customsAuthoredVegetationBucketKey('customs.vegetation.pine01', 2),
+    customsAuthoredVegetationBucketKey('customs.vegetation.tree02', 0),
+  ]);
+  assert.equal(partition.bucketCount, 4);
+  assert.equal(new Set(partition.buckets.map((bucket) => bucket.key)).size, 4, 'each (family, LOD) key is unique');
+  assert.equal(partition.visibleInstances, 5);
+  assert.equal(partition.frustumCulledInstances, 0);
+  assert.equal(partition.frustumCullingApplied, false);
+  assert.deepEqual(partition.lodInstanceCounts, { 0: 3, 1: 1, 2: 1 });
   assert.deepEqual(
-    cells.cells.flatMap((cell) => cell.prototypeGroups.flatMap((group) => (
-      group.placements.map((entry) => entry.flatIndex)
-    ))).sort((a, b) => a - b),
+    partition.buckets.flatMap((bucket) => bucket.indices.map((index) => compiled.placements[index].flatIndex)).sort((a, b) => a - b),
     [0, 1, 2, 3, 4],
   );
+  // The structural ceiling is a count of (family, LOD) pairs and cannot depend on the map layout.
+  assert.ok(partition.bucketCount <= compiled.assetGroups.length * 3);
+  assert.equal(CUSTOMS_AUTHORED_VEGETATION_BUCKET_CEILING, 93);
 
-  const keepNear = partitionCustomsAuthoredVegetationCells(compiled, {
-    cameraWorldPosition: [131, 0, 0],
-    previousCellLods: { '2:0': 0 },
+  // Hysteresis is now per instance, keyed by the placement's ordinal in the compiled plan.
+  const nearIndex = compiled.placements.findIndex((entry) => entry.flatIndex === 3);
+  const keepNear = partitionCustomsAuthoredVegetationByLod(compiled, {
+    cameraWorldPosition: [75, 0, 0],
+    previousLods: partition.lods,
   });
-  assert.equal(keepNear.cellLods['2:0'], 0, 'LOD0 remains through the +20 m hysteresis band');
-  const leaveNear = partitionCustomsAuthoredVegetationCells(compiled, {
-    cameraWorldPosition: [125, 0, 0],
-    previousCellLods: { '2:0': 0 },
+  assert.equal(partition.lods[nearIndex], 1);
+  assert.equal(keepNear.lods[nearIndex], 1, 'LOD1 is retained inside the -20 m hysteresis band at 125 m');
+  const leaveNear = partitionCustomsAuthoredVegetationByLod(compiled, {
+    cameraWorldPosition: [111, 0, 0],
+    previousLods: partition.lods,
   });
-  assert.equal(leaveNear.cellLods['2:0'], 1, 'cell switches after leaving the hysteresis band');
+  assert.equal(leaveNear.lods[nearIndex], 0, 'the instance drops to LOD0 once it clears the band');
+});
+
+test('rejects each placement against the frustum individually and keeps the LOD state coherent', () => {
+  const { catalog, placements } = lodPartitionFixture();
+  const compiled = planCustomsAuthoredVegetationInstances(renderPlan(placements), catalog);
+  // A half-space that admits only x <= 100: the two far pines fall outside it.
+  const frustum = {
+    intersectsSphere: (sphere) => sphere.center.x - sphere.radius <= 100,
+  };
+  const partition = partitionCustomsAuthoredVegetationByLod(compiled, {
+    cameraWorldPosition: [0, 0, 0],
+    frustum,
+  });
+  assert.equal(partition.frustumCullingApplied, true);
+  assert.equal(partition.visibleInstances, 3);
+  assert.equal(partition.frustumCulledInstances, 2);
+  assert.equal(partition.visibleInstances + partition.frustumCulledInstances, compiled.renderedCount);
+  assert.equal(partition.bucketCount, 2, 'the emptied (family, LOD) buckets simply do not exist');
+  // LOD is still selected for the rejected placements, so hysteresis survives a swing out of view.
+  assert.deepEqual(partition.lodInstanceCounts, { 0: 3, 1: 1, 2: 1 });
+  assert.equal(partition.lods.length, compiled.renderedCount);
+
+  assert.throws(
+    () => partitionCustomsAuthoredVegetationByLod(compiled, {
+      cameraWorldPosition: [0, 0, 0],
+      frustum: {},
+    }),
+    /intersectsSphere/,
+  );
+  assert.throws(
+    () => partitionCustomsAuthoredVegetationByLod(compiled, {
+      cameraWorldPosition: [0, 0, 0],
+      previousLods: new Int8Array(2),
+    }),
+    /one entry per compiled placement/,
+  );
+});
+
+test('recovers prototypeName by joining bare placement rows to their prototype bindings', () => {
+  const catalog = normalizeCustomsAuthoredVegetationCatalog(pack());
+  // The offline pack's own `placements[]` rows carry no `prototypeName`; the probe correctly
+  // rejects them, and the join is what makes them resolvable.
+  const bare = {
+    assetId: 'customs.vegetation.tree02',
+    instanceIndex: 0,
+    placementOrdinal: 0,
+    prototypeId: 'terrain-000-vegetation-000',
+    tileId: 'terrain-000',
+  };
+  assert.equal(probeCustomsAuthoredVegetationBinding(catalog, bare), null);
+  assert.equal(resolveCustomsAuthoredVegetationPrototypeName(catalog, bare), 'tree02');
+  const joined = joinCustomsAuthoredVegetationPrototypeName(catalog, bare);
+  assert.equal(joined.prototypeName, 'tree02');
+  assert.equal(probeCustomsAuthoredVegetationBinding(catalog, joined).asset.assetId, 'customs.vegetation.tree02');
+
+  // An unbound pair stays unbound; nothing is invented.
+  assert.equal(resolveCustomsAuthoredVegetationPrototypeName(catalog, {
+    tileId: 'terrain-000', prototypeId: 'terrain-000-vegetation-999',
+  }), null);
+  assert.equal(resolveCustomsAuthoredVegetationPrototypeName(catalog, { tileId: 'terrain-000' }), null);
+  // A declared name is never overwritten — a disagreement has to stay visible to the resolver.
+  const declared = { ...bare, prototypeName: 'pine01' };
+  assert.equal(joinCustomsAuthoredVegetationPrototypeName(catalog, declared).prototypeName, 'pine01');
 });
 
 test('loads once per prototype, preserves child transforms, and instances each primitive with tint', async () => {
@@ -353,35 +439,46 @@ test('loads once per prototype, preserves child transforms, and instances each p
     },
     disposeLoadedGlb(value) { released.push(value); },
   });
-  assert.equal(loads.length, 2);
-  assert.ok(loads.every((entry) => entry.lod === 1 && entry.url.endsWith('-lod1.glb')));
+  // Every family at every LOD is resident from the first build, which is what retires the
+  // reload-on-LOD-change path entirely.
+  assert.equal(loads.length, 6, 'two families x three LODs, loaded once each');
+  assert.deepEqual([...new Set(loads.map((entry) => entry.lod))].sort(), [0, 1, 2]);
   assert.ok(loads.every((entry) => entry.url.startsWith(
     'http://localhost/assets/3d/customs/authored/vegetation/assets/',
   )), 'the verified GLB loader must receive an absolute on-origin URL');
-  assert.equal(runtime.group.children.length, 2, 'one InstancedMesh per prototype+cell');
+  assert.equal(runtime.group.children.length, 6, 'one InstancedMesh per (family, LOD)');
   assert.equal(runtime.status.loadedAssets, 2);
-  assert.equal(runtime.status.loadedAssetLods, 2);
+  assert.equal(runtime.status.loadedAssetLods, 6);
+  assert.equal(runtime.status.bucketCeiling, 6);
   assert.equal(runtime.status.globalLod, false);
-  assert.equal(runtime.status.cellLocalLod, true);
-  assert.equal(runtime.status.spatialCells, 2);
-  assert.equal(runtime.status.prototypeCells, 2);
-  assert.equal(runtime.status.instancedMeshes, 2);
+  assert.equal(runtime.status.cellLocalLod, false);
+  assert.equal(runtime.status.perInstanceLod, true);
+  assert.equal(runtime.status.spatialCellGrid, null, 'the 128 m cell grid is gone');
+  assert.equal(runtime.status.materialMode, 'authored-per-primitive');
+  assert.equal(runtime.status.instancedMeshes, 6);
+  // Live counts: all three placements land in the medium band at this camera, so exactly two
+  // buckets carry instances and the other four are empty and hidden.
+  assert.equal(runtime.status.buckets, 2);
   assert.equal(runtime.status.frustumCullBatches, 2);
-  assert.equal(runtime.status.primitiveGroups, 3);
-  assert.equal(runtime.status.drawCalls, 3);
+  assert.equal(runtime.status.drawCalls, 3, 'pine merges two primitive materials, tree one');
+  assert.equal(runtime.status.visibleInstances, 3);
+  assert.equal(runtime.status.frustumCulledInstances, 0);
   assert.equal(runtime.status.uniquePlacementInstances, 3);
-  assert.equal(runtime.status.primitiveInstances, 5);
-  assert.equal(runtime.status.prototypeCellPlacementInstances, 3);
-  assert.equal(runtime.status.shadowCastingPrimitiveGroups, 0, 'shadows are disabled by default');
-  assert.ok(runtime.group.children.every((mesh) => mesh.castShadow === false));
-  assert.ok(runtime.group.children.every((mesh) => mesh.frustumCulled === true));
+  // Each bucket is sized to its family's full placement count: pine01 x 2, tree02 x 1, x3 LODs.
+  assert.equal(runtime.status.instanceBufferBytes, 3 * (2 * 64 + 2 * 12) + 3 * (1 * 64 + 1 * 12));
+  assert.ok(runtime.group.children.every((mesh) => mesh.castShadow === false), 'shadows are disabled by default');
+  assert.ok(runtime.group.children.every((mesh) => mesh.frustumCulled === false), 'culling is per instance, not per object');
+  assert.equal(runtime.group.children.filter((mesh) => mesh.visible).length, 2);
   assert.equal(runtime.status.duplicateOfflinePlacementListConsumed, false);
 
-  const pineMesh = runtime.group.children.find((mesh) => mesh.userData.prototypeName === 'pine01');
+  const pineMesh = runtime.group.children.find((mesh) => (
+    mesh.userData.prototypeName === 'pine01' && mesh.userData.lod === 1
+  ));
   assert.equal(pineMesh.count, 2);
+  assert.equal(pineMesh.userData.capacity, 2);
   assert.equal(pineMesh.geometry.getAttribute('position').getX(0), -2, 'child X translation and reflection are baked');
   assert.deepEqual([...pineMesh.geometry.index.array].slice(0, 3), [0, 2, 1], 'reflected triangle winding is repaired');
-  assert.equal(pineMesh.geometry.groups.length, 2, 'authored primitives merge into one prototype-cell mesh');
+  assert.equal(pineMesh.geometry.groups.length, 2, 'authored primitives merge into one (family, LOD) mesh');
   assert.ok(Array.isArray(pineMesh.material) && pineMesh.material.length === 2);
   const matrix = new THREE.Matrix4();
   pineMesh.getMatrixAt(0, matrix);
@@ -392,6 +489,24 @@ test('loads once per prototype, preserves child transforms, and instances each p
   assert.ok(Math.abs(color.r - 0.2) < 1e-6);
   assert.ok(Math.abs(color.g - 0.3) < 1e-6);
   assert.ok(Math.abs(color.b - 0.4) < 1e-6);
+
+  // A LOD change is a repack, not a reload: no further GLB request, and the instance matrix is
+  // copied rather than recomposed, so it is bit-identical in its new bucket.
+  const before = new THREE.Matrix4();
+  pineMesh.getMatrixAt(0, before);
+  const moved = runtime.update({ cameraWorldPosition: [10, 20, 34] });
+  assert.equal(loads.length, 6, 'a LOD change refetches nothing');
+  const pineNear = runtime.group.children.find((mesh) => (
+    mesh.userData.prototypeName === 'pine01' && mesh.userData.lod === 0
+  ));
+  assert.equal(pineNear.count, 2, 'both pines crossed into LOD0');
+  assert.equal(pineMesh.count, 0, 'the emptied medium bucket is repacked to zero');
+  assert.equal(pineMesh.visible, false);
+  const after = new THREE.Matrix4();
+  pineNear.getMatrixAt(0, after);
+  assert.deepEqual([...after.elements], [...before.elements], 'the matrix is copied, never recomposed');
+  assert.equal(moved.visibleInstances, 3);
+  assert.equal(moved.buckets, 2);
 
   const parent = new THREE.Group();
   parent.add(runtime.group);
@@ -407,12 +522,53 @@ test('loads once per prototype, preserves child transforms, and instances each p
   assert.equal(runtime.status.disposed, true);
   assert.equal(runtime.group.parent, null);
   assert.equal(runtime.group.children.length, 0);
-  assert.equal(released.length, 2, 'every loaded GLTF ownership token is released exactly once');
-  assert.equal(disposedGeometries, 2, 'every merged prototype geometry is disposed exactly once');
-  assert.equal(disposedInstancedMeshes, 2, 'every prototype-cell InstancedMesh releases its buffers once');
+  assert.equal(released.length, 6, 'every loaded GLTF ownership token is released exactly once');
+  assert.equal(disposedGeometries, 6, 'every merged (family, LOD) geometry is disposed exactly once');
+  assert.equal(disposedInstancedMeshes, 6, 'every bucket InstancedMesh releases its buffers once');
 });
 
-test('creates prototype-cell batches, chooses LOD per cell, and casts shadows only in near cells when opted in', async () => {
+test('the per-primitive fallback path keeps its decoded textures resident and reports them honestly', async () => {
+  const catalog = normalizeCustomsAuthoredVegetationCatalog(pack());
+  // Pine only, so exactly one family (three LODs) loads — a small, exact fixture to reason about.
+  const placements = [placement({ flatIndex: 0, presentationPosition: [10, 20, 30] })];
+  const textureSize = 32;
+  const textureBytes = textureSize * textureSize * 4;
+  const released = [];
+  const runtime = await createCustomsAuthoredVegetationRuntime({
+    plan: renderPlan(placements),
+    catalog,
+    requireCompleteCatalog: false,
+    cameraWorldPosition: [0, 0, 200],
+    // No `textureArrays`: this is the per-primitive fallback route (materialMode
+    // 'authored-per-primitive'), the one that must NOT release `loadedEntry.value` early because
+    // its own decoded materials are the merged batch's `material` array, referenced directly.
+    loadGlb: async () => fakeGlb({ textureSize }),
+    disposeLoadedGlb(value) { released.push(value); },
+  });
+  assert.equal(runtime.status.materialMode, 'authored-per-primitive');
+  assert.equal(runtime.status.decodedGlbReleasedAfterMerge, false);
+  assert.equal(released.length, 0, 'the fallback path releases nothing while the runtime is active');
+
+  // One 32x32 RGBA8 texture retained per loaded LOD (three LODs, one primitive each), plus each
+  // LOD's own small decoded geometry — the memory a stale `residentBytes` used to go silent about
+  // entirely. Only the texture floor is asserted exactly; geometry byte layout is three.js's own
+  // internal business, not this fix's contract.
+  assert.ok(
+    runtime.status.retainedDecodedGlbBytes >= textureBytes * 3,
+    `expected at least ${textureBytes * 3} retained bytes (3 decoded textures), got ${runtime.status.retainedDecodedGlbBytes}`,
+  );
+  assert.equal(
+    runtime.status.residentBytes,
+    runtime.status.instanceBufferBytes + runtime.status.geometryBytes
+      + runtime.status.textureUploadBytes + runtime.status.retainedDecodedGlbBytes,
+    'residentBytes must be the sum of every component it claims to report, retained bytes included',
+  );
+
+  runtime.dispose();
+  assert.equal(released.length, 3, 'disposing the runtime releases every retained decoded GLTF exactly once');
+});
+
+test('keeps every family+LOD resident, chooses LOD per instance, and casts shadows only at LOD0 when opted in', async () => {
   const catalog = normalizeCustomsAuthoredVegetationCatalog(pack());
   const placements = [
     placement({ flatIndex: 0, presentationPosition: [10, 10, 0] }),
@@ -441,26 +597,36 @@ test('creates prototype-cell batches, chooses LOD per cell, and casts shadows on
     },
     disposeLoadedGlb() {},
   });
-  assert.equal(loads.length, 4, 'only unique asset+LOD combinations are loaded');
-  assert.equal(runtime.group.children.length, 5, 'one primitive batch per prototype+cell');
-  assert.equal(runtime.status.spatialCells, 4);
-  assert.equal(runtime.status.prototypeCells, 5);
+  assert.equal(loads.length, 6, 'every family at every LOD is loaded exactly once');
+  assert.equal(new Set(loads).size, 6, 'no asset+LOD pair is fetched twice');
+  assert.equal(runtime.group.children.length, 6, 'one bucket per (family, LOD)');
   assert.equal(runtime.status.uniquePlacementInstances, 6);
-  assert.equal(runtime.status.prototypeCellPlacementInstances, 6);
-  assert.equal(runtime.status.primitiveInstances, 6);
+  assert.equal(runtime.status.visibleInstances, 6);
+  assert.equal(runtime.status.frustumCulledInstances, 0);
+  // Every placement is drawn exactly once across the live prefixes — the invariant the old
+  // per-cell accounting protected, now protected per bucket.
   assert.equal(runtime.group.children.reduce((sum, mesh) => sum + mesh.count, 0), 6);
-  assert.equal(runtime.status.shadowCastingPrimitiveGroups, 2);
   assert.ok(runtime.group.children.filter((mesh) => mesh.userData.lod === 0).every((mesh) => mesh.castShadow));
   assert.ok(runtime.group.children.filter((mesh) => mesh.userData.lod > 0).every((mesh) => !mesh.castShadow));
-  assert.equal(runtime.requiresReload([0, 0, 0]), false);
-  assert.equal(runtime.requiresReload([800, 0, 0]), true);
+  assert.equal(runtime.status.buckets, 3, 'near pines, far pines, and the near tree');
+  assert.deepEqual(runtime.status.lodVisibleCounts, { 0: 3, 1: 0, 2: 3 });
+
+  // A camera move only ever repacks; the resident geometry set never changes.
+  const far = runtime.update({ cameraWorldPosition: [1200, 0, 0] });
+  assert.equal(loads.length, 6);
+  assert.equal(far.visibleInstances, 6);
+  assert.equal(runtime.group.children.reduce((sum, mesh) => sum + mesh.count, 0), 6);
+  assert.equal(runtime.status.perInstanceLod, true);
+  assert.equal(runtime.status.spatialCellGrid, null);
+  assert.equal(typeof runtime.requiresReload, 'undefined', 'the reload path is gone');
+
   const uniqueGeometries = new Set(runtime.group.children.map((mesh) => mesh.geometry));
   let disposedGeometries = 0;
   for (const geometry of uniqueGeometries) {
     geometry.addEventListener('dispose', () => { disposedGeometries += 1; });
   }
   runtime.dispose();
-  assert.equal(disposedGeometries, uniqueGeometries.size, 'shared asset+LOD geometry disposes once');
+  assert.equal(disposedGeometries, uniqueGeometries.size, 'each (family, LOD) geometry disposes once');
 });
 
 test('reports BLEND without rewriting, admits MASK, and rejects disallowed or unknown alpha modes', async () => {
@@ -478,8 +644,9 @@ test('reports BLEND without rewriting, admits MASK, and rejects disallowed or un
     },
     disposeLoadedGlb() {},
   });
-  assert.equal(blendRuntime.status.alphaContract.primitiveMaterialModes.BLEND, 1);
-  assert.equal(blendRuntime.status.alphaContract.blendMaterials.length, 1);
+  // One primitive per GLB x three resident LODs.
+  assert.equal(blendRuntime.status.alphaContract.primitiveMaterialModes.BLEND, 3);
+  assert.equal(blendRuntime.status.alphaContract.blendMaterials.length, 3);
   assert.equal(blendRuntime.status.alphaContract.warnings.length, 1);
   assert.equal(blendRuntime.status.alphaContract.materialsRewritten, false);
   assert.equal(blendMaterial.transparent, true);
@@ -495,7 +662,7 @@ test('reports BLEND without rewriting, admits MASK, and rejects disallowed or un
     async loadGlb() { return fakeGlb({ alphaModes: ['MASK'] }); },
     disposeLoadedGlb() {},
   });
-  assert.equal(maskRuntime.status.alphaContract.primitiveMaterialModes.MASK, 1);
+  assert.equal(maskRuntime.status.alphaContract.primitiveMaterialModes.MASK, 3);
   assert.equal(maskRuntime.status.alphaContract.warnings.length, 0);
   maskRuntime.dispose();
 
@@ -509,7 +676,7 @@ test('reports BLEND without rewriting, admits MASK, and rejects disallowed or un
     async loadGlb() { return fakeGlb({ alphaModes: ['BLEND'] }); },
     disposeLoadedGlb() { rejectedReleased += 1; },
   }), (error) => error.code === 'ERR_CUSTOMS_VEGETATION_BLEND_REJECTED');
-  assert.equal(rejectedReleased, 1, 'rejected decoded GLTF ownership is released');
+  assert.equal(rejectedReleased, 3, 'every decoded GLTF ownership token is released on rejection');
 
   await assert.rejects(createCustomsAuthoredVegetationRuntime({
     plan: renderPlan([placement({ flatIndex: 0 })]),

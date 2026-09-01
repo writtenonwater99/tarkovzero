@@ -20,6 +20,33 @@ import { compileCustomsLocalTerrainMesh } from './customs-local-terrain-mesh.js'
 import { loadCustomsLocalVegetation } from './customs-local-vegetation.js';
 import { buildCustomsLocalVegetationRenderPlan } from './customs-local-vegetation-render.js';
 import {
+  createCustomsAuthoredVegetationRuntime,
+  normalizeCustomsAuthoredVegetationCatalog,
+} from './customs-authored-vegetation.js';
+import {
+  assertCustomsAuthoredVegetationRouteTotals,
+  routeCustomsAuthoredVegetationRollout,
+} from './customs-authored-vegetation-rollout.js';
+import {
+  loadCustomsVegetationTextureArrays,
+  validateCustomsVegetationTextureArrayIndex,
+} from './customs-vegetation-texture-arrays.js';
+import {
+  VEGETATION_MOUNT_ASSEMBLE_MS,
+  VEGETATION_MOUNT_STALL_MS,
+  VEGETATION_MOUNT_TOTAL_MS,
+  VEGETATION_REPACK_EPSILON_M,
+  decideVegetationRepack,
+  evaluateVegetationMount,
+  vegetationCameraSignature,
+} from './customs-vegetation-mount-policy.js';
+import {
+  EMPTY_RENDER_FRAME_LATCH,
+  describeRenderFrame,
+  latchRenderFrame,
+  sampleRenderFrame,
+} from './render-frame-latch.js';
+import {
   customsTerrainSurfaceCanvas,
   decodeCustomsTerrainControlPng,
 } from './customs-terrain-surface.js';
@@ -64,6 +91,19 @@ const MATERIAL_URLS = {
 const THREE_FIXED_RELIEF = 2;
 const CUSTOMS_EXACT_TERRAIN_DECIMATION = 1;
 const VALID_LOOK = new Set(['realistic', 'vector']);
+/**
+ * Dev-only, loopback-only routes for the independently-authored vegetation pack and its runtime
+ * texture arrays. Both packages live under `.local-candidates/`, OUTSIDE `public/`, so a
+ * production build can neither copy them nor gain the routes that read them — a `fetch` here
+ * simply 404s in `dist/`, which is exactly the fallback path below.
+ */
+const CUSTOMS_AUTHORED_VEGETATION_ROUTE = '/@vegetation-authored/';
+const CUSTOMS_VEGETATION_ARRAY_ROUTE = '/@vegetation-arraytex/';
+const VALID_VEGETATION_REQUEST = new Set(['procedural', 'authored']);
+// A camera nudge smaller than this cannot move any placement across a LOD seam far enough to be
+// worth a full 8,805-instance re-partition, so a slow orbit does not repack every frame. It gates
+// TRANSLATION only — a projection change has no metre-scale equivalent and is never thresholded.
+const AUTHORED_VEGETATION_REPACK_EPSILON_M = VEGETATION_REPACK_EPSILON_M;
 const TACTICAL_PROP_CALLOUTS = Object.freeze([
   Object.freeze({ featureId: 'customs.prop.industrial_rail_yard.red_container_stack', label: 'RED CONTAINER' }),
   Object.freeze({ featureId: 'customs.prop.industrial_rail_yard.locomotive_west', label: 'TRAIN' }),
@@ -1000,7 +1040,12 @@ export async function createView3d(container, mapData, src) {
   authoredRoot.name = 'customs-authored-chunks';
   const dynamicRoot = new THREE.Group();
   dynamicRoot.name = 'customs-live-and-quests';
-  scene.add(worldRoot, authoredRoot, dynamicRoot);
+  // The authored vegetation buckets hang off their own top-level root rather than inside
+  // `worldRoot`, whose `rebuildWorld()` starts with `disposeTree(worldRoot)`: a world rebuild must
+  // not silently destroy 93 buckets it has no way to rebuild.
+  const vegetationRoot = new THREE.Group();
+  vegetationRoot.name = 'customs-authored-vegetation-root';
+  scene.add(worldRoot, authoredRoot, vegetationRoot, dynamicRoot);
   const authoredAbort = new AbortController();
   const authoredGuard = createAsyncAttachGuard((lateScene) => disposeTree(lateScene, { materials: true }));
   const authoredLoaderHost = createCustomsAssetLoaderHost(createThreeLoaderFactory({ renderer }));
@@ -1223,6 +1268,12 @@ export async function createView3d(container, mapData, src) {
   let seatedBuildings = [];
   let surfaceRenderStats = { floors: 0, roofs: 0, underground: 0, stableIds: [] };
   let treeGroup = null, rockGroup = null, propGroup = null, understoryGroup = null, understoryTuftGroup = null;
+  // Which half of the exact vegetation plan the PROCEDURAL proxies draw. It starts as the whole
+  // plan and is narrowed to the router's procedural complement the moment the authored pack
+  // mounts — never before, which is what makes the swap atomic.
+  let proceduralVegetationPlan = exactVegetationPlan;
+  let authoredVegetationRuntime = null;
+  let authoredVegetationArrays = null;
   let undergroundGroup = null, buildingGroup = null, understoryLod = 'overview';
   let understoryRenderStats = {
     polygons: 0, vertices: 0, candidateTufts: 0, tuftInstances: 0, coveredRings: 0,
@@ -1732,114 +1783,146 @@ export async function createView3d(container, mapData, src) {
     worldRoot.add(propGroup);
   }
 
-  function addTreesAndRocks() {
-    treeGroup = new THREE.Group();
-    treeGroup.name = exactVegetationPlan ? 'exact-local-vegetation' : 'trees';
-    if (exactVegetationPlan) {
-      treeGroup.userData = {
-        kind: 'exact-local-vegetation',
-        declaredInstances: exactVegetationPlan.sourceCount,
-        renderedInstances: exactVegetationPlan.renderedCount,
-        classes: { ...exactVegetationPlan.counts },
-        placementAccuracy: 'canonical-game-authored',
-        geometryAccuracy: 'original-procedural-class-proxies',
-      };
-      const add = (spec) => {
-        const mesh = exactVegetationInstancedMesh(spec);
-        if (mesh) treeGroup.add(mesh);
-      };
-      const pine = exactVegetationPlan.groups.pine;
-      const deciduous = exactVegetationPlan.groups.deciduous;
-      const shrubs = exactVegetationPlan.groups.shrub;
-      const stumps = exactVegetationPlan.groups.stump;
-      const groundPlants = exactVegetationPlan.groups['ground-plant'];
+  /**
+   * Build the procedural proxy meshes for one exact vegetation plan.
+   *
+   * Takes the plan as an argument rather than reading `exactVegetationPlan`, because once the
+   * authored pack mounts this runs again over the ROUTER'S PROCEDURAL HALF — the complement of
+   * whatever the authored pack admitted. With all 31 families admitted that half is empty and
+   * every one of these eight batches disappears; with a partial pack it is a real, smaller set.
+   *
+   * Each geometry is constructed lazily, so an empty class costs no orphaned buffer.
+   */
+  function addExactVegetationMeshes(vegPlan, group) {
+    const add = (spec) => {
+      const placements = spec.placements ?? [];
+      if (placements.length === 0) return;
+      const mesh = exactVegetationInstancedMesh({ ...spec, placements, geometry: spec.geometry() });
+      if (mesh) group.add(mesh);
+    };
+    const pine = vegPlan.groups.pine ?? [];
+    const deciduous = vegPlan.groups.deciduous ?? [];
+    const shrubs = vegPlan.groups.shrub ?? [];
+    const stumps = vegPlan.groups.stump ?? [];
+    const groundPlants = vegPlan.groups['ground-plant'] ?? [];
 
-      const pineTrunkGeometry = new THREE.CylinderGeometry(1, 1, 1, 7);
-      pineTrunkGeometry.rotateX(Math.PI / 2);
+    add({
+      geometry: () => {
+        const geometry = new THREE.CylinderGeometry(1, 1, 1, 7);
+        geometry.rotateX(Math.PI / 2);
+        return geometry;
+      },
+      material: materials.trunk, placements: pine,
+      name: 'exact-pine-trunks', component: 'pine-trunk', castShadow: true,
+      transform: (dummy, placement) => {
+        const { trunkHeight, trunkRadius } = placement.dimensions;
+        dummy.position.z += trunkHeight / 2;
+        dummy.scale.set(trunkRadius, trunkRadius, trunkHeight);
+      },
+    });
+    for (const [layer, radiusFactor, heightFactor, centerFactor] of [
+      ['lower', 0.5, 0.74, 0.51],
+      ['upper', 0.34, 0.54, 0.76],
+    ]) {
       add({
-        geometry: pineTrunkGeometry, material: materials.trunk, placements: pine,
-        name: 'exact-pine-trunks', component: 'pine-trunk', castShadow: true,
-        transform: (dummy, placement) => {
-          const { trunkHeight, trunkRadius } = placement.dimensions;
-          dummy.position.z += trunkHeight / 2;
-          dummy.scale.set(trunkRadius, trunkRadius, trunkHeight);
+        geometry: () => {
+          const geometry = new THREE.ConeGeometry(1, 1, 8);
+          geometry.rotateX(Math.PI / 2);
+          return geometry;
         },
-      });
-      for (const [layer, radiusFactor, heightFactor, centerFactor] of [
-        ['lower', 0.5, 0.74, 0.51],
-        ['upper', 0.34, 0.54, 0.76],
-      ]) {
-        const crownGeometry = new THREE.ConeGeometry(1, 1, 8);
-        crownGeometry.rotateX(Math.PI / 2);
-        add({
-          geometry: crownGeometry, material: materials.pineFoliage, placements: pine,
-          name: `exact-pine-crowns-${layer}`, component: `pine-crown-${layer}`,
-          castShadow: layer === 'lower',
-          transform: (dummy, placement) => {
-            const { height, width, trunkHeight } = placement.dimensions;
-            const crownHeight = Math.max(0.2, height - trunkHeight);
-            dummy.position.z += trunkHeight + crownHeight * centerFactor;
-            dummy.scale.set(width * radiusFactor, width * radiusFactor, crownHeight * heightFactor);
-          },
-        });
-      }
-
-      const deciduousTrunkGeometry = new THREE.CylinderGeometry(1, 0.82, 1, 7);
-      deciduousTrunkGeometry.rotateX(Math.PI / 2);
-      add({
-        geometry: deciduousTrunkGeometry, material: materials.trunk, placements: deciduous,
-        name: 'exact-deciduous-trunks', component: 'deciduous-trunk', castShadow: true,
-        transform: (dummy, placement) => {
-          const { trunkHeight, trunkRadius } = placement.dimensions;
-          dummy.position.z += trunkHeight / 2;
-          dummy.scale.set(trunkRadius, trunkRadius, trunkHeight);
-        },
-      });
-      add({
-        geometry: new THREE.DodecahedronGeometry(1, 0),
-        material: materials.deciduousFoliage,
-        placements: deciduous,
-        name: 'exact-deciduous-crowns', component: 'deciduous-crown', castShadow: true,
+        material: materials.pineFoliage, placements: pine,
+        name: `exact-pine-crowns-${layer}`, component: `pine-crown-${layer}`,
+        castShadow: layer === 'lower',
         transform: (dummy, placement) => {
           const { height, width, trunkHeight } = placement.dimensions;
           const crownHeight = Math.max(0.2, height - trunkHeight);
-          dummy.position.z += trunkHeight + crownHeight * 0.48;
-          dummy.scale.set(width * 0.5, width * 0.44, crownHeight * 0.54);
+          dummy.position.z += trunkHeight + crownHeight * centerFactor;
+          dummy.scale.set(width * radiusFactor, width * radiusFactor, crownHeight * heightFactor);
         },
       });
-      add({
-        geometry: new THREE.DodecahedronGeometry(1, 0),
-        material: materials.shrubFoliage,
-        placements: shrubs,
-        name: 'exact-shrubs', component: 'shrub',
-        transform: (dummy, placement) => {
-          const { height, width } = placement.dimensions;
-          dummy.position.z += height * 0.43;
-          dummy.scale.set(width * 0.5, width * 0.43, height * 0.52);
-        },
-      });
-      const stumpGeometry = new THREE.CylinderGeometry(1, 0.84, 1, 7);
-      stumpGeometry.rotateX(Math.PI / 2);
-      add({
-        geometry: stumpGeometry, material: materials.trunk, placements: stumps,
-        name: 'exact-stumps', component: 'stump', castShadow: true,
-        transform: (dummy, placement) => {
-          const { height, trunkRadius } = placement.dimensions;
-          dummy.position.z += height / 2;
-          dummy.scale.set(trunkRadius, trunkRadius, height);
-        },
-      });
-      add({
-        geometry: grassTuftGeometry(2, true),
-        material: materials.groundPlant,
-        placements: groundPlants,
-        name: 'exact-ground-plants', component: 'ground-plant',
-        transform: (dummy, placement) => {
-          const { height, width } = placement.dimensions;
-          dummy.position.z += 0.025;
-          dummy.scale.set(width, width, height);
-        },
-      });
+    }
+
+    add({
+      geometry: () => {
+        const geometry = new THREE.CylinderGeometry(1, 0.82, 1, 7);
+        geometry.rotateX(Math.PI / 2);
+        return geometry;
+      },
+      material: materials.trunk, placements: deciduous,
+      name: 'exact-deciduous-trunks', component: 'deciduous-trunk', castShadow: true,
+      transform: (dummy, placement) => {
+        const { trunkHeight, trunkRadius } = placement.dimensions;
+        dummy.position.z += trunkHeight / 2;
+        dummy.scale.set(trunkRadius, trunkRadius, trunkHeight);
+      },
+    });
+    add({
+      geometry: () => new THREE.DodecahedronGeometry(1, 0),
+      material: materials.deciduousFoliage,
+      placements: deciduous,
+      name: 'exact-deciduous-crowns', component: 'deciduous-crown', castShadow: true,
+      transform: (dummy, placement) => {
+        const { height, width, trunkHeight } = placement.dimensions;
+        const crownHeight = Math.max(0.2, height - trunkHeight);
+        dummy.position.z += trunkHeight + crownHeight * 0.48;
+        dummy.scale.set(width * 0.5, width * 0.44, crownHeight * 0.54);
+      },
+    });
+    add({
+      geometry: () => new THREE.DodecahedronGeometry(1, 0),
+      material: materials.shrubFoliage,
+      placements: shrubs,
+      name: 'exact-shrubs', component: 'shrub',
+      transform: (dummy, placement) => {
+        const { height, width } = placement.dimensions;
+        dummy.position.z += height * 0.43;
+        dummy.scale.set(width * 0.5, width * 0.43, height * 0.52);
+      },
+    });
+    add({
+      geometry: () => {
+        const geometry = new THREE.CylinderGeometry(1, 0.84, 1, 7);
+        geometry.rotateX(Math.PI / 2);
+        return geometry;
+      },
+      material: materials.trunk, placements: stumps,
+      name: 'exact-stumps', component: 'stump', castShadow: true,
+      transform: (dummy, placement) => {
+        const { height, trunkRadius } = placement.dimensions;
+        dummy.position.z += height / 2;
+        dummy.scale.set(trunkRadius, trunkRadius, height);
+      },
+    });
+    add({
+      geometry: () => grassTuftGeometry(2, true),
+      material: materials.groundPlant,
+      placements: groundPlants,
+      name: 'exact-ground-plants', component: 'ground-plant',
+      transform: (dummy, placement) => {
+        const { height, width } = placement.dimensions;
+        dummy.position.z += 0.025;
+        dummy.scale.set(width, width, height);
+      },
+    });
+  }
+
+  function exactVegetationGroupUserData(vegPlan) {
+    return {
+      kind: 'exact-local-vegetation',
+      declaredInstances: vegPlan.sourceCount,
+      renderedInstances: vegPlan.renderedCount,
+      classes: { ...vegPlan.counts },
+      placementAccuracy: 'canonical-game-authored',
+      geometryAccuracy: 'original-procedural-class-proxies',
+    };
+  }
+
+  function addTreesAndRocks() {
+    treeGroup = new THREE.Group();
+    treeGroup.name = proceduralVegetationPlan ? 'exact-local-vegetation' : 'trees';
+    if (proceduralVegetationPlan) {
+      treeGroup.userData = exactVegetationGroupUserData(proceduralVegetationPlan);
+      addExactVegetationMeshes(proceduralVegetationPlan, treeGroup);
     } else {
       const trees = data.trees || [];
       const trunkGeometry = new THREE.CylinderGeometry(1, 1, 1, 6);
@@ -2040,6 +2123,7 @@ export async function createView3d(container, mapData, src) {
 
   function applyNature() {
     if (treeGroup) treeGroup.visible = nature.trees !== false;
+    vegetationRoot.visible = nature.trees !== false;
     if (understoryGroup) understoryGroup.visible = nature.trees !== false;
     if (understoryTuftGroup) understoryTuftGroup.visible = nature.trees !== false && fx.detail !== false;
     if (rockGroup) rockGroup.visible = nature.rocks !== false;
@@ -2285,7 +2369,504 @@ export async function createView3d(container, mapData, src) {
     // OrbitControls' target is the real focus used by the user, in runtime [-x,-z,y]. The
     // streamer's planner consumes canonical EFT x/z, so never substitute the fixed proof scope.
     void authoredStreamer.update(authoredCameraFromWorldTarget(controls.target));
+    scheduleAuthoredVegetationRepack();
   };
+
+  // ── Authored vegetation: the hybrid router and its atomic mount ─────────────────────────────
+  const vegetationRequest = (() => {
+    const requested = new URLSearchParams(location.search).get('vegetation');
+    return VALID_VEGETATION_REQUEST.has(requested) ? requested : null;
+  })();
+  const vegetationStatus = {
+    mode: 'procedural',
+    request: vegetationRequest,
+    reason: exactVegetationPlan ? 'pending' : 'no-exact-vegetation-plan',
+    routes: {
+      pack: CUSTOMS_AUTHORED_VEGETATION_ROUTE,
+      arrays: CUSTOMS_VEGETATION_ARRAY_ROUTE,
+    },
+    totals: null,
+    arrayTextures: null,
+    arrayTextureError: null,
+    // The full diagnosis, not just a code: which URL, why, and what it costs. Null until
+    // something actually fails, so a truthy value is always a real defect.
+    arrayTextureFailure: null,
+    runtime: null,
+    // Filled in while the pack loads (see `mountAuthoredVegetation`) so a mount in flight can be
+    // told apart from a mount that is wedged, and so the repack that corrects the mount-time
+    // partition is visible rather than assumed.
+    mount: null,
+    lastRepack: null,
+  };
+  status.authoredVegetation = vegetationStatus;
+
+  const vegetationFrustum = new THREE.Frustum();
+  const vegetationProjection = new THREE.Matrix4();
+  function cameraFrustumForVegetation() {
+    camera.updateMatrixWorld();
+    vegetationProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    vegetationFrustum.setFromProjectionMatrix(vegetationProjection);
+    return vegetationFrustum;
+  }
+
+  let vegetationRepackFrame = 0;
+  /** Camera signature — position AND projection — the live partition was built for. */
+  let vegetationPackedFor = null;
+  /**
+   * The signature of the camera as it stands right now.
+   *
+   * `camera.projectionMatrix` is read, not `aspect`/`fov` separately: the frustum the partition is
+   * cut against is derived from that matrix and nothing else, so a change there is exactly the
+   * question "could a different set of placements be visible now".
+   */
+  function liveVegetationCameraSignature() {
+    camera.updateMatrixWorld();
+    return vegetationCameraSignature(camera.position.toArray(), camera.projectionMatrix.elements);
+  }
+  function repackAuthoredVegetation(reason = 'requested') {
+    if (!authoredVegetationRuntime?.active) return null;
+    const signature = liveVegetationCameraSignature();
+    authoredVegetationRuntime.update({
+      cameraWorldPosition: [...signature.position],
+      frustum: cameraFrustumForVegetation(),
+    });
+    vegetationPackedFor = signature;
+    vegetationStatus.lastRepack = {
+      reason,
+      atMs: Math.round(performance.now()),
+      cameraWorldPosition: [...signature.position],
+    };
+    invalidateRender();
+    return vegetationStatus.lastRepack;
+  }
+  function scheduleAuthoredVegetationRepack() {
+    if (!authoredVegetationRuntime?.active || vegetationRepackFrame) return;
+    // A viewport resize can widen the frustum without moving the camera one metre — `cameraPose()`
+    // derives distance from clientHeight and zoom alone — so the projection is part of the gate,
+    // not just the position. Measured before this check existed: widening 700 -> 2400 px left
+    // 2,522 of 7,108 placements frustum-rejected against a frustum that no longer existed.
+    const decision = decideVegetationRepack({
+      next: liveVegetationCameraSignature(),
+      last: vegetationPackedFor,
+      epsilonMeters: AUTHORED_VEGETATION_REPACK_EPSILON_M,
+    });
+    if (!decision.repack) return;
+    vegetationRepackFrame = requestAnimationFrame(() => {
+      vegetationRepackFrame = 0;
+      repackAuthoredVegetation(decision.reason);
+    });
+  }
+
+  /**
+   * Fetch one of the dev routes' JSON documents, refusing anything that is not JSON.
+   *
+   * `response.ok` is NOT enough, and assuming it was is what let an unregistered route ship. A
+   * `/@…` prefix with no Vite plugin behind it falls through to the SPA fallback, which answers
+   * **HTTP 200 with index.html**. `!response.ok` never fires, `response.json()` then throws
+   * `Unexpected token '<'` somewhere far from the cause, and a caller that treats a parse failure
+   * as "this artifact is unavailable" degrades silently instead of reporting a missing server.
+   *
+   * The content type is the one thing that separates the two: both dev routes set
+   * `application/json`, and the SPA fallback sets `text/html`. Checking it turns a missing route
+   * into a named, loud failure at the fetch, which is where it is diagnosable.
+   */
+  async function fetchLocalVegetationJson(url, { signal = null } = {}) {
+    const response = await fetch(url, { cache: 'no-store', credentials: 'same-origin', signal });
+    if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
+    const contentType = String(response.headers?.get?.('content-type') ?? '').trim();
+    if (!/^application\/json\b/i.test(contentType)) {
+      const error = new Error(
+        `${url} answered HTTP ${response.status} with content-type "${contentType || '(none)'}", not JSON`
+        + ' — the dev route serving it is almost certainly not registered in vite.config.js, and Vite'
+        + ' answered the SPA fallback instead',
+      );
+      error.code = 'ERR_LOCAL_ROUTE_NOT_JSON';
+      throw error;
+    }
+    return response.json();
+  }
+
+  /**
+   * Deadlines for one mount.
+   *
+   * Overridable from the query string for one reason: a deadline whose failure path nobody has ever
+   * seen fire is a deadline nobody knows works, and the only other way to reach it is to wait out a
+   * real 90-second stall.
+   */
+  const vegetationMountDeadlines = (() => {
+    const params = new URLSearchParams(location.search);
+    const ms = (name, fallback) => {
+      const raw = Number(params.get(name));
+      return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+    };
+    return Object.freeze({
+      stallMs: ms('vegetationStallMs', VEGETATION_MOUNT_STALL_MS),
+      assembleMs: ms('vegetationAssembleMs', VEGETATION_MOUNT_ASSEMBLE_MS),
+      totalMs: ms('vegetationDeadlineMs', VEGETATION_MOUNT_TOTAL_MS),
+    });
+  })();
+
+  /**
+   * Load the authored pack and swap it in as ONE step, or change nothing at all.
+   *
+   * Nothing here touches the scene until `createCustomsAuthoredVegetationRuntime` has resolved,
+   * which it only does when every family at every LOD has decoded, merged and seated. A 404 on the
+   * dev route (a production build, or a machine without the pack), a rejected alpha mode, a broken
+   * receipt or an aborted view all leave the procedural vegetation exactly as it is — there is no
+   * intermediate state in which half the forest is authored.
+   *
+   * The load takes 60-85 s at the default pose and minutes under contention, and for that whole
+   * window it used to publish exactly one word — `pending` — with no count, no deadline and no way
+   * to tell a slow loader from a dead one. `vegetationStatus.mount` now carries the count and the
+   * clock, and a missed deadline aborts the mount and reports the failure instead of waiting
+   * forever on a promise that will not settle.
+   */
+  async function mountAuthoredVegetation() {
+    if (!exactVegetationPlan) return;
+    if (vegetationRequest === 'procedural') {
+      vegetationStatus.reason = 'disabled-by-query';
+      return;
+    }
+    // A mount of its own, so a deadline can cancel THIS load without aborting the authored-asset
+    // streamer that shares `authoredAbort`. Aborting the view still cancels the mount, one way.
+    const mountAbort = new AbortController();
+    const propagateAbort = () => mountAbort.abort(authoredAbort.signal.reason);
+    if (authoredAbort.signal.aborted) propagateAbort();
+    else authoredAbort.signal.addEventListener('abort', propagateAbort, { once: true });
+
+    const progress = {
+      phase: 'loading',
+      step: 'pack-index',
+      // `expected` is 3 GLBs per admitted family and is unknown until the router has run; until
+      // then the stall and total deadlines still apply, only the fraction is withheld.
+      expected: null,
+      requested: 0,
+      loaded: 0,
+      fraction: null,
+      startedMs: Math.round(performance.now()),
+      elapsedMs: 0,
+      sinceProgressMs: 0,
+      lastProgressMs: null,
+      deadlines: vegetationMountDeadlines,
+      timedOut: null,
+      cameraAtStart: camera.position.toArray(),
+      cameraMovedDuringLoadM: null,
+    };
+    vegetationStatus.mount = progress;
+    vegetationStatus.reason = 'loading-pack-index';
+    let timeoutFailure = null;
+    const watchdog = setInterval(() => {
+      const verdict = evaluateVegetationMount({
+        nowMs: performance.now(),
+        startedMs: progress.startedMs,
+        lastProgressMs: progress.lastProgressMs,
+        loaded: progress.loaded,
+        expected: progress.expected,
+        ...vegetationMountDeadlines,
+      });
+      progress.phase = verdict.phase;
+      progress.fraction = verdict.fraction;
+      progress.elapsedMs = Math.round(verdict.elapsedMs);
+      progress.sinceProgressMs = Math.round(verdict.sinceProgressMs);
+      vegetationStatus.reason = verdict.phase === 'assembling' ? 'assembling' : `loading-${progress.step}`;
+      if (!verdict.expired || timeoutFailure) return;
+      // Report from HERE, not from the catch below. A mount can miss its deadline because a fetch
+      // never settles, in which case the promise this watchdog guards never rejects and the catch
+      // never runs; the abort is a courtesy to the loader, not the thing that publishes the
+      // failure. The interval stops with it, so nothing overwrites this reason on the next tick.
+      clearInterval(watchdog);
+      progress.phase = 'timed-out';
+      timeoutFailure = {
+        reason: verdict.reason,
+        loaded: progress.loaded,
+        expected: progress.expected,
+        elapsedMs: progress.elapsedMs,
+        sinceProgressMs: progress.sinceProgressMs,
+        step: progress.step,
+      };
+      progress.timedOut = timeoutFailure;
+      const error = new Error(
+        `authored vegetation mount ${verdict.reason}: ${progress.loaded}/${progress.expected ?? '?'} GLBs`
+        + ` after ${progress.elapsedMs} ms, ${progress.sinceProgressMs} ms since the last one`,
+      );
+      error.code = 'ERR_CUSTOMS_VEGETATION_MOUNT_TIMEOUT';
+      vegetationStatus.mode = 'procedural';
+      vegetationStatus.reason = verdict.reason;
+      vegetationStatus.error = error.message;
+      console.warn(`[three-poc] ${error.message} — procedural vegetation is retained`);
+      mountAbort.abort(error);
+    }, 1000);
+
+    let arrays = null;
+    let runtime = null;
+    try {
+      const packIndex = await fetchLocalVegetationJson(
+        `${CUSTOMS_AUTHORED_VEGETATION_ROUTE}pack-index.json`,
+        { signal: mountAbort.signal },
+      );
+      const catalog = normalizeCustomsAuthoredVegetationCatalog(packIndex);
+      // Founder decision: admit ALL 31 authored families, not a subset. The router still runs —
+      // it is what proves the two halves are complementary and total, and it is the seam a
+      // partial pack would flow through unchanged.
+      const route = routeCustomsAuthoredVegetationRollout({
+        plan: exactVegetationPlan,
+        catalog,
+        admittedAssetIds: catalog.assets.map((entry) => entry.assetId),
+      });
+      const totals = assertCustomsAuthoredVegetationRouteTotals(route);
+      if (totals.authored === 0) throw new Error('authored vegetation admitted no placements');
+      // Every admitted family is resident at all three LODs from the first build, so this is the
+      // exact number of GLBs the runtime will request — the denominator of the progress count.
+      progress.expected = route.authored.assetIds.reduce(
+        (sum, assetId) => sum + (catalog.assetsById[assetId]?.lods?.length ?? 0),
+        0,
+      );
+      progress.step = 'texture-arrays';
+
+      // The texture arrays collapse the pack's 199 materials into one per LOD tier. They are an
+      // optimisation, not a correctness requirement: without them the pack still batches per
+      // (family, LOD), just with its own per-primitive materials, so their absence degrades the
+      // draw-call count and is reported — it does not abandon the swap.
+      //
+      // "Reported" is load-bearing and used not to be. This catch is a DEGRADATION, not a
+      // failure: the mount continues, and for one release the only trace it left was a string on
+      // an object nothing read, so a 199 -> 1 material collapse that never ran looked exactly like
+      // one that did. Every path out of here now names the URL and the reason, warns on the
+      // console, and lands in `renderStats().vegetation.warnings` where it is visible without one.
+      const arrayIndexUrl = `${CUSTOMS_VEGETATION_ARRAY_ROUTE}veg-layers.json`;
+      try {
+        const arrayIndex = validateCustomsVegetationTextureArrayIndex(
+          await fetchLocalVegetationJson(arrayIndexUrl, { signal: mountAbort.signal }),
+        );
+        arrays = await loadCustomsVegetationTextureArrays({
+          index: arrayIndex,
+          baseUrl: CUSTOMS_VEGETATION_ARRAY_ROUTE,
+          signal: mountAbort.signal,
+        });
+        vegetationStatus.arrayTextures = { ...arrays.stats };
+        vegetationStatus.arrayTextureError = null;
+        vegetationStatus.arrayTextureFailure = null;
+      } catch (error) {
+        const reason = error?.code ?? error?.name ?? 'unavailable';
+        vegetationStatus.arrayTextureError = reason;
+        vegetationStatus.arrayTextureFailure = {
+          url: arrayIndexUrl,
+          route: CUSTOMS_VEGETATION_ARRAY_ROUTE,
+          reason,
+          message: String(error?.message ?? error),
+          consequence:
+            'materialMode falls back to authored-per-primitive; the 199 -> 3 material collapse did not run',
+        };
+        console.warn(
+          `[three-poc] vegetation texture arrays did NOT load from ${arrayIndexUrl} (${reason}).`
+          + ' The authored pack is drawing with its own per-primitive materials, so the draw-call'
+          + ' count is the 199-material ceiling, not the 93-bucket floor.',
+          error,
+        );
+      }
+
+      progress.step = 'assets';
+      runtime = await createCustomsAuthoredVegetationRuntime({
+        plan: route.authored,
+        catalog,
+        baseUrl: CUSTOMS_AUTHORED_VEGETATION_ROUTE,
+        cameraWorldPosition: camera.position.toArray(),
+        frustum: cameraFrustumForVegetation(),
+        textureArrays: arrays,
+        signal: mountAbort.signal,
+        loadGlb: async (url, { request, signal: requestSignal }) => {
+          progress.requested += 1;
+          const { gltf } = await authoredLoaderHost.acquire();
+          const value = await loadVerifiedCustomsGlb({
+            url,
+            request,
+            signal: requestSignal,
+            parse: (bytes, gltfBaseUrl) => gltf.parseAsync(bytes, gltfBaseUrl),
+          });
+          // The only progress signal that exists: one verified, decoded GLB. Counted AFTER the
+          // parse, so a loader that opens 93 requests and finishes none reads as zero progress
+          // rather than as a mount that is nearly done.
+          progress.loaded += 1;
+          progress.lastProgressMs = performance.now();
+          return value;
+        },
+      });
+
+      // Single swap. Everything above this line is reversible by doing nothing.
+      authoredVegetationRuntime = runtime;
+      authoredVegetationArrays = arrays;
+      vegetationRoot.add(runtime.group);
+      rebuildProceduralVegetation(route.procedural);
+      vegetationStatus.mode = 'authored';
+      vegetationStatus.reason = null;
+      vegetationStatus.totals = totals;
+      // The partition inside `runtime` was cut against the camera as it stood when the load
+      // STARTED — 60-85 s ago at the default pose, longer under contention — and this line used to
+      // record the POST-load camera as the pose it had been packed for. That is the exact
+      // falsehood the epsilon gate then believed: the first thing on screen after the swap was a
+      // forest partitioned for a camera that had moved, and no repack was ever scheduled to fix
+      // it. `vegetationPackedFor` stays null until a repack against the LIVE camera has run, and
+      // this is that repack.
+      progress.cameraMovedDuringLoadM = Math.hypot(
+        camera.position.x - progress.cameraAtStart[0],
+        camera.position.y - progress.cameraAtStart[1],
+        camera.position.z - progress.cameraAtStart[2],
+      );
+      repackAuthoredVegetation('mount');
+      applyNature();
+      invalidateRender(2);
+    } catch (error) {
+      runtime?.dispose?.();
+      arrays?.dispose?.();
+      vegetationStatus.mode = 'procedural';
+      // A deadline that already fired owns the reason. The error that arrives here is the abort it
+      // raised, and reporting `AbortError` over it would hide the diagnosis in the noise of every
+      // other cancellation.
+      vegetationStatus.reason = timeoutFailure?.reason
+        ?? error?.code ?? error?.name ?? 'authored-vegetation-unavailable';
+      vegetationStatus.error = String(error?.message ?? error);
+      if (vegetationRequest === 'authored') {
+        console.warn('[three-poc] authored vegetation was requested but did not load; procedural vegetation is retained', error);
+      } else {
+        console.info('[three-poc] authored vegetation unavailable; procedural vegetation is retained', error);
+      }
+    } finally {
+      clearInterval(watchdog);
+      authoredAbort.signal.removeEventListener('abort', propagateAbort);
+      const settled = evaluateVegetationMount({
+        nowMs: performance.now(),
+        startedMs: progress.startedMs,
+        lastProgressMs: progress.lastProgressMs,
+        loaded: progress.loaded,
+        expected: progress.expected,
+        settled: true,
+        ...vegetationMountDeadlines,
+      });
+      progress.elapsedMs = Math.round(settled.elapsedMs);
+      progress.sinceProgressMs = Math.round(settled.sinceProgressMs);
+      progress.fraction = settled.fraction;
+      progress.phase = timeoutFailure ? 'timed-out' : (vegetationStatus.mode === 'authored' ? 'mounted' : 'failed');
+    }
+  }
+
+  /** Retire the procedural proxies the authored pack has taken over, and only those. */
+  function rebuildProceduralVegetation(nextPlan) {
+    proceduralVegetationPlan = nextPlan;
+    if (!treeGroup) return;
+    for (const mesh of [...treeGroup.children]) {
+      if (mesh.userData?.kind !== 'exact-local-vegetation') continue;
+      mesh.removeFromParent();
+      // The proxy geometries are created per batch here and owned by this group. The materials
+      // are the shared `materials.*` set and must survive.
+      mesh.geometry?.dispose?.();
+      mesh.dispose?.();
+    }
+    treeGroup.userData = exactVegetationGroupUserData(nextPlan);
+    addExactVegetationMeshes(nextPlan, treeGroup);
+    applyFloor();
+    invalidateRender();
+  }
+
+  function authoredVegetationRenderStats() {
+    const runtime = authoredVegetationRuntime?.active ? authoredVegetationRuntime.status : null;
+    const proceduralBatches = treeGroup
+      ? treeGroup.children.filter((mesh) => mesh.userData?.kind === 'exact-local-vegetation').length
+      : 0;
+    const proceduralInstances = treeGroup
+      ? treeGroup.children.reduce((sum, mesh) => (
+        mesh.userData?.kind === 'exact-local-vegetation' ? sum + (mesh.count ?? 0) : sum
+      ), 0)
+      : 0;
+    return {
+      mode: vegetationStatus.mode,
+      request: vegetationStatus.request,
+      reason: vegetationStatus.reason,
+      // What the mount is doing right now, with a count and a clock: `loading` with 41/93 after
+      // 38 s is a slow route, `loading` with 41/93 and 90 s since the last file is a wedged one,
+      // and `timed-out` is the deadline having said so rather than a promise nobody can see.
+      mount: vegetationStatus.mount && { ...vegetationStatus.mount },
+      // The partition on screen is only correct for the camera it was cut against. This is that
+      // camera, and the reason the last cut was made.
+      packedFor: vegetationPackedFor && { position: [...vegetationPackedFor.position] },
+      lastRepack: vegetationStatus.lastRepack && { ...vegetationStatus.lastRepack },
+      source: {
+        declaredInstances: exactVegetationPlan?.sourceCount ?? null,
+        renderedInstances: exactVegetationPlan?.renderedCount ?? null,
+        culledOutsideScope: exactVegetationPlan?.culledCount ?? null,
+      },
+      routing: vegetationStatus.totals,
+      authored: runtime && {
+        families: runtime.loadedAssets,
+        buckets: runtime.instancedMeshes,
+        bucketCeiling: runtime.bucketCeiling,
+        liveBuckets: runtime.buckets,
+        drawCalls: runtime.drawCalls,
+        materialMode: runtime.materialMode,
+        sharedMaterials: runtime.sharedMaterials,
+        visibleInstances: runtime.visibleInstances,
+        frustumCulledInstances: runtime.frustumCulledInstances,
+        lodVisibleCounts: runtime.lodVisibleCounts,
+        estimatedRenderedTriangles: runtime.estimatedRenderedTriangles,
+        instanceBufferBytes: runtime.instanceBufferBytes,
+        residentBytes: runtime.residentBytes,
+        lastRepackMs: runtime.lastRepackMs,
+        alphaModes: runtime.alphaContract.primitiveMaterialModes,
+      },
+      procedural: {
+        batches: proceduralBatches,
+        // Placements the procedural half owns, and the InstancedMesh instances it opens to draw
+        // them. They are NOT the same number: a pine proxy is a trunk plus two crown cones, so
+        // 8 batches carry ~1.6 instances per placement. Only `placements` belongs in the
+        // conservation check below.
+        placements: proceduralVegetationPlan?.renderedCount ?? 0,
+        proxyInstances: proceduralInstances,
+      },
+      // The one number the whole hybrid rests on: nothing lost, nothing duplicated. Authored
+      // (drawn + frustum-rejected) + procedural + out-of-scope === the declared source count.
+      accountedPlacements: (runtime?.visibleInstances ?? 0)
+        + (runtime?.frustumCulledInstances ?? 0)
+        + (proceduralVegetationPlan?.renderedCount ?? 0)
+        + (exactVegetationPlan?.culledCount ?? 0),
+      arrayTextures: vegetationStatus.arrayTextures,
+      arrayTextureError: vegetationStatus.arrayTextureError,
+      arrayTextureFailure: vegetationStatus.arrayTextureFailure,
+      // Degradations that are otherwise invisible in a healthy-looking status object. An empty
+      // array is the assertion "nothing quietly fell back"; anything in it is a defect with a
+      // named cause, and it is the first thing `renderStats()` should be read for.
+      warnings: vegetationWarnings(runtime),
+    };
+  }
+
+  /**
+   * Collect every way the vegetation can be RUNNING and WRONG at the same time.
+   *
+   * All three of these used to be silent. The array route answering the SPA fallback left
+   * `materialMode: 'authored-per-primitive'` and a healthy `mode: 'authored'` side by side, and
+   * nothing in the status object said the two disagreed.
+   */
+  function vegetationWarnings(runtime) {
+    const warnings = [];
+    const failure = vegetationStatus.arrayTextureFailure;
+    if (failure) {
+      warnings.push(
+        `texture arrays unavailable (${failure.reason}) from ${failure.url}: ${failure.consequence}`,
+      );
+    }
+    if (runtime && runtime.materialMode !== 'shared-array-texture') {
+      warnings.push(
+        `materialMode is "${runtime.materialMode}", not "shared-array-texture": the pack is drawing`
+        + ` ${runtime.drawCalls} calls for ${runtime.liveBuckets} live buckets instead of one per bucket`,
+      );
+    }
+    if (runtime && vegetationStatus.arrayTextures && runtime.materialMode === 'shared-array-texture'
+      && runtime.drawCalls !== runtime.liveBuckets) {
+      warnings.push(
+        `drawCalls ${runtime.drawCalls} != liveBuckets ${runtime.liveBuckets} under the shared array`
+        + ' material, which should collapse every bucket to exactly one call',
+      );
+    }
+    return warnings;
+  }
 
   const groundExtent = (() => {
     const xs = data.limit.map((p) => p[0]), zs = data.limit.map((p) => p[1]);
@@ -2350,6 +2931,9 @@ export async function createView3d(container, mapData, src) {
     });
   });
   applyView(viewState);
+  // Started after the camera is seated so the first partition uses the real orbit pose, and never
+  // awaited: the map is fully interactive on procedural vegetation while the pack loads.
+  void mountAuthoredVegetation();
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -2375,6 +2959,16 @@ export async function createView3d(container, mapData, src) {
   });
 
   let frames = 0, fps = null, fpsWindowAt = performance.now(), stopped = false;
+  /**
+   * The last frame this renderer actually submitted.
+   *
+   * `renderer.info` cannot be read from `renderStats()` directly: three's WebGPU `Animation` loop
+   * calls `info.reset()` on every rAF tick whether or not anything rendered, and this app renders
+   * on demand, so an idle frame reports 0 draw calls and 0 triangles under a fully drawn scene.
+   * Sampling immediately after `render()` — which is synchronous once the backend is initialized —
+   * is the point in the frame where the numbers are true.
+   */
+  let renderFrameLatch = EMPTY_RENDER_FRAME_LATCH;
   function animate() {
     if (stopped) return;
     requestAnimationFrame(animate);
@@ -2392,6 +2986,7 @@ export async function createView3d(container, mapData, src) {
     updateUnderstoryLod();
     updateOverlayPositions();
     renderer.render(scene, camera);
+    renderFrameLatch = latchRenderFrame(renderFrameLatch, sampleRenderFrame(renderer.info, performance.now()));
     if (settleFrames > 0) {
       settleFrames--;
       renderRequested = true;
@@ -2442,11 +3037,23 @@ export async function createView3d(container, mapData, src) {
     },
     renderStats: () => ({
       map: 'customs', renderer: 'three', backend: status.backend, scope: status.scope, look, relief, fx: { ...fx }, fps,
-      drawCalls: renderer.info?.render?.calls ?? null, triangles: renderer.info?.render?.triangles ?? null,
+      // `info.render.calls` is CUMULATIVE `renderer.render()` invocations since page load on the
+      // WebGPU renderer (Renderer.js), not per-frame draw calls; the per-frame counter is
+      // `info.render.drawCalls` (Info.js). Reading `.calls` reported a frame counter, which made
+      // every draw-call claim on this renderer meaningless. Both are exposed, correctly named.
+      //
+      // And neither can be read HERE. The renderer's own animation loop resets both counters every
+      // rAF tick, including the ticks on which this on-demand app renders nothing, so reading them
+      // from a console call lands on an idle frame roughly as often as not and reports 0. These
+      // come from the latch instead: `drawCalls` is the last frame actually submitted,
+      // `drawCallsAgeMs` says how long ago that was, and `liveDrawCalls` keeps the raw counter
+      // beside it so the difference stays visible.
+      ...describeRenderFrame(renderFrameLatch, renderer.info, performance.now()),
       geometries: renderer.info?.memory?.geometries ?? null, textures: renderer.info?.memory?.textures ?? null,
       firstFrameMs: status.firstFrameMs, dataBytes: status.dataBytes, authored: status.manifest,
       groundAtlas: status.groundAtlas, exactTerrain: status.exactTerrain,
       exactVegetation: status.exactVegetation,
+      vegetation: authoredVegetationRenderStats(),
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
       railway: { ...railwayRenderStats },
@@ -2456,6 +3063,7 @@ export async function createView3d(container, mapData, src) {
       scope: THREE_POC_SCOPE, backend: status.backend, authored: status.manifest,
       groundAtlas: status.groundAtlas, exactTerrain: status.exactTerrain,
       exactVegetation: status.exactVegetation,
+      vegetation: authoredVegetationRenderStats(),
       sources: { buildings: data.buildings?.length ?? 0, props: data.props?.length ?? 0, trees: data.trees?.length ?? 0, exactVegetation: exactVegetationPlan?.renderedCount ?? 0, understory: data.understory?.length ?? 0, rocks: data.rocks?.length ?? 0, water: data.water?.length ?? 0, floorSurfaces: data.floorSurfaces?.length ?? 0 },
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
@@ -2470,6 +3078,11 @@ export async function createView3d(container, mapData, src) {
       authoredLoaderHost.dispose();
       authoredAssetCache.clear();
       if (controlNotify) cancelAnimationFrame(controlNotify);
+      if (vegetationRepackFrame) cancelAnimationFrame(vegetationRepackFrame);
+      authoredVegetationRuntime?.dispose();
+      authoredVegetationRuntime = null;
+      authoredVegetationArrays?.dispose();
+      authoredVegetationArrays = null;
       resize.disconnect(); controls.dispose(); renderer.dispose();
       disposeTree(worldRoot); disposeTree(authoredRoot, { materials: true }); disposeTree(dynamicRoot);
       for (const material of [...Object.values(materials), ...buildingMaterials.values(), ...propMaterials.values()]) material?.dispose?.();

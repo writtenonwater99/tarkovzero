@@ -23,9 +23,25 @@
 
 import {
   CustomsAuthoredVegetationContractError,
+  joinCustomsAuthoredVegetationPrototypeName,
   normalizeCustomsAuthoredVegetationCatalog,
   probeCustomsAuthoredVegetationBinding,
 } from './customs-authored-vegetation.js';
+
+/**
+ * Every classification the procedural renderer knows how to draw.
+ *
+ * A subplan is emitted with all five keys present even when a class routed entirely to the other
+ * half, so the procedural builder can consume `procedural.groups.<class>` without a `?? []` at
+ * every call site — and so "this class is empty" is a visible zero rather than a missing key.
+ */
+export const CUSTOMS_VEGETATION_CLASSIFICATIONS = Object.freeze([
+  'pine',
+  'deciduous',
+  'shrub',
+  'stump',
+  'ground-plant',
+]);
 
 function fail(message, code = 'ERR_CUSTOMS_AUTHORED_VEGETATION_ROLLOUT', details = null) {
   throw new CustomsAuthoredVegetationContractError(message, code, details);
@@ -88,7 +104,7 @@ function normalizeIdentity(placement, label) {
   };
 }
 
-function buildSubplan(entries) {
+function buildSubplan(entries, originalPlan) {
   const groupsByClassification = new Map();
   const assetIds = new Set();
   const placements = [];
@@ -102,23 +118,81 @@ function buildSubplan(entries) {
     else assetIds.add(assetId);
     placements.push(identity.source);
   }
-  const classifications = [...groupsByClassification.keys()].sort((a, b) => a.localeCompare(b));
+  const classifications = [...new Set([
+    ...CUSTOMS_VEGETATION_CLASSIFICATIONS,
+    ...groupsByClassification.keys(),
+  ])].sort((a, b) => a.localeCompare(b));
   const counts = Object.fromEntries(classifications.map((classification) => [
     classification,
-    groupsByClassification.get(classification).length,
+    groupsByClassification.get(classification)?.length ?? 0,
   ]));
   const groups = Object.fromEntries(classifications.map((classification) => [
     classification,
-    Object.freeze(groupsByClassification.get(classification)),
+    Object.freeze(groupsByClassification.get(classification) ?? []),
   ]));
   return Object.freeze({
+    // Shaped exactly like `buildCustomsLocalVegetationRenderPlan`'s output so either half can be
+    // handed straight to the procedural builder or to the authored adapter with no adaptation.
+    // `sourceCount`/`culledCount` describe the SHARED source: this half's rendered placements plus
+    // the other half's plus the plan's own out-of-scope culls always re-add to the source count.
+    sourceCount: originalPlan.sourceCount,
     renderedCount: placements.length,
+    culledCount: originalPlan.sourceCount - placements.length,
     counts: Object.freeze(counts),
     groups: Object.freeze(groups),
     placements: Object.freeze(placements),
     assetIds: Object.freeze([...assetIds].sort((a, b) => a.localeCompare(b))),
     unsupportedPrototypeCount,
   });
+}
+
+/**
+ * The one invariant that makes the hybrid router real rather than decorative, asserted in code.
+ *
+ * Every placement the vegetation source declared ends up in exactly one of three places: drawn by
+ * the authored pack, drawn procedurally, or culled outside the rendered scope by the plan itself.
+ * No placement is duplicated across the two halves and none is silently dropped between them.
+ */
+export function assertCustomsAuthoredVegetationRouteTotals(route) {
+  const authored = route?.authored?.renderedCount;
+  const procedural = route?.procedural?.renderedCount;
+  const rendered = route?.original?.renderedCount;
+  const culled = route?.original?.culledCount;
+  const source = route?.original?.sourceCount;
+  if (![authored, procedural, rendered, culled, source].every(Number.isSafeInteger)) {
+    fail('vegetation route totals are not fully populated integers');
+  }
+  if (authored + procedural !== rendered) {
+    fail(
+      `vegetation route lost placements: authored ${authored} + procedural ${procedural} != rendered ${rendered}`,
+      'ERR_CUSTOMS_VEGETATION_ROUTE_TOTALS',
+      { authored, procedural, rendered, culled, source },
+    );
+  }
+  if (authored + procedural + culled !== source) {
+    fail(
+      `vegetation route lost placements: authored ${authored} + procedural ${procedural} + culled ${culled} != source ${source}`,
+      'ERR_CUSTOMS_VEGETATION_ROUTE_TOTALS',
+      { authored, procedural, rendered, culled, source },
+    );
+  }
+  const flatIndices = new Set();
+  for (const half of [route.authored, route.procedural]) {
+    for (const placement of half.placements) {
+      const flatIndex = placement?.flatIndex;
+      if (!Number.isSafeInteger(flatIndex)) fail('a routed placement lost its flatIndex');
+      if (flatIndices.has(flatIndex)) {
+        fail(
+          `vegetation route duplicated exact flat index ${flatIndex}`,
+          'ERR_CUSTOMS_VEGETATION_ROUTE_TOTALS',
+          { flatIndex },
+        );
+      }
+      flatIndices.add(flatIndex);
+    }
+  }
+  if (flatIndices.size !== rendered) fail('vegetation route flat-index coverage is incomplete');
+  return Object.freeze({ authored, procedural, rendered, culled, source });
 }
 
 /**
@@ -156,7 +230,14 @@ export function routeCustomsAuthoredVegetationRollout({
     const placements = groups[classification];
     if (!Array.isArray(placements)) fail(`plan.groups.${classification} must be an array`);
     for (let index = 0; index < placements.length; index += 1) {
-      const identity = normalizeIdentity(placements[index], `plan.groups.${classification}[${index}]`);
+      // A row that carries only `(tileId, prototypeId)` — the shape the offline pack's own
+      // `placements[]` mirror uses — is joined to `prototypeBindings` to recover its exact
+      // `prototypeName`. Without the join the probe correctly rejects every such row for a
+      // missing field, and the router would read that as "nothing is admissible".
+      const identity = normalizeIdentity(
+        joinCustomsAuthoredVegetationPrototypeName(catalog, placements[index]),
+        `plan.groups.${classification}[${index}]`,
+      );
       if (identity.classification !== classification) {
         fail(`plan.groups.${classification} contains a ${identity.classification} placement`);
       }
@@ -225,12 +306,6 @@ export function routeCustomsAuthoredVegetationRollout({
     fail('vegetation rollout duplicated or lost exact placements');
   }
 
-  const authored = buildSubplan(authoredEntries);
-  const procedural = buildSubplan(proceduralEntries);
-  if (authored.renderedCount + procedural.renderedCount !== identities.length) {
-    fail('vegetation rollout authored plus procedural does not equal the original rendered count');
-  }
-
   const sourceCount = source.sourceCount === undefined
     ? identities.length
     : safeInteger(source.sourceCount, 'plan.sourceCount');
@@ -241,7 +316,13 @@ export function routeCustomsAuthoredVegetationRollout({
     fail('plan.sourceCount must equal rendered placements plus plan.culledCount');
   }
 
-  return Object.freeze({
+  const authored = buildSubplan(authoredEntries, { sourceCount });
+  const procedural = buildSubplan(proceduralEntries, { sourceCount });
+  if (authored.renderedCount + procedural.renderedCount !== identities.length) {
+    fail('vegetation rollout authored plus procedural does not equal the original rendered count');
+  }
+
+  const route = Object.freeze({
     catalog,
     admittedAssetIds: admitted,
     original: Object.freeze({
@@ -255,6 +336,12 @@ export function routeCustomsAuthoredVegetationRollout({
       authoredPlacementCount: authored.renderedCount,
       proceduralPlacementCount: procedural.renderedCount,
       originalPlacementCount: identities.length,
+      culledPlacementCount: culledCount,
+      sourcePlacementCount: sourceCount,
     }),
   });
+  // Not only a test: a router that quietly lost or doubled a placement must fail here, at the
+  // seam, rather than surface later as a thinner forest nobody can account for.
+  assertCustomsAuthoredVegetationRouteTotals(route);
+  return route;
 }
