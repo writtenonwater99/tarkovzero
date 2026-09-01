@@ -46,6 +46,11 @@ const CONFIG = {
     // shifted slightly after the original calibration; keeping this affine makes
     // the regression gate change only through the newly emitted level fields.
     affine: { x: [-0.24374729, 0, 674.1179914778126], z: [0, -0.2611668507, 282.5499042] },
+    // The Wiki image embeds detached interior/floor-plan panels. Their lock
+    // pixels do not share the surface-sheet affine above. Allow them to
+    // corroborate an exact tarkov.dev lock, but never publish an unmatched
+    // pixel as a world-space door until that panel has its own surveyed affine.
+    quarantineUnmatchedWikiLocks: 'detached-floor-panel-unanchored',
     // Underground extents in maps.json identify the bunker/basement panels. These
     // names cover entrances whose calibrated Wiki point sits just outside the box.
     levelOverrides: {
@@ -454,14 +459,31 @@ const containerMerge = reconcileMarkerRows(exactContainers, [...wikiContainers, 
 
 const extracts = extractMerge.rows;
 const spawns = spawnMerge.rows;
-const locks = lockMerge.rows;
+const quarantinedWikiLocks = cfg.quarantineUnmatchedWikiLocks
+  ? lockMerge.rows.filter((row) => row.source === 'eft-wiki').map((row) => ({
+    source: row.source,
+    sourceKind: row.sourceKind,
+    sourceId: row.sourceId,
+    key: structuredClone(row.key),
+    reasonCode: cfg.quarantineUnmatchedWikiLocks,
+    coordinateStatus: 'unanchored-wiki-panel',
+  }))
+  : [];
+const locks = lockMerge.rows
+  .filter((row) => !cfg.quarantineUnmatchedWikiLocks || row.source !== 'eft-wiki')
+  .map((row) => row.source === 'tarkov.dev-json'
+    ? { ...row, positionAuthority: 'tarkov.dev-json' }
+    : row);
 const switches = switchMerge.rows;
 const stationaryWeapons = stationaryWeaponMerge.rows;
 const containers = containerMerge.rows;
 const hazards = [...exactHazards, ...artilleryZones];
+const lockStats = lockMerge.stats.map((stat) => stat.kind === 'lock'
+  ? { ...stat, after: locks.length, quarantined: quarantinedWikiLocks.length }
+  : stat);
 
 const markerStats = [
-  ...extractMerge.stats, ...spawnMerge.stats, ...lockMerge.stats, ...switchMerge.stats,
+  ...extractMerge.stats, ...spawnMerge.stats, ...lockStats, ...switchMerge.stats,
   ...stationaryWeaponMerge.stats, ...containerMerge.stats,
   { kind: 'hazard', exact: exactHazards.length, secondary: 0, before: exactHazards.length, matched: 0, after: exactHazards.length, byId: 0, byName: 0, byDistance: 0 },
   { kind: 'artilleryZone', exact: artilleryZones.length, secondary: 0, before: artilleryZones.length, matched: 0, after: artilleryZones.length, byId: 0, byName: 0, byDistance: 0 },
@@ -484,6 +506,7 @@ const out = {
   source: 'tarkov.dev exact cache + SPT 4.1.2 + EFT Wiki visual approximations', builtAt,
   exactCache: exactSource.exact.source,
   extracts, spawns, bosses, hazards, stationaryWeapons, locks, switches, containers, btrStops, artilleryZones,
+  ...(quarantinedWikiLocks.length ? { quarantinedMarkers: { locks: quarantinedWikiLocks } } : {}),
 };
 assertMarkerNameUniqueness(key, [
   { rows: extracts, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction },
@@ -497,4 +520,5 @@ assertMarkerNameUniqueness(key, [
 ], markerDuplicateWhitelist);
 await mkdir('public/data', { recursive: true });
 await writeFile(output, JSON.stringify(out, null, 1));
+if (quarantinedWikiLocks.length) console.log(`quarantined ${quarantinedWikiLocks.length} Wiki locks without emitting world coordinates (${cfg.quarantineUnmatchedWikiLocks})`);
 console.log(`wrote ${output}: ${extracts.length} extracts/transits, ${spawns.length} spawns, ${bosses.length} bosses, ${locks.length} locks, ${hazards.length} hazards/artillery, ${stationaryWeapons.length} guns, ${switches.length} switches, ${containers.length} loot markers, ${btrStops.length} BTR stops`);

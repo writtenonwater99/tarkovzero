@@ -14,7 +14,7 @@ Maps today: **Customs, Reserve, Woods** (`?map=customs|reserve|woods`).
 
 | Part | Where | Notes |
 |---|---|---|
-| Site (Vite, vanilla JS) | `index.html`, `src/` | 2D = Leaflet with a game-coordinate CRS; 3D = deck.gl (`src/map3d.js`, `src/terrain.js`, `src/trees.js`, `src/water.js`) |
+| Site (Vite, vanilla JS) | `index.html`, `src/` | 2D = Leaflet with a game-coordinate CRS; 3D = deck.gl. A Customs-only Three.js renderer proof is available on localhost; see `docs/LOCAL-THREE-POC.md`. |
 | Per-map data | `public/data/<map>.json` (markers), `public/data/<map>-3d.json` (geometry/terrain) | generated — never hand-edit |
 | Data builders | `scripts/` | `build-community-data.mjs` (extracts/spawns/loot from SPT + EFT Wiki), `build-3d.mjs` (SVG → 3D geometry, terrain, roads, bridges), `ingest-elevation.mjs`, `build-quests.mjs`, `fetch-quest-images.mjs`, `warm-tiles.mjs` |
 | Hand-authored inputs | `data/<map>-props.json`, `data/<map>-roads.json`, tables inside `scripts/build-3d.mjs` | traced from the satellite render |
@@ -35,7 +35,9 @@ The Ask panel needs `DEEPSEEK_API_KEY` in the Vercel project env (`vercel env pu
 is never bundled into the client). Offline checks for the retrieval/parsing logic: `node scripts/test-assistant.mjs`.
 
 Useful URLs: `?view=3d`, `?map=woods`, `?live=CODE`, `?base=satellite&debug=roads` (road overlay check),
-`?relief=1|2|3`, `?trees=0`, `?floor=U`, `?quest=<slug>` (quest layer).
+`?relief=1|2|3`, `?trees=0`, `?floor=U`, `?quest=<slug>` (quest layer). On the Vite localhost
+development server only, `?map=customs&view=3d&renderer=three` opens the renderer proof. That proof
+has no atmospheric fog and is fixed at 2× terrain relief; query, storage, and UI cannot change it.
 
 Data regeneration (all deterministic; commit outputs):
 
@@ -43,6 +45,7 @@ Data regeneration (all deterministic; commit outputs):
 node scripts/build-community-data.mjs customs   # markers/loot from SPT + wiki (calibrated)
 node scripts/build-3d.mjs customs               # geometry + terrain (+ reserve | woods)
 node scripts/build-quests.mjs                   # quests.json from the task snapshot + SPT locales
+npm run audit:customs                           # independent gate; nonzero until real held-out evidence passes
 ```
 
 Deploy: `vercel --prod` from the repo root (site, Vercel) · `fly deploy --ha=false` from `relay/` (relay, Fly.io).
@@ -54,9 +57,11 @@ positions, quest structure and English locales: **SPT** server database. Extract
 recognition photos: **EFT Wiki** (Fandom) interactive maps and quest pages. Icons: **game-icons.net** (CC BY 3.0).
 Task objectives/zones: tarkov.dev's task data (via a mirror while their API is down). No BSG game files are used (ToS).
 
-## Status (2026-08-29)
+## Status (2026-08-31)
 
-Live: multi-map 2D/3D, real terrain from thousands of ground samples (3× relief by default), building personality,
-props, roads baked into the ground, trees/rocks toggles, extracts with underground tagging, spawns/bosses, loot and stashes,
-live player vision-cone marker + companion app. In progress: flat water with riverbeds (Codex), playable-limit expansion,
-quest layer with objective photos, DeepSeek assistant. Open playtest questions: end of `docs/plans/PROGRESS.md`.
+Live product behavior remains multi-map Leaflet/deck.gl. Canonical elevation now displays at 1× by default;
+2×/3× are explicit analysis exaggerations. The current local work is intentionally Customs-only: exact-source
+rebuild inputs, typed ground/road/deck/water/rock/floor/roof/underground evidence, an independent held-out
+accuracy harness, and a localhost Three.js renderer seam for audited GLB/KTX2 assets. Customs is **not accuracy
+certified yet**: the executable audit fails until real first-party train and held-out survey observations exist.
+Reserve and Woods remain unchanged until Customs passes the standard.

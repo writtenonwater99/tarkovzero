@@ -1,0 +1,33 @@
+{
+  "artifactSet": "customs-terrain-pbr-12-layer-v2.1",
+  "classification": "original-authored",
+  "gameFilesRead": false,
+  "generator": {
+    "name": "tarkovzero-customs-terrain-pbr-factory",
+    "version": "2.1.0"
+  },
+  "licenseReceipt": {
+    "bytes": 331,
+    "path": "original-license.json",
+    "sha256": "63de801f572d0630895346b1772354c290a4804637bb64012ca658d68d8ce4d6"
+  },
+  "method": "Code-owned ash-olive palettes, metre-scaled periodic noise and semantic stamps, isotropic 3-12 cm micro-grit, and height-derived normals; no runtime height displacement.",
+  "networkAccess": false,
+  "schemaVersion": 1,
+  "semanticOrder": [
+    "grass",
+    "ground",
+    "gravel-road-a",
+    "forest-ground",
+    "stone-ground",
+    "rock-ground",
+    "gravel-road-b",
+    "gravel",
+    "grassy-ground",
+    "sand",
+    "pebbles-ground",
+    "soil-grass"
+  ],
+  "sourceInputs": [],
+  "thirdPartyPixels": false
+}

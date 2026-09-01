@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "documentType": "tarkovzero-original-generated-source-texture-provenance",
+  "assetId": "source.vegetation.deciduous-broadleaf-branch-sprays.openai.v1",
+  "sourceFile": "deciduous-broadleaf-branch-sprays-openai-v1.png",
+  "sha256": "sha256:aec3cabf0fa91ca4b3da56084b83aa409f994171ab92424340315acb89e39721",
+  "bytes": 1950329,
+  "png": {
+    "width": 1254,
+    "height": 1254,
+    "mode": "RGBA",
+    "grid": {
+      "columns": 4,
+      "rows": 3,
+      "cells": 12
+    }
+  },
+  "origin": {
+    "provider": "OpenAI",
+    "generator": "gpt-image 2.0",
+    "evidence": "Embedded C2PA trainedAlgorithmicMedia assertion and immutable project copy hash",
+    "classification": "OpenAI-generated original for TarkovZero",
+    "sourceGameTexture": false,
+    "sourceGameMesh": false
+  },
+  "promptVerbatim": "Use case: photorealistic-natural\nAsset type: game-ready PBR foliage albedo/opacity atlas for alpha-card meshes in a realistic 3D map\nPrimary request: create one square transparent PNG atlas containing twelve distinct, isolated cold-temperate deciduous branch sprays suitable for birch and mixed broadleaf trees\nScene/backdrop: genuine transparent background with clean alpha; no floor, sky, studio backdrop, frame, or cast shadow\nSubject: natural late-summer twig tips and branch sprays with individually readable small ovate and serrated leaves, slender grey-brown twigs, a restrained mix of birch-like and generic northern broadleaf silhouettes, varied branching density and silhouette\nStyle/medium: high-resolution botanical scan / photogrammetry-like product capture, physically plausible, highly detailed, not painted, not stylized, not low-poly\nComposition/framing: strict 4-by-3 atlas grid; one complete foliage cutout per cell; generous equal padding; no overlap; varied rotations and scale while every spray stays entirely inside its cell\nLighting/mood: soft flat overcast diffuse light, consistent direction and exposure, minimal baked shading\nColor palette: restrained dark-to-mid forest green, muted olive variation, a few subtly yellowed or dry edge leaves; avoid neon or saturated lime\nMaterials/textures: crisp leaf silhouettes and veins, natural matte/waxy roughness cues, fine twig bark, no chunky foliage blobs\nConstraints: true transparent alpha, sharp antialiased edges, no opaque matte or color fringe, no text, labels, numbers, watermark, logos, duplicate sprays, full trees, trunks, fruit, flowers, ground, sky, borders, or grid lines\nAvoid: illustration, cartoon, clip art, bonsai, artificial plastic leaves, blurry halos, dense black shadows, repeated radial star patterns",
+  "useConstraints": [
+    "Use only as an original TarkovZero cold-temperate deciduous foliage source for alpha-card proof assets.",
+    "Do not represent this atlas, its pixels, or derived geometry as an EFT or source-game texture.",
+    "Preserve this hashed source file; derive resized, edge-dilated, gutter-safe, or channel-packed runtime textures in generated outputs.",
+    "Keep generated proof assets offline until visual, structural, deterministic, and runtime admission gates pass.",
+    "No claim of botanical, source-mesh, or in-game 1:1 equivalence is authorized by this provenance record."
+  ]
+}

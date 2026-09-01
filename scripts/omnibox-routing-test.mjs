@@ -168,6 +168,12 @@ function enter(text, actions) {
 }
 
 {
+  const a = stubActions({ setRelief: (requested) => { a.calls.push(['setRelief', requested]); return 2; } });
+  const { note } = enter('> relief 3', a);
+  eq('relief command reports the scale the renderer actually applied', note, 'Relief 2×');
+}
+
+{
   const a = stubActions();
   const { note } = enter('> my quests', a);
   eq('`> my quests` + Enter reaches the quest log', a.calls[0]?.[0], 'myQuests');

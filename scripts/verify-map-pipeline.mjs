@@ -1,66 +1,261 @@
 #!/usr/bin/env node
-// Deterministic, browser-free checks for the shared marker/elevation/3D pipeline.
+// Customs-only deterministic source-to-artifact gate. This verifier first
+// rebuilds both generated files in a disposable workspace from the committed
+// exact JSON/SVG fixtures with networking disabled, then checks semantic
+// contracts. Reserve and Woods remain read-only pinned regression sentinels.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { carveWaterHeightfield, makeWaterHeightCapper } from '../src/water.js';
 import {
   assertMarkerNameUniqueness, loadExactMap, normalizeMarkerName, reconcileMarkerRows, stableStringify,
 } from './lib/exact-map-primitives.mjs';
 
-const MAPS = ['customs', 'reserve', 'woods'];
-const BASELINE = process.argv.find((argument) => argument.startsWith('--baseline='))?.slice('--baseline='.length) || 'HEAD';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const MAP = 'customs';
+const OUTPUTS = [`public/data/${MAP}.json`, `public/data/${MAP}-3d.json`];
+const CUSTOMS_OUTPUT_HASHES = Object.freeze({
+  'public/data/customs.json': 'b9422bf895ed5a4b99fa015717893511abff3eb393e47be891ddfac728f26de6',
+  'public/data/customs-3d.json': '9a6df2ad1d62371e0f139b0c017ea1fdc1426d44905042cd9a4f34a575141dad',
+});
+const READ_ONLY_REGRESSIONS = Object.freeze({
+  reserve: {
+    hashes: {
+      'public/data/reserve.json': '0dc4ceeca5228ea7012f0c52f0d37aa425a32433886c0f7e28ae01a128178036',
+      'public/data/reserve-3d.json': '81d67bf8a6b845e40cc8c4b4ed9d82fa70399b1096cda9338b2f0259829d1bbf',
+    },
+    anchors: {
+      'White Pawn': -1.25, Helipad: -5.09, 'White Queen / Dome': 19.54,
+      'D-2': 15.60, 'White Rook / Train Station': -6.25, 'Bunker Hermetic Door': -0.35,
+    },
+  },
+  woods: {
+    hashes: {
+      'public/data/woods.json': '95dfe4fd6e67e4af980cc48c853f01f886c38b9b97d2029b9741d6b7f52dadbd',
+      'public/data/woods-3d.json': '375a7359c772991b48a7b0ebeeda202fdcdf4c704993b1486750619160265702',
+    },
+    anchors: {
+      'Sniper Mountain Summit': 77.52, 'Upper Mountain': 64.62, 'Mountain Flank': 52.27,
+      'Train Depot': 9.05, 'USEC Camp': 24.57, Sawmill: -2.83,
+    },
+  },
+});
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 const fail = (message) => { throw new Error(message); };
 const assert = (condition, message) => { if (!condition) fail(message); };
-const close = (actual, expected, tolerance, message) => assert(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} vs ${expected}`);
+const close = (actual, expected, tolerance, message) => assert(
+  Math.abs(actual - expected) <= tolerance, `${message}: ${actual} vs ${expected}`,
+);
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+
+function usage(message) {
+  const stream = message ? process.stderr : process.stdout;
+  if (message) stream.write(`${message}\n`);
+  stream.write('usage: node scripts/verify-map-pipeline.mjs\n');
+  stream.write('       rebuilds Customs offline; checks pinned Reserve/Woods artifacts read-only\n');
+  process.exit(message ? 1 : 0);
+}
+
+for (const argument of process.argv.slice(2)) {
+  if (argument === '--help' || argument === '-h') usage();
+  usage(`unknown argument: ${argument}`);
+}
+
+const NETWORK_GUARD_SOURCE = String.raw`'use strict';
+const deny = () => {
+  const error = new Error('network disabled by TarkovZero map-pipeline verifier');
+  error.code = 'ERR_TARKOVZERO_NETWORK_DISABLED';
+  throw error;
+};
+globalThis.fetch = deny;
+const net = require('node:net');
+net.connect = deny;
+net.createConnection = deny;
+net.Socket.prototype.connect = deny;
+const tls = require('node:tls');
+tls.connect = deny;
+tls.TLSSocket.prototype.connect = deny;
+for (const name of ['node:http', 'node:https']) {
+  const module = require(name);
+  module.get = deny;
+  module.request = deny;
+}
+const dgram = require('node:dgram');
+dgram.Socket.prototype.bind = deny;
+dgram.Socket.prototype.connect = deny;
+dgram.Socket.prototype.send = deny;
+const dns = require('node:dns');
+for (const name of ['lookup', 'resolve', 'resolve4', 'resolve6', 'reverse']) dns[name] = deny;
+for (const name of ['lookup', 'resolve', 'resolve4', 'resolve6', 'reverse']) dns.promises[name] = deny;
+`;
+
+function runNode(arguments_, cwd, networkGuard) {
+  try {
+    return execFileSync(process.execPath, ['--require', networkGuard, ...arguments_], {
+      cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, TZ: 'UTC' },
+    });
+  } catch (error) {
+    const output = [error?.stdout, error?.stderr].filter(Boolean).join('\n').trim();
+    throw new Error(`${process.execPath} ${arguments_.join(' ')} failed in isolated rebuild${output ? `:\n${output}` : ''}`);
+  }
+}
+
+function expectNodeFailure(arguments_, cwd, networkGuard, pattern) {
+  let failure;
+  try {
+    execFileSync(process.execPath, ['--require', networkGuard, ...arguments_], {
+      cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, TZ: 'UTC' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) { failure = error; }
+  assert(failure, `${process.execPath} ${arguments_.join(' ')} unexpectedly succeeded without a required fixture`);
+  const output = [failure.stdout, failure.stderr].filter(Boolean).join('\n');
+  assert(pattern.test(output), `${process.execPath} ${arguments_.join(' ')} failed for the wrong reason:\n${output}`);
+}
+
+function assertNetworkGuard(cwd, networkGuard) {
+  const probe = `
+    const probes = [
+      () => fetch('https://example.invalid/'),
+      () => require('node:net').connect(9, '192.0.2.1'),
+    ];
+    for (const probe of probes) {
+      let blocked = false;
+      try { probe(); } catch (error) { blocked = error?.code === 'ERR_TARKOVZERO_NETWORK_DISABLED'; }
+      if (!blocked) process.exit(2);
+    }
+  `;
+  try {
+    execFileSync(process.execPath, ['--require', networkGuard, '-e', probe], {
+      cwd, encoding: 'utf8', env: { ...process.env, TZ: 'UTC' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    const output = [error.stdout, error.stderr].filter(Boolean).join('\n');
+    throw new Error(`isolated rebuild network guard is not active${output ? `:\n${output}` : ''}`);
+  }
+}
+
+async function copyProjectFiles(destination) {
+  const listed = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+    cwd: ROOT, maxBuffer: 64 * 1024 * 1024,
+  }).toString('utf8').split('\0').filter(Boolean);
+  for (const relative of listed) {
+    assert(!path.isAbsolute(relative) && !relative.split('/').includes('..'), `unsafe project path from git: ${relative}`);
+    const source = path.join(ROOT, relative);
+    let stat;
+    try { stat = await lstat(source); }
+    catch (error) { if (error?.code === 'ENOENT') continue; else throw error; }
+    if (!stat.isFile()) continue;
+    const target = path.join(destination, relative);
+    await mkdir(path.dirname(target), { recursive: true });
+    await copyFile(source, target);
+  }
+}
+
+async function assertIsolatedRebuild() {
+  const workspace = await mkdtemp(path.join(tmpdir(), 'tarkovzero-customs-rebuild-'));
+  try {
+    await copyProjectFiles(workspace);
+    const networkGuard = path.join(workspace, '.map-pipeline-network-disabled.cjs');
+    await writeFile(networkGuard, NETWORK_GUARD_SOURCE);
+    assertNetworkGuard(workspace, networkGuard);
+    runNode(['scripts/build-community-data.mjs', MAP], workspace, networkGuard);
+    runNode(['scripts/build-3d.mjs', MAP], workspace, networkGuard);
+    const rows = [];
+    for (const relative of OUTPUTS) {
+      const [expected, rebuilt] = await Promise.all([
+        readFile(path.join(ROOT, relative)),
+        readFile(path.join(workspace, relative)),
+      ]);
+      const expectedHash = sha256(expected), rebuiltHash = sha256(rebuilt);
+      assert(expectedHash === CUSTOMS_OUTPUT_HASHES[relative], `${relative} pinned hash drifted\n`
+        + `expected ${CUSTOMS_OUTPUT_HASHES[relative]}\nworktree ${expectedHash}`);
+      assert(expected.equals(rebuilt), `${relative} is stale relative to its pinned inputs/builders\n`
+        + `worktree ${expectedHash}\nrebuilt  ${rebuiltHash}\n`
+        + `regenerate with: node scripts/build-community-data.mjs customs && node scripts/build-3d.mjs customs`);
+      rows.push([relative, rebuiltHash]);
+    }
+
+    const manifest = JSON.parse(await readFile(path.join(workspace, 'scripts/data/tarkov-dev-exact-manifest.json'), 'utf8'));
+    const exactRelative = manifest.maps?.[MAP]?.cachePath;
+    const svgRelative = manifest.maps?.[MAP]?.svg?.cachePath;
+    for (const relative of [exactRelative, svgRelative]) {
+      assert(typeof relative === 'string' && !path.isAbsolute(relative) && !relative.split('/').includes('..'),
+        `unsafe fixture path in isolated manifest: ${relative}`);
+    }
+    const svgFixture = path.join(workspace, svgRelative);
+    const tamperedSvg = Buffer.from(await readFile(svgFixture));
+    tamperedSvg[Math.floor(tamperedSvg.length / 2)] ^= 0x01;
+    await writeFile(svgFixture, tamperedSvg);
+    expectNodeFailure(['scripts/build-3d.mjs', MAP], workspace, networkGuard, /SVG customs fixture hash mismatch/);
+    await rm(svgFixture);
+    expectNodeFailure(['scripts/build-3d.mjs', MAP], workspace, networkGuard, /SVG customs fixture is missing/);
+    await rm(path.join(workspace, exactRelative));
+    expectNodeFailure(['scripts/build-community-data.mjs', MAP], workspace, networkGuard, /exact tarkov\.dev customs fixture is missing/);
+    return rows;
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+}
+
 const inPoly = ([x, z], poly) => {
   let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+  for (let index = 0, previous = poly.length - 1; index < poly.length; previous = index++) {
+    const [xi, zi] = poly[index], [xj, zj] = poly[previous];
     if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
   }
   return inside;
 };
-const cr = (p0, p1, p2, p3, u) => {
-  const u2 = u * u, u3 = u2 * u;
-  return p0 * (-0.5 * u3 + u2 - 0.5 * u) + p1 * (1.5 * u3 - 2.5 * u2 + 1)
-    + p2 * (-1.5 * u3 + 2 * u2 + 0.5 * u) + p3 * (0.5 * u3 - 0.5 * u2);
+
+const catmullRom = (p0, p1, p2, p3, unit) => {
+  const unit2 = unit * unit, unit3 = unit2 * unit;
+  return p0 * (-0.5 * unit3 + unit2 - 0.5 * unit) + p1 * (1.5 * unit3 - 2.5 * unit2 + 1)
+    + p2 * (-1.5 * unit3 + 2 * unit2 + 0.5 * unit) + p3 * (0.5 * unit3 - 0.5 * unit2);
 };
-function gaussianOnce(heights, cols, rows) {
-  const kernel = [1, 4, 6, 4, 1], source = Float32Array.from(heights), temp = new Float32Array(source.length), output = new Float32Array(source.length);
-  for (let row = 0; row < rows; row++) for (let column = 0; column < cols; column++) {
+
+function gaussianOnce(heights, columns, rows) {
+  const kernel = [1, 4, 6, 4, 1];
+  const source = Float32Array.from(heights), temporary = new Float32Array(source.length), output = new Float32Array(source.length);
+  for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
     let sum = 0;
-    for (let offset = -2; offset <= 2; offset++) sum += source[row * cols + clamp(column + offset, 0, cols - 1)] * kernel[offset + 2];
-    temp[row * cols + column] = sum / 16;
+    for (let offset = -2; offset <= 2; offset++) sum += source[row * columns + clamp(column + offset, 0, columns - 1)] * kernel[offset + 2];
+    temporary[row * columns + column] = sum / 16;
   }
-  for (let row = 0; row < rows; row++) for (let column = 0; column < cols; column++) {
+  for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
     let sum = 0;
-    for (let offset = -2; offset <= 2; offset++) sum += temp[clamp(row + offset, 0, rows - 1) * cols + column] * kernel[offset + 2];
-    output[row * cols + column] = sum / 16;
+    for (let offset = -2; offset <= 2; offset++) sum += temporary[clamp(row + offset, 0, rows - 1) * columns + column] * kernel[offset + 2];
+    output[row * columns + column] = sum / 16;
   }
   return output;
 }
+
 function canonicalTerrainSampler(document) {
   const terrain = document.terrain;
   const { x0, z0, step, cols, rows } = terrain;
   const grid = carveWaterHeightfield(gaussianOnce(terrain.heights, cols, rows), terrain, document.water || []);
   const at = (column, row) => grid[clamp(row, 0, rows - 1) * cols + clamp(column, 0, cols - 1)];
   const bicubic = (x, z) => {
-    const fx = (x - x0) / step, fz = (z - z0) / step;
-    const column = Math.floor(fx), row = Math.floor(fz), u = fx - column, v = fz - row;
-    return cr(
-      cr(at(column - 1, row - 1), at(column, row - 1), at(column + 1, row - 1), at(column + 2, row - 1), u),
-      cr(at(column - 1, row), at(column, row), at(column + 1, row), at(column + 2, row), u),
-      cr(at(column - 1, row + 1), at(column, row + 1), at(column + 1, row + 1), at(column + 2, row + 1), u),
-      cr(at(column - 1, row + 2), at(column, row + 2), at(column + 1, row + 2), at(column + 2, row + 2), u),
-      v,
+    const horizontal = (x - x0) / step, vertical = (z - z0) / step;
+    const column = Math.floor(horizontal), row = Math.floor(vertical);
+    const unitX = horizontal - column, unitZ = vertical - row;
+    return catmullRom(
+      catmullRom(at(column - 1, row - 1), at(column, row - 1), at(column + 1, row - 1), at(column + 2, row - 1), unitX),
+      catmullRom(at(column - 1, row), at(column, row), at(column + 1, row), at(column + 2, row), unitX),
+      catmullRom(at(column - 1, row + 1), at(column, row + 1), at(column + 1, row + 1), at(column + 2, row + 1), unitX),
+      catmullRom(at(column - 1, row + 2), at(column, row + 2), at(column + 1, row + 2), at(column + 2, row + 2), unitX),
+      unitZ,
     );
   };
   const capWater = makeWaterHeightCapper(document.water || [], 1);
   return (x, z) => capWater(bicubic(x, z), x, z);
 }
+
 function surfaceSampler(document, relief = 1) {
   const canonical = canonicalTerrainSampler(document);
   return (x, z) => {
@@ -69,17 +264,68 @@ function surfaceSampler(document, relief = 1) {
       .map((rock) => Number.isFinite(rock.surfaceY) ? rock.surfaceY * relief : base + rock.height * relief));
   };
 }
-function baselineFile(path) {
-  try {
-    return execFileSync('git', ['show', `${BASELINE}:${path}`], { maxBuffer: 64 * 1024 * 1024 });
-  } catch (error) {
-    // Some managed sandboxes return the completed stdout with status 0 while
-    // wrapping the child-process call in EPERM. The bytes are still the exact
-    // git object; only accept this narrow successful-output case.
-    if (error?.status === 0 && error.stdout?.length) return error.stdout;
-    throw error;
+
+function reliefPaths(value, objectPath = '', found = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => reliefPaths(item, `${objectPath}[${index}]`, found));
+  } else if (value && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      if (/relief/i.test(key)) found.push(`${objectPath}.${key}`);
+      reliefPaths(child, `${objectPath}.${key}`, found);
+    }
   }
+  return found;
 }
+
+async function assertReadOnlyRegressionMaps() {
+  const hashes = [];
+  for (const [map, expected] of Object.entries(READ_ONLY_REGRESSIONS)) {
+    const markerPath = `public/data/${map}.json`;
+    const geometryPath = `public/data/${map}-3d.json`;
+    const [markerBytes, geometryBytes] = await Promise.all([
+      readFile(path.join(ROOT, markerPath)),
+      readFile(path.join(ROOT, geometryPath)),
+    ]);
+    for (const [file, bytes] of [[markerPath, markerBytes], [geometryPath, geometryBytes]]) {
+      const actual = sha256(bytes);
+      assert(actual === expected.hashes[file], `${map}: pinned ${file} hash drifted: expected ${expected.hashes[file]}, got ${actual}`);
+      hashes.push([file, actual]);
+    }
+
+    const markers = JSON.parse(markerBytes);
+    const document = JSON.parse(geometryBytes);
+    assert(Array.isArray(markers.extracts) && Array.isArray(markers.spawns) && markers.extracts.length > 0 && markers.spawns.length > 0,
+      `${map}: canonical marker collections are missing`);
+    assert(document.canonicalScale === 1 && document.terrain?.units?.scale === 1, `${map}: canonical output is not 1x`);
+    const bakedRelief = reliefPaths(document);
+    assert(!bakedRelief.length, `${map}: relief was baked into generated data at ${bakedRelief.join(', ')}`);
+
+    const anchors = document.features?.anchors ?? [];
+    assert(anchors.length === Object.keys(expected.anchors).length, `${map}: reviewed anchor count drifted`);
+    const surface = surfaceSampler(document, 1);
+    for (const anchor of anchors) {
+      assert(Object.hasOwn(expected.anchors, anchor.name), `${map}/${anchor.name}: unexpected verification anchor`);
+      close(surface(...anchor.position), expected.anchors[anchor.name], 0.015, `${map}/${anchor.name}: canonical anchor height drifted`);
+    }
+
+    const assignments = document.features?.assignments ?? [];
+    if (map === 'reserve') {
+      assert(assignments.find((item) => item.featureRoot === 'reserve.white_pawn.main')?.floors === 5,
+        'reserve: White Pawn canonical floor assignment failed');
+      assert(assignments.find((item) => item.featureRoot === 'reserve.helipad.service_footprint')?.heightM <= 4.5,
+        'reserve: Helipad service-footprint height failed');
+    } else if (map === 'woods') {
+      assert(document.props.filter((item) => item.featureRoot === 'woods.train_depot.freight_cars' && item.type === 'railcar').length === 6,
+        'woods: canonical freight-car count failed');
+      assert(document.props.filter((item) => item.featureRoot === 'woods.train_depot.cargo' && item.type === 'container').length === 10,
+        'woods: canonical depot-cargo count failed');
+      assert(!assignments.some((item) => item.featureRoot?.startsWith('woods.train_depot.') && item.place === 'Railway Bridge to Tarkov'),
+        'woods: Train Depot retains the incorrect Railway Bridge label');
+    }
+  }
+  return hashes;
+}
+
 function markerRows(markers, collection) {
   const target = {
     spawns: 'spawns', extracts: 'extracts', transits: 'extracts', locks: 'locks', switches: 'switches',
@@ -88,220 +334,168 @@ function markerRows(markers, collection) {
   }[collection];
   return markers[target] || [];
 }
+
 const SOURCE_KIND = {
   spawns: 'spawn', extracts: 'extract', transits: 'transit', locks: 'lock', switches: 'switch', hazards: 'hazard',
   lootContainers: 'lootContainer', lootLoose: 'looseLoot', stationaryWeapons: 'stationaryWeapon', btrStops: 'btrStop', artilleryZones: 'artilleryZone',
 };
-const EXPECTED_MARKER_COUNTS = {
-  customs: { extract: 28, transit: 4, lock: 62, switch: 1, hazard: 5, lootContainer: 619, looseLoot: 416, spawn: 283, stationaryWeapon: 7, btrStop: 0, artilleryZone: 2 },
-  reserve: { extract: 11, transit: 3, lock: 33, switch: 5, hazard: 4, lootContainer: 1002, looseLoot: 766, spawn: 167, stationaryWeapon: 8, btrStop: 0, artilleryZone: 2 },
-  woods: { extract: 20, transit: 4, lock: 5, switch: 0, hazard: 64, lootContainer: 437, looseLoot: 387, spawn: 368, stationaryWeapon: 2, btrStop: 8, artilleryZone: 2 },
-};
-const EXPECTED_ANCHOR_HEIGHTS = {
-  customs: { 'Big Red': 1.81, 'Dorms 2-Story': 0.75, Fortress: 1.74, 'Old Gas': 2.03, 'Water Pump': 1.18, 'Main Bridge': -6.68 },
-  reserve: { 'White Pawn': -1.25, Helipad: -5.09, 'White Queen / Dome': 19.54, 'D-2': 15.60, 'White Rook / Train Station': -6.25, 'Bunker Hermetic Door': -0.35 },
-  woods: { 'Sniper Mountain Summit': 77.52, 'Upper Mountain': 64.62, 'Mountain Flank': 52.27, 'Train Depot': 9.05, 'USEC Camp': 24.57, Sawmill: -2.83 },
-};
-const EXPECTED_OUTPUT_HASHES = {
-  'public/data/customs.json': 'fe49b31cd7791ab8a46201180d9f019efabc35f0f9a73d656d27c09aa2ed2257',
-  'public/data/customs-3d.json': '2fc39043aeb7627d8ba46d7e0ed353a0ce0cc19d9bec8b02505f247a9ec1306c',
-  'public/data/reserve.json': '0dc4ceeca5228ea7012f0c52f0d37aa425a32433886c0f7e28ae01a128178036',
-  'public/data/reserve-3d.json': '81d67bf8a6b845e40cc8c4b4ed9d82fa70399b1096cda9338b2f0259829d1bbf',
-  'public/data/woods.json': '95dfe4fd6e67e4af980cc48c853f01f886c38b9b97d2029b9741d6b7f52dadbd',
-  'public/data/woods-3d.json': '375a7359c772991b48a7b0ebeeda202fdcdf4c704993b1486750619160265702',
-};
 
-// A small contract fixture catches matcher-order and exact-geometry regressions
-// even when a particular live cache happens not to exercise every branch.
-const mergerFixture = reconcileMarkerRows([
-  { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'exact-fixture', id: 'dev-fixture', name: 'Railroad Passage (Flare)', faction: 'pmc', level: 'surface', position: { x: 1, y: 9, z: 2 }, size: { x: 3 }, outline: [{ x: 0, y: 9, z: 2 }], top: 10, bottom: 8 },
-], [
-  { source: 'eft-wiki', sourceKind: 'extract', sourceId: 'wiki-fixture', name: 'railroad passage', faction: 'pmc', level: 'underground', position: { x: 500, z: 500 }, description: 'Wiki description', requirementText: 'Fire flare' },
-]);
-assert(normalizeMarkerName(' Railroad Passage (Flare) ') === 'railroadpassage', 'marker-name normalization contract failed');
-assert(mergerFixture.rows.length === 1 && mergerFixture.stats[0].byName === 1, 'name-first marker reconciliation contract failed');
-assert(stableStringify(mergerFixture.rows[0].position) === stableStringify({ x: 1, y: 9, z: 2 })
-  && mergerFixture.rows[0].level === 'surface' && mergerFixture.rows[0].top === 10 && mergerFixture.rows[0].description === 'Wiki description',
-'exact geometry / Wiki enrichment reconciliation contract failed');
-const priorityFixture = reconcileMarkerRows([
-  { source: 'tarkov.dev-json', sourceKind: 'lock', sourceId: 'exact-id', name: 'ID target', position: { x: 0, y: 1, z: 0 } },
-  { source: 'tarkov.dev-json', sourceKind: 'lock', sourceId: 'exact-name', name: 'Name target', position: { x: 100, y: 2, z: 0 } },
-], [
-  { source: 'eft-wiki', sourceKind: 'lock', sourceId: 'wiki', tarkovDevId: 'exact-id', name: 'Name target', position: { x: 100, z: 0 } },
-], { maxDistance: 25 });
-assert(priorityFixture.stats[0].byId === 1
-  && priorityFixture.rows[0].corroboratedBy.includes('eft-wiki:wiki')
-  && !priorityFixture.rows[1].corroboratedBy,
-'ID-first matcher priority contract failed');
-const multiWitnessFixture = reconcileMarkerRows([
-  { source: 'tarkov.dev-json', sourceKind: 'spawn', sourceId: 'exact-spawn', position: { x: 0, y: 1, z: 0 } },
-], [
-  { source: 'spt-4.1.2', sourceKind: 'spawn', sourceId: 'spt-a', position: { x: 1, y: 1, z: 0 } },
-  { source: 'spt-4.1.2', sourceKind: 'spawn', sourceId: 'spt-b', position: { x: 2, y: 1, z: 0 } },
-], { nameOf: () => '' });
-assert(multiWitnessFixture.rows.length === 1 && multiWitnessFixture.stats[0].byDistance === 2
-  && multiWitnessFixture.rows[0].corroboratedBy.length === 3,
-'multiple-secondary-witness reconciliation contract failed');
-const duplicateFixture = [{
-  rows: [
-    { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'checkpoint-a', name: 'Scav Checkpoint', faction: 'scav' },
-    { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'checkpoint-b', name: 'Scav Checkpoint (Co-op)', faction: 'scav' },
-  ],
-  kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction,
-}];
-let duplicateRejected = false;
-try { assertMarkerNameUniqueness('fixture', duplicateFixture); } catch { duplicateRejected = true; }
-assert(duplicateRejected, 'unwhitelisted duplicate marker contract failed');
-assert(assertMarkerNameUniqueness('fixture', duplicateFixture, [
-  { kind: 'extract', name: 'Scav Checkpoint', faction: 'scav', count: 2 },
-]).length === 1, 'duplicate marker whitelist contract failed');
-function sourcePosition(collection, raw) {
-  if (collection === 'btrStops') return { x: raw.x, y: raw.y, z: raw.z };
-  return raw.position;
-}
-function semanticMarkerCollections(markers) {
-  return [
-    { rows: markers.extracts, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction },
-    { rows: markers.locks, kindOf: (row) => row.sourceKind, nameOf: (row) => row.key?.name },
-    { rows: markers.switches, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
-    { rows: markers.hazards, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
-    { rows: markers.containers, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
-    { rows: markers.spawns, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
-    { rows: markers.stationaryWeapons, kindOf: (row) => row.sourceKind, nameOf: (row) => row.stationaryWeapon?.name },
-    { rows: markers.btrStops, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
-  ];
-}
-function markerKindCounts(markers) {
-  const rows = [
-    ...markers.extracts, ...markers.locks, ...markers.switches, ...markers.hazards,
-    ...markers.containers, ...markers.spawns, ...markers.stationaryWeapons, ...markers.btrStops,
-  ];
-  return Object.fromEntries(Object.keys(EXPECTED_MARKER_COUNTS.customs)
-    .map((kind) => [kind, rows.filter((row) => row.sourceKind === kind).length]));
-}
-function assertFeatureResults(map, document) {
-  const assignments = document.features.assignments;
-  if (map === 'customs') {
-    const dorms = assignments.find((item) => item.featureRoot === 'customs.dorms.two_story.main');
-    assert(dorms?.floors === 2, 'Customs Dorms 2-Story floor assertion failed');
-    assert(assignments.filter((item) => item.featureRoot === 'customs.water_pump.cooling_towers' && item.kind === 'cooling_tower' && item.heightM >= 24).length === 3, 'Customs cooling-tower assertion failed');
-  }
-  if (map === 'reserve') {
-    assert(assignments.find((item) => item.featureRoot === 'reserve.white_pawn.main')?.floors === 5, 'Reserve White Pawn assertion failed');
-    assert(assignments.find((item) => item.featureRoot === 'reserve.helipad.service_footprint')?.heightM <= 4.5, 'Reserve Helipad footprint assertion failed');
-  }
-  if (map === 'woods') {
-    assert(document.props.filter((item) => item.featureRoot === 'woods.train_depot.freight_cars' && item.type === 'railcar').length === 6, 'Woods freight-car assertion failed');
-    assert(document.props.filter((item) => item.featureRoot === 'woods.train_depot.cargo' && item.type === 'container').length === 10, 'Woods depot-cargo assertion failed');
-    assert(!assignments.some((item) => item.featureRoot.startsWith('woods.train_depot.') && item.place === 'Railway Bridge to Tarkov'), 'Woods depot still carries Railway Bridge label');
-  }
-}
+const sourcePosition = (collection, raw) => collection === 'btrStops'
+  ? { x: raw.x, y: raw.y, z: raw.z } : raw.position;
 
-const anchorRows = [], hashRows = [];
-for (const map of MAPS) {
-  const markerPath = `public/data/${map}.json`, geometryPath = `public/data/${map}-3d.json`;
-  const [markerBytes, geometryBytes, featureBytes] = await Promise.all([
-    readFile(markerPath), readFile(geometryPath), readFile(`data/${map}-features.json`),
+const semanticMarkerCollections = (markers) => [
+  { rows: markers.extracts, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction },
+  { rows: markers.locks, kindOf: (row) => row.sourceKind, nameOf: (row) => row.key?.name },
+  { rows: markers.switches, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: markers.hazards, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: markers.containers, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: markers.spawns, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+  { rows: markers.stationaryWeapons, kindOf: (row) => row.sourceKind, nameOf: (row) => row.stationaryWeapon?.name },
+  { rows: markers.btrStops, kindOf: (row) => row.sourceKind, nameOf: (row) => row.name },
+];
+
+function assertLibraryContracts() {
+  const merger = reconcileMarkerRows([
+    { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'exact', name: 'Railroad Passage (Flare)', faction: 'pmc', level: 'surface', position: { x: 1, y: 9, z: 2 } },
+  ], [
+    { source: 'eft-wiki', sourceKind: 'extract', sourceId: 'wiki', name: 'railroad passage', faction: 'pmc', level: 'underground', position: { x: 500, z: 500 }, description: 'Wiki description' },
   ]);
-  const markers = JSON.parse(markerBytes), document = JSON.parse(geometryBytes);
-  const featureManifest = JSON.parse(featureBytes);
-  const oldMarkerBytes = baselineFile(markerPath), oldGeometryBytes = baselineFile(geometryPath);
-  const oldDocument = JSON.parse(oldGeometryBytes);
-  const markerHash = sha256(markerBytes), geometryHash = sha256(geometryBytes);
-  assert(markerHash === EXPECTED_OUTPUT_HASHES[markerPath], `${map}: marker output hash drifted`);
-  assert(geometryHash === EXPECTED_OUTPUT_HASHES[geometryPath], `${map}: 3D output hash drifted`);
-  hashRows.push([markerPath, sha256(oldMarkerBytes), markerHash], [geometryPath, sha256(oldGeometryBytes), geometryHash]);
+  assert(normalizeMarkerName(' Railroad Passage (Flare) ') === 'railroadpassage', 'marker-name normalization contract failed');
+  assert(merger.rows.length === 1 && merger.stats[0].byName === 1, 'name-first marker reconciliation contract failed');
+  assert(stableStringify(merger.rows[0].position) === stableStringify({ x: 1, y: 9, z: 2 })
+    && merger.rows[0].level === 'surface' && merger.rows[0].description === 'Wiki description',
+  'exact geometry / Wiki enrichment reconciliation contract failed');
 
-  assert(document.canonicalScale === 1 && document.terrain.units?.scale === 1, `${map}: canonical output is not 1x`);
-  const reliefKeys = [];
-  const scan = (value, path = '') => {
-    if (Array.isArray(value)) return value.forEach((item, index) => scan(item, `${path}[${index}]`));
-    if (!value || typeof value !== 'object') return;
-    for (const [key, child] of Object.entries(value)) { if (/relief/i.test(key)) reliefKeys.push(`${path}.${key}`); scan(child, `${path}.${key}`); }
-  };
-  scan(document);
-  assert(!reliefKeys.length, `${map}: relief was baked into generated data at ${reliefKeys.join(', ')}`);
-  const heightHash = sha256(Buffer.from(JSON.stringify(document.terrain.heights)));
-  const surface1 = surfaceSampler(document, 1), surface3 = surfaceSampler(document, 3), oldSurface = surfaceSampler(oldDocument, 1);
-  for (const anchor of document.features.anchors) {
-    const [x, z] = anchor.position, before = oldSurface(x, z), after = surface1(x, z);
-    close(surface3(x, z), after * 3, 1e-4, `${map}/${anchor.name}: 3x sampler is not a pure view skin`);
-    assert(Object.hasOwn(EXPECTED_ANCHOR_HEIGHTS[map], anchor.name), `${map}/${anchor.name}: unexpected verification anchor`);
-    close(after, EXPECTED_ANCHOR_HEIGHTS[map][anchor.name], 0.015, `${map}/${anchor.name}: canonical anchor height drifted`);
-    anchorRows.push([map, anchor.name, x, z, before, after, after - before]);
-  }
-  assert(document.features.anchors.length === Object.keys(EXPECTED_ANCHOR_HEIGHTS[map]).length, `${map}: expected anchor count drifted`);
-  assert(heightHash === sha256(Buffer.from(JSON.stringify(document.terrain.heights))), `${map}: sampler mutated canonical heights`);
-
-  const exactSource = await loadExactMap(map);
-  assert(stableStringify(document.exact) === stableStringify(exactSource.exact), `${map}: serialized exact layer differs from verified cache`);
-  assert(markers.exactCache?.cacheVersion === document.exact.source.cacheVersion, `${map}: marker and geometry exact-cache versions differ`);
-  for (const [collection, sourceItems] of Object.entries(document.exact.collections)) {
-    const rendered = markerRows(markers, collection);
-    for (const sourceItem of sourceItems) {
-      const projected = rendered.find((row) => row.source === 'tarkov.dev-json' && row.sourceKind === SOURCE_KIND[collection] && row.sourceId === sourceItem.sourceId);
-      assert(projected, `${map}: ${collection}/${sourceItem.sourceId} was not projected into renderer markers`);
-      const exactPosition = sourcePosition(collection, sourceItem.raw);
-      if (exactPosition && projected.position) {
-        assert(projected.position.x === exactPosition.x && projected.position.y === exactPosition.y && projected.position.z === exactPosition.z,
-          `${map}: ${collection}/${sourceItem.sourceId} lost exact position precision`);
-      }
-      for (const field of ['size', 'outline']) if (sourceItem.raw[field] != null) {
-        assert(stableStringify(projected[field]) === stableStringify(sourceItem.raw[field]), `${map}: ${collection}/${sourceItem.sourceId} lost exact ${field}`);
-      }
-      if (Number.isFinite(sourceItem.raw.top)) assert(projected.top === sourceItem.raw.top, `${map}: ${collection}/${sourceItem.sourceId} lost exact top`);
-      if (Number.isFinite(sourceItem.raw.bottom ?? sourceItem.raw.botom)) {
-        assert(projected.bottom === (sourceItem.raw.bottom ?? sourceItem.raw.botom), `${map}: ${collection}/${sourceItem.sourceId} lost exact bottom`);
-      }
-    }
-  }
-  assert(stableStringify(markerKindCounts(markers)) === stableStringify(EXPECTED_MARKER_COUNTS[map]), `${map}: reconciled marker counts drifted`);
-  assertMarkerNameUniqueness(map, semanticMarkerCollections(markers), featureManifest.markerDuplicateWhitelist ?? []);
-  for (const group of ['extracts', 'locks', 'switches', 'stationaryWeapons', 'containers', 'spawns']) for (const row of markers[group] || []) {
-    if (!row.corroboratedBy?.length) continue;
-    const ownWitness = `${row.source}:${row.sourceId ?? row.id}`;
-    assert(row.corroboratedBy.includes(ownWitness), `${map}: ${group}/${row.sourceId} corroboration omits authoritative source`);
-    assert(row.corroboratedBy.some((witness) => witness !== ownWitness), `${map}: ${group}/${row.sourceId} corroboration has no secondary source`);
-    assert(new Set(row.corroboratedBy).size === row.corroboratedBy.length, `${map}: ${group}/${row.sourceId} repeats a corroboration source`);
-  }
-  for (const group of ['extracts', 'locks', 'switches', 'stationaryWeapons', 'containers']) for (const row of markers[group] || []) {
-    if (row.source === 'eft-wiki') {
-      assert(row.visualApproximate === true, `${map}: Wiki-only ${group}/${row.sourceId} lacks visualApproximate`);
-      assert(!Object.hasOwn(row.position || {}, 'y'), `${map}: Wiki-only ${group}/${row.sourceId} fabricated Y`);
-    }
-  }
-  assert(markers.hazards.length >= document.exact.collections.hazards.length + document.exact.collections.artilleryZones.length, `${map}: hazards/artillery were dropped`);
-  if (map === 'reserve') assert(markers.locks.filter((item) => item.source === 'tarkov.dev-json').length === 33, 'Reserve exact locks were dropped');
-
-  const evidence = document.terrain.evidence;
-  assert(evidence.schemaVersion === 2, `${map}: typed elevation evidence schema missing`);
-  assert(Object.values(evidence.bucketCounts).reduce((sum, count) => sum + count, 0) === evidence.input, `${map}: evidence buckets do not account for every input`);
-  for (const [bucket, points] of Object.entries(evidence.buckets)) for (const point of points) {
-    assert([point.x, point.y, point.z].every(Number.isFinite), `${map}: ${bucket} contains a non-finite point`);
-    assert(point.reasonCodes?.length, `${map}: ${bucket}/${point.sourceId} has no reason code`);
-  }
-  const routedExactIds = new Set(Object.values(evidence.buckets).flat().filter((point) => point.provider === 'tarkov.dev-json').map((point) => point.sourceId));
-  for (const [collection, items] of Object.entries(document.exact.collections)) for (const item of items) {
-    if (sourcePosition(collection, item.raw)) assert(routedExactIds.has(`${collection}:${item.sourceId}`), `${map}: exact Y ${collection}/${item.sourceId} never entered the elevation router`);
-  }
-  assert(evidence.buckets.ground.some((point) => point.provider === 'tarkov.dev-json') && evidence.buckets.ground.some((point) => point.provider === 'spt-4.1.2'), `${map}: exact and SPT evidence do not share the ground pipeline`);
-  assert(document.floorSurfaces.length > 0 && document.floorSurfaces.some((surface) => surface.classification === 'underground') && document.floorSurfaces.some((surface) => surface.classification === 'roof'), `${map}: roof/underground evidence did not feed floor classification`);
-  if (map === 'woods') {
-    assert(evidence.buckets.rock.length > 0 && document.hardRocks.length > 0, 'Woods rock evidence did not feed hard-rock geometry');
-    const contactForms = document.hardRocks.filter((rock) => rock.form === 'contact');
-    assert(document.hardRocks.every((rock) => rock.evidenceSourceIds.length > 0), 'Woods hard-rock form has no routed rock evidence');
-    assert(!document.rocks.some((rock) => contactForms.some((contact) => inPoly(rock.poly.reduce((sum, point) => [sum[0] + point[0] / rock.poly.length, sum[1] + point[1] / rock.poly.length], [0, 0]), contact.poly))), 'Woods legacy rock geometry stacks on the hard-rock region');
-    close(surface1(-209.22, -279.78), 77.52, 0.01, 'Woods central summit');
-  }
-  assertFeatureResults(map, document);
+  const duplicate = [{
+    rows: [
+      { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'a', name: 'Scav Checkpoint', faction: 'scav' },
+      { source: 'tarkov.dev-json', sourceKind: 'extract', sourceId: 'b', name: 'Scav Checkpoint (Co-op)', faction: 'scav' },
+    ],
+    kindOf: (row) => row.sourceKind, nameOf: (row) => row.name, factionOf: (row) => row.faction,
+  }];
+  let rejected = false;
+  try { assertMarkerNameUniqueness('fixture', duplicate); } catch { rejected = true; }
+  assert(rejected, 'unwhitelisted duplicate marker contract failed');
 }
 
-console.log(`verified ${MAPS.length} maps: exact cache projection, typed elevation routing, reviewed feature assertions, and sampler-only 1x/3x relief`);
-console.log('\nAnchor heights (canonical 1x metres)');
-console.log('| Map | Anchor | X | Z | Before | After | Delta |');
-console.log('|---|---|---:|---:|---:|---:|---:|');
-for (const [map, name, x, z, before, after, delta] of anchorRows) console.log(`| ${map} | ${name} | ${x.toFixed(2)} | ${z.toFixed(2)} | ${before.toFixed(2)} | ${after.toFixed(2)} | ${delta >= 0 ? '+' : ''}${delta.toFixed(2)} |`);
-console.log(`\nHashes (${BASELINE} before, worktree after)`);
-console.log('| File | Before SHA-256 | After SHA-256 |');
-console.log('|---|---|---|');
-for (const [file, before, after] of hashRows) console.log(`| ${file} | \`${before}\` | \`${after}\` |`);
+const rebuiltHashes = await assertIsolatedRebuild();
+assertLibraryContracts();
+const regressionHashes = await assertReadOnlyRegressionMaps();
+
+const [markerBytes, geometryBytes, featureBytes] = await Promise.all([
+  readFile(path.join(ROOT, OUTPUTS[0])),
+  readFile(path.join(ROOT, OUTPUTS[1])),
+  readFile(path.join(ROOT, 'data/customs-features.json')),
+]);
+const markers = JSON.parse(markerBytes), document = JSON.parse(geometryBytes), featureManifest = JSON.parse(featureBytes);
+const exactSource = await loadExactMap(MAP);
+
+assert(document.canonicalScale === 1 && document.terrain.units?.scale === 1, 'customs: canonical output is not 1x');
+const reliefKeys = reliefPaths(document);
+assert(!reliefKeys.length, `customs: relief was baked into generated data at ${reliefKeys.join(', ')}`);
+
+const surface1 = surfaceSampler(document, 1), surface3 = surfaceSampler(document, 3);
+for (const anchor of document.features.anchors) {
+  const [x, z] = anchor.position, canonical = surface1(x, z);
+  assert(Number.isFinite(canonical), `customs/${anchor.name}: canonical anchor height is not finite`);
+  assert(Math.abs(surface3(x, z) - canonical * 3) <= 1e-4, `customs/${anchor.name}: 3x sampler is not a pure view skin`);
+}
+assert(document.features.anchors.length >= 6, 'customs: reviewed verification anchors were dropped');
+assert(document.features.assignments.some((item) => item.featureRoot === 'customs.dorms.two_story.main' && item.floors === 2), 'customs: Dorms 2-Story feature assignment failed');
+const dormsThreeStorySourceKey = 'svg:Ground_Level/Buildings/Big_Buildings-2:element-194:subpath-0';
+const dormsThreeStory = document.features.assignments.find((item) => item.featureRoot === 'customs.dorms.three_story.main');
+assert(dormsThreeStory?.featureId === 'customs.dorms.three_story.main'
+  && dormsThreeStory.sourceKey === dormsThreeStorySourceKey
+  && dormsThreeStory.floors === 3 && dormsThreeStory.heightM === 9.5 && dormsThreeStory.emittedAs === 'building',
+'customs: Dorms 3-Story reviewed shell assignment failed');
+assert(document.buildings.some((building) => building.sourceKey === dormsThreeStorySourceKey
+  && building.featureId === dormsThreeStory.featureId && building.floors === 3 && building.height === 9.5),
+'customs: Dorms 3-Story assignment does not resolve to the emitted 3-floor/9.5m building');
+
+assert(stableStringify(document.exact) === stableStringify(exactSource.exact), 'customs: serialized exact layer differs from verified fixture');
+assert(markers.exactCache?.cacheVersion === document.exact.source.cacheVersion, 'customs: marker and geometry exact-cache versions differ');
+for (const [collection, sourceItems] of Object.entries(document.exact.collections)) {
+  const rendered = markerRows(markers, collection);
+  for (const sourceItem of sourceItems) {
+    const projected = rendered.find((row) => row.source === 'tarkov.dev-json'
+      && row.sourceKind === SOURCE_KIND[collection] && row.sourceId === sourceItem.sourceId);
+    assert(projected, `customs: ${collection}/${sourceItem.sourceId} was not projected into renderer markers`);
+    const exactPosition = sourcePosition(collection, sourceItem.raw);
+    if (exactPosition) {
+      assert(projected.position, `customs: ${collection}/${sourceItem.sourceId} lost its exact position`);
+      assert(projected.position.x === exactPosition.x && projected.position.y === exactPosition.y && projected.position.z === exactPosition.z,
+        `customs: ${collection}/${sourceItem.sourceId} lost exact position precision`);
+    }
+    for (const field of ['size', 'outline']) if (sourceItem.raw[field] != null) {
+      assert(stableStringify(projected[field]) === stableStringify(sourceItem.raw[field]), `customs: ${collection}/${sourceItem.sourceId} lost exact ${field}`);
+    }
+    if (Number.isFinite(sourceItem.raw.top)) assert(projected.top === sourceItem.raw.top, `customs: ${collection}/${sourceItem.sourceId} lost exact top`);
+    if (Number.isFinite(sourceItem.raw.bottom ?? sourceItem.raw.botom)) {
+      assert(projected.bottom === (sourceItem.raw.bottom ?? sourceItem.raw.botom), `customs: ${collection}/${sourceItem.sourceId} lost exact bottom`);
+    }
+  }
+}
+
+assertMarkerNameUniqueness(MAP, semanticMarkerCollections(markers), featureManifest.markerDuplicateWhitelist ?? []);
+assert(!markers.locks.some((row) => row.source === 'eft-wiki'), 'customs: unanchored Wiki lock entered published world coordinates');
+assert(markers.locks.filter((row) => row.source === 'tarkov.dev-json').length === document.exact.collections.locks.length, 'customs: exact lock set was not preserved');
+const quarantinedLocks = markers.quarantinedMarkers?.locks ?? [];
+assert(quarantinedLocks.length === 28, `customs: expected 28 detached-panel Wiki locks in quarantine, got ${quarantinedLocks.length}`);
+for (const row of quarantinedLocks) {
+  assert(row.coordinateStatus === 'unanchored-wiki-panel', `customs: quarantined lock ${row.sourceId} lacks coordinate status`);
+  assert(!Object.hasOwn(row, 'position'), `customs: quarantined lock ${row.sourceId} retains a fabricated world position`);
+}
+
+const evidence = document.terrain.evidence;
+assert(evidence.schemaVersion === 3, 'customs: typed surface evidence schema missing');
+assert(Object.values(evidence.bucketCounts).reduce((sum, count) => sum + count, 0) === evidence.input, 'customs: evidence buckets do not account for every input');
+assert(stableStringify(evidence.heightfieldBuckets) === stableStringify(['ground', 'road']), 'customs: only ground and road evidence may fit the terrain heightfield');
+assert(Number.isInteger(evidence.heightfieldSamples) && evidence.heightfieldSamples > 0, 'customs: heightfield fit has no samples');
+for (const [bucket, points] of Object.entries(evidence.buckets)) for (const point of points) {
+  assert([point.x, point.y, point.z].every(Number.isFinite), `customs: ${bucket} contains a non-finite point`);
+  assert(point.reasonCodes?.length, `customs: ${bucket}/${point.sourceId} has no reason code`);
+}
+const routedExactIds = new Set(Object.values(evidence.buckets).flat()
+  .filter((point) => point.provider === 'tarkov.dev-json').map((point) => point.sourceId));
+for (const [collection, items] of Object.entries(document.exact.collections)) for (const item of items) {
+  if (sourcePosition(collection, item.raw)) assert(routedExactIds.has(`${collection}:${item.sourceId}`), `customs: exact Y ${collection}/${item.sourceId} never entered the elevation router`);
+}
+assert(evidence.buckets.ground.some((point) => point.provider === 'tarkov.dev-json')
+  && evidence.buckets.ground.some((point) => point.provider === 'spt-4.1.2'), 'customs: exact and SPT evidence do not share the ground pipeline');
+assert(document.floorSurfaces.some((surface) => surface.classification === 'underground')
+  && document.floorSurfaces.some((surface) => surface.classification === 'roof'), 'customs: roof/underground evidence did not feed floor classification');
+const surfaceIds = new Set();
+for (const surface of document.floorSurfaces) {
+  const expectedStableId = `${MAP}.surface.${sha256(Buffer.from(stableStringify([
+    MAP, surface.scope, surface.classification, String(surface.floorIndex),
+  ]))).slice(0, 24)}`;
+  assert(surface.stableId === expectedStableId, `customs: floor surface ${surface.scope}/${surface.classification}/${surface.floorIndex} has a non-deterministic stableId`);
+  assert(!surfaceIds.has(surface.stableId), `customs: duplicate floor surface stableId ${surface.stableId}`);
+  surfaceIds.add(surface.stableId);
+  if (surface.scope.startsWith('building:')) {
+    assert(surface.buildingSourceKey && surface.scope === `building:${surface.buildingSourceKey}`,
+      `customs: ${surface.stableId} has no explicit building source binding`);
+    const building = document.buildings.find((candidate) => candidate.sourceKey === surface.buildingSourceKey);
+    assert(building, `customs: ${surface.stableId} references a missing building ${surface.buildingSourceKey}`);
+    if (surface.buildingId != null) {
+      assert(surface.buildingId === building.featureId && surface.featureId === surface.buildingId,
+        `customs: ${surface.stableId} has inconsistent reviewed building IDs`);
+    }
+  }
+}
+const dormsTwoFloorZero = document.floorSurfaces.find((surface) => surface.stableId === 'customs.surface.3f03ef2c6b3b917900b5f2fe');
+const dormsThreeFloorZero = document.floorSurfaces.find((surface) => surface.stableId === 'customs.surface.23e45b4ca4c30541d58d5cd6');
+for (const [name, surface, featureId] of [
+  ['Dorms 2-Story', dormsTwoFloorZero, 'customs.dorms.two_story.main'],
+  ['Dorms 3-Story', dormsThreeFloorZero, 'customs.dorms.three_story.main'],
+]) {
+  assert(surface?.classification === 'floor' && surface.floorIndex === 0
+    && surface.buildingId === featureId && Number.isFinite(surface.surfaceY),
+  `customs: ${name} floor-0 stable surface selector failed`);
+}
+
+console.log('verified Customs from committed exact JSON/SVG fixtures through an isolated two-builder rebuild with networking disabled');
+for (const [file, hash] of rebuiltHashes) console.log(`${file}: ${hash}`);
+console.log('verified Reserve/Woods as pinned read-only canonical/feature/anchor regressions');
+for (const [file, hash] of regressionHashes) console.log(`${file}: ${hash}`);
+console.log(`exact collections preserved; ${quarantinedLocks.length} detached-panel Wiki locks remain coordinate-free`);

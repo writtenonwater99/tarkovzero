@@ -9,6 +9,10 @@
 //     --name <text> (shown on the map instead of the code) --keep (don't delete screenshots)
 //     --auto <ms> (auto-press screenshot key) --map <name> (skip log detection)
 //     --logs <EFT Logs folder> --elevation-log <file> (default elevation-<map>.jsonl) --verbose
+//   independent Customs survey options:
+//     --survey-capture <plan id> --game-build <build> --confidence <0..1> [--survey-log <file>]
+//     or direct metadata: --feature-id --survey-tag --point-role --surface-kind [--surface-id] --partition --route-id
+//     [--vertical-reference player-origin] [--surface-offset <metres>] [--priority]
 //   quest options: --no-quests (don't read the quest log) --reset-quests (forget the reconstructed set)
 //   UI options: --headless (no UI server) --port <n> (default 4173) --no-open (don't open the browser)
 // Runs with Windows node or WSL node (paths under /mnt/c are handled).
@@ -21,6 +25,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { QuestTracker } from './quests.mjs';
+import { appendSurveyObservation, buildSurveyObservation, createSurveySession } from './survey.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG = path.join(here, 'companion.json');
@@ -124,6 +129,30 @@ function resolveDirs() {
 }
 resolveDirs();
 const autoDir = () => (screenshotDirCandidates().find((d) => fs.existsSync(d)) || screenshotDirCandidates()[0] || null);
+
+// Survey capture is deliberately opt-in and separate from ordinary elevation
+// logging. A normal position stream must never become "independent truth" just
+// because it happens to contain x/y/z coordinates.
+let surveySession = null, surveyLogWarned = false, surveyMapWarned = false;
+try {
+  surveySession = createSurveySession({
+    args,
+    baseDir: here,
+    resolvePath: (value) => path.resolve(toLocal(String(value))),
+    simulate: !!args.simulate,
+  });
+} catch (error) {
+  console.error(`survey configuration error: ${error.message}`);
+  process.exit(2);
+}
+if (surveySession) {
+  log(`survey capture: ${surveySession.captureId || surveySession.featureId} (${surveySession.partition}, route ${surveySession.routeId})`);
+  log(`survey log: ${surveySession.logPath}`);
+  log('survey screenshots will be preserved even when Delete PNGs is enabled');
+  if (surveySession.verticalReference === 'player-origin' && surveySession.surfaceOffsetM === null) {
+    log('survey vertical note: player-origin has no calibrated surface offset; these captures cannot pass the elevation gate');
+  }
+}
 
 // ---- relay connection (auto-reconnect)
 let ws = null, sent = 0, lastPos = null, reconnectTimer = null;
@@ -234,6 +263,20 @@ function logElevation(msg, t = Date.now()) {
   try { fs.appendFileSync(file, `${JSON.stringify({ map: msg.map, x: msg.x, y: msg.y, z: msg.z, t })}\n`); }
   catch (error) { if (!elevationLogWarned) { elevationLogWarned = true; log(`could not append elevation log ${file}: ${error.message}`); } }
 }
+function logSurvey(msg, screenshotId, t = Date.now()) {
+  if (!surveySession) return;
+  const surveyMap = normalizeMap(msg.map);
+  if (surveyMap !== 'customs') {
+    if (!surveyMapWarned) { surveyMapWarned = true; log(`survey capture skipped: detected map ${msg.map}; independent survey is Customs-only`); }
+    return;
+  }
+  try {
+    const observation = buildSurveyObservation(surveySession, { ...msg, map: surveyMap }, { screenshotId, capturedAt: new Date(t).toISOString() });
+    appendSurveyObservation(surveySession, observation);
+  } catch (error) {
+    if (!surveyLogWarned) { surveyLogWarned = true; log(`could not append survey log ${surveySession.logPath}: ${error.message}`); }
+  }
+}
 function posMessage(p) { // every position carries the username when one is set
   const msg = { ...p, map: currentMap() };
   if (cfg.name) msg.name = cfg.name;
@@ -336,6 +379,21 @@ function stateJson() {
     version,
     simulate: !!args.simulate,
     autoDir: args.simulate ? null : autoDir(),
+    survey: surveySession ? {
+      featureId: surveySession.featureId,
+      tag: surveySession.tag,
+      pointRole: surveySession.pointRole,
+      surfaceKind: surveySession.surfaceKind,
+      surfaceId: surveySession.surfaceId,
+      partition: surveySession.partition,
+      routeId: surveySession.routeId,
+      gameBuild: surveySession.gameBuild,
+      confidence: surveySession.confidence,
+      priority: surveySession.priority,
+      verticalReference: surveySession.verticalReference,
+      surfaceOffsetM: surveySession.surfaceOffsetM,
+      logPath: surveySession.logPath,
+    } : null,
   };
 }
 function sendJson(res, obj, status = 200) {
@@ -513,10 +571,11 @@ function scan() {
     if (!p) { log(`could not parse position from filename: ${file}`); continue; }
     const msg = posMessage(p);
     logElevation(msg, now);
+    logSurvey(msg, file, now);
     const ok = send(msg);
     log(`  ${ok ? 'sent' : 'DROP'} #${sent}  x ${msg.x}  y ${msg.y}  z ${msg.z}  yaw ${msg.yaw}  map ${msg.map}${msg.name ? '  name ' + msg.name : ''}  (file→detect ${age ?? '?'} ms)${verbose ? '  ' + file : ''}`);
     if (ok) rememberPos(msg);
-    if (cfg.deleteScreenshots) setTimeout(() => fs.rm(full, () => {}), 3000);
+    if (cfg.deleteScreenshots && !surveySession) setTimeout(() => fs.rm(full, () => {}), 3000);
   }
 }
 

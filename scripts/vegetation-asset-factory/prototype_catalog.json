@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 1,
+  "map": "customs",
+  "source": "local scalar vegetation census; prototype names and aggregate instance counts only",
+  "sourceFrame": "eft-unity-world-metres-y-up",
+  "instanceCount": 8805,
+  "families": {
+    "birch": 35,
+    "deciduous-broadleaf": 479,
+    "filbert-shrub": 2747,
+    "ground-plant": 2391,
+    "pine": 3051,
+    "stump": 102
+  },
+  "prototypes": [
+    {
+      "name": "birch01",
+      "family": "birch",
+      "form": "airy-oval",
+      "variant": 1,
+      "dry": false,
+      "instances": 4,
+      "nominalHeightM": 9.2,
+      "nominalWidthM": 5.336
+    },
+    {
+      "name": "birch02",
+      "family": "birch",
+      "form": "airy-oval",
+      "variant": 2,
+      "dry": false,
+      "instances": 17,
+      "nominalHeightM": 8.1,
+      "nominalWidthM": 4.698
+    },
+    {
+      "name": "birch03",
+      "family": "birch",
+      "form": "airy-oval",
+      "variant": 3,
+      "dry": false,
+      "instances": 14,
+      "nominalHeightM": 7.2,
+      "nominalWidthM": 4.176
+    },
+    {
+      "name": "brush_dry01",
+      "family": "filbert-shrub",
+      "form": "dry-brush",
+      "variant": 1,
+      "dry": true,
+      "instances": 452,
+      "nominalHeightM": 1.65,
+      "nominalWidthM": 1.8975
+    },
+    {
+      "name": "brush_dry02",
+      "family": "filbert-shrub",
+      "form": "dry-brush",
+      "variant": 2,
+      "dry": true,
+      "instances": 56,
+      "nominalHeightM": 1.65,
+      "nominalWidthM": 1.8975
+    },
+    {
+      "name": "fern01",
+      "family": "ground-plant",
+      "form": "fern",
+      "variant": 1,
+      "dry": false,
+      "instances": 153,
+      "nominalHeightM": 0.72,
+      "nominalWidthM": 0.648
+    },
+    {
+      "name": "fern02",
+      "family": "ground-plant",
+      "form": "fern",
+      "variant": 2,
+      "dry": false,
+      "instances": 1,
+      "nominalHeightM": 0.72,
+      "nominalWidthM": 0.648
+    },
+    {
+      "name": "filbert_01",
+      "family": "filbert-shrub",
+      "form": "medium",
+      "variant": 1,
+      "dry": false,
+      "instances": 224,
+      "nominalHeightM": 1.65,
+      "nominalWidthM": 1.8975
+    },
+    {
+      "name": "filbert_big01",
+      "family": "filbert-shrub",
+      "form": "big",
+      "variant": 1,
+      "dry": false,
+      "instances": 578,
+      "nominalHeightM": 2.45,
+      "nominalWidthM": 2.8175
+    },
+    {
+      "name": "filbert_big02",
+      "family": "filbert-shrub",
+      "form": "big",
+      "variant": 2,
+      "dry": false,
+      "instances": 178,
+      "nominalHeightM": 2.45,
+      "nominalWidthM": 2.8175
+    },
+    {
+      "name": "filbert_big03",
+      "family": "filbert-shrub",
+      "form": "big",
+      "variant": 3,
+      "dry": false,
+      "instances": 196,
+      "nominalHeightM": 2.45,
+      "nominalWidthM": 2.8175
+    },
+    {
+      "name": "filbert_dry01",
+      "family": "filbert-shrub",
+      "form": "dry-filbert",
+      "variant": 1,
+      "dry": true,
+      "instances": 99,
+      "nominalHeightM": 1.65,
+      "nominalWidthM": 1.8975
+    },
+    {
+      "name": "filbert_dry03",
+      "family": "filbert-shrub",
+      "form": "dry-filbert",
+      "variant": 3,
+      "dry": true,
+      "instances": 75,
+      "nominalHeightM": 1.65,
+      "nominalWidthM": 1.8975
+    },
+    {
+      "name": "filbert_small01",
+      "family": "filbert-shrub",
+      "form": "small",
+      "variant": 1,
+      "dry": false,
+      "instances": 383,
+      "nominalHeightM": 1.05,
+      "nominalWidthM": 1.2075
+    },
+    {
+      "name": "filbert_small02",
+      "family": "filbert-shrub",
+      "form": "small",
+      "variant": 2,
+      "dry": false,
+      "instances": 264,
+      "nominalHeightM": 1.05,
+      "nominalWidthM": 1.2075
+    },
+    {
+      "name": "filbert_small03",
+      "family": "filbert-shrub",
+      "form": "small",
+      "variant": 3,
+      "dry": false,
+      "instances": 242,
+      "nominalHeightM": 1.05,
+      "nominalWidthM": 1.2075
+    },
+    {
+      "name": "grass_dry3",
+      "family": "ground-plant",
+      "form": "dry-grass",
+      "variant": 3,
+      "dry": true,
+      "instances": 1166,
+      "nominalHeightM": 0.56,
+      "nominalWidthM": 0.504
+    },
+    {
+      "name": "pine01",
+      "family": "pine",
+      "form": "conical",
+      "variant": 1,
+      "dry": false,
+      "instances": 1830,
+      "nominalHeightM": 10.8,
+      "nominalWidthM": 4.752
+    },
+    {
+      "name": "pine02",
+      "family": "pine",
+      "form": "conical",
+      "variant": 2,
+      "dry": false,
+      "instances": 252,
+      "nominalHeightM": 9.6,
+      "nominalWidthM": 4.224
+    },
+    {
+      "name": "pine03",
+      "family": "pine",
+      "form": "conical",
+      "variant": 3,
+      "dry": false,
+      "instances": 190,
+      "nominalHeightM": 8.8,
+      "nominalWidthM": 3.872
+    },
+    {
+      "name": "pine04",
+      "family": "pine",
+      "form": "conical",
+      "variant": 4,
+      "dry": false,
+      "instances": 275,
+      "nominalHeightM": 7.9,
+      "nominalWidthM": 3.476
+    },
+    {
+      "name": "pine05",
+      "family": "pine",
+      "form": "conical",
+      "variant": 5,
+      "dry": false,
+      "instances": 504,
+      "nominalHeightM": 7.1,
+      "nominalWidthM": 3.124
+    },
+    {
+      "name": "plant_wolf01",
+      "family": "ground-plant",
+      "form": "broadleaf-rosette",
+      "variant": 1,
+      "dry": false,
+      "instances": 436,
+      "nominalHeightM": 0.82,
+      "nominalWidthM": 0.738
+    },
+    {
+      "name": "plant_wolf02",
+      "family": "ground-plant",
+      "form": "broadleaf-rosette",
+      "variant": 2,
+      "dry": false,
+      "instances": 635,
+      "nominalHeightM": 0.82,
+      "nominalWidthM": 0.738
+    },
+    {
+      "name": "Stump01_update",
+      "family": "stump",
+      "form": "cut-stump",
+      "variant": 1,
+      "dry": false,
+      "instances": 25,
+      "nominalHeightM": 0.58,
+      "nominalWidthM": 0.62
+    },
+    {
+      "name": "Stump02_update",
+      "family": "stump",
+      "form": "cut-stump",
+      "variant": 2,
+      "dry": false,
+      "instances": 18,
+      "nominalHeightM": 0.66,
+      "nominalWidthM": 0.62
+    },
+    {
+      "name": "Stump03_update",
+      "family": "stump",
+      "form": "broken-stump",
+      "variant": 3,
+      "dry": false,
+      "instances": 35,
+      "nominalHeightM": 0.74,
+      "nominalWidthM": 0.62
+    },
+    {
+      "name": "Stump04_update",
+      "family": "stump",
+      "form": "broken-stump",
+      "variant": 4,
+      "dry": false,
+      "instances": 24,
+      "nominalHeightM": 0.82,
+      "nominalWidthM": 0.62
+    },
+    {
+      "name": "tree01",
+      "family": "deciduous-broadleaf",
+      "form": "round-crown",
+      "variant": 1,
+      "dry": false,
+      "instances": 170,
+      "nominalHeightM": 9.2,
+      "nominalWidthM": 5.336
+    },
+    {
+      "name": "tree02",
+      "family": "deciduous-broadleaf",
+      "form": "round-crown",
+      "variant": 2,
+      "dry": false,
+      "instances": 279,
+      "nominalHeightM": 8.1,
+      "nominalWidthM": 4.698
+    },
+    {
+      "name": "tree03",
+      "family": "deciduous-broadleaf",
+      "form": "round-crown",
+      "variant": 3,
+      "dry": false,
+      "instances": 30,
+      "nominalHeightM": 7.2,
+      "nominalWidthM": 4.176
+    }
+  ]
+}

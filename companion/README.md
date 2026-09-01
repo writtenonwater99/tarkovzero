@@ -59,6 +59,26 @@ Options (persisted in `companion.json`):
 | `--headless` | — | no UI server, terminal only |
 | `--no-open` | — | start the UI but don't open the browser |
 
+Independent accuracy survey flags are deliberately not persisted in `companion.json`:
+
+| flag | meaning |
+|---|---|
+| `--survey-capture <id>` | load pre-declared metadata from `data/customs-audit-anchors.json` |
+| `--survey-plan <file>` | use another schema-v1 Customs capture plan |
+| `--survey-log <file>` | append independent evidence as JSONL; default `companion/survey-customs.jsonl` |
+| `--game-build <id>` | required EFT build/version recorded with every observation |
+| `--confidence <0..1>` | required capture confidence; held-out audit evidence requires at least 0.8 |
+| `--feature-id <id>` | stable `customs.*` feature id for a direct/ad-hoc capture |
+| `--survey-tag <text>` | human-readable physical target for a direct capture |
+| `--point-role <role>` | what is being measured, such as `ground-contact`, `object-corner`, or `floor-contact` |
+| `--surface-kind <kind>` | labeled truth: `ground`, `road`, `bridge-deck`, `water`, `rock`, `floor`, `roof`, `underground`, or `object` |
+| `--surface-id <id>` | emitted, geometry-bound `customs.surface.*` stable ID; required for floor, roof, and underground captures so the audit never chooses a layer from observed Y or labels |
+| `--partition <train\|held-out>` | route partition declared before capture |
+| `--route-id <customs.*>` | stable route id; the same route may never cross partitions |
+| `--vertical-reference <kind>` | only `player-origin` is valid for EFT screenshots (the default); `surface-contact` belongs to a separate capture source/schema and is rejected here |
+| `--surface-offset <metres>` | calibrated player-origin-to-surface offset; without it the observation cannot count toward elevation error |
+| `--priority` | mark a priority-compound/control observation |
+
 Works with Windows Node (`node companion.mjs`) or from WSL (`node.exe companion.mjs` / `node companion.mjs`).
 The folder is polled every 250 ms rather than `fs.watch`ed (fs.watch is silent on `/mnt/c`).
 
@@ -67,6 +87,48 @@ The folder is polled every 250 ms rather than `fs.watch`ed (fs.watch is silent o
 EFT embeds position + rotation in every screenshot filename. The companion watches the folder, parses the
 filename, and sends `{x, y, z, yaw, map}` to the relay under your code. If a username is set it rides along in
 every position message as `name` (the site reads `m.name` and labels your arrow with it instead of the code).
+
+## Independent Customs accuracy survey
+
+Ordinary position and `elevation-*.jsonl` logs are **not** independent accuracy evidence. Accuracy survey
+mode is opt-in, Customs-only, rejects `--simulate`, requires stable feature/route/build/confidence metadata,
+and records the original EFT screenshot filename as `screenshotId`. EFT filenames always report the
+**player origin**; the companion cannot label them as surface contacts. Without an independently calibrated
+`surfaceOffsetM`, they remain useful for horizontal/classification evidence but are excluded from vertical
+metrics. Survey mode preserves PNG/JPG files even when the normal delete-after-3-seconds option is enabled.
+
+The committed capture plan contains metadata only—there are intentionally no placeholder measurements. For
+example, this captures the pre-declared held-out Dorms east route:
+
+```bash
+cd companion
+node companion.mjs --map customs \
+  --survey-capture dorms-east-ground-held-out \
+  --game-build "<exact EFT build>" --confidence 0.95 \
+  --surface-offset "<independently calibrated metres>"
+```
+
+Every new EFT screenshot appends one JSON object to `survey-customs.jsonl`. Stop/restart with another
+`--survey-capture` id when the physical target changes. Never move a route between `train` and `held-out`
+after inspecting errors. The raw survey log is git-ignored because it contains first-party raid coordinates;
+promote only a reviewed evidence copy into `data/customs-audit-anchors.json`.
+
+Run the audit from the repository root:
+
+```bash
+npm run audit:customs -- \
+  --input data/customs-audit-anchors.json \
+  --input companion/survey-customs.jsonl
+```
+
+The audit reports held-out horizontal and vertical errors, training-evidence coverage, held-out surface
+classification, playable-bounds outliers, and object fidelity. It exits nonzero until all gates pass. Survey
+records contain reference truth only: an embedded `model` prediction is forbidden. Centers, corners, surfaces,
+yaw, and dimensions are derived from the emitted, hashed `customs-3d.json` artifact. Dangling or duplicate
+stable-feature assignments fail the model contract. Layered predictions resolve the predeclared `surfaceId`
+against an emitted, geometry-bound `floorSurfaces[].stableId`; `surfaceKind`, `pointRole`, and observed Y only score the result
+and never select a floor. Generated terrain residuals are never substituted for held-out truth.
+`npm run audit:customs -- --bootstrap` validates the empty-template workflow without claiming a pass.
 
 ## Active quests
 
@@ -117,6 +179,7 @@ Same-origin, 127.0.0.1 only, token required (`X-TZ-Token` header, or `?t=` for t
 
 ```
 npm run test:quests            # from the repo root — node --test, no dependencies
+node --test companion/test/survey.test.mjs scripts/audit-map-accuracy.test.mjs
 ```
 
 Covers the quest-log parser and the state machine against `test/fixtures/` (three synthetic log sessions in

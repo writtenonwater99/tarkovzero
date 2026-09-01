@@ -1,25 +1,48 @@
 {
-  "schemaVersion": 1,
-  "cacheVersion": "2026-08-29-e9e411d572ae-a1d400843b10",
-  "fetchedDate": "2026-08-29",
-  "sources": [
-    {
-      "name": "maps",
-      "url": "https://json.tarkov.dev/regular/maps",
-      "cachePath": "scripts/data/tarkov-dev-exact/2026-08-29/maps-e9e411d572ae5493.json",
-      "sha256": "e9e411d572ae54938f23f79b6e46dc3f1eece74335e64d5cbcdb914b70637db7",
-      "bytes": 9568353,
-      "etag": "W/\"d87334b7cd3dce58c1ae184d8c16f6a3\"",
-      "lastModified": "Sun, 30 Aug 2026 00:14:27 GMT"
-    },
-    {
-      "name": "maps_en",
-      "url": "https://json.tarkov.dev/regular/maps_en",
-      "cachePath": "scripts/data/tarkov-dev-exact/2026-08-29/maps_en-a1d400843b10f867.json",
-      "sha256": "a1d400843b10f8677eabe59acb4833716506fb571d7f27e73bd550cb7c25a21e",
-      "bytes": 22962,
-      "etag": "W/\"ea6c4650564958dc2edd01b40e984fb2\"",
-      "lastModified": "Wed, 26 Aug 2026 09:04:31 GMT"
+  "schemaVersion": 3,
+  "maps": {
+    "customs": {
+      "cacheVersion": "customs-85d01ff52c30f7da",
+      "fetchedDate": "2026-08-31",
+      "cachePath": "scripts/data/tarkov-dev-exact/customs-d2fa8ae869a9cde3.json.gz",
+      "sha256": "d2fa8ae869a9cde39c2b8edd0255c7c24700291ab1404198ecb0b892088b8535",
+      "decodedSha256": "85d01ff52c30f7da79244df376a7e3c9278c2281043dbcc940dc75e26240243d",
+      "bytes": 52208,
+      "decodedBytes": 274974,
+      "sources": [
+        {
+          "name": "maps",
+          "url": "https://json.tarkov.dev/regular/maps",
+          "sha256": "47d4cf89506304d7d76b669c5d15d42978026ae6a2734872d49e54f2faaaa4a7",
+          "bytes": 9574896,
+          "etag": "W/\"30c6ffaf7652814924e259d55fb9a318\"",
+          "lastModified": "Mon, 31 Aug 2026 19:34:37 GMT"
+        },
+        {
+          "name": "maps_en",
+          "url": "https://json.tarkov.dev/regular/maps_en",
+          "sha256": "544137c033c31bfae3458b1ced228ee6c9282716ea12f96bc2a75c20682a48c3",
+          "bytes": 22962,
+          "etag": "W/\"6bfcaff9fc1e0f9137bf1c6f1e6adaac\"",
+          "lastModified": "Mon, 31 Aug 2026 09:04:30 GMT"
+        }
+      ],
+      "svg": {
+        "fetchedDate": "2026-08-31",
+        "cachePath": "scripts/data/tarkov-dev-exact/customs-2892dc782c00a99e.svg.gz",
+        "sha256": "2892dc782c00a99e0ddf0e8332cc318434152200a33e7e4375df2002b954b98e",
+        "decodedSha256": "ee53a5c0faf185a1a4d7be82c2533cd76e70372ac2cac5e9d75b6f3be226768e",
+        "bytes": 77009,
+        "decodedBytes": 193074,
+        "source": {
+          "name": "svg",
+          "url": "https://assets.tarkov.dev/maps/svg/Customs.svg",
+          "sha256": "ee53a5c0faf185a1a4d7be82c2533cd76e70372ac2cac5e9d75b6f3be226768e",
+          "bytes": 193074,
+          "etag": "W/\"91668ae18a8d46d53e6fa8850184254a\"",
+          "lastModified": "Mon, 03 Nov 2025 17:22:49 GMT"
+        }
+      }
     }
-  ]
+  }
 }

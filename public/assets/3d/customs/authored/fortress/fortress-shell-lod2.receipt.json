@@ -1,0 +1,184 @@
+{
+  "asset": {
+    "boundsM": {
+      "centerM": [
+        -0.164566,
+        9.323835,
+        -0.061165
+      ],
+      "max": [
+        30.638618,
+        18.230173,
+        16.564327
+      ],
+      "min": [
+        -30.967751,
+        0.417496,
+        -16.686657
+      ],
+      "sizeM": [
+        61.606369,
+        17.812676,
+        33.250984
+      ]
+    },
+    "bytes": 316024,
+    "floors": [
+      "ground",
+      "floor-1",
+      "roof"
+    ],
+    "gltf": {
+      "forwardAxis": "+x",
+      "pivot": "origin",
+      "unit": "metre",
+      "upAxis": "+y"
+    },
+    "id": "fortress-shell",
+    "lod": 2,
+    "outputFile": "fortress-shell-lod2.glb",
+    "sha256": "sha256:38819248cb3b8e806a27e282126f582d9ec2ccd7397f05358b45513eba2900ea"
+  },
+  "canonicalPlacement": {
+    "eftRootCenterM": {
+      "x": 202.898880005,
+      "y": 1.729503632,
+      "z": -127.68775177
+    },
+    "note": "placement is receipt metadata only; no world transform is baked into the GLB",
+    "recommendedEftPivotM": {
+      "x": 202.898880005,
+      "y": 1.729503632,
+      "z": -127.68775177
+    },
+    "yawDeg": -10.342808
+  },
+  "copyrightBoundary": {
+    "authorship": "independently-authored original procedural geometry and textures",
+    "bakedLightingIncluded": false,
+    "fogIncluded": false,
+    "gameFilesReadByGenerator": false,
+    "gameMeshesIncluded": false,
+    "gameShadersIncluded": false,
+    "gameTexturesIncluded": false,
+    "input": "sanitized scalar dimensions, elevations, yaw, hierarchy counts, and material-family labels"
+  },
+  "generated": {
+    "blenderBoundsM": {
+      "center": [
+        -0.164566,
+        0.061165,
+        9.323835
+      ],
+      "max": [
+        30.638618,
+        16.686657,
+        18.230173
+      ],
+      "min": [
+        -30.967751,
+        -16.564327,
+        0.417496
+      ],
+      "size": [
+        61.606369,
+        33.250984,
+        17.812677
+      ]
+    },
+    "embeddedImageCount": 15,
+    "materialCount": 5,
+    "maximumBatchBoundDriftM": 0.0,
+    "meshObjects": 14,
+    "objectCount": 21,
+    "preservedContractMeshes": 2,
+    "preservedRoofPanelMeshes": 2,
+    "roofTextureResolution": 32,
+    "sourceMeshObjects": 158,
+    "staticBatches": 10,
+    "structureScalars": {
+      "inputFile": "fortress-structure-scalars-v1.json",
+      "objectCount": 334,
+      "sha256": "sha256:8a59c61be57feac54e6307dad12851699ed9c88bdc30a078f37c233f796c6cd7",
+      "usage": "exact scalar origins for roof/girders/supports/ramps and nonzero above-root opaque structural modules; original authored dimensions/materials"
+    },
+    "textureResolution": 64,
+    "triangles": 1872,
+    "vertices": 1252
+  },
+  "generator": {
+    "blenderVersion": "4.5.13 LTS",
+    "name": "tarkovzero-fortress-factory",
+    "requiredInvocationFlags": [
+      "--background",
+      "--factory-startup",
+      "--disable-autoexec",
+      "--python-exit-code 1"
+    ],
+    "scriptSha256": "sha256:972ad51c7b05584fae6ca66ee31547a8ca91d17bfc818523b05200bbb077f1d8",
+    "version": "0.1.0"
+  },
+  "limitations": [
+    "Only supplied scalar anchors are measurement-backed; facade damage, exact opening widths, and basement room layout remain independently authored hypotheses.",
+    "Roof panel positions are scalar-backed; galvanized/off-white/oxidized material variation and weathering are original-authored, deterministic, and not measured per panel.",
+    "No source-game topology, UVs, pixels, shaders, decals, signs, brands, or baked lighting are present.",
+    "The GLB is an authoring baseline and must pass fixed-camera silhouette, opening/cover, held-out placement, and runtime performance gates before a near-1:1 claim."
+  ],
+  "schemaVersion": 1,
+  "truthAnchors": {
+    "footprintLocalQuadM": [
+      [
+        -30.960060241,
+        -12.561473777
+      ],
+      [
+        30.317091682,
+        -12.458264449
+      ],
+      [
+        30.309401501,
+        12.648307217
+      ],
+      [
+        -30.967750422,
+        12.54509789
+      ]
+    ],
+    "footprintM": {
+      "length": 61.27723884118801,
+      "width": 25.106572844575993
+    },
+    "localFromRootM": {
+      "basement": -3.516903632,
+      "ground": 0.7174963680000002,
+      "roofPanelMaximum": 18.064,
+      "roofPanelMinimum": 15.998,
+      "upper": 6.453496368
+    },
+    "longitudinalGirders": 11,
+    "materialFamilies": [
+      "brick",
+      "cement_board",
+      "concrete",
+      "roof_galvanized",
+      "roof_offwhite",
+      "roof_oxidized",
+      "steel"
+    ],
+    "metalRoofSupports": 22,
+    "nominalGirderSpacingM": 5.9876,
+    "playableWorldYM": {
+      "basement": -1.7874,
+      "ground": 2.447,
+      "upper": 8.183
+    },
+    "ramps": 4,
+    "roofGridCapacity": 80,
+    "roofPanelsPresent": 60,
+    "roofTrussWorldYRangeM": [
+      17.7,
+      19.8
+    ],
+    "stairs": 2
+  }
+}

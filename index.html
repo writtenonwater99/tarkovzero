@@ -186,7 +186,7 @@
                   </div>
                 </div>
                 <div class="line only-3d">
-                  <span class="line-lab" title="Real = overcast autumn materials, light and distance haze. Vector = the flat map-board skin, with contours and elevation bands, over exactly the same geometry.">Look</span>
+                  <span class="line-lab" title="Real = grounded autumn materials and directional light. Vector = the flat map-board skin, with contours and elevation bands, over exactly the same geometry.">Look</span>
                   <div id="look-toggle" class="seg" role="group" aria-label="Render style">
                     <button type="button" class="seg-cell on" data-look="realistic" aria-pressed="true">Real</button>
                     <button type="button" class="seg-cell" data-look="vector" aria-pressed="false">Vector</button>
@@ -202,12 +202,12 @@
                     <button type="button" class="seg-cell on" data-fx="detail" aria-pressed="true">Detail</button>
                   </div>
                 </div>
-                <div class="line only-3d">
-                  <span class="line-lab" title="Vertical scale of terrain only; buildings and trees keep their real height">Relief</span>
+                <div class="line only-3d" id="relief-row">
+                  <span class="line-lab" title="1× is canonical EFT elevation. 2× and 3× are explicitly exaggerated analysis views; buildings and trees keep real height.">Relief</span>
                   <div id="relief-toggle" class="seg" role="group" aria-label="Terrain relief">
-                    <button type="button" class="seg-cell" data-relief="1" aria-pressed="false">1×</button>
+                    <button type="button" class="seg-cell on" data-relief="1" aria-pressed="true">1×</button>
                     <button type="button" class="seg-cell" data-relief="2" aria-pressed="false">2×</button>
-                    <button type="button" class="seg-cell on" data-relief="3" aria-pressed="true">3×</button>
+                    <button type="button" class="seg-cell" data-relief="3" aria-pressed="false">3×</button>
                   </div>
                 </div>
                 <div class="line">

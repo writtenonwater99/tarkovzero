@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "documentType": "tarkovzero-independent-accuracy-evidence",
+  "map": "customs",
+  "status": "bootstrap-no-measurements",
+  "coordinateFrame": "eft-unity-world-metres-y-up",
+  "truthPolicy": [
+    "Declare each route as train or held-out before capture; a route must never appear in both partitions.",
+    "Never copy generated terrain, marker, SVG, or object coordinates into reference x/y/z.",
+    "An EFT screenshot filename always records the player origin and can never be labeled surface-contact. It is not surface elevation unless surfaceOffsetM is independently calibrated.",
+    "Observations contain reference truth only. Never add a model field; predictions are derived from the emitted, hashed Customs artifact.",
+    "For floor, roof, or underground captures, declare an emitted, geometry-bound floorSurfaces stableId as surfaceId before capture; labels and observed Y never select the predicted layer.",
+    "Training residuals are diagnostics only. Certification metrics use held-out observations.",
+    "Do not add placeholder coordinates. Empty observations must fail certification clearly."
+  ],
+  "canonicalGates": {
+    "horizontal": { "medianM": 1.5, "p95M": 3, "maxM": 5, "minimumHeldOut": 20 },
+    "vertical": { "maeM": 0.5, "p95M": 1.25, "maxM": 3, "minimumHeldOut": 30 },
+    "coverage": { "traversableWithin25M": 0.8, "priorityWithin10M": 0.95, "minimumPriorityHeldOut": 10 },
+    "surface": { "accuracy": 0.98, "severeErrors": 0, "minimumHeldOut": 30 },
+    "bounds": { "unapprovedOutside": 0 },
+    "objects": {
+      "artifactStableIdRate": 1,
+      "centerP95M": 1,
+      "yawMaxDeg": 5,
+      "dimensionAbsM": 0.5,
+      "dimensionRelative": 0.1,
+      "minimumCenters": 10,
+      "minimumYaw": 3,
+      "minimumDimensions": 3
+    },
+    "provenance": { "minimumHeldOutRoutes": 3, "maximumGameBuilds": 1 }
+  },
+  "capturePlan": [
+    {
+      "id": "dorms-west-ground-train",
+      "featureId": "customs.dorms.ground.west_route",
+      "tag": "Dorms west perimeter traversable ground",
+      "pointRole": "ground-contact",
+      "surfaceKind": "ground",
+      "partition": "train",
+      "routeId": "customs.route.dorms.west_train",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "dorms-two-story-corners-train",
+      "featureId": "customs.dorms.two_story.main",
+      "tag": "Dorms 2-Story surveyed exterior corners",
+      "pointRole": "object-corner",
+      "surfaceKind": "object",
+      "partition": "train",
+      "routeId": "customs.route.dorms.west_train",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "dorms-three-story-corners-train",
+      "featureId": "customs.dorms.three_story.main",
+      "tag": "Dorms 3-Story surveyed exterior corners",
+      "pointRole": "object-corner",
+      "surfaceKind": "object",
+      "partition": "train",
+      "routeId": "customs.route.dorms.south_train",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "dorms-east-ground-held-out",
+      "featureId": "customs.dorms.ground.east_route",
+      "tag": "Dorms east perimeter held-out ground route",
+      "pointRole": "ground-contact",
+      "surfaceKind": "ground",
+      "partition": "held-out",
+      "routeId": "customs.route.dorms.east_held_out",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "dorms-two-story-floor-0-held-out",
+      "featureId": "customs.dorms.two_story.main",
+      "surfaceId": "customs.surface.3f03ef2c6b3b917900b5f2fe",
+      "tag": "Dorms 2-Story held-out ground-floor surface",
+      "pointRole": "floor-contact",
+      "surfaceKind": "floor",
+      "partition": "held-out",
+      "routeId": "customs.route.dorms.floor_surface_held_out",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "dorms-three-story-floor-0-held-out",
+      "featureId": "customs.dorms.three_story.main",
+      "surfaceId": "customs.surface.23e45b4ca4c30541d58d5cd6",
+      "tag": "Dorms 3-Story held-out ground-floor surface",
+      "pointRole": "floor-contact",
+      "surfaceKind": "floor",
+      "partition": "held-out",
+      "routeId": "customs.route.dorms.floor_surface_held_out",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "big-red-ground-train",
+      "featureId": "customs.big_red.ground.perimeter",
+      "tag": "Big Red perimeter traversable ground",
+      "pointRole": "ground-contact",
+      "surfaceKind": "ground",
+      "partition": "train",
+      "routeId": "customs.route.big_red.train",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "fortress-ground-train",
+      "featureId": "customs.fortress.ground.perimeter",
+      "tag": "Fortress and Crackhouse traversable ground",
+      "pointRole": "ground-contact",
+      "surfaceKind": "ground",
+      "partition": "train",
+      "routeId": "customs.route.fortress.train",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "main-bridge-deck-held-out",
+      "featureId": "customs.main_bridge.deck",
+      "tag": "Main Bridge deck held out from ground fitting",
+      "pointRole": "bridge-deck",
+      "surfaceKind": "bridge-deck",
+      "partition": "held-out",
+      "routeId": "customs.route.river_bridge_held_out",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "river-waterline-held-out",
+      "featureId": "customs.river.main.waterline",
+      "tag": "River waterline held out from terrain fitting",
+      "pointRole": "waterline",
+      "surfaceKind": "water",
+      "partition": "held-out",
+      "routeId": "customs.route.river_bridge_held_out",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "old-gas-ground-train",
+      "featureId": "customs.old_gas.ground.perimeter",
+      "tag": "Old Gas traversable ground",
+      "pointRole": "ground-contact",
+      "surfaceKind": "ground",
+      "partition": "train",
+      "routeId": "customs.route.old_gas.train",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "water-pump-objects-held-out",
+      "featureId": "customs.water_pump.cooling_towers.1",
+      "tag": "Water Pump cooling tower held-out object checks",
+      "pointRole": "object-center",
+      "surfaceKind": "object",
+      "partition": "held-out",
+      "routeId": "customs.route.water_pump_held_out",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "sniper-hill-ground-train",
+      "featureId": "customs.sniper_hill.ground.route",
+      "tag": "Sniper Hill ridge and slope ground",
+      "pointRole": "ground-contact",
+      "surfaceKind": "ground",
+      "partition": "train",
+      "routeId": "customs.route.sniper_hill.train",
+      "priority": true,
+      "verticalReference": "player-origin"
+    },
+    {
+      "id": "powerline-ground-held-out",
+      "featureId": "customs.powerline.east.ground_route",
+      "tag": "East powerline held-out ground route",
+      "pointRole": "ground-contact",
+      "surfaceKind": "ground",
+      "partition": "held-out",
+      "routeId": "customs.route.powerline_held_out",
+      "priority": true,
+      "verticalReference": "player-origin"
+    }
+  ],
+  "observations": []
+}

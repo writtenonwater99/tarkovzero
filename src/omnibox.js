@@ -88,7 +88,11 @@ export function runCommand(cmd, rawArg, actions = {}) {
       if (!a.setFloor?.(f)) return `No floor “${arg}”`;
       return `Floor ${f}`;
     }
-    case 'relief': { const n = Number(q) || 3; a.setRelief?.(n); return `Relief ${n}×`; }
+    case 'relief': {
+      const requested = Number(q) || 3;
+      const applied = a.setRelief?.(requested);
+      return `Relief ${typeof applied === 'number' ? applied : requested}×`;
+    }
     case 'trees': case 'rocks': { const on = onOff(false); a.setNature?.(cmd.name, on); return `${cmd.name} ${on ? 'on' : 'off'}`; }
     case 'labels': {
       const d = ['off', 'key', 'all'].find((x) => x.startsWith(q)) ?? 'all';

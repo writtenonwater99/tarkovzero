@@ -2,9 +2,12 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MANIFEST_PATH = path.join(ROOT, 'scripts/data/tarkov-dev-exact-manifest.json');
+const CACHE_ROOT = path.join(ROOT, 'scripts/data/tarkov-dev-exact') + path.sep;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 export const EXACT_LAYER_SCHEMA_VERSION = 1;
 export const EXACT_COLLECTIONS = Object.freeze([
@@ -189,49 +192,102 @@ export function assertMarkerNameUniqueness(mapKey, collections, whitelist = []) 
   return duplicateGroups;
 }
 
-function cacheError(message) {
-  return new Error(`${message}. Run: node scripts/fetch-map-primitives.mjs --date YYYY-MM-DD`);
+function cacheError(message, mapKey = 'customs') {
+  const recovery = mapKey === 'customs'
+    ? 'Refresh explicitly with: node scripts/fetch-map-primitives.mjs --map customs --date YYYY-MM-DD'
+    : `${mapKey} refresh is intentionally disabled while production work remains Customs-only`;
+  return new Error(`${message}. ${recovery}`);
 }
 
-async function loadManifest() {
+async function loadManifest(mapKey) {
   let raw;
   try {
     raw = await readFile(MANIFEST_PATH, 'utf8');
   } catch (error) {
-    if (error?.code === 'ENOENT') throw cacheError('exact tarkov.dev cache manifest is missing');
+    if (error?.code === 'ENOENT') throw cacheError('exact tarkov.dev cache manifest is missing', mapKey);
     throw error;
   }
   let manifest;
   try { manifest = JSON.parse(raw); }
-  catch (error) { throw cacheError(`exact tarkov.dev cache manifest is invalid JSON (${error.message})`); }
-  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.sources)) {
-    throw cacheError(`unsupported exact tarkov.dev cache manifest schema ${manifest.schemaVersion}`);
+  catch (error) { throw cacheError(`exact tarkov.dev cache manifest is invalid JSON (${error.message})`, mapKey); }
+  if (manifest.schemaVersion !== 3 || !manifest.maps || typeof manifest.maps !== 'object' || Array.isArray(manifest.maps)) {
+    throw cacheError(`unsupported exact tarkov.dev cache manifest schema ${manifest.schemaVersion}`, mapKey);
   }
   return manifest;
 }
 
-async function loadSource(manifest, name) {
-  const source = manifest.sources.find((candidate) => candidate.name === name);
-  if (!source?.cachePath || !/^[a-f0-9]{64}$/.test(source.sha256 || '')) {
-    throw cacheError(`exact tarkov.dev cache manifest has no valid ${name} source`);
+async function readVerifiedGzip(mapKey, metadata, label, extension) {
+  if (!metadata?.cachePath || !SHA256_PATTERN.test(metadata.sha256 || '')
+      || !SHA256_PATTERN.test(metadata.decodedSha256 || '')) {
+    throw cacheError(`${label} manifest has no valid ${mapKey} fixture`, mapKey);
   }
-  const file = path.resolve(ROOT, source.cachePath);
-  const cacheRoot = path.join(ROOT, 'scripts/data/tarkov-dev-exact') + path.sep;
-  if (!file.startsWith(cacheRoot)) throw cacheError(`exact tarkov.dev ${name} cache path escapes scripts/data/tarkov-dev-exact`);
+  const file = path.resolve(ROOT, metadata.cachePath);
+  if (!file.startsWith(CACHE_ROOT)) throw cacheError(`${label} ${mapKey} fixture path escapes scripts/data/tarkov-dev-exact`, mapKey);
+  const expectedName = `${mapKey}-${metadata.sha256.slice(0, 16)}.${extension}.gz`;
+  if (path.basename(file) !== expectedName) {
+    throw cacheError(`${label} ${mapKey} fixture is not content-addressed as ${expectedName}`, mapKey);
+  }
   let bytes;
   try { bytes = await readFile(file); }
   catch (error) {
-    if (error?.code === 'ENOENT') throw cacheError(`exact tarkov.dev ${name} cache is missing at ${path.relative(ROOT, file)}`);
+    if (error?.code === 'ENOENT') throw cacheError(`${label} ${mapKey} fixture is missing at ${path.relative(ROOT, file)}`, mapKey);
     throw error;
   }
   const actual = sha256(bytes);
-  if (actual !== source.sha256) {
-    throw cacheError(`exact tarkov.dev ${name} cache hash mismatch: expected ${source.sha256}, got ${actual}`);
+  if (actual !== metadata.sha256) {
+    throw cacheError(`${label} ${mapKey} fixture hash mismatch: expected ${metadata.sha256}, got ${actual}`, mapKey);
   }
-  let json;
-  try { json = JSON.parse(bytes.toString('utf8')); }
-  catch (error) { throw cacheError(`exact tarkov.dev ${name} cache is invalid JSON (${error.message})`); }
-  return { source, json };
+  let decoded;
+  try { decoded = gunzipSync(bytes); }
+  catch (error) { throw cacheError(`${label} ${mapKey} fixture is invalid gzip (${error.message})`, mapKey); }
+  const decodedActual = sha256(decoded);
+  if (decodedActual !== metadata.decodedSha256) {
+    throw cacheError(`${label} ${mapKey} decoded fixture hash mismatch: expected ${metadata.decodedSha256}, got ${decodedActual}`, mapKey);
+  }
+  if (Number.isInteger(metadata.bytes) && metadata.bytes !== bytes.length) {
+    throw cacheError(`${label} ${mapKey} fixture byte count mismatch: expected ${metadata.bytes}, got ${bytes.length}`, mapKey);
+  }
+  if (Number.isInteger(metadata.decodedBytes) && metadata.decodedBytes !== decoded.length) {
+    throw cacheError(`${label} ${mapKey} decoded byte count mismatch: expected ${metadata.decodedBytes}, got ${decoded.length}`, mapKey);
+  }
+  return decoded;
+}
+
+async function loadFixture(manifest, mapKey) {
+  const entry = manifest.maps[mapKey];
+  if (!Array.isArray(entry?.sources) || typeof entry.cacheVersion !== 'string'
+      || !/^\d{4}-\d{2}-\d{2}$/.test(entry.fetchedDate || '')) {
+    throw cacheError(`exact tarkov.dev cache manifest has no valid ${mapKey} fixture`, mapKey);
+  }
+  const decoded = await readVerifiedGzip(mapKey, entry, 'exact tarkov.dev', 'json');
+  let fixture;
+  try { fixture = JSON.parse(decoded.toString('utf8')); }
+  catch (error) { throw cacheError(`exact tarkov.dev ${mapKey} fixture is invalid JSON (${error.message})`, mapKey); }
+  if (fixture.schemaVersion !== 1 || fixture.mapKey !== mapKey || fixture.map?.normalizedName !== mapKey
+      || !fixture.translations || typeof fixture.translations !== 'object' || Array.isArray(fixture.translations)
+      || !fixture.lookups || typeof fixture.lookups !== 'object' || Array.isArray(fixture.lookups)) {
+    throw cacheError(`exact tarkov.dev ${mapKey} fixture has an invalid schema`, mapKey);
+  }
+  return { entry, fixture };
+}
+
+export async function loadMapSvg(mapKey) {
+  const manifest = await loadManifest(mapKey);
+  const metadata = manifest.maps[mapKey]?.svg;
+  if (!metadata || !/^\d{4}-\d{2}-\d{2}$/.test(metadata.fetchedDate || '')
+      || metadata.source?.name !== 'svg'
+      || typeof metadata.source?.url !== 'string' || !metadata.source.url.startsWith('https://')
+      || metadata.source.sha256 !== metadata.decodedSha256
+      || !Number.isInteger(metadata.source.bytes) || metadata.source.bytes <= 0
+      || metadata.source.bytes !== metadata.decodedBytes) {
+    throw cacheError(`tarkov.dev SVG manifest has no valid ${mapKey} fixture`, mapKey);
+  }
+  const decoded = await readVerifiedGzip(mapKey, metadata, 'tarkov.dev SVG', 'svg');
+  const svg = decoded.toString('utf8');
+  if (!/<svg\b[^>]*\bviewBox=["'][^"']+["']/i.test(svg)) {
+    throw cacheError(`tarkov.dev SVG ${mapKey} fixture has no SVG viewBox`, mapKey);
+  }
+  return svg;
 }
 
 function rawRecords(map, collection) {
@@ -288,17 +344,15 @@ export function primitiveRows(exactLayer) {
 }
 
 export async function loadExactMap(mapKey) {
-  const manifest = await loadManifest();
-  const [{ source: mapsSource, json: mapsJson }, { source: namesSource, json: namesJson }] = await Promise.all([
-    loadSource(manifest, 'maps'),
-    loadSource(manifest, 'maps_en'),
-  ]);
-  const maps = mapsJson?.data?.maps;
-  const translations = namesJson?.data;
-  if (!maps || typeof maps !== 'object' || Array.isArray(maps)) throw cacheError('exact tarkov.dev maps cache has no data.maps object');
-  if (!translations || typeof translations !== 'object' || Array.isArray(translations)) throw cacheError('exact tarkov.dev maps_en cache has no translation object');
-  const map = Object.values(maps).find((candidate) => candidate?.normalizedName === mapKey);
-  if (!map) throw new Error(`exact tarkov.dev cache has no map ${mapKey}`);
+  const manifest = await loadManifest(mapKey);
+  const { entry, fixture } = await loadFixture(manifest, mapKey);
+  const { map, translations, lookups } = fixture;
+  const mapsSource = entry.sources.find((candidate) => candidate.name === 'maps');
+  const namesSource = entry.sources.find((candidate) => candidate.name === 'maps_en');
+  if (!mapsSource?.url || !/^[a-f0-9]{64}$/.test(mapsSource.sha256 || '')
+      || !namesSource?.url || !/^[a-f0-9]{64}$/.test(namesSource.sha256 || '')) {
+    throw cacheError(`exact tarkov.dev ${mapKey} fixture has invalid upstream provenance`, mapKey);
+  }
 
   const collections = {};
   for (const [collection] of EXACT_COLLECTIONS) collections[collection] = wrapRecords(collection, rawRecords(map, collection));
@@ -306,10 +360,11 @@ export async function loadExactMap(mapKey) {
     schemaVersion: EXACT_LAYER_SCHEMA_VERSION,
     source: {
       provider: 'tarkov.dev-json',
-      cacheVersion: manifest.cacheVersion,
-      fetchedDate: manifest.fetchedDate,
+      cacheVersion: entry.cacheVersion,
+      fetchedDate: entry.fetchedDate,
       urls: [mapsSource.url, namesSource.url],
       sha256: { maps: mapsSource.sha256, maps_en: namesSource.sha256 },
+      fixtureSha256: entry.sha256,
     },
     map: {
       id: map.id,
@@ -324,8 +379,8 @@ export async function loadExactMap(mapKey) {
     map,
     translations,
     lookups: {
-      lootContainers: mapsJson.data.lootContainers ?? {},
-      stationaryWeapons: mapsJson.data.stationaryWeapons ?? {},
+      lootContainers: lookups.lootContainers ?? {},
+      stationaryWeapons: lookups.stationaryWeapons ?? {},
     },
   };
 }

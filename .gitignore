@@ -6,6 +6,9 @@ dist
 .vercel
 # per-step screenshots + report.json from `npm run e2e`
 .e2e
+# local Playwright browser state, screenshots, and trace output
+.playwright-cli/
+output/playwright/
 # measured render baseline from `npm run render-baseline` (a machine-specific measurement, not a
 # source artifact — re-measure rather than diff someone else's adapter)
 .render
@@ -13,9 +16,27 @@ dist
 companion/companion.json
 companion/companion-quests.json
 companion/elevation-*.jsonl
+# first-party raid coordinates/screenshots metadata; promote only a reviewed,
+# redacted evidence fixture under data/ when it is ready for the audit corpus
+companion/survey-*.jsonl
 # quest-layer build inputs: crawled/downloaded, re-fetched by scripts/build-quests.mjs
 scripts/data/tasks/
-# Versioned tarkov.dev JSON responses are reproducible local build caches. The
-# small URL/date/hash manifest beside this directory is committed.
-scripts/data/tarkov-dev-exact/
+# Only compact content-addressed exact-map fixtures are source inputs. Ignore
+# raw/manual downloads while keeping the verified gzip fixtures recoverable in
+# every clean checkout.
+scripts/data/tarkov-dev-exact/*
+!scripts/data/tarkov-dev-exact/*.json.gz
+!scripts/data/tarkov-dev-exact/*.svg.gz
 scratch/
+
+# Python bytecode from the optional local-only Unity inventory tests/tooling.
+__pycache__/
+*.py[cod]
+
+# User-owned, game-derived runtime truth. Lives outside public/ so `vite build`
+# cannot copy it into dist/; served only by the dev-only `/@local-game-derived/`
+# loopback route. Never committed, deployed, or sent to external helpers.
+.local-game-derived/
+# Legacy location (pre-move). Kept ignored so an un-migrated checkout cannot
+# commit or deploy the package while the user relocates it.
+public/local-game-derived/

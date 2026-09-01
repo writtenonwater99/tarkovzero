@@ -46,6 +46,45 @@
       "evidence": { "method": "exact-lock-clusters+named-landmark", "status": "exact-floor-count; shell-needs-survey" }
     },
     {
+      "featureId": "customs.dorms.three_story.main",
+      "match": {
+        "sourceKey": "svg:Ground_Level/Buildings/Big_Buildings-2:element-194:subpath-0",
+        "centroid": [183.8167, 168.1],
+        "toleranceM": 0.1
+      },
+      "set": { "featureClass": "building", "name": "Dorms 3-Story", "place": "Dorms 3-Story", "floorCount": 3, "heightM": 9.5, "style": "box" },
+      "assert": { "count": 1, "floorCount": 3, "minHeightM": 9.5, "maxHeightM": 9.5, "style": "box", "kind": "big_buildings" },
+      "evidence": { "method": "tarkov.dev-svg-footprint+floor-extents+named-landmark", "status": "reviewed-shell; doorway-geometry-unsupported" }
+    },
+    {
+      "featureId": "customs.building.fortress.main",
+      "match": {
+        "sourceKey": "svg:Ground_Level/Buildings/Big_Buildings-2:element-196:subpath-0",
+        "centroid": [203, -128],
+        "toleranceM": 0.1
+      },
+      "set": {
+        "featureClass": "building",
+        "name": "Fortress",
+        "place": "Fortress",
+        "floorCount": 2,
+        "heightM": 18.1,
+        "style": "frame"
+      },
+      "assert": {
+        "count": 1,
+        "floorCount": 2,
+        "minHeightM": 18,
+        "maxHeightM": 18.2,
+        "style": "frame",
+        "kind": "big_buildings"
+      },
+      "evidence": {
+        "method": "read-only-unity-transform-census+tarkov.dev-svg-footprint+floor-evidence",
+        "status": "exact root/structural placement; original-authored shell in progress"
+      }
+    },
+    {
       "featureId": "customs.water_pump.cooling_towers",
       "match": {
         "centroids": [[603.67, -98.19], [618.55, -100], [611.5, -130.15]],

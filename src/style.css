@@ -51,6 +51,29 @@ body{background:var(--bg-app);color:var(--text);font:400 var(--fs-body)/1.45 var
 #map3d{display:none}
 body.view-3d #map{display:none}
 body.view-3d #map3d{display:block}
+.tz-three-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.tz-three-overlay{position:absolute;inset:0;z-index:4;overflow:hidden;pointer-events:none;font-family:var(--f-display)}
+.tz-three-proof-chip{position:absolute;top:58px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;
+  padding:5px 9px;background:rgba(9,13,11,.9);border:1px solid rgba(45,190,108,.42);border-radius:var(--r-md);
+  box-shadow:var(--shadow-hud);color:var(--cream);white-space:nowrap}
+.tz-three-proof-chip b{font:700 11px/1 var(--f-mono);letter-spacing:.1em;color:var(--acc)}
+.tz-three-proof-chip span{font:600 9px/1 var(--f-mono);letter-spacing:.08em;color:var(--text-mute)}
+.tz-three-marker{position:absolute;left:0;top:0;max-width:190px;padding:2px 5px;border-radius:3px;
+  background:rgba(8,12,10,.78);border:1px solid rgba(230,227,215,.2);color:var(--cream);
+  font:700 10px/1.15 var(--f-display);letter-spacing:.045em;text-transform:uppercase;white-space:nowrap;
+  text-shadow:0 1px 2px #000;box-shadow:0 2px 5px rgba(0,0,0,.42);will-change:transform}
+button.tz-three-marker{appearance:none;cursor:pointer;pointer-events:auto}
+.tz-three-marker-place{padding:0;background:transparent;border:0;box-shadow:none;font-size:12px;text-shadow:0 1px 2px #000,0 0 4px #000}
+.tz-three-marker-marker{border-color:rgba(230,227,215,.34);color:var(--cream)}
+.tz-three-marker-extract{border-color:rgba(45,190,108,.62);color:#8df0bb}
+.tz-three-marker-extract.focused{background:rgba(30,138,78,.52);border-color:var(--acc)}
+.tz-three-marker-quest{border-color:rgba(231,182,75,.7);color:#f3cf7b}
+.tz-three-marker-player{border-color:rgba(56,214,200,.72);color:#83eee5}
+.tz-three-marker-landmark{background:rgba(48,22,16,.86);border-color:rgba(198,88,61,.76);color:#ffb39e;
+  box-shadow:0 2px 7px rgba(0,0,0,.48),0 0 0 1px rgba(90,28,18,.34)}
+.tz-three-hover{position:absolute;z-index:5;max-width:320px;padding:5px 7px;background:rgba(8,12,10,.94);
+  border:1px solid var(--line);border-radius:var(--r-sm);color:var(--text);font:600 11px/1.25 var(--f-body);
+  box-shadow:var(--shadow-hud);pointer-events:none}
 .leaflet-container{background:rgb(10,16,14);font-family:var(--f-body)}
 #map.base-roadmap,.leaflet-container.base-roadmap{background:#DCDFD8}
 body.trees-off #map .roadmap .trees{display:none}
@@ -62,6 +85,10 @@ body.rocks-off #map .roadmap .rock{display:none}
 /* view-scoped chrome — written per component so the base display rule can't outrank it */
 .line.only-3d{display:none}
 body.view-3d .line.only-3d{display:flex}
+/* The localhost Customs Three proof is a fixed 2×, no-haze visual target. Deck keeps the complete
+   analysis controls on every map; only the gated proof hides controls it cannot truthfully apply. */
+body.renderer-three #relief-row{display:none}
+body.renderer-three #fx-row [data-fx="fog"]{display:none}
 body.view-3d .line.only-2d{display:none}
 .line-note.only-3d{display:none}
 body.view-3d .line-note.only-3d{display:block}

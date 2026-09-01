@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader runner",
-    "build": "vite build --configLoader runner",
+    "build": "vite build --configLoader runner && npm run verify:build-boundary",
+    "verify:build-boundary": "node scripts/verify-build-boundary.mjs",
     "preview": "vite preview --configLoader runner",
     "check:dom": "node scripts/dom-contract-check.mjs",
     "check:fx": "node scripts/render-fx-check.mjs",
@@ -13,6 +14,25 @@
     "test:lod": "node scripts/lod-test.mjs",
     "test:active-quests": "node scripts/active-quests-test.mjs",
     "test:assistant": "node scripts/test-assistant.mjs",
+    "test:map-pipeline": "node scripts/verify-map-pipeline.mjs",
+    "test:prop-identity": "node --test scripts/prop-feature-identity.test.mjs",
+    "test:terrain-texture": "node --test scripts/terrain-texture-mapping-test.mjs",
+    "test:customs-truth": "node --test scripts/customs-truth-graph.test.mjs && python3 -m unittest scripts/test_extract_customs_unity.py",
+    "test:customs-census": "python3 -m unittest scripts/test_census_customs_assets.py",
+    "test:customs-local-terrain": "python3 -m unittest scripts/test_extract_customs_terrain_local.py && node --test scripts/customs-local-terrain.test.mjs scripts/customs-local-terrain-loader.test.mjs scripts/customs-local-terrain-mesh.test.mjs scripts/customs-local-vegetation.test.mjs scripts/customs-local-vegetation-render.test.mjs scripts/customs-terrain-surface.test.mjs scripts/audit-customs-local-terrain.test.mjs",
+    "test:customs-terrain-pbr": "node --test scripts/customs-terrain-control-atlas.test.mjs scripts/customs-terrain-material-contract.test.mjs scripts/customs-terrain-pbr-runtime.test.mjs",
+    "test:customs-authored-vegetation": "node --test scripts/customs-authored-vegetation.test.mjs",
+    "test:local-boundary": "node --test scripts/local-game-derived-dev.test.mjs scripts/tarkov-asset-cache-dev.test.mjs scripts/verify-build-boundary.test.mjs",
+    "test:map-accuracy-harness": "node --test companion/test/survey.test.mjs scripts/audit-map-accuracy.test.mjs",
+    "audit:customs": "node scripts/audit-map-accuracy.mjs",
+    "audit:customs-local-terrain": "node scripts/audit-customs-local-terrain.mjs",
+    "test:customs-geometry": "node scripts/customs-geometry-accuracy-test.mjs",
+    "test:asset-manifest": "node --test scripts/customs-asset-manifest.test.mjs",
+    "test:asset-runtime": "node --test scripts/customs-asset-runtime.test.mjs scripts/customs-asset-loader.test.mjs",
+    "test:assets-v2": "npm run test:asset-manifest && npm run test:asset-runtime",
+    "verify:customs-authored-assets": "node scripts/verify-customs-authored-assets.mjs",
+    "test:customs-authored-assets": "node --test scripts/verify-customs-authored-assets.test.mjs && npm run verify:customs-authored-assets",
+    "test:three-renderer": "node --test scripts/three-renderer-test.mjs",
     "test:quests": "node --test companion/test/quests.test.mjs",
     "test:relay": "node --test relay/test/server.test.mjs",
     "test:render-style": "node --test scripts/render-style-test.mjs",
@@ -20,7 +40,7 @@
     "test:camera": "node --test scripts/camera-test.mjs",
     "test:atmosphere": "node --test scripts/atmosphere-test.mjs",
     "test:buildings": "node --test scripts/building-height-test.mjs",
-    "test": "npm run check:dom && npm run test:omnibox && npm run test:lod && npm run test:active-quests && npm run test:assistant && npm run test:quests && npm run test:relay && npm run test:render-style && npm run test:render-assets && npm run test:camera && npm run test:atmosphere && npm run test:buildings",
+    "test": "npm run check:dom && npm run test:omnibox && npm run test:lod && npm run test:active-quests && npm run test:assistant && npm run test:map-pipeline && npm run test:prop-identity && npm run test:terrain-texture && npm run test:customs-truth && npm run test:customs-census && npm run test:customs-local-terrain && npm run test:customs-terrain-pbr && npm run test:customs-authored-vegetation && npm run test:local-boundary && npm run test:map-accuracy-harness && npm run test:customs-geometry && npm run test:assets-v2 && npm run test:customs-authored-assets && npm run test:three-renderer && npm run test:quests && npm run test:relay && npm run test:render-style && npm run test:render-assets && npm run test:camera && npm run test:atmosphere && npm run test:buildings",
     "e2e": "node scripts/e2e-walkthrough.mjs",
     "render-baseline": "node scripts/render-baseline.mjs",
     "fetch-data": "node scripts/fetch-data.mjs",
@@ -28,7 +48,8 @@
     "build-community-data": "node scripts/build-community-data.mjs",
     "build-3d": "node scripts/build-3d.mjs",
     "build-quests": "node scripts/build-quests.mjs",
-    "prepare-render-assets": "node scripts/prepare-render-assets.mjs"
+    "prepare-render-assets": "node scripts/prepare-render-assets.mjs",
+    "prepare-three-assets": "node scripts/prepare-three-assets.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.11",
@@ -38,9 +59,11 @@
     "@deck.gl/mesh-layers": "^9.3.11",
     "@luma.gl/engine": "^9.3.6",
     "earcut": "^2.2.4",
-    "leaflet": "^1.9.4"
+    "leaflet": "^1.9.4",
+    "three": "0.185.1"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "4.5.0",
     "vite": "^7.0.0"
   }
 }

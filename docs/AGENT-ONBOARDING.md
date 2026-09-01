@@ -17,7 +17,7 @@ light-beam pings, live player positions streamed from the game (companion app �
 
 - **Game coordinates are the single source of truth.** Leaflet latLng = `[z, x]`; deck cartesian = `[-x, -z, y]`;
   everything drapes on `H(x, z)` (terrain sampler). See playbook §1 before touching anything positional.
-- **Terrain is true scale**; the *view* applies a relief factor (1×/2×/3×, default 3×) once at the sampler. Object heights stay real.
+- **Terrain is true scale**; the *view* applies a relief factor once at the sampler. Accuracy defaults to canonical 1×. 2×/3× are explicitly exaggerated analysis views. Object heights stay real.
 - **No BSG game files** (ToS). Sources: tarkov.dev assets, SPT database, EFT Wiki, our own screenshots. Keep credits in the footer.
 - **Never hand-edit `public/data/*.json`** — regenerate with the scripts; builders must stay deterministic.
 - **Customs is the regression gate**: shared-pipeline changes must keep Customs output identical unless the change is intended
@@ -74,6 +74,9 @@ Backlog (highest value first):
 5. Survey-dependent 3D fidelity (`docs/plans/3D-AUDIT.md` ranks): Reserve bunker network, Customs industrial east,
    road profiles — needs founder raid-hours with the companion's elevation logging.
 6. More maps (Shoreline, Interchange, Lighthouse, Streets…) via `docs/MAP-BUILD-PLAYBOOK.md`.
+
+Local renderer work is Customs-only. `?renderer=three` is accepted only by the Vite development
+server and falls back to deck.gl for Reserve/Woods or production builds. See `docs/LOCAL-THREE-POC.md`.
 
 ## 6. Ready-to-paste prompt for a fresh session
 

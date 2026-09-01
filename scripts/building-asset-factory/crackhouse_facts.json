@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "documentType": "tarkovzero-public-building-facts",
+  "map": "customs",
+  "assetId": "crackhouse-shell",
+  "source": {
+    "file": "public/data/customs-3d.json",
+    "sha256": "sha256:9a6df2ad1d62371e0f139b0c017ea1fdc1426d44905042cd9a4f34a575141dad",
+    "selection": "one building row plus its two buildingSourceKey-bound floor surfaces"
+  },
+  "building": {
+    "sourceKey": "svg:Ground_Level/Buildings/Big_Buildings-2:element-197:subpath-0",
+    "poly": [
+      [94.3, -166.5],
+      [89.5, -142.6],
+      [73.6, -145.9],
+      [78.4, -169.7]
+    ],
+    "height": 6.5,
+    "floors": 2,
+    "kind": "big_buildings",
+    "name": "mechanic",
+    "place": "Crackhouse",
+    "color": [139, 110, 90],
+    "style": "gable",
+    "roof": [126, 76, 52]
+  },
+  "floorSurfaces": [
+    {
+      "stableId": "customs.surface.57f069d95d86a5f2d1958bd8",
+      "classification": "floor",
+      "floorIndex": 0,
+      "surfaceY": 1.983
+    },
+    {
+      "stableId": "customs.surface.71a656b56aa4c9747e6a03d3",
+      "classification": "floor",
+      "floorIndex": 1,
+      "surfaceY": 5.4932
+    }
+  ],
+  "derivationContract": {
+    "pivotXZ": "arithmetic mean of the four public footprint vertices",
+    "longAxis": "normalized mean of edge p0->p1 and reversed opposing edge p3->p2",
+    "yawDeg": "atan2(longAxis.x,longAxis.z), because authored +X forward maps to EFT +Z at zero yaw",
+    "lengthM": "mean length of the two opposing long edges",
+    "widthM": "mean length of the two opposing short edges",
+    "pivotY": "floorSurfaces floorIndex 0 surfaceY",
+    "upperLocalY": "floorIndex 1 surfaceY minus floorIndex 0 surfaceY"
+  }
+}

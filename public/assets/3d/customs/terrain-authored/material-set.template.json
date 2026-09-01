@@ -1,0 +1,209 @@
+{
+  "arrays": [
+    {
+      "colorSpace": "srgb",
+      "height": 512,
+      "kind": "ktx2-array",
+      "mipLevels": 10,
+      "receipts": {
+        "originalLicense": {
+          "sha256": "63de801f572d0630895346b1772354c290a4804637bb64012ca658d68d8ce4d6",
+          "url": "/assets/3d/customs/terrain-authored/original-license.json"
+        },
+        "provenance": {
+          "sha256": "514c5a365763ac46195cf6da1b63d90eccba1f8ce552f2cf067fe7d8a53f3f5f",
+          "url": "/assets/3d/customs/terrain-authored/provenance.json"
+        }
+      },
+      "role": "albedo",
+      "sha256": "48b5db779d58a1ea2fe7dc1b165f015e1e880cac0effc13a2bc28a2837915556",
+      "slices": 12,
+      "url": "/assets/3d/customs/terrain-authored/customs-terrain-albedo-array.ktx2",
+      "width": 512
+    },
+    {
+      "colorSpace": "linear",
+      "height": 512,
+      "kind": "ktx2-array",
+      "mipLevels": 10,
+      "normalSpace": "tangent",
+      "receipts": {
+        "originalLicense": {
+          "sha256": "63de801f572d0630895346b1772354c290a4804637bb64012ca658d68d8ce4d6",
+          "url": "/assets/3d/customs/terrain-authored/original-license.json"
+        },
+        "provenance": {
+          "sha256": "514c5a365763ac46195cf6da1b63d90eccba1f8ce552f2cf067fe7d8a53f3f5f",
+          "url": "/assets/3d/customs/terrain-authored/provenance.json"
+        }
+      },
+      "role": "normal",
+      "sha256": "83b8d6c0b1366bc5913b7d3a91245ce0af2fe0e49e0520f6cb5e40b9c1e0cff5",
+      "slices": 12,
+      "url": "/assets/3d/customs/terrain-authored/customs-terrain-normal-array.ktx2",
+      "width": 512
+    },
+    {
+      "channels": [
+        "occlusion",
+        "roughness",
+        "metallic",
+        "unused"
+      ],
+      "colorSpace": "linear",
+      "height": 512,
+      "kind": "ktx2-array",
+      "mipLevels": 10,
+      "receipts": {
+        "originalLicense": {
+          "sha256": "63de801f572d0630895346b1772354c290a4804637bb64012ca658d68d8ce4d6",
+          "url": "/assets/3d/customs/terrain-authored/original-license.json"
+        },
+        "provenance": {
+          "sha256": "514c5a365763ac46195cf6da1b63d90eccba1f8ce552f2cf067fe7d8a53f3f5f",
+          "url": "/assets/3d/customs/terrain-authored/provenance.json"
+        }
+      },
+      "role": "orm",
+      "sha256": "ff6d4b93b26f10e4e567354821a9bbbb0f0cf8afd7fa4b9278b064f523acc560",
+      "slices": 12,
+      "url": "/assets/3d/customs/terrain-authored/customs-terrain-orm-array.ktx2",
+      "width": 512
+    }
+  ],
+  "delivery": "original-authored",
+  "layers": [
+    {
+      "arrayIndex": 0,
+      "index": 0,
+      "metresPerRepeat": 14.4,
+      "normalStrength": 1.25,
+      "ormStrength": 1.0,
+      "semantic": "grass",
+      "terrainLayerName": "microsplat_layer_Grass_summer_D_0"
+    },
+    {
+      "arrayIndex": 1,
+      "index": 1,
+      "metresPerRepeat": 21.0,
+      "normalStrength": 1.0,
+      "ormStrength": 1.0,
+      "semantic": "ground",
+      "terrainLayerName": "microsplat_layer_Ground_summer_D_1"
+    },
+    {
+      "arrayIndex": 2,
+      "index": 2,
+      "metresPerRepeat": 27.0,
+      "normalStrength": 1.1,
+      "ormStrength": 1.0,
+      "semantic": "gravel-road-a",
+      "terrainLayerName": "microsplat_layer_Gravel_Road_A_summer_D_2"
+    },
+    {
+      "arrayIndex": 3,
+      "index": 3,
+      "metresPerRepeat": 19.2,
+      "normalStrength": 1.2,
+      "ormStrength": 1.0,
+      "semantic": "forest-ground",
+      "terrainLayerName": "microsplat_layer_Forest_Ground_summer_D_3"
+    },
+    {
+      "arrayIndex": 4,
+      "index": 4,
+      "metresPerRepeat": 24.0,
+      "normalStrength": 1.35,
+      "ormStrength": 1.0,
+      "semantic": "stone-ground",
+      "terrainLayerName": "microsplat_layer_Stone_Ground_summer_D_4"
+    },
+    {
+      "arrayIndex": 5,
+      "index": 5,
+      "metresPerRepeat": 36.0,
+      "normalStrength": 1.65,
+      "ormStrength": 1.0,
+      "semantic": "rock-ground",
+      "terrainLayerName": "microsplat_layer_Rock_Ground_summer_D_5"
+    },
+    {
+      "arrayIndex": 6,
+      "index": 6,
+      "metresPerRepeat": 25.2,
+      "normalStrength": 1.15,
+      "ormStrength": 1.0,
+      "semantic": "gravel-road-b",
+      "terrainLayerName": "microsplat_layer_Gravel_Road_B_summer_D_6"
+    },
+    {
+      "arrayIndex": 7,
+      "index": 7,
+      "metresPerRepeat": 13.2,
+      "normalStrength": 1.3,
+      "ormStrength": 1.0,
+      "semantic": "gravel",
+      "terrainLayerName": "microsplat_layer_Gravel_summer_D_7"
+    },
+    {
+      "arrayIndex": 8,
+      "index": 8,
+      "metresPerRepeat": 16.8,
+      "normalStrength": 1.25,
+      "ormStrength": 1.0,
+      "semantic": "grassy-ground",
+      "terrainLayerName": "microsplat_layer_Grassy_Ground_summer_D_8"
+    },
+    {
+      "arrayIndex": 9,
+      "index": 9,
+      "metresPerRepeat": 18.0,
+      "normalStrength": 0.9,
+      "ormStrength": 1.0,
+      "semantic": "sand",
+      "terrainLayerName": "microsplat_layer_Sand_summer_D_9"
+    },
+    {
+      "arrayIndex": 10,
+      "index": 10,
+      "metresPerRepeat": 15.0,
+      "normalStrength": 1.35,
+      "ormStrength": 1.0,
+      "semantic": "pebbles-ground",
+      "terrainLayerName": "microsplat_layer_Pebbles_Ground_summer_D_10"
+    },
+    {
+      "arrayIndex": 11,
+      "index": 11,
+      "metresPerRepeat": 18.0,
+      "normalStrength": 1.2,
+      "ormStrength": 1.0,
+      "semantic": "soil-grass",
+      "terrainLayerName": "microsplat_layer_Soil_Grass_summer_D_11"
+    }
+  ],
+  "macro": {
+    "colorSpace": "srgb",
+    "height": 512,
+    "kind": "ktx2-2d",
+    "metresPerRepeat": 256.0,
+    "mipLevels": 10,
+    "receipts": {
+      "originalLicense": {
+        "sha256": "63de801f572d0630895346b1772354c290a4804637bb64012ca658d68d8ce4d6",
+        "url": "/assets/3d/customs/terrain-authored/original-license.json"
+      },
+      "provenance": {
+        "sha256": "514c5a365763ac46195cf6da1b63d90eccba1f8ce552f2cf067fe7d8a53f3f5f",
+        "url": "/assets/3d/customs/terrain-authored/provenance.json"
+      }
+    },
+    "role": "macro-albedo",
+    "sha256": "4d07a93af9d4426471e1878e2866a52a7838181bd9af3af3581faff333d8b405",
+    "strength": 0.16,
+    "url": "/assets/3d/customs/terrain-authored/customs-terrain-macro-albedo.ktx2",
+    "width": 512
+  },
+  "map": "customs",
+  "schemaVersion": 1
+}

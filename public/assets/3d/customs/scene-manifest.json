@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 2,
+  "map": "customs",
+  "notes": "Localhost Fortress V2: original-authored weathered spatial baseline with exact reviewed placement and playable slabs. It is not a near-1:1 tactical-opening, cover, or collision claim.",
+  "frames": {
+    "source": "eft-unity-world-metres-y-up",
+    "runtime": "three-z-up-metres",
+    "runtimeFromSource": "[-x, -z, y]"
+  },
+  "scope": {
+    "id": "customs-industrial-rail-yard",
+    "center": { "x": 230, "z": -110 },
+    "widthM": 360,
+    "depthM": 300
+  },
+  "budgets": {
+    "totalBytes": 50331648,
+    "totalTriangles": 4000000,
+    "perCellBytes": 12582912,
+    "perCellTriangles": 900000,
+    "maxConcurrentLoads": 4,
+    "drawDistanceM": 260
+  },
+  "evidence": {
+    "sources": [
+      {
+        "id": "tarkovzero-fortress-original-authoring",
+        "kind": "authored",
+        "title": "TarkovZero deterministic Fortress factory output",
+        "holder": "TarkovZero",
+        "license": "Project-local original work",
+        "licenseUrl": "https://github.com/writtenonwater99/tarkovzero",
+        "retrievedAt": "2026-08-31",
+        "notes": "Original procedural geometry and PBR textures; no copied game mesh, topology, UV, texture pixels, shaders, brands, or baked lighting."
+      },
+      {
+        "id": "tarkovzero-fortress-reviewed-scalars",
+        "kind": "measurement",
+        "title": "Reviewed scalar-only Fortress placement and elevation contract",
+        "holder": "TarkovZero",
+        "license": "Project-local measurement record",
+        "licenseUrl": "https://github.com/writtenonwater99/tarkovzero",
+        "retrievedAt": "2026-08-31",
+        "notes": "Sanitized scalar positions, dimensions, elevations, yaw, and category counts only; no source creative payload."
+      }
+    ],
+    "observations": [
+      {
+        "id": "fortress-shell-pivot",
+        "sourceId": "tarkovzero-fortress-reviewed-scalars",
+        "subject": "Fortress shell canonical root pivot",
+        "positionM": { "x": 202.898880005, "y": 1.729503632, "z": -127.68775177 },
+        "toleranceM": 0.001,
+        "featureId": "customs.building.fortress.main",
+        "notes": "Ground and upper playable tops are 2.447 m and 8.183 m world Y."
+      }
+    ]
+  },
+  "delivery": {
+    "baseUrl": "assets/3d/customs/authored/",
+    "materials": [],
+    "assets": [
+      {
+        "id": "fortress-shell-original-baseline",
+        "kind": "unique",
+        "name": "Fortress original-authored spatial baseline",
+        "sourceId": "tarkovzero-fortress-original-authoring",
+        "gltf": { "unit": "metre", "upAxis": "+y", "forwardAxis": "+x", "pivot": "origin" },
+        "bounds": {
+          "min": { "x": -30.967751, "y": 0.417496, "z": -16.686657 },
+          "max": { "x": 30.638618, "y": 18.230173, "z": 16.564327 }
+        },
+        "materialIds": [],
+        "masks": { "floors": ["ground", "floor-1", "roof"], "interior": true },
+        "proxies": {
+          "picking": { "shape": "box", "inflateM": 0 },
+          "shadow": { "mode": "both" },
+          "collision": { "shape": "none" }
+        },
+        "lods": [
+          { "level": 0, "url": "fortress/fortress-shell-lod0.glb", "sha256": "sha256:9da8e05e18ade85e6c9498b0550bc0518511157765460ce3a15df94e5d9c11d5", "bytes": 6932600, "triangles": 52592, "maxDistanceM": 70 },
+          { "level": 1, "url": "fortress/fortress-shell-lod1.glb", "sha256": "sha256:87e9e3a1035995ae865cc5d0ce8b36c0c9ac46014d9caf4479ebe525a3b2b8b6", "bytes": 1455740, "triangles": 9064, "maxDistanceM": 150 },
+          { "level": 2, "url": "fortress/fortress-shell-lod2.glb", "sha256": "sha256:38819248cb3b8e806a27e282126f582d9ec2ccd7397f05358b45513eba2900ea", "bytes": 316024, "triangles": 1872, "maxDistanceM": 260 }
+        ]
+      }
+    ],
+    "instances": [
+      {
+        "id": "fortress-shell-main",
+        "assetId": "fortress-shell-original-baseline",
+        "cellId": "fortress-golden-cell",
+        "stableId": "customs.authored.fortress.shell.main",
+        "featureId": "customs.building.fortress.main",
+        "label": "Fortress authored baseline",
+        "pickable": true,
+        "transform": {
+          "position": { "x": 202.898880005, "y": 1.729503632, "z": -127.68775177 },
+          "rotation": { "yawDeg": -10.342808 }
+        },
+        "floor": "ground"
+      }
+    ],
+    "cells": [
+      {
+        "id": "fortress-golden-cell",
+        "center": { "x": 203, "z": -128 },
+        "widthM": 90,
+        "depthM": 90,
+        "minY": 0,
+        "maxY": 22,
+        "loadPriority": 100,
+        "instanceIds": ["fortress-shell-main"]
+      }
+    ],
+    "replacements": [
+      {
+        "id": "replace-fortress-building",
+        "target": { "kind": "building", "featureId": "customs.building.fortress.main" },
+        "instanceIds": ["fortress-shell-main"],
+        "policy": "hide-mesh-and-picking",
+        "notes": "Reversible only after the authored shell attaches."
+      },
+      {
+        "id": "replace-fortress-ground-surface",
+        "target": { "kind": "surface", "featureId": "customs.surface.6af471a2ddbe2b71904bf384" },
+        "instanceIds": ["fortress-shell-main"],
+        "policy": "hide-mesh-and-picking",
+        "notes": "Exact ground playable top is present in the authored shell."
+      },
+      {
+        "id": "replace-fortress-upper-surface",
+        "target": { "kind": "surface", "featureId": "customs.surface.088520ea863c78b8cb29d787" },
+        "instanceIds": ["fortress-shell-main"],
+        "policy": "hide-mesh-and-picking",
+        "notes": "Exact upper playable top is present in the authored shell."
+      }
+    ]
+  }
+}

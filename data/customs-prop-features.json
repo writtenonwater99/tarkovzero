@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "map": "customs",
+  "_doc": "Reviewed semantic identities for recognizable Customs props. The build matches type plus game-coordinate anchor within 0.15 m and fails on missing or ambiguous matches; array positions are never identities.",
+  "features": [
+    {
+      "featureId": "customs.prop.industrial_rail_yard.locomotive_west",
+      "match": { "type": "railcar", "position": [251.6, -184], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.tanker_1",
+      "match": { "type": "railcar", "position": [262.1, -174.6], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.tanker_2",
+      "match": { "type": "railcar", "position": [267.1, -168.6], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.tanker_3",
+      "match": { "type": "railcar", "position": [271.9, -162.8], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.tanker_4",
+      "match": { "type": "railcar", "position": [276.5, -157.2], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.locomotive_east",
+      "match": { "type": "railcar", "position": [363.9, -124.2], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.red_container_stack",
+      "match": { "type": "container", "position": [233, -89], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.red_container_west",
+      "match": { "type": "container", "position": [200.3, -95.6], "toleranceM": 0.15 }
+    },
+    {
+      "featureId": "customs.prop.industrial_rail_yard.red_container_east",
+      "match": { "type": "container", "position": [254.6, -112.6], "toleranceM": 0.15 }
+    }
+  ]
+}

@@ -1,0 +1,1008 @@
+{
+  "artifactSet": "customs-terrain-pbr-12-layer-v2.1",
+  "authoredReceipts": {
+    "originalLicense": {
+      "bytes": 331,
+      "path": "original-license.json",
+      "sha256": "63de801f572d0630895346b1772354c290a4804637bb64012ca658d68d8ce4d6"
+    },
+    "provenance": {
+      "bytes": 911,
+      "path": "provenance.json",
+      "sha256": "514c5a365763ac46195cf6da1b63d90eccba1f8ce552f2cf067fe7d8a53f3f5f"
+    }
+  },
+  "channelSemantics": {
+    "albedo": {
+      "channels": [
+        "red",
+        "green",
+        "blue"
+      ],
+      "colorSpace": "sRGB"
+    },
+    "normal": {
+      "basis": "unit vector packed from [-1,1] to [0,1]",
+      "channels": [
+        "tangent-x",
+        "tangent-y",
+        "tangent-z"
+      ],
+      "colorSpace": "linear"
+    },
+    "orm": {
+      "channels": [
+        "ambient-occlusion",
+        "roughness",
+        "metalness",
+        "unused"
+      ],
+      "colorSpace": "linear",
+      "metalness": 0,
+      "unused": 255
+    }
+  },
+  "dimensions": {
+    "height": 512,
+    "periodicBorder": "last row and column exactly duplicate first row and column",
+    "powerOfTwo": true,
+    "width": 512
+  },
+  "generator": {
+    "determinism": "explicit seeds; periodic integer lattices; fixed PNG filter/compression; no timestamps",
+    "name": "tarkovzero-customs-terrain-pbr-factory",
+    "runtime": "Python 3 standard library only",
+    "version": "2.1.0"
+  },
+  "heightContract": {
+    "outputHeightTexture": false,
+    "runtimeDisplacement": false,
+    "sourceHeightUse": "normal and ambient-occlusion synthesis only"
+  },
+  "ktx2": {
+    "arrayOrder": [
+      "grass",
+      "ground",
+      "gravel-road-a",
+      "forest-ground",
+      "stone-ground",
+      "rock-ground",
+      "gravel-road-b",
+      "gravel",
+      "grassy-ground",
+      "sand",
+      "pebbles-ground",
+      "soil-grass"
+    ],
+    "arrays": [
+      {
+        "bytes": 499357,
+        "height": 512,
+        "layers": 12,
+        "mipLevels": 10,
+        "path": "customs-terrain-albedo-array.ktx2",
+        "role": "albedo",
+        "sha256": "48b5db779d58a1ea2fe7dc1b165f015e1e880cac0effc13a2bc28a2837915556",
+        "width": 512
+      },
+      {
+        "bytes": 3717783,
+        "height": 512,
+        "layers": 12,
+        "mipLevels": 10,
+        "path": "customs-terrain-normal-array.ktx2",
+        "role": "normal",
+        "sha256": "83b8d6c0b1366bc5913b7d3a91245ce0af2fe0e49e0520f6cb5e40b9c1e0cff5",
+        "width": 512
+      },
+      {
+        "bytes": 3167628,
+        "height": 512,
+        "layers": 12,
+        "mipLevels": 10,
+        "path": "customs-terrain-orm-array.ktx2",
+        "role": "orm",
+        "sha256": "ff6d4b93b26f10e4e567354821a9bbbb0f0cf8afd7fa4b9278b064f523acc560",
+        "width": 512
+      }
+    ],
+    "commandTemplates": {
+      "arrays": {
+        "albedo": [
+          "$TOKTX",
+          "--t2",
+          "--threads",
+          "1",
+          "--genmipmap",
+          "--filter",
+          "lanczos4",
+          "--layers",
+          "12",
+          "--assign_oetf",
+          "srgb",
+          "--assign_primaries",
+          "srgb",
+          "--target_type",
+          "RGB",
+          "--encode",
+          "etc1s",
+          "--clevel",
+          "2",
+          "--qlevel",
+          "180",
+          "--",
+          "customs-terrain-albedo-array.ktx2",
+          "00-grass-albedo.png",
+          "01-ground-albedo.png",
+          "02-gravel-road-a-albedo.png",
+          "03-forest-ground-albedo.png",
+          "04-stone-ground-albedo.png",
+          "05-rock-ground-albedo.png",
+          "06-gravel-road-b-albedo.png",
+          "07-gravel-albedo.png",
+          "08-grassy-ground-albedo.png",
+          "09-sand-albedo.png",
+          "10-pebbles-ground-albedo.png",
+          "11-soil-grass-albedo.png"
+        ],
+        "normal": [
+          "$TOKTX",
+          "--t2",
+          "--threads",
+          "1",
+          "--genmipmap",
+          "--filter",
+          "lanczos4",
+          "--layers",
+          "12",
+          "--assign_oetf",
+          "linear",
+          "--assign_primaries",
+          "none",
+          "--target_type",
+          "RGB",
+          "--encode",
+          "uastc",
+          "--uastc_quality",
+          "2",
+          "--uastc_rdo_l",
+          "0.5",
+          "--uastc_rdo_m",
+          "--zcmp",
+          "8",
+          "--",
+          "customs-terrain-normal-array.ktx2",
+          "00-grass-normal.png",
+          "01-ground-normal.png",
+          "02-gravel-road-a-normal.png",
+          "03-forest-ground-normal.png",
+          "04-stone-ground-normal.png",
+          "05-rock-ground-normal.png",
+          "06-gravel-road-b-normal.png",
+          "07-gravel-normal.png",
+          "08-grassy-ground-normal.png",
+          "09-sand-normal.png",
+          "10-pebbles-ground-normal.png",
+          "11-soil-grass-normal.png"
+        ],
+        "orm": [
+          "$TOKTX",
+          "--t2",
+          "--threads",
+          "1",
+          "--genmipmap",
+          "--filter",
+          "lanczos4",
+          "--layers",
+          "12",
+          "--assign_oetf",
+          "linear",
+          "--assign_primaries",
+          "none",
+          "--target_type",
+          "RGBA",
+          "--encode",
+          "uastc",
+          "--uastc_quality",
+          "2",
+          "--uastc_rdo_l",
+          "1.0",
+          "--uastc_rdo_m",
+          "--zcmp",
+          "8",
+          "--",
+          "customs-terrain-orm-array.ktx2",
+          "00-grass-orm.png",
+          "01-ground-orm.png",
+          "02-gravel-road-a-orm.png",
+          "03-forest-ground-orm.png",
+          "04-stone-ground-orm.png",
+          "05-rock-ground-orm.png",
+          "06-gravel-road-b-orm.png",
+          "07-gravel-orm.png",
+          "08-grassy-ground-orm.png",
+          "09-sand-orm.png",
+          "10-pebbles-ground-orm.png",
+          "11-soil-grass-orm.png"
+        ]
+      },
+      "macro": [
+        "$TOKTX",
+        "--t2",
+        "--threads",
+        "1",
+        "--genmipmap",
+        "--filter",
+        "lanczos4",
+        "--2d",
+        "--assign_oetf",
+        "srgb",
+        "--assign_primaries",
+        "srgb",
+        "--target_type",
+        "RGB",
+        "--encode",
+        "etc1s",
+        "--clevel",
+        "2",
+        "--qlevel",
+        "180",
+        "--",
+        "customs-terrain-macro-albedo.ktx2",
+        "customs-terrain-macro-albedo.png"
+      ]
+    },
+    "macro": {
+      "bytes": 8271,
+      "height": 512,
+      "mipLevels": 10,
+      "path": "customs-terrain-macro-albedo.ktx2",
+      "role": "macro-albedo",
+      "sha256": "4d07a93af9d4426471e1878e2866a52a7838181bd9af3af3581faff333d8b405",
+      "width": 512
+    },
+    "requested": true,
+    "tool": {
+      "name": "toktx",
+      "version": "toktx v4.4.2"
+    }
+  },
+  "layers": [
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 334943,
+          "channels": 3,
+          "height": 512,
+          "path": "00-grass-albedo.png",
+          "sha256": "5798d9ba8b113add0c3a4d3954e745b9a1fe9b4bcd7e54257d535e843d198d50",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 681574,
+          "channels": 3,
+          "height": 512,
+          "path": "00-grass-normal.png",
+          "sha256": "c84a548de7dc9f2e1d7528fd6557743d7e5df10e4c66ced1ca7e9dbb0919add7",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 443067,
+          "channels": 4,
+          "height": 512,
+          "path": "00-grass-orm.png",
+          "sha256": "31250bed74d19548d3ae76524f794c9cbe57c690df0e7719c94fe52d38b62425",
+          "width": 512
+        }
+      },
+      "featureProfile": "grass",
+      "featureReferenceScaleMetres": 2.4,
+      "heightAmplitudeMetres": 0.045,
+      "index": 0,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 1.8,
+        "heightAmplitudeMetres": 0.0007,
+        "roughnessAmplitude": 0.016,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.25,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.5,
+        "desaturationFractionFromV2": 0.08
+      },
+      "physicalTileScaleMetres": 14.4,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.86,
+      "seed": 833214065,
+      "semantic": "grass"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 290589,
+          "channels": 3,
+          "height": 512,
+          "path": "01-ground-albedo.png",
+          "sha256": "6a1f11661d97173522e3abe1f0775dd6d0f988fffefffae09346c4423757f7cd",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 432100,
+          "channels": 3,
+          "height": 512,
+          "path": "01-ground-normal.png",
+          "sha256": "54150076ca6fbb4e1be33df647da769426a497425bd3153d08875522c14627f4",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 393191,
+          "channels": 4,
+          "height": 512,
+          "path": "01-ground-orm.png",
+          "sha256": "df07abf4356255d2a9bfbc2ee6fda54a88ee7a87cba43e84a36fc6fda00af5ca",
+          "width": 512
+        }
+      },
+      "featureProfile": "ground",
+      "featureReferenceScaleMetres": 3.5,
+      "heightAmplitudeMetres": 0.035,
+      "index": 1,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 4.2,
+        "heightAmplitudeMetres": 0.0055,
+        "roughnessAmplitude": 0.065,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.0,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.8,
+        "desaturationFractionFromV2": 0.1
+      },
+      "physicalTileScaleMetres": 21.0,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.96,
+      "seed": 2827946787,
+      "semantic": "ground"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 268921,
+          "channels": 3,
+          "height": 512,
+          "path": "02-gravel-road-a-albedo.png",
+          "sha256": "5dfb11b03111259e6eb5c8149ea4ff5e7887ee3a5debe685d75fb1bb63f5c090",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 409223,
+          "channels": 3,
+          "height": 512,
+          "path": "02-gravel-road-a-normal.png",
+          "sha256": "7f88f4c565f1b10a1d54d5751ed117f10028981931bfa56e83fb117cd35d6aab",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 417843,
+          "channels": 4,
+          "height": 512,
+          "path": "02-gravel-road-a-orm.png",
+          "sha256": "935abdb1956f3fc69d0636fc5ea94779b0515fafd271f0a6cf97476d5f4fe111",
+          "width": 512
+        }
+      },
+      "featureProfile": "road-a",
+      "featureReferenceScaleMetres": 4.5,
+      "heightAmplitudeMetres": 0.05,
+      "index": 2,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 4.5,
+        "heightAmplitudeMetres": 0.006,
+        "roughnessAmplitude": 0.065,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.1,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.7,
+        "desaturationFractionFromV2": 0.085
+      },
+      "physicalTileScaleMetres": 27.0,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.8,
+      "seed": 1887691477,
+      "semantic": "gravel-road-a"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 357890,
+          "channels": 3,
+          "height": 512,
+          "path": "03-forest-ground-albedo.png",
+          "sha256": "d703733c3ce7a3942ff0f0813f8def1ae0f6a40111141f1e31dcce4d8f421fe3",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 617157,
+          "channels": 3,
+          "height": 512,
+          "path": "03-forest-ground-normal.png",
+          "sha256": "6f1f1348e3e30be0dca48ed242549fc39c3790b284d19b79e65027cb693c8d0c",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 445609,
+          "channels": 4,
+          "height": 512,
+          "path": "03-forest-ground-orm.png",
+          "sha256": "841037dab3a1a1755d6d0fd5f13bcad880839153d0af9a9baba63846880c90b7",
+          "width": 512
+        }
+      },
+      "featureProfile": "forest",
+      "featureReferenceScaleMetres": 3.2,
+      "heightAmplitudeMetres": 0.055,
+      "index": 3,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 2.0,
+        "heightAmplitudeMetres": 0.0011,
+        "roughnessAmplitude": 0.022,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.2,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.5,
+        "desaturationFractionFromV2": 0.075
+      },
+      "physicalTileScaleMetres": 19.2,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.93,
+      "seed": 3335670031,
+      "semantic": "forest-ground"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 294698,
+          "channels": 3,
+          "height": 512,
+          "path": "04-stone-ground-albedo.png",
+          "sha256": "b7e89fd15cc92b80200b4ccc25ed06faf56928254044faf40924d70ddf48d2b8",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 659922,
+          "channels": 3,
+          "height": 512,
+          "path": "04-stone-ground-normal.png",
+          "sha256": "cea8631ec46a235746b5f93bea10005158f01e0da1f4bb673682cd9595e8b807",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 439543,
+          "channels": 4,
+          "height": 512,
+          "path": "04-stone-ground-orm.png",
+          "sha256": "076b87c064a83c99c13de02a343cdb36d90bbc95a319357713bba87464f1dcc7",
+          "width": 512
+        }
+      },
+      "featureProfile": "stone",
+      "featureReferenceScaleMetres": 4.0,
+      "heightAmplitudeMetres": 0.085,
+      "index": 4,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 4.5,
+        "heightAmplitudeMetres": 0.008,
+        "roughnessAmplitude": 0.07,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.35,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.3,
+        "desaturationFractionFromV2": 0.04
+      },
+      "physicalTileScaleMetres": 24.0,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.72,
+      "seed": 384240809,
+      "semantic": "stone-ground"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 281499,
+          "channels": 3,
+          "height": 512,
+          "path": "05-rock-ground-albedo.png",
+          "sha256": "7c4a742f6e35e780c23d8405f24208578b0512e95b0a66736c822f7b8691a6f1",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 712248,
+          "channels": 3,
+          "height": 512,
+          "path": "05-rock-ground-normal.png",
+          "sha256": "e584da837f07c5ce70e21d100675bea4d1731df2ebe7479849dbc430dcad5b6c",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 437035,
+          "channels": 4,
+          "height": 512,
+          "path": "05-rock-ground-orm.png",
+          "sha256": "1926e184e9ba610c8e584b2a7a3c4c057f185109f892faa149e7a60f35d185d9",
+          "width": 512
+        }
+      },
+      "featureProfile": "rock",
+      "featureReferenceScaleMetres": 6.0,
+      "heightAmplitudeMetres": 0.19,
+      "index": 5,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 4.7,
+        "heightAmplitudeMetres": 0.012,
+        "roughnessAmplitude": 0.075,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.65,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.3,
+        "desaturationFractionFromV2": 0.04
+      },
+      "physicalTileScaleMetres": 36.0,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.76,
+      "seed": 3853619021,
+      "semantic": "rock-ground"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 282433,
+          "channels": 3,
+          "height": 512,
+          "path": "06-gravel-road-b-albedo.png",
+          "sha256": "50caafac0c34b171dc722ad69da15c539265bdf7e171d24ad6264f34dec866cf",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 447586,
+          "channels": 3,
+          "height": 512,
+          "path": "06-gravel-road-b-normal.png",
+          "sha256": "84094f1783af0fdef7f7ece4dfbca55ed072eafc92a85a7e63f8054b8f8b24a3",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 414671,
+          "channels": 4,
+          "height": 512,
+          "path": "06-gravel-road-b-orm.png",
+          "sha256": "cc181193c19684fdbc09a8a1e0d2d1e39399b1adc820650b496e744cfd1ea6d4",
+          "width": 512
+        }
+      },
+      "featureProfile": "road-b",
+      "featureReferenceScaleMetres": 4.2,
+      "heightAmplitudeMetres": 0.06,
+      "index": 6,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 4.5,
+        "heightAmplitudeMetres": 0.0065,
+        "roughnessAmplitude": 0.065,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.15,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.8,
+        "desaturationFractionFromV2": 0.1
+      },
+      "physicalTileScaleMetres": 25.2,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.83,
+      "seed": 1338190359,
+      "semantic": "gravel-road-b"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 284987,
+          "channels": 3,
+          "height": 512,
+          "path": "07-gravel-albedo.png",
+          "sha256": "fbcfd58642fe6769e871fce69306365aa25987a1327116bb7dc6cfc27cd263ec",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 651963,
+          "channels": 3,
+          "height": 512,
+          "path": "07-gravel-normal.png",
+          "sha256": "79369a8253828ad8a8a355ffc43587b5a16f684ae848514f4ed605a92a921d35",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 460947,
+          "channels": 4,
+          "height": 512,
+          "path": "07-gravel-orm.png",
+          "sha256": "cb883be58696b6d2e5315a2ceb70548d2f31799718366c73d20b56f87eb5d71a",
+          "width": 512
+        }
+      },
+      "featureProfile": "gravel",
+      "featureReferenceScaleMetres": 2.2,
+      "heightAmplitudeMetres": 0.055,
+      "index": 7,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 5.0,
+        "heightAmplitudeMetres": 0.008,
+        "roughnessAmplitude": 0.08,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.3,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.5,
+        "desaturationFractionFromV2": 0.075
+      },
+      "physicalTileScaleMetres": 13.2,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.74,
+      "seed": 2451425507,
+      "semantic": "gravel"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 318012,
+          "channels": 3,
+          "height": 512,
+          "path": "08-grassy-ground-albedo.png",
+          "sha256": "3a6717a489c7a1ab680534926526f4d012c528a3fab4fdd14e88fcf382daad94",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 622404,
+          "channels": 3,
+          "height": 512,
+          "path": "08-grassy-ground-normal.png",
+          "sha256": "ed75375d19bc5f4d7f7030a5020e3097172b3df8e724cd7031f7fc0d781b9539",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 390789,
+          "channels": 4,
+          "height": 512,
+          "path": "08-grassy-ground-orm.png",
+          "sha256": "6c00ef811e4b7bf545995c71f6c4e31a3116aa6021b3d74e6836fe1defe1c18b",
+          "width": 512
+        }
+      },
+      "featureProfile": "grassy",
+      "featureReferenceScaleMetres": 2.8,
+      "heightAmplitudeMetres": 0.06,
+      "index": 8,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 1.8,
+        "heightAmplitudeMetres": 0.001,
+        "roughnessAmplitude": 0.02,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.25,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.5,
+        "desaturationFractionFromV2": 0.08
+      },
+      "physicalTileScaleMetres": 16.8,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.86,
+      "seed": 729085633,
+      "semantic": "grassy-ground"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 253562,
+          "channels": 3,
+          "height": 512,
+          "path": "09-sand-albedo.png",
+          "sha256": "aa38b1cec1f92771458c184942b78c6ad701f9a307fbfa5a88690bd9167b81f9",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 372003,
+          "channels": 3,
+          "height": 512,
+          "path": "09-sand-normal.png",
+          "sha256": "feb16fb164197ddabf10eec9ad397d825e196a75d98594796b146699800ba6dc",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 333670,
+          "channels": 4,
+          "height": 512,
+          "path": "09-sand-orm.png",
+          "sha256": "0a65b51627e2f6aac296d261e544481364401705c98121108b4d9ef2b94b825e",
+          "width": 512
+        }
+      },
+      "featureProfile": "sand",
+      "featureReferenceScaleMetres": 3.0,
+      "heightAmplitudeMetres": 0.04,
+      "index": 9,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 1.5,
+        "heightAmplitudeMetres": 0.001,
+        "roughnessAmplitude": 0.022,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 0.9,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.7,
+        "desaturationFractionFromV2": 0.075
+      },
+      "physicalTileScaleMetres": 18.0,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.94,
+      "seed": 3674566201,
+      "semantic": "sand"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 286909,
+          "channels": 3,
+          "height": 512,
+          "path": "10-pebbles-ground-albedo.png",
+          "sha256": "ec1a564c8eda0173aafa0d876ec0d572fce20fa6e1ac3efd77f8f7296a9a0cb2",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 677391,
+          "channels": 3,
+          "height": 512,
+          "path": "10-pebbles-ground-normal.png",
+          "sha256": "f7ea37060dfea86c2b87535470a51dd7e5c87e392be7a7f735f4fad7891a237d",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 463430,
+          "channels": 4,
+          "height": 512,
+          "path": "10-pebbles-ground-orm.png",
+          "sha256": "02ddbec4e16112cbd6b4f07655b2a818fc32baa974a3215c8a52f606267e1a05",
+          "width": 512
+        }
+      },
+      "featureProfile": "pebbles",
+      "featureReferenceScaleMetres": 2.5,
+      "heightAmplitudeMetres": 0.075,
+      "index": 10,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 5.0,
+        "heightAmplitudeMetres": 0.009,
+        "roughnessAmplitude": 0.08,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.35,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.5,
+        "desaturationFractionFromV2": 0.06
+      },
+      "physicalTileScaleMetres": 15.0,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.72,
+      "seed": 1707386763,
+      "semantic": "pebbles-ground"
+    },
+    {
+      "artifacts": {
+        "albedo": {
+          "bitDepth": 8,
+          "bytes": 341089,
+          "channels": 3,
+          "height": 512,
+          "path": "11-soil-grass-albedo.png",
+          "sha256": "e4aeba5f30701999e1f897dd86037fabd913a4cc03a0aa7d6d9f990e17cc8acc",
+          "width": 512
+        },
+        "normal": {
+          "bitDepth": 8,
+          "bytes": 595492,
+          "channels": 3,
+          "height": 512,
+          "path": "11-soil-grass-normal.png",
+          "sha256": "a08016e2fab4f79d2d052c9d820fbe41175e03ff6442d0f43aeeb57b80f76d6a",
+          "width": 512
+        },
+        "orm": {
+          "bitDepth": 8,
+          "bytes": 437484,
+          "channels": 4,
+          "height": 512,
+          "path": "11-soil-grass-orm.png",
+          "sha256": "ba6538e4e301eaf4b1ca68c5c3f7f6e084307e6b01c341da2111acef4a7ec490",
+          "width": 512
+        }
+      },
+      "featureProfile": "soil-grass",
+      "featureReferenceScaleMetres": 3.0,
+      "heightAmplitudeMetres": 0.055,
+      "index": 11,
+      "microGrit": {
+        "albedoAmplitudeSrgbUnits": 4.0,
+        "heightAmplitudeMetres": 0.005,
+        "roughnessAmplitude": 0.06,
+        "targetWavelengthsMetres": [
+          0.12,
+          0.07,
+          0.03
+        ]
+      },
+      "normalStrength": 1.2,
+      "paletteGrade": {
+        "coolingBlueBiasSrgbUnits": 0.7,
+        "desaturationFractionFromV2": 0.095
+      },
+      "physicalTileScaleMetres": 18.0,
+      "repeatScaleMultiplierFromV1": 6.0,
+      "roughnessBase": 0.92,
+      "seed": 4030421277,
+      "semantic": "soil-grass"
+    }
+  ],
+  "macro": {
+    "artifact": {
+      "bitDepth": 8,
+      "bytes": 20248,
+      "channels": 3,
+      "height": 512,
+      "path": "customs-terrain-macro-albedo.png",
+      "sha256": "5be7b1b3cfbe58d1a2dec2e85797d2b4a509d828e6d6c4bdfe7151aac94e9399",
+      "width": 512
+    },
+    "physicalTileScaleMetres": 256.0,
+    "role": "macro-albedo",
+    "seed": 2051391977,
+    "strength": 0.16
+  },
+  "materialSet": {
+    "contentHashesFinal": true,
+    "contract": "src/customs-terrain-material-contract.js material-set v1",
+    "placeholderDigestWhenKtx2IsNotRequested": "0000000000000000000000000000000000000000000000000000000000000000",
+    "structurallyCompatible": true,
+    "template": {
+      "bytes": 6230,
+      "path": "material-set.template.json",
+      "sha256": "8c79c9303deefeaa88731331088ca16f2377b4e0fb0e6b1e9a605d6a0be09710"
+    }
+  },
+  "microGritContract": {
+    "controlOrSplatMaskModified": false,
+    "normalMinimumFootprintPixels": 2,
+    "normalNyquistClamped": true,
+    "orientation": "isotropic-periodic-value-noise",
+    "runtimeSamplesAdded": 0,
+    "targetWavelengthsMetres": [
+      0.12,
+      0.07,
+      0.03
+    ]
+  },
+  "provenance": {
+    "classification": "original-authored",
+    "gameFilesRead": false,
+    "license": {
+      "appliesTo": "generated texture pixels and KTX2 derivatives",
+      "name": "Creative Commons CC0 1.0 Universal",
+      "spdx": "CC0-1.0"
+    },
+    "method": "Procedurally synthesized from code-owned palettes, periodic noise, semantic shape rules, and physically scaled isotropic micro-grit.",
+    "networkAccess": false,
+    "sourceInputs": [],
+    "thirdPartyPixels": false
+  },
+  "schemaVersion": 1,
+  "semanticOrder": [
+    "grass",
+    "ground",
+    "gravel-road-a",
+    "forest-ground",
+    "stone-ground",
+    "rock-ground",
+    "gravel-road-b",
+    "gravel",
+    "grassy-ground",
+    "sand",
+    "pebbles-ground",
+    "soil-grass"
+  ],
+  "visualRevision": {
+    "goals": [
+      "preserve the V2 anti-tiling and exact sixfold physical repeat",
+      "restore tactile 3-12 cm source detail without changing control masks",
+      "increase rounded normal energy and roughness breakup without sparkle",
+      "cool living and earth palettes toward ash and olive without grey washout"
+    ],
+    "id": "v2.1-microdetail-live-qa",
+    "repeatScaleMultiplierFromV1": 6.0
+  }
+}

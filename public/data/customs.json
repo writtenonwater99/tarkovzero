@@ -5,16 +5,17 @@
  "builtAt": "2026-08-29T02:02:07.079Z",
  "exactCache": {
   "provider": "tarkov.dev-json",
-  "cacheVersion": "2026-08-29-e9e411d572ae-a1d400843b10",
-  "fetchedDate": "2026-08-29",
+  "cacheVersion": "customs-85d01ff52c30f7da",
+  "fetchedDate": "2026-08-31",
   "urls": [
    "https://json.tarkov.dev/regular/maps",
    "https://json.tarkov.dev/regular/maps_en"
   ],
   "sha256": {
-   "maps": "e9e411d572ae54938f23f79b6e46dc3f1eece74335e64d5cbcdb914b70637db7",
-   "maps_en": "a1d400843b10f8677eabe59acb4833716506fb571d7f27e73bd550cb7c25a21e"
-  }
+   "maps": "47d4cf89506304d7d76b669c5d15d42978026ae6a2734872d49e54f2faaaa4a7",
+   "maps_en": "544137c033c31bfae3458b1ced228ee6c9282716ea12f96bc2a75c20682a48c3"
+  },
+  "fixtureSha256": "d2fa8ae869a9cde39c2b8edd0255c7c24700291ab1404198ecb0b892088b8535"
  },
  "extracts": [
   {
@@ -8121,7 +8122,8 @@
     }
    ],
    "top": 2.688743,
-   "bottom": 1.93874311
+   "bottom": 1.93874311,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8168,7 +8170,8 @@
     }
    ],
    "top": 2.71174335,
-   "bottom": 1.96174312
+   "bottom": 1.96174312,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8220,7 +8223,8 @@
     }
    ],
    "top": 8.63788,
-   "bottom": 7.55788
+   "bottom": 7.55788,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8267,7 +8271,8 @@
     }
    ],
    "top": 2.937965,
-   "bottom": 2.20796442
+   "bottom": 2.20796442,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8314,7 +8319,8 @@
     }
    ],
    "top": 4.448966,
-   "bottom": 3.71896529
+   "bottom": 3.71896529,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8361,7 +8367,8 @@
     }
    ],
    "top": 2.76500273,
-   "bottom": 1.93500257
+   "bottom": 1.93500257,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8422,7 +8429,8 @@
    "corroboratedBy": [
     "tarkov.dev-json:78a17af14129bad6dbfcc58f490776639d777e0e",
     "eft-wiki:327"
-   ]
+   ],
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8479,7 +8487,8 @@
     "tarkov.dev-json:2e9c51a0f9edec820a4b1e7fd616b5a55d5e95e5",
     "eft-wiki:328",
     "eft-wiki:329"
-   ]
+   ],
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8526,7 +8535,8 @@
     }
    ],
    "top": 4.3444,
-   "bottom": 3.39439964
+   "bottom": 3.39439964,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8573,7 +8583,8 @@
     }
    ],
    "top": 1.33599961,
-   "bottom": 0.505999446
+   "bottom": 0.505999446,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8620,7 +8631,8 @@
     }
    ],
    "top": 1.33599937,
-   "bottom": 0.505999446
+   "bottom": 0.505999446,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8667,7 +8679,8 @@
     }
    ],
    "top": 1.32660019,
-   "bottom": 0.49660027
+   "bottom": 0.49660027,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8714,7 +8727,8 @@
     }
    ],
    "top": 1.32960021,
-   "bottom": 0.4996003
+   "bottom": 0.4996003,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8761,7 +8775,8 @@
     }
    ],
    "top": 1.33160043,
-   "bottom": 0.501600266
+   "bottom": 0.501600266,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8808,7 +8823,8 @@
     }
    ],
    "top": 7.305814,
-   "bottom": 6.355814
+   "bottom": 6.355814,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8855,7 +8871,8 @@
     }
    ],
    "top": 7.32560635,
-   "bottom": 6.375606
+   "bottom": 6.375606,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8902,7 +8919,8 @@
     }
    ],
    "top": 7.32560444,
-   "bottom": 6.37560463
+   "bottom": 6.37560463,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8949,7 +8967,8 @@
     }
    ],
    "top": 1.27646148,
-   "bottom": 0.34546113
+   "bottom": 0.34546113,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -8996,7 +9015,8 @@
     }
    ],
    "top": 4.306203,
-   "bottom": 3.356203
+   "bottom": 3.356203,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9043,7 +9063,8 @@
     }
    ],
    "top": 4.31760263,
-   "bottom": 3.36760235
+   "bottom": 3.36760235,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9090,7 +9111,8 @@
     }
    ],
    "top": 4.312603,
-   "bottom": 3.36260223
+   "bottom": 3.36260223,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9137,7 +9159,8 @@
     }
    ],
    "top": 7.314004,
-   "bottom": 6.364004
+   "bottom": 6.364004,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9184,7 +9207,8 @@
     }
    ],
    "top": 1.2864933,
-   "bottom": 0.355493546
+   "bottom": 0.355493546,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9231,7 +9255,8 @@
     }
    ],
    "top": 7.284604,
-   "bottom": 6.454604
+   "bottom": 6.454604,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9278,7 +9303,8 @@
     }
    ],
    "top": 4.29300261,
-   "bottom": 3.46300244
+   "bottom": 3.46300244,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9335,7 +9361,8 @@
     }
    ],
    "top": 1.23666859,
-   "bottom": 0.423267365
+   "bottom": 0.423267365,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9382,7 +9409,8 @@
     }
    ],
    "top": 4.260984,
-   "bottom": 3.43098378
+   "bottom": 3.43098378,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9429,7 +9457,8 @@
     }
    ],
    "top": 4.2875824,
-   "bottom": 3.45758247
+   "bottom": 3.45758247,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9496,7 +9525,8 @@
     }
    ],
    "top": 2.72378635,
-   "bottom": 1.7213707
+   "bottom": 1.7213707,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9563,7 +9593,8 @@
     }
    ],
    "top": 2.7217865,
-   "bottom": 1.71937072
+   "bottom": 1.71937072,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9624,7 +9655,8 @@
    "corroboratedBy": [
     "tarkov.dev-json:9226bcefecf3d23d68a5aa34b98ad10b629917cc",
     "eft-wiki:572"
-   ]
+   ],
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9671,7 +9703,8 @@
     }
    ],
    "top": -1.37976813,
-   "bottom": -2.179768
+   "bottom": -2.179768,
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9732,7 +9765,8 @@
    "corroboratedBy": [
     "tarkov.dev-json:99ac8767c034e962516d044b77e75a67d7a901a3",
     "eft-wiki:335"
-   ]
+   ],
+   "positionAuthority": "tarkov.dev-json"
   },
   {
    "source": "tarkov.dev-json",
@@ -9783,427 +9817,8 @@
    "corroboratedBy": [
     "tarkov.dev-json:67cc6f57d0510e05dcda2f6baefeb5f6c71dd635",
     "eft-wiki:360"
-   ]
-  },
-  {
-   "sourceId": "330",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Gas Station Storage Room"
-   },
-   "position": {
-    "x": 336.8,
-    "z": 241.2
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "331",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Gas Station Office"
-   },
-   "position": {
-    "x": 336.8,
-    "z": 247.4
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "332",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Military Checkpoint Building"
-   },
-   "position": {
-    "x": 571.1,
-    "z": 15.4
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "334",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "USEC Stash"
-   },
-   "position": {
-    "x": 388.2,
-    "z": -159.2
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "336",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Trailer Park Cabin"
-   },
-   "position": {
-    "x": -165.3,
-    "z": -204.6
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "337",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Portable Cabin"
-   },
-   "position": {
-    "x": -223.1,
-    "z": -215.3
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "338",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Tarcone Director's Office"
-   },
-   "position": {
-    "x": -234.3,
-    "z": 62
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "339",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 206"
-   },
-   "position": {
-    "x": 47.6,
-    "z": 190.7
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "340",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 110"
-   },
-   "position": {
-    "x": -12.9,
-    "z": 253.5
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "341",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 114"
-   },
-   "position": {
-    "x": -4.6,
-    "z": 253.5
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "342",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Guard Desk"
-   },
-   "position": {
-    "x": -17,
-    "z": 188.2
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "343",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 105"
-   },
-   "position": {
-    "x": -12.9,
-    "z": 181.6
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "344",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 104"
-   },
-   "position": {
-    "x": -4.6,
-    "z": 181.6
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "345",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 108"
-   },
-   "position": {
-    "x": -284.5,
-    "z": 246.7
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "346",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 118"
-   },
-   "position": {
-    "x": -238.8,
-    "z": 242.5
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "347",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 103"
-   },
-   "position": {
-    "x": -276.3,
-    "z": 166.2
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "348",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 220"
-   },
-   "position": {
-    "x": -159.1,
-    "z": 242.5
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "349",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 218"
-   },
-   "position": {
-    "x": -167.4,
-    "z": 242.5
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "350",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 214"
-   },
-   "position": {
-    "x": -204.8,
-    "z": 264.7
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "351",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 203"
-   },
-   "position": {
-    "x": -196.4,
-    "z": 166.2
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "352",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 204"
-   },
-   "position": {
-    "x": -204.7,
-    "z": 166.2
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "353",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 303"
-   },
-   "position": {
-    "x": -117.2,
-    "z": 166.4
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "354",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 306"
-   },
-   "position": {
-    "x": -125.6,
-    "z": 184
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "355",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 315"
-   },
-   "position": {
-    "x": -117.2,
-    "z": 238.1
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "356",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Room 308"
-   },
-   "position": {
-    "x": -125.6,
-    "z": 247
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "357",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Marked Dorm Room 314"
-   },
-   "position": {
-    "x": -117.2,
-    "z": 264.8
-   },
-   "level": "upper",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "546",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Dorm Overseer Room"
-   },
-   "position": {
-    "x": -196.4,
-    "z": 213.1
-   },
-   "level": "surface",
-   "visualApproximate": true
-  },
-  {
-   "sourceId": "575",
-   "source": "eft-wiki",
-   "sourceKind": "lock",
-   "lockType": "door",
-   "key": {
-    "name": "Reshala's Bunkhouse"
-   },
-   "position": {
-    "x": 103.1,
-    "z": -105.3
-   },
-   "level": "surface",
-   "visualApproximate": true
+   ],
+   "positionAuthority": "tarkov.dev-json"
   }
  ],
  "switches": [
@@ -30575,5 +30190,289 @@
    "top": 8,
    "bottom": -2
   }
- ]
+ ],
+ "quarantinedMarkers": {
+  "locks": [
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "330",
+    "key": {
+     "name": "Gas Station Storage Room"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "331",
+    "key": {
+     "name": "Gas Station Office"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "332",
+    "key": {
+     "name": "Military Checkpoint Building"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "334",
+    "key": {
+     "name": "USEC Stash"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "336",
+    "key": {
+     "name": "Trailer Park Cabin"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "337",
+    "key": {
+     "name": "Portable Cabin"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "338",
+    "key": {
+     "name": "Tarcone Director's Office"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "339",
+    "key": {
+     "name": "Dorm Room 206"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "340",
+    "key": {
+     "name": "Dorm Room 110"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "341",
+    "key": {
+     "name": "Dorm Room 114"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "342",
+    "key": {
+     "name": "Dorm Guard Desk"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "343",
+    "key": {
+     "name": "Dorm Room 105"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "344",
+    "key": {
+     "name": "Dorm Room 104"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "345",
+    "key": {
+     "name": "Dorm Room 108"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "346",
+    "key": {
+     "name": "Dorm Room 118"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "347",
+    "key": {
+     "name": "Dorm Room 103"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "348",
+    "key": {
+     "name": "Dorm Room 220"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "349",
+    "key": {
+     "name": "Dorm Room 218"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "350",
+    "key": {
+     "name": "Dorm Room 214"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "351",
+    "key": {
+     "name": "Dorm Room 203"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "352",
+    "key": {
+     "name": "Dorm Room 204"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "353",
+    "key": {
+     "name": "Dorm Room 303"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "354",
+    "key": {
+     "name": "Dorm Room 306"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "355",
+    "key": {
+     "name": "Dorm Room 315"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "356",
+    "key": {
+     "name": "Dorm Room 308"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "357",
+    "key": {
+     "name": "Marked Dorm Room 314"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "546",
+    "key": {
+     "name": "Dorm Overseer Room"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   },
+   {
+    "source": "eft-wiki",
+    "sourceKind": "lock",
+    "sourceId": "575",
+    "key": {
+     "name": "Reshala's Bunkhouse"
+    },
+    "reasonCode": "detached-floor-panel-unanchored",
+    "coordinateStatus": "unanchored-wiki-panel"
+   }
+  ]
+ }
 }

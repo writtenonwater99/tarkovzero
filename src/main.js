@@ -13,6 +13,7 @@ import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
 import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
+import { localRendererMode } from './local-renderer-gate.js';
 // zOff() is the 2D↔3D zoom relation. It is this MAP's CRS scale and nothing else, so the two views
 // always report the same metres per pixel — see the note in camera.js.
 import { CAM, zoomOffsetFor, fitZoom, setFitBox } from './camera.js';
@@ -58,6 +59,28 @@ const avoidOffset = () => offsetOf(avoidRect());
 
 const requestedMap = new URLSearchParams(location.search).get('map');
 const mapData = selectMap(requestedMap);
+// Renderer migration is an explicit localhost proof, never a production mode. The current deck.gl
+// view remains the default and the only renderer for Reserve/Woods. This lets the Three.js slice
+// exercise the real UI/live/quest stack without turning an unfinished asset lane into a release.
+const rendererRequest = new URLSearchParams(location.search).get('renderer');
+const rendererMode = localRendererMode({
+  dev: import.meta.env?.DEV === true,
+  hostname: location.hostname,
+  mapKey: mapData.key,
+  rendererRequest,
+});
+if (rendererRequest === 'three' && rendererMode !== 'three') console.warn('Three.js proof is localhost-only and Customs-only; using deck.gl');
+// Renderer-specific chrome is CSS-gated by this class. localRendererMode() guarantees it can only
+// appear for the localhost Customs proof; production and Reserve/Woods retain their current UI.
+document.body.classList.toggle('renderer-three', rendererMode === 'three');
+if (rendererMode === 'three') {
+  // Customs truth mode has one visual contract: no fog and fixed 2x terrain relief.
+  // Remove the controls from the live DOM instead of leaving inert/hidden toggles behind.
+  $('#relief-row')?.remove();
+  $('#fx-row [data-fx="fog"]')?.remove();
+  const effectsLabel = $('#fx-row .line-lab');
+  if (effectsLabel) effectsLabel.title = 'Real-only effects. Grade controls the post pass. Detail controls the ground material. Vector runs neither.';
+}
 /** zoom2d = zoom3d + zOff(), for THIS map. Both directions and the permalink go through it. */
 const zOff = () => zoomOffsetFor(mapData);
 const mapLabels = LABELS[mapData.key] ?? [];
@@ -171,20 +194,28 @@ setNature('rocks', rocksShown, false);
 // Terrain relief is a 3D-only display preference. Query values override (without rewriting) the
 // persisted choice, matching the Trees/Rocks behavior above.
 const reliefChoices = new Set([1, 2, 3]);
+const THREE_FIXED_RELIEF = 2;
 const reliefQuery = Number(new URLSearchParams(location.search).get('relief'));
-let relief = reliefChoices.has(reliefQuery) ? reliefQuery : Number(store.get('relief', 3));
-if (!reliefChoices.has(relief)) relief = 3;
+// Preference v2 resets the historical 3x default exactly once. A deliberate click persists after
+// that; an old localStorage value does not silently keep presenting exaggerated terrain as truth.
+const RELIEF_PREF_VERSION = 2;
+const storedRelief = Number(store.get('reliefVersion', 0)) === RELIEF_PREF_VERSION ? Number(store.get('relief', 1)) : 1;
+let relief = rendererMode === 'three'
+  ? THREE_FIXED_RELIEF
+  : reliefChoices.has(reliefQuery) ? reliefQuery : storedRelief;
+if (!reliefChoices.has(relief)) relief = 1;
 function setRelief(next, persist = true) {
-  next = Number(next);
-  if (!reliefChoices.has(next)) next = 3;
+  next = rendererMode === 'three' ? THREE_FIXED_RELIEF : Number(next);
+  if (!reliefChoices.has(next)) next = 1;
   relief = next;
   $$('#relief-toggle .seg-cell').forEach((b) => {
     const active = Number(b.dataset.relief) === relief;
     b.classList.toggle('on', active);
     b.setAttribute('aria-pressed', String(active));
   });
-  if (persist) store.set('relief', relief);
+  if (persist && rendererMode !== 'three') { store.set('relief', relief); store.set('reliefVersion', RELIEF_PREF_VERSION); }
   view3d?.setRelief(relief);
+  return relief;
 }
 $$('#relief-toggle .seg-cell').forEach((b) => (b.onclick = () => setRelief(b.dataset.relief)));
 setRelief(relief, false);
@@ -195,7 +226,9 @@ setRelief(relief, false);
 // `?look=` overrides the persisted choice for one visit without rewriting it.
 const looks = new Set(['realistic', 'vector']);
 const lookQuery = new URLSearchParams(location.search).get('look');
-let look = looks.has(lookQuery) ? lookQuery : String(store.get('look', 'vector'));
+let look = looks.has(lookQuery)
+  ? lookQuery
+  : rendererMode === 'three' ? 'realistic' : String(store.get('look', 'vector'));
 if (!looks.has(look)) look = 'vector';
 function setLook(next, persist = true) {
   // The fallback is the DEFAULT, and the default is vector. It used to be 'realistic', two lines
@@ -208,7 +241,7 @@ function setLook(next, persist = true) {
     b.classList.toggle('on', active);
     b.setAttribute('aria-pressed', String(active));
   });
-  if (persist) store.set('look', look);
+  if (persist && rendererMode !== 'three') store.set('look', look);
   // The FX row only means anything under Real — vector holds no effects to switch.
   paintFx();
   view3d?.setLook(look);
@@ -229,11 +262,14 @@ const FX_KEYS = ['fog', 'grade', 'detail'];
 const fxQuery = new URLSearchParams(location.search).get('fx');
 const fx = (() => {
   const stored = store.get('fx', null);
-  const raw = fxQuery ?? (stored == null ? null : String(stored));
+  const raw = fxQuery ?? (rendererMode === 'three' ? null : stored == null ? null : String(stored));
   if (raw == null || raw === '' || raw === 'all') return Object.fromEntries(FX_KEYS.map((k) => [k, true]));
   const want = new Set(raw.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean));
   return Object.fromEntries(FX_KEYS.map((k) => [k, want.has(k)]));
 })();
+// Three has no atmospheric fog. Ignore stale storage/query state and keep the public QA state
+// honest; Deck's independently switchable fog remains unchanged.
+if (rendererMode === 'three') fx.fog = false;
 const fxParam = () => (FX_KEYS.every((k) => fx[k]) ? 'all' : FX_KEYS.filter((k) => fx[k]).join(',') || 'none');
 function paintFx() {
   $$('#fx-row .seg-cell').forEach((b) => {
@@ -246,8 +282,9 @@ function paintFx() {
 }
 function setFx(key, persist = true) {
   if (!FX_KEYS.includes(key)) return;
+  if (rendererMode === 'three' && key === 'fog') return;
   fx[key] = !fx[key];
-  if (persist) store.set('fx', fxParam());
+  if (persist && rendererMode !== 'three') store.set('fx', fxParam());
   paintFx();
   view3d?.setFx({ [key]: fx[key] });
 }
@@ -1283,7 +1320,9 @@ async function setView(mode) {
   viewBtns.forEach((b) => { const on = b.dataset.view === mode; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
   if (mode === '3d') {
     if (!view3d) {
-      const { createView3d } = await import('./map3d.js');
+      const { createView3d } = rendererMode === 'three'
+        ? await import('./map3d-three.js')
+        : await import('./map3d.js');
       view3d = await createView3d($('#map3d'), mapData, {
         relief,
         look,
@@ -1461,6 +1500,7 @@ document.addEventListener('keydown', (e) => {
 //   tz.quests.select('the-punisher-part-1'); tz.quests.flyTo('<objectiveId>'); tz.quests.markObjective(id)
 window.tz = {
   map: mapData.key,
+  renderer: rendererMode,
   get view() { return is3d() ? '3d' : '2d'; },
   setView,
   flyTo,

@@ -17,6 +17,9 @@ import {
   waterExtensionFor, voidMargin, shadowRings, materialTint,
 } from './atmosphere.js';
 import { buildingMaterialId, roofMaterialId } from './render-style.js';
+import {
+  buildingFloorLevels, createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight,
+} from './surfaces.js';
 // Where a building's walls meet the ground, and what fills the downhill gap. Pure module, shared
 // verbatim with scripts/building-height-test.mjs — see its header for the foundation bug it exists
 // to prevent.
@@ -193,14 +196,19 @@ const markerIconKey = (m) => {
 // icons/labels always on top of geometry
 const ringAt = (poly, y) => poly.map((p) => P(p, y));
 const expand = (poly, m) => { const c = poly.reduce((a, p) => [a[0] + p[0] / poly.length, a[1] + p[1] / poly.length], [0, 0]); return poly.map(([x, z]) => { const dx = x - c[0], dz = z - c[1], L = Math.hypot(dx, dz) || 1; return [x + (dx / L) * m, z + (dz / L) * m]; }); };
-// Bridge height is local to the road, never an absolute world Z. Keeping the local lift separate
-// is important: relief may make the sampled ground negative, but that must not delete a pier.
+const renderHeightOf = (building) => building?._surfaceProfile?.height ?? building?.height ?? 0;
+const renderFloorLevels = (building, options = {}) => building?._surfaceProfile
+  ? buildingFloorLevels(building._surfaceProfile, options)
+  : floorLevels(building, options);
+// A surveyed `surfaceY` is an absolute deck altitude and must not inherit the carved river bed.
+// Older bridges without that evidence retain the legacy local lift above ground/water.
 function bridgeProfile(b) {
   const p = b.path, cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
   const L = cum[cum.length - 1], ramp = Math.min(15, L / 3);
   return p.map((pt, i) => { const t = cum[i]; return { pt, lift: t < ramp ? (t / ramp) * b.height : t > L - ramp ? ((L - t) / ramp) * b.height : b.height }; });
 }
-const bridgePath = (b) => bridgeProfile(b).map(({ pt, lift }) => P(pt, bridgeGround(pt) + lift + 0.1));
+const bridgeDeckY = (b, pt, lift) => measuredSurfaceY(b, RELIEF) ?? bridgeGround(pt) + lift;
+const bridgePath = (b) => bridgeProfile(b).map(({ pt, lift }) => P(pt, bridgeDeckY(b, pt, lift) + 0.1));
 // offset a 3D path sideways by d metres (for railings on both sides of a deck)
 function offsetPath(p, d) {
   return p.map((q, i) => { const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)]; const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [q[0] - (dy / L) * d, q[1] + (dx / L) * d, q[2]]; });
@@ -210,7 +218,7 @@ function piers(b) {
   const p = bridgeProfile(b), out = [];
   for (let i = 3; i < p.length - 3; i += 3) {
     if (p[i].lift < b.height - 0.01) continue;
-    const top = P(p[i].pt, bridgeGround(p[i].pt) + p[i].lift - 0.05), bottom = H(p[i].pt[0], p[i].pt[1]) + 0.25;
+    const top = P(p[i].pt, bridgeDeckY(b, p[i].pt, p[i].lift) - 0.05), bottom = H(p[i].pt[0], p[i].pt[1]) + 0.25;
     out.push({ pos: top, bottom, h: Math.max(0.2, top[2] - bottom), w: b.width * 0.5 });
   }
   return out;
@@ -234,7 +242,8 @@ function obb(poly) {
 const polyArea = (poly) => Math.abs(poly.reduce((a, [x, z], i) => { const [nx, nz] = poly[(i + 1) % poly.length]; return a + x * nz - nx * z; }, 0)) / 2;
 // hip roof: four slopes from the eaves up to a ridge along the long axis (no open gable ends)
 function hipRoof(b) {
-  const o = obb(b.poly), eave = b.height * 0.72, ridge = b.height + 0.4, { mn, mx, toXZ } = o;
+  const height = renderHeightOf(b);
+  const o = obb(b.poly), eave = height * 0.72, ridge = height + (b._surfaceProfile?.measuredRoof ? 0 : 0.4), { mn, mx, toXZ } = o;
   let [u0, u1, v0, v1] = [mn[0], mx[0], mn[1], mx[1]];
   if (!o.long) [u0, u1, v0, v1] = [mn[1], mx[1], mn[0], mx[0]];
   const T = o.long ? toXZ : (u, v) => toXZ(v, u);
@@ -253,7 +262,7 @@ function columns(poly, spacing = 6) { const out = []; for (let i = 0; i < poly.l
 // Lattice pylon: 4 legs tapering inward over 3 stacked segments, two cross-arms, insulator dots
 // and diagonal bracing. Straight untapered posts were the most obviously-CG thing on the ridge.
 function pylonParts(b, posts, slabs, edges, dots) {
-  const o = obb(b.poly), H0 = b.height || 22, base = b.base ?? 0, { mn, mx, toXZ } = o;
+  const o = obb(b.poly), H0 = renderHeightOf(b) || 22, base = b.base ?? 0, { mn, mx, toXZ } = o;
   const cx = (mn[0] + mx[0]) / 2, cy = (mn[1] + mx[1]) / 2, w = Math.max(3, Math.min(mx[0] - mn[0], mx[1] - mn[1]));
   const legs = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
   const spread = (t) => w * (0.38 - 0.135 * t); // 35% narrower at the top
@@ -327,19 +336,21 @@ function tintBuildings(bs) {
 }
 function detailParts(bs, scenes = []) {
   const out = { boxes: [], plinths: [], flats: [], lines: [], dashes: [], dots: [] };
-  const B = (poly, base, h, color, lvl = 0) => { if (poly && poly.length > 2 && h > 0.02) out.boxes.push({ poly, base, h, color, lvl }); };
-  const F = (poly, z, color, lvl = 0) => { if (poly && poly.length > 2) out.flats.push({ ring: ringAt(poly, z), color, lvl }); };
-  const F3 = (ring, color, lvl = 0) => out.flats.push({ ring, color, lvl });
-  const L = (path, color, w, lvl = 0) => { if (path.length > 1) out.lines.push({ path, color, w, lvl }); };
-  const D = (path, color, w, dash, lvl = 0) => { if (path.length > 1) out.dashes.push({ path, color, w, dash, lvl }); };
-  const T = (pos, r, color, lvl = 0) => out.dots.push({ pos, r, color, lvl });
+  let owner = null;
+  const B = (poly, base, h, color, lvl = 0) => { if (poly && poly.length > 2 && h > 0.02) out.boxes.push({ poly, base, h, color, lvl, owner }); };
+  const F = (poly, z, color, lvl = 0) => { if (poly && poly.length > 2) out.flats.push({ ring: ringAt(poly, z), color, lvl, owner }); };
+  const F3 = (ring, color, lvl = 0) => out.flats.push({ ring, color, lvl, owner });
+  const L = (path, color, w, lvl = 0) => { if (path.length > 1) out.lines.push({ path, color, w, lvl, owner }); };
+  const D = (path, color, w, dash, lvl = 0) => { if (path.length > 1) out.dashes.push({ path, color, w, dash, lvl, owner }); };
+  const T = (pos, r, color, lvl = 0) => out.dots.push({ pos, r, color, lvl, owner });
   const closed = (poly, z) => { const r = ringAt(poly, z); return [...r, r[0]]; };
   const seg = (a, b, za, zb) => [P(a, za), P(b, zb ?? za)];
 
   for (const b of bs) {
+    owner = b;
     if (b.kind === 'powerline_towers') continue; // pylonParts owns those
     const st = b.style || 'box', place = b.place || '';
-    const base = b.base ?? 0, h = b.height, A = polyArea(b.poly);
+    const base = b.base ?? 0, h = renderHeightOf(b), A = polyArea(b.poly);
     const o = obb(b.poly);
     const cen = b.poly.reduce((a, p) => [a[0] + p[0] / b.poly.length, a[1] + p[1] / b.poly.length], [0, 0]);
     const rnd = hash1(cen[0], cen[1]);
@@ -385,10 +396,10 @@ function detailParts(bs, scenes = []) {
     }
 
     // --- 2. window bands: one dashed ring per floor. Dashes read as glass, gaps as piers.
-    // `floorLevels()` measures off b.height / b.floors — the REAL building — never off the extruded
-    // span or the plinth, so a slope cannot invent a storey line.
+    // Measured floor planes win; only buildings without evidence fall back to shell-proportional
+    // levels. A slope can never invent a storey line.
     const banded = st === 'box' && A >= 40 && !['Fortress', 'Big Red'].includes(place) && b.kind !== 'tank';
-    if (banded) for (const z of floorLevels(b, { inset: 1.35 }))
+    if (banded) for (const z of renderFloorLevels(b, { inset: 1.35 }))
       D(closed(b.poly, base + z), C.glass, 1.15, place.startsWith('Dorms') ? [1.55, 1.35] : [1.6, 1.5], z);
 
     // --- 3. parapet lip + roof slab: roof and wall stop being the same grey
@@ -420,7 +431,7 @@ function detailParts(bs, scenes = []) {
 
     // --- 6. gable roofs: ridge cap, eave line, corrugation ribs, skylight strips
     if (st === 'gable' && isRectangular(b.poly)) {
-      const eave = h * 0.72, ridge = h + 0.4, r0 = u0 + WID / 2, r1 = u1 - WID / 2;
+      const eave = h * 0.72, ridge = h + (b._surfaceProfile?.measuredRoof ? 0 : 0.4), r0 = u0 + WID / 2, r1 = u1 - WID / 2;
       const zOn = (v) => eave + (ridge - eave) * Math.min(1, Math.abs(v - (v < vm ? v0 : v1)) / (WID / 2 || 1));
       L(seg(pt(r0, vm), pt(r1, vm), base + ridge + 0.06), mul(roof, 1.2), 0.5, h);
       L(closed(expand(b.poly, 0.05), base + eave), [...C.ink, 90], 0.3, eave);
@@ -443,12 +454,12 @@ function detailParts(bs, scenes = []) {
 
     // --- 7. frame (Skeleton, Old Construction): a real column grid, edge beams, a shear core
     if (st === 'frame') {
-      const top = b.floors * 3.3;
+      const top = h;
       for (let u = u0 + 2.2; u < u1 - 1; u += 4.5) for (let v = v0 + 2.2; v < v1 - 1; v += 4.5) {
         const q = pt(u, v); if (!inPolyXZ(q, b.poly)) continue;
         B(rect(u - 0.28, u + 0.28, v - 0.28, v + 0.28), base, top - 0.25, C.concreteRaw, 0);
       }
-      for (let k = 1; k <= b.floors; k++) L(closed(expand(b.poly, 0.04), base + k * 3.3 - 0.15), mul(C.concreteRaw, 0.78), 0.3, k * 3.3);
+      for (const z of renderFloorLevels(b, { includeRoof: true })) L(closed(expand(b.poly, 0.04), base + z - 0.15), mul(C.concreteRaw, 0.78), 0.3, z);
       B(rect(u0 + 0.4, u0 + 5.4, vm - 2, vm + 2), base, top, mul(C.concreteRaw, 0.88), 0);
       for (const q of columns(b.poly, 6)) T([...P(q), base + top + 0.45], 0.1, C.rebar, top);
       F(rect(u1 - 5, u1 - 1.5, vm - 1.5, vm + 1.5), base + top + 0.03, [26, 28, 26], top);
@@ -509,13 +520,13 @@ function detailParts(bs, scenes = []) {
       B(rect(u0 + LEN * 0.5 - 1.7, u0 + LEN * 0.5 + 1.7, v0 - 1.6, v0), base + 3.0, 0.2, C.parapet, 3.0);
       for (const t of [-1.5, 1.5]) B(rect(u0 + LEN * 0.5 + t - 0.09, u0 + LEN * 0.5 + t + 0.09, v0 - 1.4, v0 - 1.22), base, 3.0, C.parapet, 0);
       const q = pt(u1 - 3, vm); B(circle(q[0], q[1], 0.8, 14), base + h + 0.55, 1.2, C.tank, h);
-      if (b.floors >= 3) for (const z of floorLevels(b).slice(0, 2)) {
+      if (b.floors >= 3) for (const z of renderFloorLevels(b).slice(0, 2)) {
         L(closed(expand(b.poly, 0.5), base + z), mul(wall, 0.9), 0.9, z);
         L(closed(expand(b.poly, 0.9), base + z + 0.9), C.bridgeRail, 0.12, z);
       }
     }
     if (place === 'Fortress') {
-      for (const z of floorLevels(b, { inset: 1.4 })) D(closed(b.poly, base + z), [26, 34, 36, 240], 0.55, [0.55, 2.6], z + 1.4);
+      for (const z of renderFloorLevels(b, { inset: 1.4 })) D(closed(b.poly, base + z), [26, 34, 36, 240], 0.55, [0.55, 2.6], z + 1.4);
       D(closed(expand(b.poly, 0.06), base + h + 0.55), [196, 192, 182], 0.55, [1.25, 1.25], h);
       const rim = columns(expand(b.poly, -0.6), Math.max(2.2, (LEN + WID) * 2 / 14));
       rim.forEach((q, i) => B(rbox(q[0], q[1], 0.5, 0.9, i * 37 % 180), base + h + 0.06, 0.5, C.sandbag, h));
@@ -547,6 +558,9 @@ function detailParts(bs, scenes = []) {
   }
 
   // --- 11. scenes with no footprint in the data: bunker mouths + checkpoints ---------------
+  // These assemblies are not owned by the last building visited above. Leaving `owner` set
+  // would make the floor selector truncate an unrelated checkpoint using that building's survey.
+  owner = null;
   for (const s of scenes) {
     const [x, z] = s.pos, a = s.rot, ca = Math.cos(a), sa = Math.sin(a);
     const R = (du, dv) => [x + du * ca - dv * sa, z + du * sa + dv * ca];
@@ -589,12 +603,12 @@ function buildingParts(bs) {
   const walls = [], roofs = [], slabs = [], posts = [], edges = [], dots = [];
   for (const b of bs) {
     if (b.kind === 'powerline_towers') { pylonParts(b, posts, slabs, edges, dots); continue; }
-    const st = b.style || 'box';
-    if (st === 'box' || st === 'tank') walls.push({ ...b, h: b.height });
-    if (st === 'tank') slabs.push({ poly: b.poly, z: b.height + 0.02, color: [196, 200, 198], base: b.base });
+    const st = b.style || 'box', height = renderHeightOf(b);
+    if (st === 'box' || st === 'tank') walls.push({ ...b, h: height });
+    if (st === 'tank') slabs.push({ poly: b.poly, z: height + 0.02, color: [196, 200, 198], base: b.base, owner: b });
     if (st === 'gable') {
-      if (!isRectangular(b.poly)) { walls.push({ ...b, h: b.height }); slabs.push({ poly: b.poly, z: b.height + 0.02, color: b.roof ?? b.roofTint, base: b.base }); continue; }
-      walls.push({ ...b, h: b.height * 0.72 });
+      if (!isRectangular(b.poly)) { walls.push({ ...b, h: height }); slabs.push({ poly: b.poly, z: height + 0.02, color: b.roof ?? b.roofTint, base: b.base, owner: b }); continue; }
+      walls.push({ ...b, h: height * 0.72 });
       // R1.5: a roof takes its own MATERIAL CLASS — corrugated metal on a gable, tile on a house
       // (ROOF_MATERIAL.byPlace maps Crackhouse and Streamer House to 'roof-tile') — not one shared
       // warehouse grey. tintBuildings() sets `roofTint` on every non-pylon building, so the old
@@ -603,8 +617,8 @@ function buildingParts(bs) {
       const rc = b.roof ? liftTone(b.roof, 0.12) : b.roofTint, shade = (k) => rc.map((c) => Math.min(255, c * k));
       hipRoof(b).forEach((pts, i) => roofs.push({ pts, color: shade([1, 0.82, 0.9, 0.9][i]), b }));
     }
-    if (st === 'frame') { for (let k = 1; k <= b.floors; k++) { const z = k * 3.3; slabs.push({ poly: b.poly, z, color: [C.concreteRaw[0], C.concreteRaw[1], C.concreteRaw[2], 235], base: b.base }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]], base: b.base }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: b.floors * 3.3, w: 0.55, color: C.concreteRaw, base: b.base }); }
-    if (st === 'canopy') { slabs.push({ poly: b.poly, z: b.height, color: b.color ?? b.roofTint, base: b.base }); edges.push({ path: [...ringAt(b.poly, b.height - 0.4), ringAt(b.poly, b.height - 0.4)[0]], base: b.base }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: b.height, w: 0.5, color: C.parapet, base: b.base }); }
+    if (st === 'frame') { for (const z of renderFloorLevels(b, { includeRoof: true })) { slabs.push({ poly: b.poly, z, color: [C.concreteRaw[0], C.concreteRaw[1], C.concreteRaw[2], 235], base: b.base, owner: b }); edges.push({ path: [...ringAt(b.poly, z), ringAt(b.poly, z)[0]], base: b.base, owner: b }); } for (const c of columns(b.poly)) posts.push({ pos: c, h: height, w: 0.55, color: C.concreteRaw, base: b.base, owner: b }); }
+    if (st === 'canopy') { slabs.push({ poly: b.poly, z: height, color: b.color ?? b.roofTint, base: b.base, owner: b }); edges.push({ path: [...ringAt(b.poly, height - 0.4), ringAt(b.poly, height - 0.4)[0]], base: b.base, owner: b }); for (const c of columns(b.poly, 9)) posts.push({ pos: c, h: height, w: 0.5, color: C.parapet, base: b.base, owner: b }); }
   }
   return { walls, roofs, slabs, posts, edges, dots };
 }
@@ -923,7 +937,51 @@ export async function createView3d(container, mapData, src) {
    * walls sit on the ground under the footprint centroid and stand exactly `height` metres, and
    * the downhill gap is closed by the dark, unlit, capped skirt — never by wall-coloured mass.
    */
-  const placeBuildings = () => seatBuildings(data.buildings, H);
+  let floorResolver = createFloorSurfaceResolver(data.floorSurfaces, relief);
+  let measuredFloorSlabs = [];
+  let undergroundSurfaces = [];
+  const placeBuildings = () => {
+    seatBuildings(data.buildings, H);
+    floorResolver = createFloorSurfaceResolver(data.floorSurfaces, relief);
+    for (const building of data.buildings) {
+      const fallbackBase = building.base;
+      const fallbackPlinthBase = building.plinthBase;
+      const profile = floorResolver.buildingProfile(building, { fallbackBase, fallbackHeight: building.height });
+      building._surfaceProfile = profile;
+      if (!profile.measuredBase) continue;
+      building.base = profile.baseY;
+      // Keep the measured walkable plane authoritative while retaining the existing dark skirt as
+      // the visual seam down to terrain. It never becomes wall material or changes the shell top.
+      const maxDrop = Math.max(1.5, (Number(building.height) || 0) * 0.6);
+      const wantedBottom = Math.min(fallbackPlinthBase ?? profile.baseY - 0.35, profile.baseY - 0.35);
+      building.plinthBase = Math.max(profile.baseY - maxDrop, wantedBottom);
+      building.plinthHeight = Math.max(0.47, profile.baseY - building.plinthBase + 0.12);
+    }
+    measuredFloorSlabs = floorResolver.measuredFloorSlabs(data.buildings);
+    const namedUnderground = (data.underground || []).map((item) => {
+      const center = centroidOf(item.poly);
+      const depth = Number(item.depth) || 4;
+      const groundY = H(center[0], center[1]);
+      const profile = floorResolver.undergroundProfile(item, {
+        fallbackY: groundY - depth,
+        fallbackReferenceY: groundY / relief - depth,
+      });
+      return { ...item, ...profile, surfaceY: profile.surfaceY, surfaceStableId: profile.stableId };
+    });
+    const namedStableIds = new Set(namedUnderground.map((item) => item.surfaceStableId).filter(Boolean));
+    const buildingUnderground = floorResolver.measuredBuildingUndergroundSlabs(data.buildings)
+      .filter((surface) => !surface.stableId || !namedStableIds.has(surface.stableId))
+      .map((surface) => ({
+        name: `${surface.building.place ?? surface.building.name ?? 'Building'} basement`,
+        poly: surface.building.poly,
+        measured: true,
+        row: surface.row,
+        surfaceY: surface.surfaceY,
+        surfaceStableId: surface.stableId,
+      }));
+    undergroundSurfaces = [...namedUnderground, ...buildingUnderground];
+    return data.buildings;
+  };
   const tBuildings = performance.now();
   placeBuildings();
   const tTrees = performance.now();
@@ -1002,7 +1060,7 @@ export async function createView3d(container, mapData, src) {
   waitFonts.then(() => { fontsReady = fontLoaded(); if (initialised) render(); });
   let floor = 'all'; // 'all' | 0 | 1 | 2 | 3 | 'U'
   let nature = { trees: true, rocks: true };
-  const capH = (b, h) => (floor === 'all' || floor === 'U' ? h : Math.min(h, (Number(floor) + 1) * 3.3 - 0.4 + (b.style === 'canopy' ? 10 : 0)));
+  const capH = (b, h) => (b.style === 'canopy' ? h : Math.min(h, visibleBuildingHeight(b._surfaceProfile, floor)));
 
   // TRACK B / STAGE 1: the scene light and the terrain bake's key light now come from the SAME two
   // frozen numbers in src/render-style.js (azimuth 230, elevation 21), so the two shading systems
@@ -1171,7 +1229,10 @@ export async function createView3d(container, mapData, src) {
     new SolidPolygonLayer({ id: 'rocks', shadowEnabled: false, data: boulders, getPolygon: (d) => ringG(d.poly, 0.04), extruded: true, getElevation: (d) => d.height, getFillColor: (d) => d.color ? liftTone(d.color, 0.1) : C.rock, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'boulder') }),
   ];
   };
-  const makeFloorLines = () => data.buildings.flatMap((b) => Array.from({ length: Math.max(0, b.floors - 1) }, (_, k) => ({ path: [...ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0)), ringAt(expand(b.poly, 0.15), (k + 1) * 3.3 + (b.base ?? 0))[0]] })));
+  const makeFloorLines = () => data.buildings.flatMap((building) => renderFloorLevels(building).map((height) => {
+    const ring = ringAt(expand(building.poly, 0.15), (building.base ?? 0) + height);
+    return { path: [...ring, ring[0]], building, height };
+  }));
   let floorLines = makeFloorLines();
   let propData = propParts(data.props || []);
   const fenceStrips = (data.fences || []).map((f) => ({ poly: strip(f.path, 0.12) }));
@@ -1211,12 +1272,13 @@ export async function createView3d(container, mapData, src) {
     type: SCENES[m.name.trim()], pos: [m.position.x, m.position.z], tower: m.name.trim() === 'Military Base CP',
     rot: Math.atan2(mid[1] - m.position.z, mid[0] - m.position.x) }));
   let details = detailParts(data.buildings, scenes);
-  const showLvl = (d) => floor === 'all' || floor === 'U' || d.lvl <= (Number(floor) + 1) * 3.3;
+  const showLvl = (d) => floor === 'all' || floor === 'U' || !d.owner
+    || d.lvl <= visibleBuildingHeight(d.owner._surfaceProfile, floor) + 0.4;
   let parts = buildingParts(data.buildings);
   const undergroundLayers = () => floor !== 'U' ? [] : [
-    new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: data.underground || [], getPolygon: (d) => ringG(d.poly, 0.4), getFillColor: C.undergroundOn, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true, parameters: OVERLAY }),
-    new PathLayer({ id: 'underground-outline', shadowEnabled: false, data: data.underground || [], getPath: (d) => ringG([...d.poly, d.poly[0]], 0.44), getColor: [255, 220, 150, 235], getWidth: 2, widthUnits: 'pixels', updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, parameters: OVERLAY }),
-    new TextLayer({ id: 'underground-badges', data: (data.underground || []).filter((d) => polyArea(d.poly) > 1000), getPosition: (d) => Pg(centroidOf(d.poly), 0.7), getText: () => 'U', getSize: 13, sizeUnits: 'pixels', getColor: C.ink, background: true, getBackgroundColor: [255, 176, 48, 245], backgroundPadding: [4, 2, 4, 2], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF, billboard: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: undergroundSurfaces, getPolygon: (d) => ringAt(d.poly, d.surfaceY + 0.04), getFillColor: C.undergroundOn, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true, parameters: OVERLAY }),
+    new PathLayer({ id: 'underground-outline', shadowEnabled: false, data: undergroundSurfaces, getPath: (d) => ringAt([...d.poly, d.poly[0]], d.surfaceY + 0.08), getColor: [255, 220, 150, 235], getWidth: 2, widthUnits: 'pixels', updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, parameters: OVERLAY }),
+    new TextLayer({ id: 'underground-badges', data: undergroundSurfaces.filter((d) => polyArea(d.poly) > 1000), getPosition: (d) => P(centroidOf(d.poly), d.surfaceY + 0.32), getText: () => 'U', getSize: 13, sizeUnits: 'pixels', getColor: C.ink, background: true, getBackgroundColor: [255, 176, 48, 245], backgroundPadding: [4, 2, 4, 2], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF, billboard: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
   ];
   const buildingLayer = () => [...undergroundLayers(),
     /*
@@ -1243,6 +1305,14 @@ export async function createView3d(container, mapData, src) {
       material: surfaceMaterial(look, 'building'),
       onHover: (i) => { if (i.index !== hover) { hover = i.index; render(); } },
     }),
+    new SolidPolygonLayer({
+      id: 'measured-floor-surfaces', visible: floor !== 'U', shadowEnabled: false,
+      data: measuredFloorSlabs.filter((d) => floor === 'all' || d.floorIndex <= Number(floor)),
+      getPolygon: (d) => ringAt(d.building.poly, d.surfaceY + 0.025),
+      getFillColor: [154, 151, 141, 235], pickable: true,
+      updateTriggers: { getPolygon: [floor, heightEpoch] },
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(),
+    }),
     new SolidPolygonLayer({ id: 'roofs', visible: floor === 'all', data: parts.roofs, getPolygon: (d) => d.pts.map(([x, z, y]) => P([x, z], y + (d.b.base ?? footprintGround(d.b.poly)))), getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'roof') }),
     /*
      * Flat roof decks. No `material` here, and none is missing: deck's SolidPolygonLayer only calls
@@ -1251,7 +1321,7 @@ export async function createView3d(container, mapData, src) {
      * UNLIT and takes its albedo verbatim. That is why a roof's sky lobe is folded into its colour
      * by atmosphere.js's materialTint() instead of being asked for as a Phong specular here.
      */
-    new SolidPolygonLayer({ id: 'slabs', visible: floor !== 'U', shadowEnabled: false, data: parts.slabs.filter((d) => floor === 'all' || d.z <= (Number(floor) + 1) * 3.3), getPolygon: (d) => ringAt(d.poly, d.z + (d.base ?? footprintGround(d.poly))), updateTriggers: { getPolygon: [floor, heightEpoch] }, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new SolidPolygonLayer({ id: 'slabs', visible: floor !== 'U', shadowEnabled: false, data: parts.slabs.filter((d) => floor === 'all' || !d.owner || d.z <= visibleBuildingHeight(d.owner._surfaceProfile, floor) + 0.4), getPolygon: (d) => ringAt(d.poly, d.z + (d.base ?? footprintGround(d.poly))), updateTriggers: { getPolygon: [floor, heightEpoch] }, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
     new SolidPolygonLayer({ id: 'posts', visible: floor !== 'U', data: parts.posts, getPolygon: (d) => box(P(d.pos), d.w).map(([x, y]) => [x, y, d.base ?? H(d.pos[0], d.pos[1])]), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'slabLike') }),
     new SolidPolygonLayer({ id: 'detail-boxes', visible: floor !== 'U', data: details.boxes.filter(showLvl), getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: [floor, heightEpoch] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'prop') }),
     new SolidPolygonLayer({ id: 'detail-flats', visible: floor !== 'U', shadowEnabled: false, data: details.flats.filter(showLvl), getPolygon: (d) => d.ring, getFillColor: (d) => d.color, updateTriggers: { getPolygon: [floor, heightEpoch] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
@@ -1866,8 +1936,9 @@ export async function createView3d(container, mapData, src) {
       if (!object) return null;
       if (layer.id === 'buildings') return { html: `<b>${esc(object.place ?? object.name ?? object.kind)}</b><br>${object.floors} floor${object.floors > 1 ? 's' : ''} · ${object.height} m`, className: 'deck-tooltip' };
       if (layer.id === 'roofs') return { html: `<b>${esc(object.b.place ?? object.b.name ?? object.b.kind)}</b><br>${object.b.floors} floor${object.b.floors > 1 ? 's' : ''} · ${object.b.height} m`, className: 'deck-tooltip' };
+      if (layer.id === 'measured-floor-surfaces') return { html: `<b>${esc(object.building.place ?? object.building.name ?? object.building.kind)}</b><br>measured floor ${object.floorIndex + 1} · y ${object.row.surfaceY} m`, className: 'deck-tooltip' };
       if (layer.id === 'props') return { html: `<b>${esc(object.p.name ?? object.p.type)}</b>`, className: 'deck-tooltip' };
-      if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground`, className: 'deck-tooltip' };
+      if (layer.id === 'underground') return { html: `<b>${esc(object.name)}</b><br>underground · y ${Number(object.row?.surfaceY ?? object.surfaceY).toFixed(2)} m`, className: 'deck-tooltip' };
       if (layer.id.startsWith('cluster-')) return { html: `<b>${object.count} ${esc((KINDS[object.kind]?.label ?? 'markers').toLowerCase())}</b>click to zoom in`, className: 'deck-tooltip' };
       if (layer.id.startsWith('markers-')) return object.html ? { html: object.html, className: 'deck-tooltip' } : null;
       if (layer.id === 'quest-markers') return { html: object.html, className: 'deck-tooltip' };

@@ -4,15 +4,16 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { LABELS } from '../src/labels.js';
 import { carveWaterHeightfield, pointInWater, waterRings } from '../src/water.js';
-import { exactPosition, loadExactMap, primitiveRows, stableStringify } from './lib/exact-map-primitives.mjs';
+import { exactPosition, loadExactMap, loadMapSvg, primitiveRows, stableStringify } from './lib/exact-map-primitives.mjs';
+import { applyPropFeatureManifest } from './lib/prop-feature-identity.mjs';
 
 const CUSTOMS_COLORS = { 'Big Red': [142, 58, 50], 'Crackhouse': [139, 110, 90], 'Dorms 2-Story': [185, 169, 143], 'Dorms 3-Story': [185, 169, 143], 'New Gas': [196, 191, 180], 'Old Gas': [150, 146, 134], 'Fortress': [162, 158, 148], 'Skeleton': [162, 158, 148], 'Repair Shop': [138, 140, 136], 'Warehouse 3': [138, 140, 136], 'Warehouse 4': [138, 140, 136], 'Warehouse 7': [138, 140, 136], 'Warehouse 17': [138, 140, 136], 'Depot': [146, 142, 132], 'Boiler': [150, 130, 118], 'Oil Rig': [146, 138, 124], 'Streamer House': [139, 110, 90], 'Bus Station': [176, 172, 160], 'Storage': [144, 146, 142], 'Powerline Tower': [126, 126, 122], 'Water Pump': [140, 148, 152], 'Military Checkpoint': [160, 156, 146] };
 const CUSTOMS_ROOFS = { 'Warehouse 3': [92, 102, 106], 'Warehouse 4': [92, 102, 106], 'Warehouse 7': [92, 102, 106], 'Warehouse 17': [92, 102, 106], 'Depot': [98, 100, 102], 'Storage': [96, 99, 100], 'Crackhouse': [126, 76, 52], 'Streamer House': [126, 76, 52], 'Repair Shop': [92, 102, 106], 'Boiler': [104, 96, 88] };
 const CUSTOMS_STYLES = { 'Skeleton': 'frame', 'Old Construction': 'frame', 'Crackhouse': 'gable', 'Streamer House': 'gable', 'Repair Shop': 'gable', 'Warehouse 3': 'gable', 'Warehouse 4': 'gable', 'Warehouse 7': 'gable', 'Warehouse 17': 'gable', 'Depot': 'gable', 'Boiler': 'gable', 'Storage': 'gable', 'New Gas': 'canopy', 'Old Gas': 'canopy', 'Bus Station': 'canopy' };
 const CONFIG = {
   customs: {
-    svgName: 'Customs', svgUrl: 'https://assets.tarkov.dev/maps/svg/Customs.svg', maps: 'scripts/tarkov-dev-maps.json',
-    props: 'data/customs-props.json', roads: 'data/customs-roads.json', spt: 'scripts/spt-bigmap-base.json',
+    maps: 'scripts/tarkov-dev-maps.json',
+    props: 'data/customs-props.json', propFeatures: 'data/customs-prop-features.json', roads: 'data/customs-roads.json', spt: 'scripts/spt-bigmap-base.json',
     bounds: { xMax: 698, xMin: -372, zMin: -307, zMax: 237 }, base: 'Ground_Level',
     groups: { land: 'Ground', limit: 'Ground', water: 'River', pavement: 'Pavement', trees: 'Trees', rocks: 'Rocks', railway: 'Railway', fence: 'Fence', powerlines: 'Powerlines' },
     waterProfile: { kind: 'river', depth: 1.2, bank: 5, flowAxis: [0, 1], maxSlope: 0.004 },
@@ -28,7 +29,7 @@ const CONFIG = {
     ],
   },
   reserve: {
-    svgName: 'Reserve', svgUrl: 'https://assets.tarkov.dev/maps/svg/Reserve.svg', maps: 'scripts/data/reserve/maps-entry.json',
+    maps: 'scripts/data/reserve/maps-entry.json',
     props: 'data/reserve-props.json', roads: 'data/reserve-roads.json', spt: 'scripts/data/reserve/spt-base.json',
     bounds: { xMax: 289, xMin: -303, zMin: -274, zMax: 272 }, base: 'Ground_Level',
     groups: { land: 'Terrains', limit: 'Terrains', water: null, pavement: 'Concrete', trees: 'Trees', rocks: 'Rocks', railway: 'Railroad', fence: 'Fences_int', powerlines: null },
@@ -45,7 +46,7 @@ const CONFIG = {
     ],
   },
   woods: {
-    svgName: 'Woods', svgUrl: 'https://assets.tarkov.dev/maps/svg/Woods.svg', maps: 'scripts/data/woods/maps-entry.json',
+    maps: 'scripts/data/woods/maps-entry.json',
     props: 'data/woods-props.json', roads: 'data/woods-roads.json', yards: 'data/woods-yards.json', spt: 'scripts/data/woods/spt-base.json',
     bounds: { xMax: 646, xMin: -761, zMin: -914, zMax: 442 }, base: 'Ground_Level',
     groups: { land: 'Base_Terrain', limit: 'Base_Terrain', water: 'Water', pavement: null, trees: null, rocks: 'Rocks', railway: 'Railroad', fence: 'Fences', powerlines: 'Power_Line', plane: 'Plane', pier: 'Pier', minefield: 'Minefield' },
@@ -82,11 +83,16 @@ if (featureManifest.schemaVersion !== 1 || featureManifest.map !== key || !Array
   throw new Error(`${key}: invalid data/${key}-features.json manifest`);
 }
 
-let svg;
-try { svg = await readFile(`.cache/maps/svg/${cfg.svgName}.svg`, 'utf8'); } catch { svg = await (await fetch(cfg.svgUrl)).text(); }
+// Source geometry is a committed, content-addressed fixture. Network refreshes
+// are explicit; a missing or altered SVG must fail rather than mutate a build.
+const svg = await loadMapSvg(key);
 const maps = JSON.parse(await readFile(cfg.maps, 'utf8'));
 const community = JSON.parse(await readFile(`public/data/${key}.json`, 'utf8'));
 const props = JSON.parse(await readFile(cfg.props, 'utf8')).props;
+if (cfg.propFeatures) {
+  const propFeatureManifest = JSON.parse(await readFile(cfg.propFeatures, 'utf8'));
+  applyPropFeatureManifest({ map: key, props, manifest: propFeatureManifest });
+}
 const roadEdits = JSON.parse(await readFile(cfg.roads, 'utf8'));
 const yards = cfg.yards ? JSON.parse(await readFile(cfg.yards, 'utf8')).yards : [];
 const extraRoads = roadEdits.add;
@@ -222,14 +228,21 @@ for (const b of buildings) {
 const featureAssignments = [];
 for (const definition of featureManifest.features) {
   const targets = definition.match?.centroids ?? (definition.match?.centroid ? [definition.match.centroid] : []);
+  const expectedSourceKeys = definition.match?.sourceKeys ?? (definition.match?.sourceKey ? [definition.match.sourceKey] : []);
   const tolerance = definition.match?.toleranceM ?? 0.5;
   if (!definition.featureId || !targets.length) throw new Error(`${key}: feature ${definition.featureId ?? '(missing id)'} has no centroid target`);
+  if (expectedSourceKeys.length && (expectedSourceKeys.length !== targets.length || expectedSourceKeys.some((value) => typeof value !== 'string' || !value))) {
+    throw new Error(`${key}: feature ${definition.featureId} must provide one valid sourceKey per centroid target`);
+  }
   const matches = [];
   for (const [targetIndex, target] of targets.entries()) {
+    const expectedSourceKey = expectedSourceKeys[targetIndex];
     const candidates = buildings.map((building) => ({ building, distance: Math.hypot(centroid(building.poly)[0] - target[0], centroid(building.poly)[1] - target[1]) }))
-      .filter(({ building, distance }) => distance <= tolerance && !featureAssignments.some((assignment) => assignment.building === building))
+      .filter(({ building, distance }) => distance <= tolerance
+        && (!expectedSourceKey || building.sourceKey === expectedSourceKey)
+        && !featureAssignments.some((assignment) => assignment.building === building))
       .sort((a, b) => a.distance - b.distance || String(a.building.sourceKey ?? '').localeCompare(String(b.building.sourceKey ?? '')));
-    if (candidates.length !== 1) throw new Error(`${key}: ${definition.featureId} target ${target.join(',')} matched ${candidates.length} buildings within ${tolerance} m`);
+    if (candidates.length !== 1) throw new Error(`${key}: ${definition.featureId} target ${target.join(',')}${expectedSourceKey ? ` / ${expectedSourceKey}` : ''} matched ${candidates.length} buildings within ${tolerance} m`);
     const building = candidates[0].building;
     const featureId = targets.length === 1 ? definition.featureId : `${definition.featureId}.${targetIndex + 1}`;
     const set = definition.set ?? {};
@@ -283,81 +296,6 @@ const circleRing = ([x, z], radius, maxStep = 1.75) => {
   const count = Math.max(24, Math.ceil((2 * Math.PI * radius) / maxStep));
   return Array.from({ length: count }, (_, i) => { const a = (i / count) * 2 * Math.PI; return [x + Math.cos(a) * radius, z + Math.sin(a) * radius]; });
 };
-const capsuleRing = (a, b, radius, maxStep = 1.75) => {
-  const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
-  if (samePoint(a, b)) return circleRing(a, radius, maxStep);
-  const count = Math.max(12, Math.ceil((Math.PI * radius) / maxStep)), ring = [];
-  for (let i = 0; i <= count; i++) { const q = angle - Math.PI / 2 + (i / count) * Math.PI; ring.push([b[0] + Math.cos(q) * radius, b[1] + Math.sin(q) * radius]); }
-  for (let i = 0; i <= count; i++) { const q = angle + Math.PI / 2 + (i / count) * Math.PI; ring.push([a[0] + Math.cos(q) * radius, a[1] + Math.sin(q) * radius]); }
-  return cleanRing(ring);
-};
-const segmentIntersection = (a, b, c, d) => {
-  const rx = b[0] - a[0], rz = b[1] - a[1], sx = d[0] - c[0], sz = d[1] - c[1];
-  const den = rx * sz - rz * sx;
-  if (Math.abs(den) < 1e-10) return null;
-  const qx = c[0] - a[0], qz = c[1] - a[1];
-  const t = (qx * sz - qz * sx) / den, u = (qx * rz - qz * rx) / den;
-  if (t < -1e-9 || t > 1 + 1e-9 || u < -1e-9 || u > 1 + 1e-9) return null;
-  const tc = Math.max(0, Math.min(1, t)), uc = Math.max(0, Math.min(1, u));
-  return { t: tc, u: uc, point: [a[0] + tc * rx, a[1] + tc * rz] };
-};
-// Boundary-overlay union for two overlapping simple rings. Marker patches are convex and always
-// overlap the current playable ring; retaining only the pieces outside the other ring leaves the
-// union outline while preserving every untouched SVG segment geometrically.
-function unionRings(leftInput, rightInput) {
-  const left = ccw(cleanRing(leftInput)), right = ccw(cleanRing(rightInput));
-  const leftSplits = left.map((p, i) => [{ t: 0, point: p }, { t: 1, point: left[(i + 1) % left.length] }]);
-  const rightSplits = right.map((p, i) => [{ t: 0, point: p }, { t: 1, point: right[(i + 1) % right.length] }]);
-  let intersections = 0;
-  for (let i = 0; i < left.length; i++) for (let j = 0; j < right.length; j++) {
-    const hit = segmentIntersection(left[i], left[(i + 1) % left.length], right[j], right[(j + 1) % right.length]);
-    if (!hit) continue;
-    leftSplits[i].push({ t: hit.t, point: hit.point }); rightSplits[j].push({ t: hit.u, point: hit.point }); intersections++;
-  }
-  if (intersections < 2) {
-    if (inPoly(right[0], left)) return left;
-    if (inPoly(left[0], right)) return right;
-    throw new Error(`disconnected limit patch (${intersections} boundary intersections)`);
-  }
-  const pieces = (ring, splits, other) => {
-    const out = [];
-    for (let i = 0; i < ring.length; i++) {
-      const points = splits[i].sort((a, b) => a.t - b.t).filter((v, k, all) => !k || Math.abs(v.t - all[k - 1].t) > 1e-8);
-      for (let j = 1; j < points.length; j++) {
-        const a = points[j - 1].point, b = points[j].point;
-        if (samePoint(a, b)) continue;
-        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        if (!inPoly(mid, other)) out.push([a, b]);
-      }
-    }
-    return out;
-  };
-  const edges = [...pieces(left, leftSplits, right), ...pieces(right, rightSplits, left)];
-  const keyOf = (p) => `${Math.round(p[0] * 1e5)},${Math.round(p[1] * 1e5)}`;
-  const starts = new Map();
-  edges.forEach((edge, i) => { const key = keyOf(edge[0]); if (!starts.has(key)) starts.set(key, []); starts.get(key).push(i); });
-  const used = new Uint8Array(edges.length), rings = [];
-  for (let seed = 0; seed < edges.length; seed++) {
-    if (used[seed]) continue;
-    const ring = [edges[seed][0]], start = keyOf(edges[seed][0]); let edgeIndex = seed;
-    for (let guard = 0; guard <= edges.length; guard++) {
-      if (used[edgeIndex]) break;
-      used[edgeIndex] = 1;
-      const end = edges[edgeIndex][1]; ring.push(end);
-      if (keyOf(end) === start) break;
-      const next = (starts.get(keyOf(end)) || []).find((i) => !used[i]);
-      if (next == null) {
-        const endKey = keyOf(end), outgoing = starts.get(endKey)?.length || 0;
-        throw new Error(`open limit ring after marker union at ${end.map((v) => v.toFixed(6)).join(',')} (key ${endKey}, outgoing ${outgoing}, edges ${edges.length}, intersections ${intersections})`);
-      }
-      edgeIndex = next;
-    }
-    const cleaned = cleanRing(ring);
-    if (cleaned.length >= 3) rings.push(cleaned);
-  }
-  if (!rings.length) throw new Error('empty limit ring after marker union');
-  return ccw(rings.sort((a, b) => Math.abs(ringArea(b)) - Math.abs(ringArea(a)))[0]);
-}
 const resampleRing = (ring, step = 2) => {
   const out = [];
   for (let i = 0; i < ring.length; i++) {
@@ -370,74 +308,30 @@ const resampleRing = (ring, step = 2) => {
 const MARKER_GROUPS = ['extracts', 'spawns', 'hazards', 'stationaryWeapons', 'switches', 'locks', 'containers', 'btrStops'];
 const markerPoints = MARKER_GROUPS.flatMap((group) => (community[group] || []).map((marker, index) => ({
   group, index, name: marker.name || marker.key?.name || marker.stationaryWeapon?.name || marker.zoneName || marker.type || `${group} #${index + 1}`,
+  source: marker.source, sourceKind: marker.sourceKind, sourceId: marker.sourceId,
   point: [marker.position?.x, marker.position?.z],
 }))).filter((marker) => {
   if (marker.point.every(Number.isFinite)) return true;
   throw new Error(`${key}: invalid ${marker.group} marker position for ${marker.name}`);
 });
-const MARKER_MARGIN = 18, PATCH_RADIUS = 18.25;
-// Nearby marker bumps can otherwise leave a comb of narrow bays between overlapping gameplay
-// evidence. Removing only local concave vertices fills those bays (it can only add playable area),
-// while natural SVG concavities away from a deficient marker remain geometrically unchanged.
-function fillMarkerBays(input, deficientMarkers, influence = 75, maxChord = 120) {
-  const ring = ccw(cleanRing(input)); let removed = 0, changed = true;
-  const crossesOtherEdge = (a, c, at) => {
-    for (let j = 0; j < ring.length; j++) {
-      if (j === at || j === (at + ring.length - 1) % ring.length || j === (at + 1) % ring.length) continue;
-      const hit = segmentIntersection(a, c, ring[j], ring[(j + 1) % ring.length]);
-      if (hit && hit.t > 1e-7 && hit.t < 1 - 1e-7 && hit.u > 1e-7 && hit.u < 1 - 1e-7) return true;
-    }
-    return false;
+const MARKER_MARGIN = 18;
+function auditMarkerContainment(limit) {
+  const rows = markerPoints.map((marker) => ({ marker, ...ringDistance(marker.point, limit) }));
+  const outside = rows.filter((row) => !row.inside);
+  const nearEdge = rows.filter((row) => row.inside && row.distance < MARKER_MARGIN);
+  console.log(`marker boundary audit: ${markerPoints.length} checked; ${outside.length} outside, ${nearEdge.length} within ${MARKER_MARGIN} m of edge; markers are diagnostic and never alter the SVG limit`);
+  return {
+    authority: 'tarkov.dev-svg',
+    markerPolicy: 'diagnostic-only',
+    markerCount: markerPoints.length,
+    outsideCount: outside.length,
+    nearEdgeCount: nearEdge.length,
+    outsideMarkers: outside.map(({ marker, distance }) => ({
+      group: marker.group, index: marker.index, name: marker.name,
+      source: marker.source, sourceKind: marker.sourceKind, sourceId: marker.sourceId,
+      position: marker.point, distanceM: +distance.toFixed(2),
+    })),
   };
-  while (changed) {
-    changed = false;
-    for (let i = 0; i < ring.length && ring.length > 3; i++) {
-      const a = ring[(i + ring.length - 1) % ring.length], b = ring[i], c = ring[(i + 1) % ring.length];
-      const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
-      if (cross >= -1e-7 || Math.hypot(c[0] - a[0], c[1] - a[1]) > maxChord) continue;
-      if (!deficientMarkers.some((marker) => Math.hypot(marker.point[0] - b[0], marker.point[1] - b[1]) <= influence)) continue;
-      if (crossesOtherEdge(a, c, i)) continue;
-      ring.splice(i, 1); removed++; changed = true; i--;
-    }
-  }
-  return { ring, removed };
-}
-function expandLimitForMarkers(rawLimit) {
-  let limit = ccw(cleanRing(rawLimit)), patches = 0;
-  const rawStats = markerPoints.map((marker) => ({ marker, ...ringDistance(marker.point, limit) }));
-  const pending = rawStats.filter((d) => !d.inside || d.distance < MARKER_MARGIN)
-    .sort((a, b) => (a.inside ? MARKER_MARGIN - a.distance : MARKER_MARGIN + a.distance) - (b.inside ? MARKER_MARGIN - b.distance : MARKER_MARGIN + b.distance)
-      || a.marker.group.localeCompare(b.marker.group) || a.marker.index - b.marker.index);
-  for (const { marker } of pending) {
-    const state = ringDistance(marker.point, limit);
-    if (state.inside && state.distance >= MARKER_MARGIN) continue;
-    let error = null, joined = null;
-    for (let attempt = 0; attempt < 4 && !joined; attempt++) {
-      const radius = PATCH_RADIUS + attempt * 0.75;
-      const patch = !state.inside && state.distance >= radius
-        ? capsuleRing(state.nearest, marker.point, radius)
-        : circleRing(marker.point, radius);
-      try { joined = unionRings(limit, patch); } catch (cause) { error = cause; }
-    }
-    if (!joined) throw new Error(`${key}: marker limit patch failed for ${marker.group}[${marker.index}] ${marker.name} @ ${marker.point.join(',')}: ${error.message}`, { cause: error });
-    limit = joined;
-    patches++;
-  }
-  const cleaned = fillMarkerBays(limit, pending.map((d) => d.marker));
-  limit = resampleRing(cleaned.ring, 1.9).map(([x, z]) => [+x.toFixed(2), +z.toFixed(2)])
-    .filter((point, index, all) => !index || !samePoint(point, all[index - 1], 1e-9));
-  console.log(`limit: ${rawLimit.length} SVG points -> ${limit.length} smooth points; ${rawStats.filter((d) => !d.inside).length} raw outside markers; ${patches} local buffered expansions; ${cleaned.removed} narrow-bay vertices filled`);
-  return limit;
-}
-function assertMarkerContainment(limit) {
-  const offenders = markerPoints.map((marker) => ({ marker, ...ringDistance(marker.point, limit) }))
-    .filter((d) => !d.inside || d.distance < MARKER_MARGIN - 0.02);
-  if (offenders.length) {
-    console.error(`${key}: ${offenders.length} marker containment offenders (required ${MARKER_MARGIN} m margin):`);
-    for (const d of offenders) console.error(`  ${d.marker.group}[${d.marker.index}] ${d.marker.name} @ ${d.marker.point.join(',')}: ${d.inside ? `${d.distance.toFixed(2)} m margin` : `${d.distance.toFixed(2)} m outside`}`);
-    throw new Error(`${key}: playable limit does not contain every marker`);
-  }
-  console.log(`marker containment: ${markerPoints.length} shared 2D/3D markers checked; 0 offenders; >=${MARKER_MARGIN} m margin`);
 }
 // Compound SVG water paths use reversed nested rings for islands. Preserve those as holes so
 // neither the basin carve nor the water fill erases dry land in the middle of a river.
@@ -456,14 +350,14 @@ for (const r of [...roads.map((r) => ({ ...r, cls: 'road' })), ...(cfg.groups.ra
   for (const p of pts) { if (overWater(p)) run.push(p); else flush(); }
   flush();
 }
-// ---- playable boundary = SVG ground plus deterministic local buffers around every shared marker.
-// tarkov.dev's visual Ground/Limit ring is not the true gameplay edge everywhere (Dorms V-Ex is
-// the clearest example). Preserve its unaffected segments, attach only the buffered marker patches,
-// then resample the final outline at <=2 m so the terrain and flat cliff follow one clean curve.
+// ---- playable boundary = the source SVG ground ring only.
+// Gameplay markers are observations, not geometry. A bad or detached marker may be reported
+// outside the ring, but must never manufacture land or expand the fitted terrain domain.
 const RAW_LIMIT = polysIn(cfg.groups.limit)[0];
 if (!RAW_LIMIT) throw new Error(`${key}: no playable limit from SVG group ${cfg.groups.limit}`);
-const LIMIT = expandLimitForMarkers(RAW_LIMIT);
-assertMarkerContainment(LIMIT);
+const LIMIT = resampleRing(ccw(cleanRing(RAW_LIMIT)), 1.9).map(([x, z]) => [+x.toFixed(2), +z.toFixed(2)])
+  .filter((point, index, all) => !index || !samePoint(point, all[index - 1], 1e-9));
+const boundaryAudit = auditMarkerContainment(LIMIT);
 const inside = (pt) => inPoly(pt, LIMIT);
 function clipPath(path, step = 3) { const out = []; let run = []; for (const q of resample(path, step)) { if (inside(q)) run.push(q); else { if (run.length >= 2) out.push(run); run = []; } } if (run.length >= 2) out.push(run); return out; }
 const clipLines = (items) => items.flatMap((it) => clipPath(it.path).map((path) => ({ ...it, path })));
@@ -573,9 +467,10 @@ for (const b of buildings) {
   if (b.style === 'gable' && ROOF_COLORS[b.place]) b.roof = ROOF_COLORS[b.place];
 }
 // ---- terrain: typed exact/SPT/survey evidence ------------------------------------------
-// Every finite point is retained with a bucket and reason code. Only the ground
-// bucket is deduplicated into the single-valued heightfield; rock/floor/roof/
-// underground remain available to their corresponding hard-surface classifiers.
+// Every finite point is retained with a bucket and reason code. Only ground and
+// at-grade road points are deduplicated into the single-valued heightfield;
+// bridge decks, water, rock, floor, roof, and underground observations stay in
+// separate hard-surface buckets and can never bend the terrain fit.
 const spt = JSON.parse(await readFile(cfg.spt, 'utf8'));
 const TERRAIN_FEATURES = cfg.terrain;
 const SAMPLE_SOURCE_WEIGHT = { exactSpawn: 3, sptSpawn: 2.5, exactLoot: 1.5, sptLoot: 1, survey: 4, exactInteractive: 1.25 };
@@ -642,12 +537,21 @@ const undergroundExtentAt = (p) => floorBoxes.some((ext) => cfg.underground.test
   && p.x >= ext.x1 && p.x <= ext.x2 && p.z >= ext.z1 && p.z <= ext.z2
   && Number.isFinite(ext.y?.[0]) && Number.isFinite(ext.y?.[1]) && p.y >= Math.min(...ext.y) - 1 && p.y <= Math.max(...ext.y) + 1);
 const buildingAt = (p) => buildings.find((building) => inPoly([p.x, p.z], building.poly));
+const segmentDistance = ([x, z], [ax, az], [bx, bz]) => {
+  const dx = bx - ax, dz = bz - az, lengthSquared = dx * dx + dz * dz || 1;
+  const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / lengthSquared));
+  return Math.hypot(x - (ax + t * dx), z - (az + t * dz));
+};
+const pathDistance = (point, path) => path.slice(1).reduce((best, end, index) => Math.min(best, segmentDistance(point, path[index], end)), Infinity);
+const bridgeAt = (p) => bridges.find((bridge) => pathDistance([p.x, p.z], bridge.path) <= bridge.width / 2 + 0.75);
+const roadAt = (p) => roads.find((road) => pathDistance([p.x, p.z], road.path) <= road.width / 2 + 0.75);
 const rockReasons = (p) => [
   ...(/(?:Zone)?(?:Big|High)Rocks/i.test(p.zone) ? ['semantic-rock-zone'] : []),
   ...(rawRockPolys.some((poly) => inPoly([p.x, p.z], poly)) ? ['svg-rock-footprint'] : []),
   ...(hardRockRegions.some((rock) => inPoly([p.x, p.z], rock.poly)) ? ['manifest-hard-rock-region'] : []),
 ];
 const bootstrap = evidenceInput.filter((p) => inside([p.x, p.z]) && !buildingAt(p) && !rockReasons(p).length
+  && !bridgeAt(p) && !overWater([p.x, p.z])
   && !undergroundExtentAt(p) && !/ZoneSub(Command|Storage)/i.test(p.zone));
 const nearbyBootstrap = spatialIndex(bootstrap, 24);
 const localGround = (p) => {
@@ -657,19 +561,27 @@ const localGround = (p) => {
   }
   return null;
 };
-const evidenceBuckets = { ground: [], rock: [], floor: [], roof: [], underground: [] };
+const evidenceBuckets = { ground: [], road: [], 'bridge-deck': [], water: [], rock: [], floor: [], roof: [], underground: [] };
 for (const p of evidenceInput) {
   const reasons = [], local = localGround(p), building = buildingAt(p), rocks = rockReasons(p);
+  const bridge = bridgeAt(p), road = roadAt(p), water = overWater([p.x, p.z]);
   let bucket;
   if (!inside([p.x, p.z])) { bucket = 'roof'; reasons.push('outside-playable-nonterrain'); }
   else if (undergroundExtentAt(p) || /ZoneSub(Command|Storage)/i.test(p.zone)) { bucket = 'underground'; reasons.push(undergroundExtentAt(p) ? 'exact-underground-extent' : 'semantic-underground-zone'); }
   else if (['hazard', 'artilleryZone'].includes(p.sourceKind)) { bucket = 'roof'; reasons.push('interaction-volume-center-nonterrain'); }
+  else if (bridge) { bucket = 'bridge-deck'; reasons.push(`mapped-bridge-deck:${bridge.name ?? bridge.kind}`); }
+  else if (water) { bucket = 'water'; reasons.push('mapped-water-body'); }
   else if (rocks.length) { bucket = 'rock'; reasons.push(...rocks); }
   else if (building) {
     const delta = local == null ? null : p.y - local;
     if (delta != null && delta < -2.5) { bucket = 'underground'; reasons.push('building-below-local-ground'); }
     else if (delta != null && delta >= Math.max(4, building.height - 1.25)) { bucket = 'roof'; reasons.push('building-roof-band'); }
     else { bucket = 'floor'; reasons.push(delta == null ? 'building-no-ground-context' : 'building-floor-band'); }
+  } else if (road) {
+    const delta = local == null ? null : p.y - local;
+    if (delta != null && delta > 2.5) { bucket = 'roof'; reasons.push('road-elevated-local-outlier'); }
+    else if (delta != null && delta < -2.5) { bucket = 'underground'; reasons.push('road-below-local-ground'); }
+    else { bucket = 'road'; reasons.push(`mapped-road-surface:${road.kind}`); }
   } else if (local == null) {
     if (['exactLoot', 'sptLoot', 'exactInteractive'].includes(p.source)) { bucket = 'roof'; reasons.push('isolated-object-no-ground-context'); }
     else { bucket = 'ground'; reasons.push('trusted-isolated-ground'); }
@@ -678,11 +590,12 @@ for (const p of evidenceInput) {
   else { bucket = 'ground'; reasons.push('within-local-ground-band'); }
   evidenceBuckets[bucket].push({ ...p, reasonCodes: reasons });
 }
-// A trusted source wins each 2 m ground cell. Retaining the uncollapsed ground
-// bucket above keeps every observation auditable while preventing duplicate
-// current/legacy samples from overweighting one location in the fit.
+// A trusted source wins each 2 m heightfield cell. Retaining the uncollapsed
+// ground/road buckets above keeps every observation auditable while preventing
+// duplicate current/legacy samples from overweighting one location in the fit.
+const heightfieldEvidence = [...evidenceBuckets.ground, ...evidenceBuckets.road];
 const groundCells = new Map();
-for (const point of evidenceBuckets.ground) {
+for (const point of heightfieldEvidence) {
   const cell = `${Math.round(point.x / 2)},${Math.round(point.z / 2)}`;
   if (!groundCells.has(cell)) groundCells.set(cell, []);
   groundCells.get(cell).push(point);
@@ -809,6 +722,22 @@ if (profile && waterSampleSets.length) {
   const carved = carveWaterHeightfield(heights, { x0, z0, step: STEP, cols, rows }, out0.water);
   for (let i = 0; i < heights.length; i++) heights[i] = +carved[i].toFixed(2);
 }
+// Preserve measured deck altitude independently from the water/terrain bed.
+// Existing renderers may still consume the legacy local `height`; surfaceY is
+// the canonical target for an accuracy renderer and prevents deck observations
+// from being thrown away merely because they no longer bend the heightfield.
+for (const bridge of bridges) {
+  const points = evidenceBuckets['bridge-deck'].filter((point) => bridgeAt(point) === bridge);
+  if (!points.length) continue;
+  bridge.surfaceY = +median(points.map((point) => point.y)).toFixed(4);
+  bridge.evidence = {
+    classification: 'bridge-deck',
+    sampleCount: points.length,
+    minY: +Math.min(...points.map((point) => point.y)).toFixed(4),
+    maxY: +Math.max(...points.map((point) => point.y)).toFixed(4),
+    sourceIds: points.map((point) => `${point.provider}:${point.sourceId}`).sort(),
+  };
+}
 for (const bucket of Object.values(evidenceBuckets)) bucket.sort((a, b) => a.z - b.z || a.x - b.x || a.y - b.y || a.sourceId.localeCompare(b.sourceId));
 const reasonCodeCounts = {};
 for (const bucket of Object.values(evidenceBuckets)) for (const point of bucket) for (const code of point.reasonCodes) reasonCodeCounts[code] = (reasonCodeCounts[code] ?? 0) + 1;
@@ -819,9 +748,10 @@ const terrain = {
   // multiplier is a sampler-only view skin and is never serialized here.
   units: { horizontal: 'metre', vertical: 'metre', scale: 1 },
   evidence: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     input: evidenceInput.length,
     heightfieldSamples: groundPts.length,
+    heightfieldBuckets: ['ground', 'road'],
     bucketCounts,
     reasonCodeCounts: Object.fromEntries(Object.entries(reasonCodeCounts).sort(([a], [b]) => a.localeCompare(b))),
     buckets: evidenceBuckets,
@@ -895,7 +825,10 @@ for (const bucketName of ['floor', 'roof', 'underground']) for (const point of e
       : `cell:${Math.floor(point.x / 20)},${Math.floor(point.z / 20)}`;
   const groupKey = `${scope}|${bucketName}|${floorIndex}`;
   if (!floorGroups.has(groupKey)) floorGroups.set(groupKey, {
+    stableId: `${key}.surface.${createHash('sha256').update(stableStringify([key, scope, bucketName, String(floorIndex)])).digest('hex').slice(0, 24)}`,
     scope, classification: bucketName, floorIndex,
+    ...(building?.sourceKey ? { buildingSourceKey: building.sourceKey } : {}),
+    ...(building?.featureId ? { buildingId: building.featureId } : {}),
     ...(building?.featureId ? { featureId: building.featureId } : {}),
     ...(extent ? { layer: extent.layer, name: extent.name } : {}),
     points: [],
@@ -908,7 +841,11 @@ const floorSurfaces = [...floorGroups.values()].map(({ points, ...surface }) => 
   minY: +Math.min(...points.map((point) => point.y)).toFixed(4),
   maxY: +Math.max(...points.map((point) => point.y)).toFixed(4),
   evidenceSourceIds: points.map((point) => `${point.provider}:${point.sourceId}`).sort(),
-})).sort((a, b) => a.scope.localeCompare(b.scope) || String(a.floorIndex).localeCompare(String(b.floorIndex)) || a.classification.localeCompare(b.classification));
+}));
+if (new Set(floorSurfaces.map((surface) => surface.stableId)).size !== floorSurfaces.length) {
+  throw new Error(`${key}: floor surface stableId collision`);
+}
+floorSurfaces.sort((a, b) => a.scope.localeCompare(b.scope) || String(a.floorIndex).localeCompare(String(b.floorIndex)) || a.classification.localeCompare(b.classification));
 console.log(`props ${props.length + svgProps.length}`);
 console.log(`terrain ${cols}x${rows} @${STEP}m from ${groundPts.length}/${evidenceInput.length} points, buckets ${JSON.stringify(bucketCounts)}, range ${Math.min(...heights).toFixed(1)}..${Math.max(...heights).toFixed(1)} m`);
 // drop anything whose centroid is outside the playable boundary
@@ -1111,7 +1048,8 @@ const out = {
     })),
     anchors: anchorHeights,
   },
-  props: propsIn, terrain, floorSurfaces, hardRocks: hardRocksOut, bridges, limit: LIMIT,
+  props: propsIn, terrain, floorSurfaces, hardRocks: hardRocksOut, bridges,
+  boundary: boundaryAudit, limit: LIMIT,
   land: [LIMIT], water: out0.water, pavement: (cfg.groups.pavement ? polysIn(cfg.groups.pavement) : []).filter(insideC), understory: treePolys, trees: treeCrowns, rocks: rocksOut,
   roads, railway: clipLines((cfg.groups.railway ? linesIn(cfg.groups.railway) : []).map((p) => ({ path: p }))), fences: fencesCut, powerlines: clipLines((cfg.groups.powerlines ? linesIn(cfg.groups.powerlines) : []).map((p) => ({ path: p }))),
   buildings, underground: undergroundIn, floorBoxes,

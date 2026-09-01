@@ -30,6 +30,50 @@ const PAD = 8;             // metres of mesh built outside the limit bbox (hidde
 const TEX_W = 2048;        // baked ground texture width
 const DEFAULT_VOID_Z = -14;
 
+/**
+ * Describe the one game-space rectangle covered by the baked terrain texture.
+ *
+ * Keep this pure and renderer-neutral: Deck and Three can independently build geometry while
+ * agreeing on the exact padded bounds, canvas aspect ratio and UV convention. Canvas row zero is
+ * `z0`; callers that upload the returned canvas to Three must disable CanvasTexture's default
+ * `flipY` so UV v=0 samples that same first canvas row rather than mirroring the map north/south.
+ */
+export function terrainTextureMapping(limit) {
+  if (!Array.isArray(limit) || limit.length < 3) throw new TypeError('terrain texture mapping requires a limit ring');
+  const xs = limit.map((point) => Number(point?.[0]));
+  const zs = limit.map((point) => Number(point?.[1]));
+  if (![...xs, ...zs].every(Number.isFinite)) throw new TypeError('terrain limit coordinates must be finite');
+  const x0 = Math.min(...xs) - PAD, x1 = Math.max(...xs) + PAD;
+  const z0 = Math.min(...zs) - PAD, z1 = Math.max(...zs) + PAD;
+  const width = x1 - x0, depth = z1 - z0;
+  if (!(width > 0) || !(depth > 0)) throw new RangeError('terrain limit must span both game axes');
+  const textureWidth = TEX_W;
+  const textureHeight = Math.round((textureWidth * depth) / width);
+  const mapping = {
+    bounds: Object.freeze({ x0, z0, x1, z1, width, depth }),
+    textureSize: Object.freeze([textureWidth, textureHeight]),
+    metersPerTexel: Object.freeze([width / textureWidth, depth / textureHeight]),
+    uvOrigin: Object.freeze([x0, z0]),
+    uvAxes: Object.freeze(['+gameX', '+gameZ']),
+    canvasOrigin: 'top-left = game (x0,z0)',
+    canvasYAxis: '+gameZ',
+    threeCanvasTextureFlipY: false,
+  };
+  return Object.freeze(mapping);
+}
+
+/** Map a game-space `(x,z)` point to the baked terrain texture's exact, clamped UV. */
+export function gameToTerrainTextureUv(x, z, mapping) {
+  const bounds = mapping?.bounds;
+  if (!bounds || !(bounds.width > 0) || !(bounds.depth > 0)) throw new TypeError('valid terrain texture mapping required');
+  const gameX = Number(x), gameZ = Number(z);
+  if (!Number.isFinite(gameX) || !Number.isFinite(gameZ)) throw new TypeError('game texture coordinates must be finite');
+  return [
+    clamp((gameX - bounds.x0) / bounds.width, 0, 1),
+    clamp((gameZ - bounds.z0) / bounds.depth, 0, 1),
+  ];
+}
+
 // Light directions in DECK space (X=-gameX, Y=-gameZ, Z=up). `sunDir` is the travel direction of
 // the key; the bake's key light is exactly its negation, so the two shading systems agree.
 //
@@ -313,15 +357,13 @@ export function buildTerrain(data, relief = 3, options = {}) {
 
   // ---- bbox of the built surface (limit bbox + padding)
   const limit = data.limit;
-  const lx = limit.map((p) => p[0]), lz = limit.map((p) => p[1]);
-  const X0 = Math.min(...lx) - PAD, X1 = Math.max(...lx) + PAD;
-  const Z0 = Math.min(...lz) - PAD, Z1 = Math.max(...lz) + PAD;
-  const W = X1 - X0, D = Z1 - Z0;
+  const textureMapping = terrainTextureMapping(limit);
+  const { x0: X0, z0: Z0, width: W, depth: D } = textureMapping.bounds;
 
   // ================================================================ texture
-  const TH_T = Math.round((TEX_W * D) / W);     // rows covering the ground
+  const TH_T = textureMapping.textureSize[1];   // rows covering the ground
   const TH = TH_T;
-  const mx = W / TEX_W, mz = D / TH_T;          // metres per texel
+  const [mx, mz] = textureMapping.metersPerTexel;
 
   // fine height raster at texture resolution, built separably (bicubic == CR in x then CR in z)
   const cxA = new Int32Array(TEX_W), cuA = new Float32Array(TEX_W);
@@ -875,6 +917,10 @@ export function buildTerrain(data, relief = 3, options = {}) {
   return {
     H,
     voidZ,
+    /** Shared, lazily baked canvas. Treat it as read-only; repeated calls return the cached object. */
+    groundTexture: (mode = look) => textureFor(mode),
+    /** Exact game-space bounds and UV/canvas orientation consumed by the baked texture. */
+    groundTextureMapping: textureMapping,
     /** `layers(look, {fogExtension, groundExtension})` — geometry is shared, only material changes. */
     layers: (mode = look, extra = {}) => [cliffLayer(mode, extra), layer(mode, extra)],
     /** The realistic depth-tinted water surface, or `null`. Vector keeps map3d's flat fill. */

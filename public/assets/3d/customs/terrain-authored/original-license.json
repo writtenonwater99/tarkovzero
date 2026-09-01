@@ -1,0 +1,12 @@
+{
+  "artifactSet": "customs-terrain-pbr-12-layer-v2.1",
+  "classification": "original-authored",
+  "gameAssetPayloads": [],
+  "license": {
+    "appliesTo": "generated texture pixels and KTX2 derivatives",
+    "name": "Creative Commons CC0 1.0 Universal",
+    "spdx": "CC0-1.0"
+  },
+  "schemaVersion": 1,
+  "thirdPartyAssets": []
+}
