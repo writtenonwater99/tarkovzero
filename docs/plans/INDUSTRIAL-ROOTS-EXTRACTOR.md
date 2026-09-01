@@ -1,8 +1,48 @@
 # `scripts/extract-customs-industrial-roots.py` — implementation specification
 
-**Status:** design only. The script does not exist yet. This document is the contract an
-implementer builds to and a reviewer rejects against. Nothing here has been run against game
-files; no game file was opened, listed, or hashed while writing it.
+**Status (2026-09-01):** implemented and under test (`npm run test:customs-industrial-roots`,
+121 synthetic tests, no game file ever opened). **Never run against game files** — the single
+gated real run belongs to the operator. This document is the contract a reviewer rejects
+against; where it and the code disagree, the code is the defect *or* this document is, and one
+of the two is fixed in the same change.
+
+> ## ⚠️ What this tool's output IS — read before quoting any number from it
+>
+> **Decision 2026-09-01, after an external red team.** There is **no independent identity source
+> in this repository**. `extract-customs-industrial-roots.py` imports `census-customs-assets.py`,
+> which imports `extract-customs-unity.py` as its selector; and the "second source"
+> (`scripts/customs-industrial-second-source.mjs`) reads a dump that *that same selector*
+> produced. The two share an acquisition layer, so **agreement between them is not validation**.
+>
+> The output is therefore redefined. It is no longer "the truth about the Customs rail yard". It
+> is a **conservative candidate roster** — a retrieval and coordinate-correlation aid, to be
+> confirmed later against **geo-tagged in-game photographs**: EFT writes world position and camera
+> quaternion into the screenshot filename (see `CLAUDE.md`, "Screenshot filename"), so a survey
+> raid produces independently-sourced evidence that this pipeline cannot manufacture.
+>
+> Design consequence, and it is the governing one: **an artifact that overstates its own authority
+> is the primary failure mode.** Every count carries its uncertainty; nothing may read as a settled
+> fact about the game. The artifact says so itself (`artifactKind`, `establishes`,
+> `doesNotEstablish`, and `awaitingVisualConfirmation` on the document and on every row), the
+> row set is called `candidates`, and a run that lost any geometry is `inconclusive` by
+> construction.
+>
+> The verdict machinery stays, because **contradicting** the claim is exactly what a shared
+> acquisition layer can still do honestly: a count this instrument cannot reach is evidence
+> against a claim that asserts it. It may never present itself as the final word.
+>
+> Also established, and not to be re-litigated without evidence:
+>
+> * The handoff's "3 closed / 2 tank / 1 hopper / 2 six-metre red containers" has no artifact
+>   behind it and is contradicted, **in the same direction**, by both instruments.
+> * Body type IS explicit in EFT names (`Vagon_tank`, `Vagon_hopper`, `Vagon_shutted_closed`,
+>   `Vagon_gondola_small`/`_large`), and colour partly so (`container_6m_Red_close`,
+>   `Vagon_tank_green`, `Vagon_hopper_black`). A **gondola** family exists that the claim never
+>   listed. But an explicit name proves a **label** is separable, **not** that the GameObject
+>   wearing it is a placed wagon rather than a child, a collider shell, an LOD node, or an
+>   inactive placeholder.
+> * Only this tool's output may drive any rewrite of the two stale landmark mapping literals
+>   (§10), and only after a non-inconclusive run. The nine-proxy mapping stays disproven.
 
 ---
 
@@ -191,13 +231,45 @@ GameObjects. Keys are `(asset, pathId)`.
 `g` (exclusive) down to each such GameObject (inclusive) as `lodInterior`. A `lodInterior` node is
 never a root. This is the single strongest structural signal and it fires first.
 
-**Step 3 — the part-name predicate.** `isPartOf(n, p)` is true when
-`normalized_name(n)` is empty, is a bare integer, equals `normalized_name(p)`, starts with
-`normalized_name(p)`, or is in
+**Step 3 — the part-name predicate.** `_part_fold_reason(child, parent)` returns **why** a child
+folds into its parent, or `None`. It is used by Step 4's exclusions, **not a rule of its own**;
+the reason is returned rather than a boolean because §R6 has to know which clause fired.
+
+| Clause | Fires when | Reason |
+|---|---|---|
+| empty / index | the child's normalized name is `""` or a bare integer | `empty-or-index` |
+| **instance** | the two normalized names are **equal** → **not a part** (see below) | `None` |
+| segment prefix, qualified | the child's segments start with the parent's and every remaining segment is shell vocabulary or a digit — `Vagon_tank_green -> Vagon_tank_green_collider` | `segment-prefix-part` |
+| segment prefix, unqualified | the same, but a remaining segment names something — `Railcar_Long -> Railcar_Long_A`, `Vagon -> Vagon_Long_01` | `segment-prefix-unqualified` (**R6 watches this one**) |
+| part token | the child's **whole** name is in `PART_NAME_TOKENS` | `part-token` |
+| **shared prefix stem (R5)** | the child shares a leading segment run with the parent and everything after it is shell vocabulary — `Vagon_tank_green -> Vagon_tank_collider` | `shared-prefix-stem` |
+| all shell words | **every** segment of the child's name is shell vocabulary — `Shadow_Mesh`, `Collider_Low` | `all-part-tokens` |
+
 `PART_NAME_TOKENS = {lod, lod0, lod1, lod2, lod3, lods, mesh, meshes, model, body, frame, base,
 chassis, bogie, bogey, wheels, wheel, collider, colliders, collision, col, shadow, shadowcaster,
-lightprobe, probe, bounds, pivot, geo, geometry, render, renderer, group, grp, parts, detail}`.
-It is a predicate used by Step 4's exclusions, **not a rule of its own.**
+lightprobe, probe, bounds, pivot, geo, geometry, render, renderer, group, grp, parts, detail}` is
+matched against a **whole** name. `PART_SUFFIX_TOKENS` is the segment-level shell vocabulary the
+last three clauses use — `ballistic(s), door(s), doorleaf, leaf, leaves, hatch(es), glass,
+window(s), interior, exterior, decal(s), proxy, occluder, occlusion, navmesh, trigger,
+physic(s)/phys, cap(s), lid, paint, logo, low, high, hi, lo, mid, inner, outer, shell(s), dummy,
+helper, socket, attach` — and `FOLDABLE_PART_TOKENS` is the union of the two.
+
+> **Decision 2026-09-01 — an identical name is an INSTANCE, never a part.** Because
+> `normalized_name` folds the trailing index, `Container -> {Container_01, Container_02}` — Unity's
+> ordinary way of authoring two placements under one wrapper — presented as `container` under
+> `container` and both children were swallowed as parts of the wrapper. Nothing is ever named
+> exactly what it is a part OF; a body is `Body`, not `Vagon`.
+
+> **Decision 2026-09-01 (R5) — folding is by shared prefix STEM, not by exact parent prefix, and
+> the prefix test is segment-aware.** The published clause was the raw-text
+> `child.startswith(parent)`. A colour variant breaks it: `Vagon_tank_green`'s own collider,
+> shadow, ballistic and door-leaf shells are authored `Vagon_tank_<shell>`, and
+> `vagon_tank_collider` does not start with `vagon_tank_green`. **Nine of the twenty-six in-box
+> rail placements carry such a suffix** (`Vagon_tank_green`, `Vagon_hopper_black`,
+> `Vagon_gondola_small_green`, `Vagon_movable_doors_grey`), so each fragmented into its shells:
+> the placement was rejected as a multi-branch group and its four shells were elected as four
+> "objects". Raw-text prefixing was wrong in the other direction too — it made `vagon_tanker` a
+> part of `vagon_tank`, which is two different words — so the clause now compares **segments**.
 
 > **Decision 2026-09-01 — rule R2 is deleted, not repaired.** The published rule read
 > `if parent(n) is elected and isPartOf(n, parent(n)): return`. It could never fire: election stops
@@ -221,8 +293,8 @@ any of:
   renderable children of differing names; or
 - **R5-span:** the axis-aligned XZ span of the *world positions* of `n`'s renderable
   descendants exceeds `--max-placement-span-m` (default **26 m**); or
-- **R4-multi-branch:** `not renderable(n)` **and** ≥ 2 of `n`'s direct children both carry a
-  renderer somewhere beneath them and are not `isPartOf(·, n)`.
+- **R4-multi-branch:** `not renderable(n)` **and** `n`'s **placement frontier** (below) holds ≥ 2
+  nodes.
 
 > **Decision 2026-09-01 — why R4-multi-branch exists.** The distinct-name rule counts *names*, and
 > `isPartOf` is ancestor-blind in its last clause: a descendant literally named `Mesh` reads as a
@@ -231,9 +303,38 @@ any of:
 > else fired — the conditional `containers` rule needs renderable *children* and the renderers are
 > on grandchildren, and 7 m is well under the span guard. The wrapper was elected as **one** root.
 > That is an **undercount**, the exact error that would falsely "confirm" a low claimed count, so
-> the rule now also counts *branches*: how many children of `n` carry geometry and do not read as
-> parts of `n`. Counting branches instead of names is what separates two containers behind two
-> `Mesh` nodes from `Vagon_02 -> Body -> Mesh`, which has one part-named branch and stays one root.
+> the rule now also counts *branches*: how many things underneath `n` carry geometry and do not
+> read as parts of `n`. Counting branches instead of names is what separates two containers behind
+> two `Mesh` nodes from `Vagon_02 -> Body -> Mesh`, which has one part-named branch and stays one
+> root.
+
+**Step 4a — the placement frontier (R1).** `branches(n)` is the **nearest non-part descendant
+frontier**, not the direct-child set. Starting from `n`'s children, the walk **descends through**
+
+* a child that folds into `n` by name (Step 3) — its own children are re-tested **against `n`'s
+  name**, which is what keeps `Vagon -> Body -> Mesh` one placement; and
+* a child a grouping rule already rejected — a group is by definition not a placement, so the
+  placements are the things underneath it;
+
+and **stops**, contributing one branch, at everything else. A LOD interior is never a branch (R1
+owns it), a subtree with no renderer anywhere is not a branch, and a node whose hierarchy is
+incomplete is **opaque** — the election ledgers it, so the walk must not pretend to see past it.
+The walk is bounded by `MAX_HIERARCHY_DEPTH` and by a visited set, so a parent cycle cannot loop it.
+
+Frontier and grouping rule are mutually recursive (a frontier reads its descendants' rules; a rule
+reads its own frontier), so both are computed **once, bottom-up** in reverse topological order by
+`compute_placement_structure(forest, max_span=…)`. Nodes made unreachable by a cycle sit at the end
+of the order and are visited first; their descendants' rules default to `None`, which is safe
+because the election ledgers that whole component anyway.
+
+> **Decision 2026-09-01 (R1) — the frontier is not the direct-child set.** Measured on the
+> published implementation: inserting **one** ordinary intermediate node —
+> `Depot_A -> Stack -> {Container_01 -> Mesh, Container_02 -> Mesh}` — dropped `electedRoots` from
+> **2 to 1**, *silently*, with `complete: true` and `rootCountIsLowerBound: false`. `Depot_A` saw a
+> single direct branch (`Stack`); the distinct-name rule saw one folded family, because `mesh`
+> reads as a part of anything; 7 m is far under the span guard. One wrapper was elected for two
+> containers and no ledger said a word. A rule that only survives when the authoring happens to be
+> flat is not a rule.
 
 **Rule order is observable and therefore fixed:** R4-multi-family → R4-group-name → R5-span →
 R4-multi-branch. Only R5 writes a `diagnostics.spanRejected[]` row, and that ledger exists because
@@ -272,6 +373,56 @@ elect(n):
 The outermost surviving node wins, and election stops the descent — that is precisely "deduplicate
 to the outermost transform of each placed object, not every named descendant".
 
+### 2.3a The accounting invariant — nothing may vanish
+
+**Every renderer in the scene ends up attributed to exactly one elected root, or to a named
+diagnostic row.** Until this invariant exists and is asserted, a green suite means only that the
+submitted fixtures pass: the election can drop geometry and no count moves.
+
+The universe is `facts["renderers"]`. Each elected root claims the renderers on the members it
+**owns** (its subtree, minus any nested placements it was split from). A second claim on the same
+renderer is a programming error — the ownership partition must be disjoint — and raises rather than
+being reconciled. Whatever is left over is unattributed, and each unattributed renderer is grouped
+by its owning node into a `diagnostics.unattributedRenderers[]` row carrying `{objectId, asset,
+pathId, hierarchyPathHash, reason, rendererCount}` — never a name — with `reason` one of:
+
+| reason | what happened |
+|---|---|
+| `rejected-node-own-geometry` | a grouping rule rejected a node that carried its own renderer; rejection only ever happens **above** the roots a descent produces, so nothing owns it |
+| `rejection-elected-nothing` | the renderer hangs under a rejected node whose descent elected nothing |
+| `unrootable-node` / `unrootable-ancestor` | the owner, or an ancestor of it, is in `unrootableNodes[]` |
+| `renderer-owner-not-in-scene` | the renderer's `gameObjectPathId` names a GameObject that never parsed — **the one loss no node-level ledger can see, because there is no node to ledger** |
+
+`counts.renderersAttributed + counts.renderersUnattributed == counts.renderersTotal` is arithmetic,
+not a claim, and the builder refuses a document where it does not hold. `unattributedRenderers[]`
+is capped at 500 rows (`unattributedRenderersTruncated` says so); the counts are never capped.
+
+> **Decision 2026-09-01 (R2) — the A1 ledger asked the wrong question.** A rejection was ledgered
+> only when its descent elected **nothing**. That test cannot see the commoner loss: a rejected
+> node carrying its **own** renderer or LODGroup. `Yard` (a renderer) over `Vagon_Yardside` (a
+> renderer) elected one root, threw the yard's geometry away, and reported `complete: true` with an
+> empty ledger, because a child had survived. `diagnostics.unresolvedRejections[]` now asks both
+> halves — `reason` is `descent-elected-nothing`, `own-geometry-unattributed`, or both — and
+> carries `rendererCount`. The renderer accounting above is the same question asked of geometry
+> instead of of nodes, and it is the half that catches a *future* rule change that quietly stops
+> attributing something.
+
+### 2.3b R6 — a fold names alone cannot justify is named, never picked
+
+`Vagon -> {Vagon_Long_01, Vagon_Long_02}` standing 8 m apart folds to **one** root through the
+unqualified segment-prefix clause, because `vagon_long` genuinely is `vagon` plus a qualifier — and
+two identically-named siblings standing apart is equally the spelling of **two** placements. There
+is no name evidence that settles it. The tool therefore does **not** split them and does **not**
+pretend the fold was settled: it writes a `diagnostics.ambiguousFolds[]` row
+(`{objectId, asset, pathId, hierarchyPathHash, nameHash, foldedChildCount, spanM, rule}`) and the
+roster's count becomes a lower bound.
+
+The row fires only when, under an **elected** root, ≥ 2 renderable children of one node fold by
+`segment-prefix-unqualified`, carry the **same** normalized name as each other, and stand further
+apart than `--coincident-root-m`. Deliberately excluded: `Vagon_tank_green -> Vagon_tank_collider`
+(the shell vocabulary settles it), `Railcar_Long -> {Railcar_Long_A, Railcar_Long_B}` (differently
+named children read as two parts of one object), and shells stacked at the same pivot.
+
 ### 2.4 Recognising a root when the hierarchy is incomplete — **fail closed, per node**
 
 `hierarchyComplete` is false when a parent transform is missing, two transforms name each other, or
@@ -283,7 +434,12 @@ interior**. It goes to `diagnostics.unrootableNodes[]` with `{objectId, asset, p
 hierarchyPathHash, reason}` — never a name, never a path. Consequences, all mandatory:
 
 - `complete` becomes `false` (so a normal run refuses to publish without `--allow-partial`);
-- `counts.rootCountIsLowerBound` becomes `true`;
+- `counts.rootCountIsLowerBound` becomes `true`. **R3:** so does any *unattributed renderer*
+  (§2.3a) and any *ambiguous fold* (§2.3b) — a count that might be missing objects is a floor
+  whatever the mechanism — and a floor forces `claimVerdict.overall: "inconclusive"` regardless of
+  the component verdicts, which stay computed and readable. An unattributed renderer does **not**
+  make `complete` false: the *read* was complete, the *attribution* was not, and conflating the two
+  would hide a load failure behind a rule bug;
 - if any unrootable node's *known* partial ancestor chain contains an elected root that is inside
   the scope box, `scopeIntegrity` becomes `"suspect"`. **That walk terminates on a visited-set, not
   on a hop budget.** Bounding it by `MAX_HIERARCHY_DEPTH` (as the first implementation did) made the
@@ -436,7 +592,7 @@ transliterated Russian, so both vocabularies are carried:
 | covered | `covered, closed, box, boxcar, kryt, kryty, tovarn, freight, gruz, gruzov` |
 | tank | `tank, tanker, cistern, cisterna, fuel, toplivo, neft, oil, gas` |
 | hopper | `hopper, hoper, bunker, dump, ore, coal, ugol, gravel, ballast, shcheben` |
-| flat | `flat, platform, platforma, flatcar` |
+| flat | `flat, platforma, flatcar, flatbed` — the bare English `platform` is **not** here; see the negative lexicon |
 | gondola | `gondola, poluvagon, polu, opentop` |
 | container | `container, konteyner, kontejner, cont, iso` |
 | length hint | `6m, 20ft, 20f, 12m, 40ft, 40f` — counted **only** adjacent to a container token |
@@ -444,6 +600,32 @@ transliterated Russian, so both vocabularies are carried:
 
 `GENERIC_NAMES = {prop, props, object, obj, mesh, model, static, group, item, thing, new, gameobject}`
 — a root whose normalized name is one of these has no lexical identity and is penalised.
+
+**The negative lexicon (channel D, added 2026-09-01).** The positive lexicon is a set of words that
+RAISE a reading; it had no counterpart, so a name that names a completely different object could
+only ever be scored on the words it happened to share.
+
+> **Measured:** a real `Metal_barrel_04_closed_old_blue` standing three metres from the rails
+> scored `closed` on its own name (N +0.35) and on its material (M +0.20), shared its name with a
+> sibling (F +0.05) and sat 1 m from the track (R+ +0.10) = **0.70, `established`,
+> `rail-wagon-covered`** — channel-identical to a genuine `Vagon_shutted_closed`. At least **34**
+> such barrels, plus roughly **700** railings and platforms, stand inside the scope box.
+
+`NEGATIVE_NAME_TOKENS = {barrel, barrels, bochka, cylinder, cylinders, railing, railings, handrail,
+perila, stepladder, ladder, ladders, lestnica, lestnitsa, platform, platforms, fence, fences,
+zabor, stair, stairs, staircase, scaffold, scaffolding}`.
+
+This is a **channel with a pinned weight, not a blocklist bolted on the side**: the token is
+evidence, it is reported in `confidenceChannels.D` and in `evidenceChannelsFired`, and it lowers a
+score exactly as a positive token raises one. The class is not deleted from the candidate set — the
+row still reads `rail-wagon-covered`, at a confidence that says nobody should build on it — because
+suppressing the reading would hide the ambiguity the channel exists to report.
+
+Like every other suppression decision, D reads the root's **own** evidence only (its name, its
+renderable subtree's names, its material names) and never an ancestor's: a wrapper called
+`Barrels_Zone` must not disqualify a genuine wagon under it, exactly as `Kryt_Zone` must not
+promote one. D never fires on `unclassified`, which is the residual rather than a reading, so
+nothing contradicts it.
 
 ### 4.3 Confidence score — exact arithmetic
 
@@ -463,8 +645,22 @@ to the exact value, not a range.
 | A | a competing class scores ≥ 0.35 on N+P+M alone | **−0.25** |
 | X | `world.worldExact == false` | **−0.20** |
 | G | `normalizedName` empty or in `GENERIC_NAMES` | **−0.30** |
+| D | a `NEGATIVE_NAME_TOKENS` word in the root's **own** evidence, on any class but `unclassified` | **−0.60** |
 
 `confidence = round(clamp(sum, 0.0, 0.95), 3)`.
+
+**Why D is −0.60, and why that number is checkable rather than tasteful.** The requirement is that
+a name naming a *different object* defeats every channel a name can earn on its own. The strongest
+score reachable without an ancestor-path hit is `MAX_OWN_NAME_POSITIVE = N + M + L + S + F + R+ =
+0.90`, and `0.90 + D = 0.30` must land below `probable` (0.40). It does, with 0.10 to spare;
+`test_negative_evidence_defeats_every_own_name_channel` pins the arithmetic against the constants
+themselves, so the weight cannot be softened without a red test. Applied to the measured barrel:
+`0.70 − 0.60 = 0.10`, `unresolved`; with an LODGroup and a second renderable descendant (L and S
+firing too) `0.90 − 0.60 = 0.30`, still `unresolved`. The `Vagon_shutted_closed` standing beside
+it is untouched at 0.45, `probable` — the channel discriminates rather than blanket-penalising.
+
+Each row also carries `evidenceChannelsFired`: the channel codes that actually moved its score, in
+table order, with `R` reported as `R+` or `R−` because the two readings are different evidence.
 
 The **0.95 hard ceiling is deliberate**: no name-only identification is ever certain, and the
 schema must not be able to express certainty about something nobody looked at.
@@ -594,16 +790,29 @@ run may never render a verdict on anyone's claim.
 
 ## 6. Output schema
 
-### 6.1 `--output` — the roots document
+### 6.1 `--output` — the candidate roster
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generator": {
-    "name": "tarkovzero-customs-industrial-roots",
+    "name": "tarkovzero-customs-industrial-candidate-roster",
     "unityPyVersion": "…",
     "selectionMode": "catalog-first-customs-only"
   },
+  // The honesty block.  A reader who quotes a number from this file without
+  // reading these four fields is quoting something the artifact does not claim.
+  "artifactKind": "conservative-candidate-roster",
+  "awaitingVisualConfirmation": true,
+  "establishes": ["…", "…"],
+  "doesNotEstablish": [
+    "That any row is a placed wagon rather than a child, a collider shell, an LOD node, or an
+     inactive placeholder. An explicit name proves only that a LABEL is separable.",
+    "Body type, colour, size, or condition beyond what a literal token states; …",
+    "An independently sourced identity. The extractor and the repository's second source share one
+     acquisition layer, so their agreement is not validation.",
+    "Anything at all until each row is confirmed against geo-tagged in-game photographs …"
+  ],
   "parameters": {                       // every knob that could change the answer, pinned
     "scopeId": "customs-industrial-rail-yard",
     "scopeCenter": {"x": 230, "z": -110}, "scopeWidthM": 360, "scopeDepthM": 300,
@@ -630,11 +839,17 @@ run may never render a verdict on anyone's claim.
     "electedRoots": 0, "rootsInScope": 0,
     "railRootsInScope": 0, "containerRootsInScope": 0, "otherIndustrialRootsInScope": 0,
     "establishedRootsInScope": 0, "probableRootsInScope": 0, "unresolvedRootsInScope": 0,
-    "spanRejectedCount": 0, "unrootableNodeCount": 0, "coincidentRootGroupCount": 0,
+    "spanRejectedCount": 0, "unrootableNodeCount": 0, "unresolvedRejectionCount": 0,
+    "coincidentRootGroupCount": 0,
     "rootCountIsLowerBound": false,
-    "skippedNonRootsObjects": 0, "skippedObjects": 0
+    "skippedNonRootsObjects": 0, "skippedObjects": 0,
+    // the accounting invariant, in three numbers a reader can add up (§2.3a)
+    "renderersTotal": 0, "renderersAttributed": 0, "renderersUnattributed": 0,
+    "unattributedRendererOwnerCount": 0,
+    "ambiguousFoldCount": 0,             // §2.3b
+    "negativeEvidenceRootsInScope": 0    // rows where channel D fired
   },
-  "roots": [
+  "candidates": [                        // NOT `roots`: every row is a candidate
     {
       "rootId": "customs.root.<12-hex-of-objectId-hash>",
       "objectId": "…", "asset": "level__", "pathId": 0, "sourceFile": "…",
@@ -652,8 +867,10 @@ run may never render a verdict on anyone's claim.
       "class": "rail-wagon-unspecified",
       "confidence": 0.55, "band": "probable",
       "confidenceChannels": {"N": 0.35, "P": 0, "M": 0.20, "L": 0, "S": 0, "F": 0,
-                             "R": 0, "A": 0, "X": 0, "G": 0},
-      "competingClasses": [{"class": "rail-wagon-tank", "score": 0.20}]
+                             "R": 0, "A": 0, "X": 0, "G": 0, "D": 0},
+      "evidenceChannelsFired": ["N", "M"],
+      "competingClasses": [{"class": "rail-wagon-tank", "score": 0.20}],
+      "awaitingVisualConfirmation": true   // unconditionally; see the header
     }
   ],
   "families": [                          // grouped by (normalizedName, class); the count that matters
@@ -671,7 +888,23 @@ run may never render a verdict on anyone's claim.
   "diagnostics": {
     "fileLoadFailures": [], "objectParseFailures": [], "skippedObjects": [],
     "dependencyFailures": [], "droppedForbiddenFieldCount": 0,
-    "unrootableNodes": [], "inexactRoots": [], "spanRejected": [],
+    "unrootableNodes": [],
+    "unresolvedRejections": [            // §2.3a; `reason` names WHICH half fired
+      {"objectId": "…", "asset": "…", "pathId": 0, "hierarchyPathHash": "…",
+       "rule": "R4-group-name", "reason": "own-geometry-unattributed",
+       "rendererCount": 1, "renderableDescendantCount": 2}
+    ],
+    "unattributedRenderers": [           // §2.3a; capped at 500 rows
+      {"objectId": "…", "asset": "…", "pathId": 0, "hierarchyPathHash": "…",
+       "reason": "rejected-node-own-geometry", "rendererCount": 1}
+    ],
+    "unattributedRenderersTruncated": false,
+    "ambiguousFolds": [                  // §2.3b
+      {"objectId": "…", "asset": "…", "pathId": 0, "hierarchyPathHash": "…",
+       "nameHash": "…", "foldedChildCount": 2, "spanM": 8.0,
+       "rule": "R6-ambiguous-prefix-fold"}
+    ],
+    "inexactRoots": [], "spanRejected": [],
     "coincidentRootGroups": [], "prefabLinkage": "unavailable"
   }
 }
@@ -685,8 +918,9 @@ Notes that a reviewer must check:
   the surface small. `materialNames` **is** emitted (it is a scored evidence channel), bounded to
   64 entries and 1024 chars each by the payload guard.
 - `rootId` is `"customs.root." + sha256(objectId)[:12]` — stable across runs, lowercase hex, and it
-  satisfies the truth-graph `ID_PATTERN`.
-- `roots` is sorted by `(class, position.x, position.z, objectId)`; `families` by
+  satisfies the truth-graph `ID_PATTERN`. The `root` in the id names the *election* (a placement
+  root), not a claim about the object; the row set it indexes is `candidates`.
+- `candidates` is sorted by `(class, position.x, position.z, objectId)`; `families` by
   `(-instanceCount, normalizedName)`. Deterministic ordering is asserted by test.
 - `ROOTS_ALLOWED_OUTPUT_KEYS` is the exact set of keys above and nothing else.
 
@@ -694,9 +928,18 @@ Notes that a reviewer must check:
 
 A second artifact, same publication rules, that answers "what do I build?": the `families` table
 ranked by in-scope instance count, the `claimVerdict` block, the `separability` block, the anchor
-cross-check table, and the four diagnostic counts (`spanRejectedCount`, `unrootableNodeCount`,
-`coincidentRootGroupCount`, `outsideTerrainEnvelopeCount`). No new facts — a projection of
-`--output` only, so the two can never disagree.
+cross-check table, and the diagnostic counts (`spanRejectedCount`, `unrootableNodeCount`,
+`unresolvedRejectionCount`, `coincidentRootGroupCount`, `outsideTerrainEnvelopeCount`). No new
+facts — a projection of `--output` only, so the two can never disagree.
+
+Two things travel with it deliberately, because the roster is the artifact an operator actually
+reads and a caveat one indirection away is the same overstatement:
+
+- the whole honesty block (`artifactKind`, `awaitingVisualConfirmation`, `establishes`,
+  `doesNotEstablish`); and
+- `counts.rootCountIsLowerBound` plus the accounting numbers (`renderersTotal`,
+  `renderersAttributed`, `renderersUnattributed`, `ambiguousFoldCount`,
+  `negativeEvidenceRootsInScope`) — a count that is a floor must say so **where the count is read**.
 
 ---
 
@@ -729,8 +972,8 @@ Rules the converter must enforce, each with a test:
   object stands in the world and assert nothing about a parent we did not fully verify.
 - A root is **excluded** from `sceneNodes` when `world` is missing, `positionExact` is false, or any
   `scale` component is 0 (the schema rejects a zero scale and a zero-length quaternion). Excluded
-  roots remain in the roots document and are counted in `graph.excludedRootCount` in the converter's
-  own return value — never dropped silently.
+  roots remain in the roster's `candidates[]` and are counted in `graph.excludedRootCount` in the
+  converter's own return value — never dropped silently.
 - Ordinals are assigned after sorting on `(classSlug, x, z, objectId)` and start at 1, so a re-run
   over the same bytes yields byte-identical `canonicalCustomsTruthGraphJson(...)`. Pin that digest
   in the test.
@@ -889,9 +1132,90 @@ extractor and watching the named test go red.
     `Cisterna_Metal` material → N = 0, P = 0.20, confidence 0.20, `unresolved`; the same tokens on a
     node that renders score N = 0.35. Pins §4.3's decision.
 
+### The structural repairs R1–R6 and the accounting invariant (added 2026-09-01)
+
+Three rounds of fixture-local patching had produced a green suite over an unsound instrument. Each
+repair below carries the reviewer's **measured counterexample**, a **name variant**, a **structure
+variant**, and a **control that must not change**; class `StructuralRepairTests`.
+
+50. `one_intermediate_node_cannot_hide_two_placements` (**R1**) —
+    `Depot_A -> Stack -> {Container_01 -> Mesh, Container_02 -> Mesh}` → **2** roots.
+    Name variant: `Storage_A -> Holder -> {Vagon_01 -> Body, …}`. Structure variant: three
+    intermediates. Controls: an intermediate over ONE placement is still one root at `Depot_A`, and
+    `Vagon_02 -> Body -> Mesh` is still one root.
+51. `the_frontier_walk_descends_through_groups_not_only_parts` (**R1**) — `Depot_A -> Yard ->
+    {Konteyner_01, Konteyner_02}`, where the intermediate is rejected by name → **2** roots.
+52. `every_renderer_is_attributed_to_one_candidate_or_to_a_named_row` (**invariant**) — over nine
+    fixtures: `renderersAttributed + renderersUnattributed == renderersTotal`, the rows' own
+    `rendererCount`s sum to `renderersUnattributed`, every row names a cause, and
+    `rootCountIsLowerBound` is exactly "something left the count".
+53. `a_rejected_node_that_renders_is_named_in_the_renderer_ledger` (**R2**) — the `Yard`-over-
+    `Vagon_Yardside` case. Name variant: the conditional `containers` clause. Structure variant: the
+    rendering group two levels down under a rejected wrapper. Controls: the *same shape* with the
+    rendering group inside an elected subtree loses nothing, and a rejected node with no renderer of
+    its own writes no row — so the row tracks the loss, not the word `Yard`.
+54. `any_unattributed_renderer_forces_a_lower_bound_and_inconclusive` (**R3**) — `claim_scene()`
+    scores `supported`; the identical scene plus one rendering group node keeps every component
+    verdict and withdraws the overall one.
+55. `a_barrel_beside_the_rails_is_not_rolling_stock` (**R4**) — the measured 0.70 / `established` /
+    `rail-wagon-covered` barrel, pinned channel by channel, now `unresolved` at 0.10 while the real
+    `Vagon_shutted_closed` beside it stays `probable` at 0.45. Name variants: railings, stepladder,
+    platform, fence. Structure variant: the barrel with an LODGroup and a second renderable
+    descendant, at its own-evidence maximum (0.90 − 0.60 = 0.30). Controls: `vagon_platforma` keeps
+    its flat-wagon class and takes no penalty, and a `Barrels_Zone` wrapper does not disqualify the
+    wagons under it.
+56. `negative_evidence_defeats_every_own_name_channel` (**R4**) — the weight is pinned by
+    arithmetic against the constants, and D never fires on `unclassified`.
+57. `a_bare_platform_is_scenery_not_a_flat_wagon` (**R4**) — `Platform_metal_01` is `unclassified`
+    while `Vagon_Platforma_01` is `rail-wagon-flat`.
+58. `a_colour_variant_folds_its_own_shells` (**R5**) — `Vagon_tank_green` over its collider, shadow,
+    ballistic and door shells → **1** root with 4 renderable descendants. Name variants:
+    `Vagon_hopper_black`, `Vagon_gondola_small_green`, `Vagon_movable_doors_grey`. Structure
+    variant: the shells nested rather than siblings. Controls: `Vagon_tank_green ->
+    {Vagon_tank_kryt, Vagon_tank_hopper}` stays **2** (a shared stem is not enough — the tail must
+    be shell words), `vagon_tanker` is not a part of `vagon_tank`, and five numbered siblings stay
+    five.
+59. `a_name_made_only_of_shell_words_is_a_part_of_whatever_holds_it` (**R5**) — `Vagon_Kryt_01 ->
+    {Shadow_Mesh, Collider_Low}` → **1** root; control: `konteyner_mesh` does not fold.
+60. `a_fold_names_cannot_settle_is_named_never_picked` (**R6**) — `Vagon -> {Vagon_Long_01,
+    Vagon_Long_02}` 8 m apart → **1** root, **1** `ambiguousFolds` row, lower bound, inconclusive.
+    Name variant: `Konteyner_Big`. Structure variant: three folded siblings. Controls: the same
+    children 0.4 m apart write no row, `Railcar_Long_{A,B}` write no row, and a shell-vocabulary
+    fold writes no row.
+61. `only_the_distinct_name_rule_can_reject_a_single_branch_wrapper` (**R4-multi-family**) — once
+    the frontier walk exists, this rule needed a fixture of its own: `Depot_A -> Vagon_01 ->
+    Konteyner_Sub`, one frontier branch and a 3 m span, so nothing else can fire.
+62. `the_artifact_says_what_it_does_and_does_not_establish` / `evidence_channels_fired_names_every_
+    channel_that_moved_the_score` (**roster semantics**) — the honesty block on both artifacts, the
+    three phrases a reader must not miss (`collider`, `acquisition layer`, `photograph`),
+    `awaitingVisualConfirmation` on every row, `evidenceChannelsFired` reconstructible from
+    `confidenceChannels`, the channel sum equal to the confidence, no `roots` key, and
+    `rootCountIsLowerBound` present in the roster's counts.
+
+### Mutation bank — 30 deletions, 30 caught (re-run 2026-09-01)
+
+A scratch copy of the extractor is mutated and the whole suite is run against it; nothing in the
+repository is modified. Baseline green, and **every** mutation red:
+
+`R1-frontier` · `R2-own-renderers` · `R3-lower-bound` · `R3-inconclusive` · `ACCOUNTING` ·
+`R4-negative` · `R4-weight` · `R4-platform` · `R5-stem-fold` · `R5-all-part-tokens` ·
+`R6-ambiguity` · `ROSTER-row-flag` · `ROSTER-statement` · `ROSTER-rename` · `R1-lod-interior` ·
+`R4-multi-family` · `R4-group-name` · `R4-conditional` · `R5-span` · `R4-multi-branch` · `SPLIT` ·
+`EQUAL-NAME-PART` · `FAIL-CLOSED` · `CHANNEL-A` · `CHANNEL-X` · `BANDS` · `MIRROR` ·
+`NINE-PROXY-1TO1` · `ALLOWLIST` · `SCOPE-INTEGRITY`.
+
+Three of them survived the first pass — `R4-platform`, `R5-all-part-tokens` and, newly,
+`R4-multi-family`, whose old isolation fixture the frontier walk had made reachable by
+R4-multi-branch instead. Tests 57, 59 and 61 were written for exactly those three.
+
+Five of the mutations are also carried **inside** the suite (`GuardMutationTests`), where the
+published behaviour is restored by monkey-patch and the counterexample asserted directly:
+`R1-frontier`, `R3` (twice, including a proof that the accounting ledger and the rejection ledger
+are independent), `R4-negative`, `R5-stem-fold`, `R6-ambiguity`.
+
 ### Graph converter
 
-49. A fixture roots document → `normalizeCustomsTruthGraph()` accepts the result; unplaceable roots
+49. A fixture candidate roster → `normalizeCustomsTruthGraph()` accepts the result; unplaceable roots
     are excluded and counted; ids are stable; `canonicalCustomsTruthGraphJson` digest is pinned;
     a malformed input is rejected rather than repaired.
 
@@ -969,8 +1293,10 @@ position within 0.15 m).
 The rewrite is a **separate, separately-reviewed change** that consumes the extractor's output. It
 is not part of this script.
 
-1. Run §9 command 2. The roots document is the sole input. If `claimVerdict.overall` is
-   `"inconclusive"`, **stop** — nothing is rewritten from an inconclusive run.
+1. Run §9 command 2. The candidate roster is the sole input, and it is the **only** thing that may
+   drive this rewrite — the nine-proxy mapping stays disproven. If `claimVerdict.overall` is
+   `"inconclusive"`, **stop**: nothing is rewritten from an inconclusive run, and after the R3
+   repair that includes any run where a renderer went unattributed or a fold was ambiguous.
 2. Regenerate `data/customs-prop-features.json` from **`established` roots only**:
    `featureId = customs.prop.industrial_rail_yard.<class_slug>_<ordinal>`,
    `match.type` from the class (`railcar` / `container`),
@@ -1006,5 +1332,8 @@ is not part of this script.
 - No seating, collision, or tactical claim of any kind.
 - No writes to `public/`, to the live scene manifest, or to any committed data file. The extractor's
   only outputs are the two files outside the repo.
-- No promotion of any asset. This tool tells you **what is there**; the admission planner and the
-  founder's GPU verdict decide what ships.
+- No promotion of any asset. This tool tells you **what to go and look at**; the admission planner
+  and the founder's GPU verdict decide what ships.
+- **No claim that a row is the object its name suggests.** That is the survey raid's job (§0), and
+  no amount of agreement between this tool and anything else built on the same selector substitutes
+  for it.

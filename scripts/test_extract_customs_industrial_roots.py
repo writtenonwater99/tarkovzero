@@ -387,7 +387,7 @@ class RootsTestCase(unittest.TestCase):
         return code, stdout.getvalue(), stderr.getvalue()
 
     def classes(self, document):
-        return {item["normalizedName"]: item["class"] for item in document["roots"]}
+        return {item["normalizedName"]: item["class"] for item in document["candidates"]}
 
 
 # --------------------------------------------------------------------------
@@ -911,6 +911,174 @@ def nine_proxy_scene():
     return scene
 
 
+# --------------------------------------------------------------------------
+# fixtures for the 2026-09-01 structural repairs (R1–R6)
+# --------------------------------------------------------------------------
+
+
+def placements_behind_one_intermediate_node(
+    wrapper="Depot_A", middle="Stack", family="Container", part="Mesh", depth=1
+):
+    """R1's measured counterexample: ONE ordinary node hides two placements.
+
+    `Depot_A -> Stack -> {Container_01 -> Mesh, Container_02 -> Mesh}`.  The
+    published branch rule read `Depot_A`'s DIRECT children, saw one (`Stack`), and
+    elected the wrapper as a single root for two containers — silently, with
+    `complete: true` and `rootCountIsLowerBound: false`.  `depth` inserts more
+    intermediates, because a rule that only handles one is not a rule.
+    """
+    scene = Scene()
+    cursor = scene.node(wrapper, pos=(230.0, 0.0, -110.0))
+    for level in range(depth):
+        cursor = scene.node(
+            f"{middle}_{level}" if depth > 1 else middle,
+            parent=cursor,
+            pos=(230.0, 0.0, -110.0),
+        )
+    for index, offset in enumerate((0.0, 7.0)):
+        crate = scene.node(
+            f"{family}_{index + 1:02d}", parent=cursor,
+            pos=(230.0 + offset, 0.0, -110.0),
+        )
+        scene.node(part, parent=crate, pos=(230.0 + offset, 1.0, -110.0), renderer=True)
+    return scene
+
+
+def one_placement_behind_one_intermediate_node():
+    """R1's CONTROL: an intermediate over ONE placement is still one root."""
+    scene = Scene()
+    wrapper = scene.node("Depot_A", pos=(230.0, 0.0, -110.0))
+    stack = scene.node("Stack", parent=wrapper, pos=(230.0, 0.0, -110.0))
+    crate = scene.node("Container_01", parent=stack, pos=(230.0, 0.0, -110.0))
+    scene.node("Mesh", parent=crate, pos=(230.0, 1.0, -110.0), renderer=True)
+    return scene
+
+
+COLOUR_VARIANT_SHELLS = ("collider", "shadow", "ballistic", "doors")
+
+
+def a_colour_variant_and_its_shells(stem="Vagon_tank", variant="green", nested=False):
+    """R5: a colour variant whose own shells share its STEM, not its full name.
+
+    `Vagon_tank_green -> {Vagon_tank_collider, Vagon_tank_shadow,
+    Vagon_tank_ballistic, Vagon_tank_doors}`.  The published fold required
+    `child.startswith(parent)`, and `vagon_tank_collider` does not start with
+    `vagon_tank_green`, so all four shells read as placement branches: the wagon
+    was rejected as a multi-branch group and its shells were elected as four
+    "objects".  Nine of the twenty-six in-box rail placements carry such a suffix.
+    """
+    scene = Scene()
+    root = scene.node(f"{stem}_{variant}", pos=(230.0, 0.0, -110.0))
+    parent = root
+    for index, shell in enumerate(COLOUR_VARIANT_SHELLS):
+        node = scene.node(
+            f"{stem}_{shell}",
+            parent=parent,
+            pos=(230.0 + 0.4 * index, 0.0, -110.0),
+            renderer=True,
+        )
+        if nested:
+            parent = node
+    return scene
+
+
+def a_stem_sharing_pair_of_real_placements():
+    """R5's CONTROL: a shared stem is not enough — the tail must be shell words."""
+    scene = Scene()
+    root = scene.node("Vagon_tank_green", pos=(230.0, 0.0, -110.0))
+    scene.node("Vagon_tank_kryt", parent=root, pos=(230.0, 0.0, -110.0), renderer=True)
+    scene.node("Vagon_tank_hopper", parent=root, pos=(236.0, 0.0, -110.0), renderer=True)
+    return scene
+
+
+def an_ambiguous_prefix_fold(family="Vagon", qualifier="Long", count=2, pitch=8.0):
+    """R6: `Vagon -> {Vagon_Long_01, Vagon_Long_02}`, 8 m apart.
+
+    Both children fold into the parent through the unqualified segment-prefix
+    clause, so the roster reports one root — and two identically-named siblings
+    standing 8 m apart is equally the spelling of two placements.  Names alone
+    cannot settle it, so the artifact says so instead of picking.
+    """
+    scene = Scene()
+    root = scene.node(family, pos=(230.0, 0.0, -110.0))
+    for index in range(count):
+        scene.node(
+            f"{family}_{qualifier}_{index + 1:02d}",
+            parent=root,
+            pos=(230.0 + pitch * index, 0.0, -110.0),
+            renderer=True,
+        )
+    return scene
+
+
+BARREL_NAME = "Metal_barrel_04_closed_old_blue"
+BARREL_MATERIAL = "Metal_barrel_closed_mat"
+
+
+def _orphan_a_renderer(facts):
+    """A renderer whose owning GameObject is not in the scene.
+
+    The one geometry loss that NO node-level ledger can see: there is no node to
+    ledger.  Only the accounting invariant — enumerate the renderers, subtract the
+    attributed ones — notices that something did not come back.
+    """
+    facts["renderers"].append(
+        {
+            "objectId": f"{SHARED_NAME}#MeshRenderer:987654",
+            "asset": SHARED_NAME,
+            "pathId": 987654,
+            "gameObjectPathId": 876543,
+            "materialSlotCount": 0,
+            "materialNames": [],
+            "materialIds": [],
+        }
+    )
+
+
+def claim_scene_with_a_rendering_group():
+    """`claim_scene()` plus one rejected node that carries geometry of its own.
+
+    Everything the claim is scored on is unchanged; the only new fact is a
+    renderer nobody owns, which is exactly what R3 says withdraws the verdict.
+    """
+    scene = claim_scene()
+    scene.node("Yard", pos=(120.0, 0.0, -200.0), renderer=True)
+    return scene
+
+
+def barrels_and_a_wagon_beside_the_rails(name=BARREL_NAME, lods=False):
+    """R4's measured counterexample: a barrel three metres from the rails.
+
+    `Metal_barrel_04_closed_old_blue` hits `closed` on its own name (N) and on its
+    material (M), shares its name with a sibling (F) and stands 1 m from the track
+    (R+): 0.35 + 0.20 + 0.05 + 0.10 = 0.70, `established`,
+    `rail-wagon-covered` — channel-identical to the real `Vagon_shutted_closed`
+    beside it.  `lods=True` adds the L and S channels too, taking the published
+    score to its own-evidence maximum.
+    """
+    scene = Scene()
+    scene.material(BARREL_MATERIAL, None)
+    for index in range(2):
+        barrel = scene.node(
+            f"{name}_{index + 1:02d}",
+            pos=(200.0 + 3.0 * index, 0.0, -109.0),
+            renderer=True,
+            materials=(BARREL_MATERIAL,),
+        )
+        if lods:
+            level = scene.node(
+                f"{name}_LOD1_{index + 1:02d}",
+                parent=barrel,
+                pos=(202.0 + 3.0 * index, 0.0, -109.0),
+                renderer=True,
+                materials=(BARREL_MATERIAL,),
+            )
+            scene.lod_group(barrel, [barrel, level])
+    scene.node("Vagon_shutted_closed", pos=(240.0, 0.0, -110.0), renderer=True)
+    scene.node("Widget", pos=(FORTRESS[0], 0.0, FORTRESS[1]), renderer=True)
+    return scene
+
+
 FORBIDDEN_TYPE_READERS = lambda: [
     FakeReader("Mesh", 900_001, AssertionError("Mesh must never be parsed")),
     FakeReader("Texture2D", 900_002, AssertionError("Texture2D must never be parsed")),
@@ -930,8 +1098,8 @@ class CountingTests(RootsTestCase):
     def test_one_wagon_with_lods_is_one_root_not_four(self):
         document, _facts, _fake = self.build(one_wagon_with_lods())
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        self.assertEqual(document["roots"][0]["normalizedName"], "vagon")
-        self.assertEqual(document["roots"][0]["lodCount"], 3)
+        self.assertEqual(document["candidates"][0]["normalizedName"], "vagon")
+        self.assertEqual(document["candidates"][0]["lodCount"], 3)
 
     def test_five_wagons_under_one_group_elect_five_roots(self):
         document, _facts, _fake = self.build(five_wagons_under_one_group())
@@ -941,17 +1109,17 @@ class CountingTests(RootsTestCase):
         self.assertAlmostEqual(rejected["spanM"], 48.0, places=3)
         self.assertEqual(rejected["childCount"], 5)
         self.assertNotIn(
-            "railyard_wagons", {item["normalizedName"] for item in document["roots"]}
+            "railyard_wagons", {item["normalizedName"] for item in document["candidates"]}
         )
 
     def test_two_placements_behind_part_named_children_are_two_roots(self):
         """D1: the yard is undercounted when a placement hides behind `Mesh`."""
         document, _facts, _fake = self.build(two_placements_behind_part_named_children())
         self.assertEqual(document["counts"]["electedRoots"], 2)
-        names = [item["normalizedName"] for item in document["roots"]]
+        names = [item["normalizedName"] for item in document["candidates"]]
         self.assertEqual(names, ["container", "container"])
         self.assertNotIn("containers", names)
-        positions = sorted(item["world"]["position"]["x"] for item in document["roots"])
+        positions = sorted(item["world"]["position"]["x"] for item in document["candidates"])
         self.assertEqual(positions, [230.0, 237.0])
 
     def test_containers_rendering_only_through_their_own_lods_are_counted(self):
@@ -961,11 +1129,11 @@ class CountingTests(RootsTestCase):
         )
         self.assertEqual(document["counts"]["electedRoots"], 2)
         self.assertEqual(
-            [item["normalizedName"] for item in document["roots"]],
+            [item["normalizedName"] for item in document["candidates"]],
             ["container", "container"],
         )
         self.assertEqual(
-            sorted(item["world"]["position"]["x"] for item in document["roots"]),
+            sorted(item["world"]["position"]["x"] for item in document["candidates"]),
             [230.0, 236.0],
         )
         self.assertEqual(document["counts"]["unresolvedRejectionCount"], 0)
@@ -985,7 +1153,7 @@ class CountingTests(RootsTestCase):
         document, _facts, _fake = self.build(variant, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 2)
         self.assertEqual(
-            sorted(item["normalizedName"] for item in document["roots"]),
+            sorted(item["normalizedName"] for item in document["candidates"]),
             ["container", "containers"],
         )
 
@@ -1004,9 +1172,9 @@ class CountingTests(RootsTestCase):
         wrapped.lod_group(owner, members)
         document, _facts, _fake = self.build(wrapped, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        self.assertEqual(document["roots"][0]["normalizedName"], "depot_a")
-        self.assertEqual(document["roots"][0]["renderableDescendantCount"], 3)
-        self.assertEqual(document["roots"][0]["lodCount"], 2)
+        self.assertEqual(document["candidates"][0]["normalizedName"], "depot_a")
+        self.assertEqual(document["candidates"][0]["renderableDescendantCount"], 3)
+        self.assertEqual(document["candidates"][0]["lodCount"], 2)
 
         # Counted as placement branches, the LOD levels are split off the root
         # that owns them and the root under-reports its own geometry.
@@ -1019,7 +1187,7 @@ class CountingTests(RootsTestCase):
         bare.lod_group(owner, members)
         document, _facts, _fake = self.build(bare, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertEqual(root["normalizedName"], "vagon")
         self.assertEqual(root["renderableDescendantCount"], 3)
         self.assertEqual(root["descendantCount"], 2)
@@ -1034,6 +1202,7 @@ class CountingTests(RootsTestCase):
         self.assertEqual(document["counts"]["unresolvedRejectionCount"], 1)
         row = document["diagnostics"]["unresolvedRejections"][0]
         self.assertEqual(row["rule"], "R4-group-name")
+        self.assertEqual(row["reason"], "descent-elected-nothing")
         self.assertEqual(row["renderableDescendantCount"], 3)
         self.assertEqual(len(row["hierarchyPathHash"]), 64)
         self.assertNotIn("name", row)
@@ -1043,16 +1212,40 @@ class CountingTests(RootsTestCase):
         self.assertEqual(document["claimVerdict"]["overall"], "inconclusive")
 
         # Variant: a different group token, and the rejection still cannot be
-        # silent.  A rejection whose descent DOES elect something is not a row.
+        # silent.
         variant, _facts, _fake = self.build(
             a_group_whose_whole_descent_is_lod_interiors("Zone"), cross_check=False
         )
         self.assertEqual(variant["counts"]["unresolvedRejectionCount"], 1)
-        resolved, _facts, _fake = self.build(
+
+        # R2: a rejection whose descent DOES elect something is still a row when
+        # the rejected node carried geometry of its OWN.  `Yard` renders and is
+        # rejected on its name; `Vagon_Yardside` is elected; the yard's renderer
+        # belongs to nobody.  The published ledger asked only "did the descent
+        # elect something", saw `Vagon_Yardside`, and stayed silent.
+        own_geometry, _facts, _fake = self.build(
             renderable_group_named_yard(), cross_check=False
         )
-        self.assertEqual(resolved["counts"]["electedRoots"], 1)
-        self.assertEqual(resolved["counts"]["unresolvedRejectionCount"], 0)
+        self.assertEqual(own_geometry["counts"]["electedRoots"], 1)
+        self.assertEqual(own_geometry["counts"]["unresolvedRejectionCount"], 1)
+        row = own_geometry["diagnostics"]["unresolvedRejections"][0]
+        self.assertEqual(row["rule"], "R4-group-name")
+        self.assertEqual(row["reason"], "own-geometry-unattributed")
+        self.assertEqual(row["rendererCount"], 1)
+        self.assertTrue(own_geometry["counts"]["rootCountIsLowerBound"])
+        self.assertEqual(own_geometry["claimVerdict"]["overall"], "inconclusive")
+
+        # CONTROL: a rejected node with NO renderer of its own whose descent does
+        # elect something writes no row at all — the repair must not turn every
+        # grouping node into a diagnostic.
+        control, _facts, _fake = self.build(
+            five_wagons_under_one_group(), cross_check=False
+        )
+        self.assertEqual(control["counts"]["electedRoots"], 5)
+        self.assertEqual(control["counts"]["spanRejectedCount"], 1)
+        self.assertEqual(control["counts"]["unresolvedRejectionCount"], 0)
+        self.assertEqual(control["counts"]["renderersUnattributed"], 0)
+        self.assertFalse(control["counts"]["rootCountIsLowerBound"])
 
     def test_a_wrapper_named_like_its_children_still_yields_two_roots(self):
         """A2: an identical normalized name is an instance, never a part."""
@@ -1061,11 +1254,11 @@ class CountingTests(RootsTestCase):
         )
         self.assertEqual(document["counts"]["electedRoots"], 2)
         self.assertEqual(
-            [item["normalizedName"] for item in document["roots"]],
+            [item["normalizedName"] for item in document["candidates"]],
             ["container", "container"],
         )
         self.assertEqual(
-            sorted(item["world"]["position"]["x"] for item in document["roots"]),
+            sorted(item["world"]["position"]["x"] for item in document["candidates"]),
             [230.0, 237.0],
         )
 
@@ -1077,7 +1270,7 @@ class CountingTests(RootsTestCase):
         )
         self.assertEqual(variant["counts"]["electedRoots"], 2)
         self.assertEqual(
-            {item["normalizedName"] for item in variant["roots"]}, {"vagon"}
+            {item["normalizedName"] for item in variant["candidates"]}, {"vagon"}
         )
 
         # Control: a strictly longer child name is still a part, so spec §8
@@ -1109,9 +1302,9 @@ class CountingTests(RootsTestCase):
         document, _facts, _fake = self.build(a_stack_of_renderers(), cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 3)
         self.assertEqual(
-            {item["normalizedName"] for item in document["roots"]}, {"container"}
+            {item["normalizedName"] for item in document["candidates"]}, {"container"}
         )
-        for item in document["roots"]:
+        for item in document["candidates"]:
             # Each root owns its own geometry and nothing below it: a split root
             # that still aggregated the nested placements' renderers and pivots
             # would report the stack's span as its own.
@@ -1135,14 +1328,14 @@ class CountingTests(RootsTestCase):
         control.node("Wheels_Front", parent=wagon, pos=(232.0, 0.0, -110.0), renderer=True)
         document, _facts, _fake = self.build(control, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        self.assertEqual(document["roots"][0]["renderableDescendantCount"], 4)
+        self.assertEqual(document["candidates"][0]["renderableDescendantCount"], 4)
 
     def test_a_wrapper_over_two_families_is_rejected_by_name_variety(self):
         """R4's distinct-name rule, on a wrapper with only one branch."""
         document, _facts, _fake = self.build(one_branch_two_families(), cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 2)
         self.assertEqual(
-            sorted(item["normalizedName"] for item in document["roots"]),
+            sorted(item["normalizedName"] for item in document["candidates"]),
             ["konteyner", "vagon"],
         )
         self.assertEqual(document["counts"]["spanRejectedCount"], 0)
@@ -1151,7 +1344,7 @@ class CountingTests(RootsTestCase):
         """R4's GROUP_NAME_TOKENS branch — the only rule that can fire here."""
         document, _facts, _fake = self.build(renderable_group_named_yard())
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        self.assertEqual(document["roots"][0]["normalizedName"], "vagon_yardside")
+        self.assertEqual(document["candidates"][0]["normalizedName"], "vagon_yardside")
         self.assertEqual(document["counts"]["spanRejectedCount"], 0)
 
     def test_a_node_named_containers_is_a_group_only_with_two_named_children(self):
@@ -1161,7 +1354,7 @@ class CountingTests(RootsTestCase):
         )
         self.assertEqual(document["counts"]["electedRoots"], 2)
         self.assertEqual(
-            sorted(item["normalizedName"] for item in document["roots"]),
+            sorted(item["normalizedName"] for item in document["candidates"]),
             ["container_left", "container_right"],
         )
 
@@ -1178,8 +1371,8 @@ class CountingTests(RootsTestCase):
         scene.node("Mesh", parent=crate, pos=(231.0, 1.0, -110.0), renderer=True)
         document, _facts, _fake = self.build(scene, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        self.assertEqual(document["roots"][0]["normalizedName"], "container")
-        self.assertEqual(document["roots"][0]["renderableDescendantCount"], 2)
+        self.assertEqual(document["candidates"][0]["normalizedName"], "container")
+        self.assertEqual(document["candidates"][0]["renderableDescendantCount"], 2)
 
         # Two DIFFERENT names under the same node is the group the rule is for.
         distinct = Scene()
@@ -1189,15 +1382,15 @@ class CountingTests(RootsTestCase):
         document, _facts, _fake = self.build(distinct, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 2)
         self.assertEqual(
-            sorted(item["normalizedName"] for item in document["roots"]),
+            sorted(item["normalizedName"] for item in document["candidates"]),
             ["crate_left", "crate_right"],
         )
 
     def test_deep_prefab_without_a_lodgroup_is_one_root(self):
         document, _facts, _fake = self.build(deep_prefab_no_lodgroup())
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        self.assertEqual(document["roots"][0]["normalizedName"], "vagon")
-        self.assertEqual(document["roots"][0]["descendantCount"], 3)
+        self.assertEqual(document["candidates"][0]["normalizedName"], "vagon")
+        self.assertEqual(document["candidates"][0]["descendantCount"], 3)
 
     def test_long_group_is_span_rejected_and_its_children_elected(self):
         document, _facts, _fake = self.build(long_group_split())
@@ -1236,7 +1429,7 @@ class CountingTests(RootsTestCase):
     def test_a_broken_node_under_an_in_scope_root_makes_the_scope_suspect(self):
         document, _facts, _fake = self.build(broken_node_under_an_in_scope_root())
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertEqual(root["normalizedName"], "vagon_stack")
         self.assertTrue(root["inScope"])
         self.assertGreater(document["counts"]["unrootableNodeCount"], 0)
@@ -1303,12 +1496,12 @@ class CountingTests(RootsTestCase):
         self.assertEqual(document["counts"]["gameObjectsParsed"], 175)
         self.assertEqual(document["counts"]["renderablesParsed"], 175)
         self.assertEqual(
-            {item["normalizedName"] for item in document["roots"]}, {"vagon"}
+            {item["normalizedName"] for item in document["candidates"]}, {"vagon"}
         )
 
     def test_root_ids_are_stable_lowercase_hex_of_the_object_id(self):
         document, _facts, _fake = self.build(coincident_roots())
-        for item in document["roots"]:
+        for item in document["candidates"]:
             self.assertTrue(item["rootId"].startswith("customs.root."))
             suffix = item["rootId"].split(".")[-1]
             self.assertEqual(len(suffix), 12)
@@ -1328,7 +1521,7 @@ class CountingTests(RootsTestCase):
                 item["world"]["position"]["z"],
                 item["objectId"],
             )
-            for item in document["roots"]
+            for item in document["candidates"]
         ]
         self.assertEqual(root_keys, sorted(root_keys))
         family_keys = [
@@ -1352,7 +1545,7 @@ class CountingTests(RootsTestCase):
         self.assertNotIn("hierarchyPath\"", payload)
         self.assertNotIn("textureProperties", payload)
         self.assertNotIn("textureName", payload)
-        for item in document["roots"]:
+        for item in document["candidates"]:
             self.assertNotIn("hierarchyPath", item)
             self.assertNotIn("name", item)
             self.assertEqual(len(item["hierarchyPathHash"]), 64)
@@ -1372,7 +1565,7 @@ class ScopeAndFrameTests(RootsTestCase):
         scene.node("Vagon_Out_Z", pos=(230.0, 0.0, 40.01), renderer=True)
         document, _facts, _fake = self.build(scene)
         by_hash = {
-            item["nameHash"]: item["inScope"] for item in document["roots"]
+            item["nameHash"]: item["inScope"] for item in document["candidates"]
         }
         self.assertEqual(document["counts"]["rootsInScope"], 2)
         self.assertEqual(sum(1 for value in by_hash.values() if value), 2)
@@ -1487,7 +1680,7 @@ class ScopeAndFrameTests(RootsTestCase):
 class ClassificationTests(RootsTestCase):
     def test_lexicon_hits_pin_the_exact_class_and_confidence(self):
         document, _facts, _fake = self.build(lexicon_scene(), cross_check=False)
-        by_name = {item["normalizedName"]: item for item in document["roots"]}
+        by_name = {item["normalizedName"]: item for item in document["candidates"]}
         expected = {
             "teplovoz": roots_module.CLASS_RAIL_LOCOMOTIVE,
             "vagon_kryt": roots_module.CLASS_RAIL_COVERED,
@@ -1523,7 +1716,7 @@ class ClassificationTests(RootsTestCase):
             materials=("Cisterna_Steel",),
         )
         document, _facts, _fake = self.build(scene, cross_check=False)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertEqual(root["class"], roots_module.CLASS_RAIL_TANK)
         self.assertEqual(root["confidence"], 0.55)
         self.assertEqual(root["band"], "probable")
@@ -1548,7 +1741,7 @@ class ClassificationTests(RootsTestCase):
                    materials=("Cisterna_Metal",))
         document, _facts, _fake = self.build(scene, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 1)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertEqual(root["normalizedName"], "kryt_vagony")
         self.assertEqual(root["class"], roots_module.CLASS_RAIL_COVERED)
         self.assertEqual(
@@ -1570,10 +1763,10 @@ class ClassificationTests(RootsTestCase):
         renderable.node("Kryt_Vagony", pos=(230.0, 0.0, -110.0), renderer=True,
                         materials=("Cisterna_Metal",))
         strong, _facts, _fake = self.build(renderable, cross_check=False)
-        self.assertEqual(strong["roots"][0]["class"], roots_module.CLASS_RAIL_COVERED)
-        self.assertEqual(strong["roots"][0]["confidenceChannels"]["N"], 0.35)
-        self.assertEqual(strong["roots"][0]["confidenceChannels"]["P"], 0)
-        self.assertEqual(strong["roots"][0]["confidence"], 0.35)
+        self.assertEqual(strong["candidates"][0]["class"], roots_module.CLASS_RAIL_COVERED)
+        self.assertEqual(strong["candidates"][0]["confidenceChannels"]["N"], 0.35)
+        self.assertEqual(strong["candidates"][0]["confidenceChannels"]["P"], 0)
+        self.assertEqual(strong["candidates"][0]["confidence"], 0.35)
 
     def test_worked_sanity_check_n_plus_p_plus_m_is_exactly_0_75(self):
         scene = Scene()
@@ -1585,7 +1778,7 @@ class ClassificationTests(RootsTestCase):
                    renderer=True, materials=("Cisterna_Steel",))
         document, _facts, _fake = self.build(scene, cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 2)
-        for root in document["roots"]:
+        for root in document["candidates"]:
             self.assertEqual(root["class"], roots_module.CLASS_RAIL_TANK)
             self.assertEqual(root["confidence"], 0.75)
             self.assertEqual(root["band"], "established")
@@ -1605,7 +1798,7 @@ class ClassificationTests(RootsTestCase):
         ]
         scene.lod_group(root_go, members)
         document, _facts, _fake = self.build(scene, cross_check=False)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertEqual(root["class"], roots_module.CLASS_RAIL_TANK)
         self.assertEqual(root["lodCount"], 2)
         self.assertEqual(root["renderableDescendantCount"], 3)
@@ -1621,10 +1814,10 @@ class ClassificationTests(RootsTestCase):
         document, _facts, _fake = self.build(ambiguous_body_type(), cross_check=False)
         self.assertEqual(document["counts"]["electedRoots"], 6)
         self.assertEqual(
-            {item["class"] for item in document["roots"]},
+            {item["class"] for item in document["candidates"]},
             {roots_module.CLASS_RAIL_UNSPECIFIED},
         )
-        for item in document["roots"]:
+        for item in document["candidates"]:
             self.assertLess(item["confidence"], 0.70)
             # N + F (six roots share the family name) = 0.40 exactly.
             self.assertEqual(item["confidence"], 0.40)
@@ -1645,7 +1838,7 @@ class ClassificationTests(RootsTestCase):
         document, _facts, _fake = self.build(
             scene, terrain={"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
         )
-        by_distance = sorted(document["roots"], key=lambda item: item["railDistanceM"])
+        by_distance = sorted(document["candidates"], key=lambda item: item["railDistanceM"])
         self.assertAlmostEqual(by_distance[0]["railDistanceM"], 1.0, places=3)
         self.assertAlmostEqual(by_distance[1]["railDistanceM"], 40.0, places=3)
         self.assertEqual(by_distance[0]["class"], roots_module.CLASS_RAIL_TANK)
@@ -1661,7 +1854,7 @@ class ClassificationTests(RootsTestCase):
         scene.node("Konteyner_02", pos=(240.0, 0.0, -110.0), renderer=True)
         document, _facts, _fake = self.build(scene, cross_check=False)
         self.assertEqual(
-            {item["class"] for item in document["roots"]},
+            {item["class"] for item in document["candidates"]},
             {roots_module.CLASS_CONTAINER_UNSPECIFIED},
         )
         size = document["classification"]["separability"]["containerSize"]
@@ -1675,7 +1868,7 @@ class ClassificationTests(RootsTestCase):
         red.node("Container_6m_01", pos=(230.0, 0.0, -110.0), renderer=True,
                  materials=("Red_Mat",))
         document, _facts, _fake = self.build(red, cross_check=False)
-        evidence = document["roots"][0]["colorEvidence"]
+        evidence = document["candidates"][0]["colorEvidence"]
         self.assertEqual(evidence["property"], "_Color")
         self.assertEqual((evidence["r"], evidence["g"], evidence["b"]), (0.62, 0.1, 0.09))
 
@@ -1684,7 +1877,7 @@ class ClassificationTests(RootsTestCase):
         white.node("Container_6m_01", pos=(230.0, 0.0, -110.0), renderer=True,
                    materials=("White_Mat",))
         document, _facts, _fake = self.build(white, cross_check=False)
-        self.assertEqual(document["roots"][0]["colorEvidence"], "none")
+        self.assertEqual(document["candidates"][0]["colorEvidence"], "none")
 
     def test_every_class_in_the_schema_is_assignable(self):
         """S3: a class with no token set can never be produced, so it may not exist.
@@ -1705,7 +1898,7 @@ class ClassificationTests(RootsTestCase):
         scene = Scene()
         scene.node("Vagon_Cisterna_Kryt", pos=(230.0, 0.0, -110.0), renderer=True)
         document, _facts, _fake = self.build(scene, cross_check=False)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertEqual(root["class"], roots_module.CLASS_RAIL_COVERED)
         self.assertEqual(root["confidenceChannels"]["N"], 0.35)
         self.assertEqual(root["confidenceChannels"]["A"], -0.25)
@@ -1724,7 +1917,7 @@ class ClassificationTests(RootsTestCase):
         document, _facts, _fake = self.build(
             scene, terrain={"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
         )
-        by_name = {item["normalizedName"]: item for item in document["roots"]}
+        by_name = {item["normalizedName"]: item for item in document["candidates"]}
         near = by_name["vagon_kryt_near"]
         far = by_name["vagon_kryt_far"]
         self.assertAlmostEqual(near["railDistanceM"], 1.0, places=3)
@@ -1742,7 +1935,7 @@ class ClassificationTests(RootsTestCase):
             scale=(float("nan"), 1.0, 1.0),
         )
         document, _facts, _fake = self.build(scene, cross_check=False)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertFalse(root["positionExact"])
         self.assertEqual(root["confidenceChannels"]["X"], -0.20)
         self.assertEqual(root["confidenceChannels"]["N"], 0.35)
@@ -1760,7 +1953,7 @@ class ClassificationTests(RootsTestCase):
         scene = Scene()
         scene.node("Vagon_Skewed", pos=(230.0, 0.0, -110.0), renderer=True)
         document, _facts, _fake = self.build(scene, cross_check=False)
-        root = document["roots"][0]
+        root = document["candidates"][0]
         self.assertTrue(root["positionExact"])
         self.assertEqual(root["confidenceChannels"]["X"], 0)
         self.assertEqual(root["confidence"], 0.35)
@@ -1790,7 +1983,7 @@ class ClassificationTests(RootsTestCase):
         tanks, _facts, _fake = self.build(
             yard, terrain={"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
         )
-        by_name = {item["normalizedName"]: item for item in tanks["roots"]}
+        by_name = {item["normalizedName"]: item for item in tanks["candidates"]}
         self.assertEqual(
             by_name["tank_storage"]["class"], roots_module.CLASS_TANK_STATIC
         )
@@ -1816,12 +2009,12 @@ class ClassificationTests(RootsTestCase):
         def reading(document):
             return [
                 (item["normalizedName"], item["class"], item["confidence"])
-                for item in document["roots"]
+                for item in document["candidates"]
             ]
 
         self.assertEqual(reading(loaded), reading(neutral))
         self.assertEqual(
-            {item["class"] for item in loaded["roots"] if item["normalizedName"] == "vagon"},
+            {item["class"] for item in loaded["candidates"] if item["normalizedName"] == "vagon"},
             {roots_module.CLASS_RAIL_UNSPECIFIED},
         )
         self.assertEqual(
@@ -1854,7 +2047,7 @@ class ClassificationTests(RootsTestCase):
         hinted = sized("Container_6m_Zone")
         for document in (plain, hinted):
             self.assertEqual(
-                {item["class"] for item in document["roots"]},
+                {item["class"] for item in document["candidates"]},
                 {roots_module.CLASS_CONTAINER_UNSPECIFIED},
             )
             self.assertEqual(
@@ -1879,7 +2072,7 @@ class ClassificationTests(RootsTestCase):
         # Both tanks stand 1 m from the rails.  `storage` lives only in a
         # wrapper we rejected, and a rejected wrapper may not move a tank off
         # the rails and into `industrial-tank-static`.
-        for item in document["roots"]:
+        for item in document["candidates"]:
             self.assertAlmostEqual(item["railDistanceM"], 1.0, places=3)
             self.assertEqual(item["class"], roots_module.CLASS_RAIL_TANK, item["rootId"])
         self.assertEqual(document["counts"]["otherIndustrialRootsInScope"], 0)
@@ -1899,7 +2092,7 @@ class ClassificationTests(RootsTestCase):
         )
         document, _facts, _fake = self.build(scene, cross_check=False)
         debris = next(
-            item for item in document["roots"]
+            item for item in document["candidates"]
             if item["normalizedName"] == "container_6m_debris"
         )
         self.assertEqual(debris["class"], roots_module.CLASS_CONTAINER_6M)
@@ -1915,7 +2108,7 @@ class ClassificationTests(RootsTestCase):
             six_wagons_and_one_bystander(), cross_check=False
         )
         bystander = next(
-            item for item in document["roots"]
+            item for item in document["candidates"]
             if item["normalizedName"] == "weird_kryt_debris"
         )
         self.assertEqual(bystander["class"], roots_module.CLASS_RAIL_COVERED)
@@ -1935,7 +2128,7 @@ class ClassificationTests(RootsTestCase):
             cross_check=False,
         )
         lifted = next(
-            item for item in confident["roots"]
+            item for item in confident["candidates"]
             if item["normalizedName"] == "weird_kryt_debris"
         )
         self.assertEqual(lifted["band"], "probable")
@@ -1967,7 +2160,7 @@ class ClassificationTests(RootsTestCase):
             counts["containerRootsInScopeConfident"],
             sum(
                 1
-                for item in document["roots"]
+                for item in document["candidates"]
                 if item["inScope"]
                 and item["band"] in ("established", "probable")
                 and item["class"] in roots_module.CONTAINER_CLASSES
@@ -1985,8 +2178,8 @@ class ClassificationTests(RootsTestCase):
         )
         self.assertEqual(with_rails["classification"]["railAdjacency"], "available")
         self.assertEqual(without["classification"]["railAdjacency"], "unavailable")
-        first = {item["rootId"]: item for item in with_rails["roots"]}
-        second = {item["rootId"]: item for item in without["roots"]}
+        first = {item["rootId"]: item for item in with_rails["candidates"]}
+        second = {item["rootId"]: item for item in without["candidates"]}
         self.assertEqual(set(first), set(second))
         for root_id, item in first.items():
             other = second[root_id]
@@ -2056,7 +2249,7 @@ class FalsifiabilityTests(RootsTestCase):
         self.assertTrue(document["complete"])
         self.assertTrue(document["frameVerified"])
         # Nine real objects: every matched root is one a verdict may be built on.
-        for item in document["roots"]:
+        for item in document["candidates"]:
             if item["normalizedName"] in ("vagon", "container"):
                 self.assertIn(item["band"], ("established", "probable"), item["rootId"])
         self.assertEqual(document["claimVerdict"]["overall"], "nine-proxy-plan-supported")
@@ -2106,7 +2299,7 @@ class FalsifiabilityTests(RootsTestCase):
         self.assertTrue(broken["complete"])
         self.assertTrue(broken["frameVerified"])
         unresolved = [
-            item for item in broken["roots"] if item["band"] == "unresolved"
+            item for item in broken["candidates"] if item["band"] == "unresolved"
             and item["class"] in roots_module.RAIL_CLASSES
         ]
         self.assertEqual(len(unresolved), 1)
@@ -2192,7 +2385,7 @@ class FalsifiabilityTests(RootsTestCase):
             terrain={"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY},
         )
         containers = [
-            item for item in document["roots"]
+            item for item in document["candidates"]
             if item["class"] in roots_module.CONTAINER_CLASSES
         ]
         self.assertEqual(len(containers), 2)
@@ -2242,6 +2435,624 @@ class FalsifiabilityTests(RootsTestCase):
 
 
 # --------------------------------------------------------------------------
+# structural repairs R1–R6 + the accounting invariant (2026-09-01)
+# --------------------------------------------------------------------------
+
+
+class StructuralRepairTests(RootsTestCase):
+    """Each repair: the reviewer's measured case, a name variant, a structure
+    variant, and a control that must not move."""
+
+    # -- R1: the nearest non-part descendant frontier -----------------------
+
+    def test_one_intermediate_node_cannot_hide_two_placements(self):
+        """R1: the branch rule walks to the frontier, not to the direct children."""
+        document, _facts, _fake = self.build(
+            placements_behind_one_intermediate_node(), cross_check=False
+        )
+        self.assertEqual(document["counts"]["electedRoots"], 2)
+        self.assertEqual(
+            [item["normalizedName"] for item in document["candidates"]],
+            ["container", "container"],
+        )
+        self.assertEqual(
+            sorted(item["world"]["position"]["x"] for item in document["candidates"]),
+            [230.0, 237.0],
+        )
+        # The published run reported ONE root here with these two flags set, which
+        # is what made the undercount invisible.
+        self.assertFalse(document["counts"]["rootCountIsLowerBound"])
+        self.assertTrue(document["complete"])
+
+        # Name variant: a different wrapper word, a different intermediate word, a
+        # different family and a different part name.
+        named, _facts, _fake = self.build(
+            placements_behind_one_intermediate_node(
+                wrapper="Storage_A", middle="Holder", family="Vagon", part="Body"
+            ),
+            cross_check=False,
+        )
+        self.assertEqual(named["counts"]["electedRoots"], 2)
+        self.assertEqual(
+            {item["normalizedName"] for item in named["candidates"]}, {"vagon"}
+        )
+
+        # Structure variant: three intermediates instead of one.  A rule that only
+        # sees through a single hop is not a frontier walk.
+        deep, _facts, _fake = self.build(
+            placements_behind_one_intermediate_node(depth=3), cross_check=False
+        )
+        self.assertEqual(deep["counts"]["electedRoots"], 2)
+
+        # CONTROL: an intermediate over ONE placement still elects the outermost
+        # transform, and a part-named branch still folds.
+        control, _facts, _fake = self.build(
+            one_placement_behind_one_intermediate_node(), cross_check=False
+        )
+        self.assertEqual(control["counts"]["electedRoots"], 1)
+        self.assertEqual(control["candidates"][0]["normalizedName"], "depot_a")
+        prefab, _facts, _fake = self.build(deep_prefab_no_lodgroup(), cross_check=False)
+        self.assertEqual(prefab["counts"]["electedRoots"], 1)
+        self.assertEqual(prefab["candidates"][0]["normalizedName"], "vagon")
+
+    def test_the_frontier_walk_descends_through_groups_not_only_parts(self):
+        """R1: a rejected node is not a placement, so the placements are beneath it."""
+        scene = Scene()
+        wrapper = scene.node("Depot_A", pos=(230.0, 0.0, -110.0))
+        # `Yard` is rejected on its name alone; its two containers are the real
+        # frontier of `Depot_A`, one hop further down than the direct-child set.
+        yard = scene.node("Yard", parent=wrapper, pos=(230.0, 0.0, -110.0))
+        for index, offset in enumerate((0.0, 6.0)):
+            scene.node(
+                f"Konteyner_{index + 1:02d}", parent=yard,
+                pos=(230.0 + offset, 0.0, -110.0), renderer=True,
+            )
+        document, _facts, _fake = self.build(scene, cross_check=False)
+        self.assertEqual(document["counts"]["electedRoots"], 2)
+        self.assertEqual(
+            {item["normalizedName"] for item in document["candidates"]}, {"konteyner"}
+        )
+        self.assertEqual(document["counts"]["renderersUnattributed"], 0)
+
+    def test_only_the_distinct_name_rule_can_reject_a_single_branch_wrapper(self):
+        """R4-multi-family, isolated now that the frontier walk exists.
+
+        `Depot_A -> Vagon_01 -> Konteyner_Sub`, both rendering.  `Vagon_01` renders,
+        so it is not a wrapper and is not a group; `Depot_A` therefore has exactly
+        ONE frontier branch and the branch rule cannot fire, its span is 3 m so R5
+        cannot, and `depot_a` is not a group word.  Only the count of distinct
+        non-part renderable descendant families sees two things here.
+        """
+        scene = Scene()
+        wrapper = scene.node("Depot_A", pos=(230.0, 0.0, -110.0))
+        vagon = scene.node(
+            "Vagon_01", parent=wrapper, pos=(230.0, 0.0, -110.0), renderer=True
+        )
+        scene.node(
+            "Konteyner_Sub", parent=vagon, pos=(233.0, 0.0, -110.0), renderer=True
+        )
+        document, _facts, _fake = self.build(scene, cross_check=False)
+        self.assertEqual(document["counts"]["electedRoots"], 1)
+        # Deleting the rule elects `depot_a` — the wrapper — instead.
+        self.assertEqual(document["candidates"][0]["normalizedName"], "vagon")
+        self.assertEqual(document["counts"]["spanRejectedCount"], 0)
+        self.assertEqual(document["counts"]["renderersUnattributed"], 0)
+
+    def test_a_name_made_only_of_shell_words_is_a_part_of_whatever_holds_it(self):
+        """R5's residual clause: `Shadow_Mesh` and `Collider_Low` name no object.
+
+        Neither child shares a segment with `Vagon_Kryt`, so the stem rule cannot
+        fold them and neither whole name is a `PART_NAME_TOKENS` member.  Without
+        the all-shell-words clause both read as placements and one wagon is
+        reported as two objects called `shadow_mesh` and `collider_low`.
+        """
+        scene = Scene()
+        wagon = scene.node("Vagon_Kryt_01", pos=(230.0, 0.0, -110.0))
+        scene.node("Shadow_Mesh", parent=wagon, pos=(230.0, 1.0, -110.0), renderer=True)
+        scene.node("Collider_Low", parent=wagon, pos=(231.0, 0.0, -110.0), renderer=True)
+        document, _facts, _fake = self.build(scene, cross_check=False)
+        self.assertEqual(document["counts"]["electedRoots"], 1)
+        self.assertEqual(document["candidates"][0]["normalizedName"], "vagon_kryt")
+        self.assertEqual(document["candidates"][0]["renderableDescendantCount"], 2)
+        self.assertEqual(
+            roots_module._part_fold_reason("shadow_mesh", "vagon_kryt"),
+            roots_module.FOLD_ALL_PART_TOKENS,
+        )
+        # CONTROL: one non-shell segment and the child names an object again.
+        self.assertIsNone(roots_module._part_fold_reason("konteyner_mesh", "vagon_kryt"))
+
+    def test_a_bare_platform_is_scenery_not_a_flat_wagon(self):
+        """R4: the English `platform` is not the Russian `platforma`.
+
+        `platform` was a `FLAT_TOKENS` member, so every loading platform, walkway
+        and stair platform in the scope box — roughly seven hundred of them, on
+        the reviewer's count — read as `rail-wagon-flat`.  It now lives in the
+        negative lexicon only, while `platforma` keeps the flat-wagon reading.
+        """
+        scene = Scene()
+        scene.node("Platform_metal_01", pos=(230.0, 0.0, -110.0), renderer=True)
+        scene.node("Vagon_Platforma_01", pos=(240.0, 0.0, -110.0), renderer=True)
+        scene.node("Widget", pos=(FORTRESS[0], 0.0, FORTRESS[1]), renderer=True)
+        document, _facts, _fake = self.build(scene, cross_check=False)
+        by_name = {item["normalizedName"]: item for item in document["candidates"]}
+        self.assertEqual(
+            by_name["platform_metal"]["class"], roots_module.CLASS_UNCLASSIFIED
+        )
+        self.assertEqual(by_name["platform_metal"]["confidence"], 0.0)
+        self.assertEqual(
+            by_name["vagon_platforma"]["class"], roots_module.CLASS_RAIL_FLAT
+        )
+        self.assertNotIn("platform", roots_module.FLAT_TOKENS)
+        self.assertIn("platform", roots_module.NEGATIVE_NAME_TOKENS)
+        self.assertIn("platforma", roots_module.FLAT_TOKENS)
+        self.assertNotIn("platforma", roots_module.NEGATIVE_NAME_TOKENS)
+        # One flat wagon in scope, not two.
+        self.assertEqual(document["counts"]["railRootsInScope"], 1)
+
+    # -- R2 + the accounting invariant --------------------------------------
+
+    def test_every_renderer_is_attributed_to_one_candidate_or_to_a_named_row(self):
+        """The invariant, over every fixture that can lose geometry."""
+        cases = {
+            "claim": (claim_scene(), 0),
+            "lods": (one_wagon_with_lods(), 0),
+            "stack": (a_stack_of_renderers(), 0),
+            "frontier": (placements_behind_one_intermediate_node(), 0),
+            "colour-variant": (a_colour_variant_and_its_shells(), 0),
+            "rendering-group": (renderable_group_named_yard(), 1),
+            "lod-only-group": (a_group_whose_whole_descent_is_lod_interiors(), 2),
+            "orphan": (incomplete_hierarchy(), 1),
+            "cycle": (cyclic_parents(), 2),
+        }
+        for label, (scene, expected_unattributed) in cases.items():
+            document, facts, _fake = self.build(scene, cross_check=False)
+            counts = document["counts"]
+            rows = document["diagnostics"]["unattributedRenderers"]
+            self.assertEqual(counts["renderersTotal"], len(facts["renderers"]), label)
+            self.assertEqual(
+                counts["renderersAttributed"] + counts["renderersUnattributed"],
+                counts["renderersTotal"],
+                label,
+            )
+            self.assertEqual(
+                counts["renderersUnattributed"], expected_unattributed, label
+            )
+            # Nothing vanishes: every unattributed renderer is named by a row, and
+            # every row names a cause rather than merely a number.
+            self.assertEqual(
+                sum(row["rendererCount"] for row in rows),
+                counts["renderersUnattributed"],
+                label,
+            )
+            self.assertEqual(len(rows), counts["unattributedRendererOwnerCount"], label)
+            for row in rows:
+                self.assertIn(
+                    row["reason"],
+                    {
+                        "rejected-node-own-geometry",
+                        "rejection-elected-nothing",
+                        "unrootable-node",
+                        "unrootable-ancestor",
+                        "renderer-owner-not-in-scene",
+                    },
+                    label,
+                )
+                self.assertNotIn("name", row)
+            # A loss and a floor are the same statement.
+            self.assertEqual(
+                counts["rootCountIsLowerBound"],
+                bool(
+                    counts["renderersUnattributed"]
+                    or counts["unrootableNodeCount"]
+                    or counts["unresolvedRejectionCount"]
+                    or counts["ambiguousFoldCount"]
+                ),
+                label,
+            )
+
+    def test_a_rejected_node_that_renders_is_named_in_the_renderer_ledger(self):
+        """R2: a rejected node's OWN geometry is accounted for, not just its descent."""
+        document, _facts, _fake = self.build(
+            renderable_group_named_yard(), cross_check=False
+        )
+        self.assertEqual(document["counts"]["electedRoots"], 1)
+        self.assertEqual(document["counts"]["renderersUnattributed"], 1)
+        row = document["diagnostics"]["unattributedRenderers"][0]
+        self.assertEqual(row["reason"], "rejected-node-own-geometry")
+        self.assertEqual(row["rendererCount"], 1)
+        self.assertEqual(len(row["hierarchyPathHash"]), 64)
+        self.assertNotIn("Yard", json.dumps(document))
+
+        # Name variant: the conditional `containers` rule rejects a rendering node
+        # on a different clause, and the same geometry loss is reported.
+        variant, _facts, _fake = self.build(
+            renderable_containers_with_two_named_children(), cross_check=False
+        )
+        self.assertEqual(variant["counts"]["electedRoots"], 2)
+        self.assertEqual(variant["counts"]["renderersUnattributed"], 1)
+        self.assertEqual(
+            variant["diagnostics"]["unattributedRenderers"][0]["reason"],
+            "rejected-node-own-geometry",
+        )
+
+        # Structure variant: the rendering group stands two levels down, beneath a
+        # wrapper that was itself rejected, and its loss is still counted once.
+        nested = Scene()
+        zone = nested.node("Zone", pos=(230.0, 0.0, -110.0))
+        yard = nested.node("Yard", parent=zone, pos=(231.0, 0.0, -110.0), renderer=True)
+        nested.node("Konteyner_01", parent=yard, pos=(232.0, 0.0, -110.0), renderer=True)
+        document, _facts, _fake = self.build(nested, cross_check=False)
+        self.assertEqual(document["counts"]["electedRoots"], 1)
+        self.assertEqual(document["counts"]["renderersUnattributed"], 1)
+        self.assertEqual(
+            document["diagnostics"]["unattributedRenderers"][0]["reason"],
+            "rejected-node-own-geometry",
+        )
+
+        # CONTROL for the same shape: when the rendering group is NOT rejected —
+        # it stands inside an elected root's subtree rather than above it — its
+        # geometry is owned and nothing is unattributed.  The row tracks the loss,
+        # not the word `Yard`.
+        owned = Scene()
+        outer = owned.node("Vagon_Outer", pos=(230.0, 0.0, -110.0), renderer=True)
+        inner_yard = owned.node(
+            "Yard", parent=outer, pos=(231.0, 0.0, -110.0), renderer=True
+        )
+        owned.node("Konteyner_01", parent=inner_yard, pos=(232.0, 0.0, -110.0),
+                   renderer=True)
+        document, _facts, _fake = self.build(owned, cross_check=False)
+        self.assertEqual(document["counts"]["electedRoots"], 1)
+        self.assertEqual(document["counts"]["renderersUnattributed"], 0)
+
+        # CONTROL: a rejected node with no renderer of its own loses nothing, so
+        # the ledger stays empty and the roster keeps its verdict.
+        control, _facts, _fake = self.build(
+            long_group_split(), cross_check=False
+        )
+        self.assertEqual(control["counts"]["electedRoots"], 2)
+        self.assertEqual(control["counts"]["spanRejectedCount"], 1)
+        self.assertEqual(control["counts"]["renderersUnattributed"], 0)
+        self.assertEqual(control["diagnostics"]["unattributedRenderers"], [])
+        self.assertFalse(control["counts"]["rootCountIsLowerBound"])
+
+    # -- R3: an unattributed renderer is a floor, and a floor has no verdict --
+
+    def test_any_unattributed_renderer_forces_a_lower_bound_and_inconclusive(self):
+        """R3: geometry nobody owns withdraws the verdict, not just a count."""
+        supported, _facts, _fake = self.build(
+            claim_scene(), terrain={"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
+        )
+        self.assertEqual(supported["counts"]["renderersUnattributed"], 0)
+        self.assertFalse(supported["counts"]["rootCountIsLowerBound"])
+        self.assertEqual(supported["claimVerdict"]["overall"], "supported")
+
+        # The identical scene plus ONE rendering node named like a group: the
+        # per-component verdicts are untouched and the overall one is withdrawn.
+        scene = claim_scene()
+        scene.node("Yard", pos=(120.0, 0.0, -200.0), renderer=True)
+        withheld, _facts, _fake = self.build(
+            scene, terrain={"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
+        )
+        self.assertEqual(withheld["counts"]["renderersUnattributed"], 1)
+        self.assertTrue(withheld["counts"]["rootCountIsLowerBound"])
+        self.assertTrue(withheld["complete"])
+        self.assertTrue(withheld["frameVerified"])
+        for component in ("closedFreightWagons", "tankWagons", "hopperWagons"):
+            self.assertEqual(
+                withheld["claimVerdict"][component],
+                supported["claimVerdict"][component],
+                component,
+            )
+        self.assertEqual(withheld["claimVerdict"]["overall"], "inconclusive")
+
+    # -- R4: the negative evidence channel ----------------------------------
+
+    def test_a_barrel_beside_the_rails_is_not_rolling_stock(self):
+        """R4: the measured 0.70 / established / rail-wagon-covered barrel."""
+        terrain = {"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
+        document, _facts, _fake = self.build(
+            barrels_and_a_wagon_beside_the_rails(), terrain=terrain
+        )
+        by_name = {item["normalizedName"]: item for item in document["candidates"]}
+        barrel = by_name["metal_barrel_04_closed_old_blue"]
+        # Every positive channel the reviewer measured still fires — the reading is
+        # not suppressed, it is OUTWEIGHED, and the artifact shows both halves.
+        self.assertEqual(
+            {key: barrel["confidenceChannels"][key] for key in ("N", "M", "F", "R", "D")},
+            {"N": 0.35, "M": 0.20, "F": 0.05, "R": 0.10, "D": -0.60},
+        )
+        self.assertEqual(barrel["evidenceChannelsFired"], ["N", "M", "F", "R+", "D"])
+        self.assertEqual(barrel["confidence"], 0.10)
+        self.assertEqual(barrel["band"], "unresolved")
+        self.assertEqual(document["counts"]["negativeEvidenceRootsInScope"], 2)
+        # The channel discriminates: the real wagon standing beside them keeps a
+        # band a verdict may be built on.
+        wagon = by_name["vagon_shutted_closed"]
+        self.assertEqual(wagon["confidenceChannels"]["D"], 0)
+        self.assertEqual(wagon["confidence"], 0.45)
+        self.assertEqual(wagon["band"], "probable")
+
+        # Name variant: railings, a stepladder and a platform, all carrying the
+        # same `closed` token that made the barrel a freight wagon.
+        for name in ("Railings_long_closed", "Stepladder_metal_closed",
+                     "Platform_wood_closed", "Fence_panel_closed"):
+            variant, _facts, _fake = self.build(
+                barrels_and_a_wagon_beside_the_rails(name=name), terrain=terrain
+            )
+            row = next(
+                item for item in variant["candidates"]
+                if item["normalizedName"] == name.casefold()
+            )
+            self.assertEqual(row["confidenceChannels"]["D"], -0.60, name)
+            self.assertEqual(row["band"], "unresolved", name)
+
+        # Structure variant: the barrel with an LODGroup and a second renderable
+        # descendant, so L and S fire too — its own-evidence maximum.
+        loaded, _facts, _fake = self.build(
+            barrels_and_a_wagon_beside_the_rails(lods=True), terrain=terrain
+        )
+        row = next(
+            item for item in loaded["candidates"]
+            if item["normalizedName"] == BARREL_NAME.casefold()
+        )
+        self.assertEqual(
+            row["evidenceChannelsFired"], ["N", "M", "L", "S", "F", "R+", "D"]
+        )
+        self.assertEqual(row["confidence"], 0.30)
+        self.assertEqual(row["band"], "unresolved")
+
+        # CONTROL 1: `platforma` is the Russian flat-wagon word and is NOT the
+        # English `platform`; it keeps its class and takes no penalty.
+        control, _facts, _fake = self.build(lexicon_scene(), cross_check=False)
+        flat = next(
+            item for item in control["candidates"]
+            if item["normalizedName"] == "vagon_platforma"
+        )
+        self.assertEqual(flat["class"], roots_module.CLASS_RAIL_FLAT)
+        self.assertEqual(flat["confidenceChannels"]["D"], 0)
+        self.assertEqual(flat["confidence"], 0.35)
+
+        # CONTROL 2: an ancestor may add weight to a reading and may never delete
+        # one — a wrapper called `Barrels_Zone` must not disqualify a real wagon,
+        # exactly as `Kryt_Zone` must not promote one.
+        scene = Scene()
+        wrapper = scene.node("Barrels_Zone", pos=(180.0, 0.0, -120.0))
+        for index in range(2):
+            scene.node(
+                f"Vagon_Kryt_{index + 1:02d}", parent=wrapper,
+                pos=(180.0 + 10.0 * index, 0.0, -120.0), renderer=True,
+            )
+        under_wrapper, _facts, _fake = self.build(scene, cross_check=False)
+        for item in under_wrapper["candidates"]:
+            self.assertEqual(item["confidenceChannels"]["D"], 0, item["rootId"])
+            self.assertEqual(item["class"], roots_module.CLASS_RAIL_COVERED)
+
+    def test_negative_evidence_defeats_every_own_name_channel(self):
+        """R4: the weight is pinned by arithmetic, not by taste."""
+        self.assertEqual(roots_module.MAX_OWN_NAME_POSITIVE, 0.90)
+        self.assertLess(
+            roots_module.MAX_OWN_NAME_POSITIVE + roots_module.CHANNEL_WEIGHTS["D"],
+            roots_module.BAND_PROBABLE,
+        )
+        # And it is a channel, not a filter: `unclassified` is the residual, so
+        # nothing contradicts it and D never fires on it.
+        confidence, channels = roots_module._score_class(
+            roots_module.CLASS_UNCLASSIFIED,
+            {"name": [["barrel"]], "weakName": [], "path": [], "material": []},
+            lod_count=0,
+            renderable_descendants=1,
+            pivot_span=0.0,
+            shared_name=False,
+            rail_distance=None,
+            rail_available=False,
+            world_exact=True,
+            generic_name=False,
+            competing_base=0.0,
+            rail_on_track_m=4.0,
+            rail_off_track_m=12.0,
+            negative_name=True,
+        )
+        self.assertEqual(channels["D"], 0)
+        self.assertEqual(confidence, 0.0)
+
+    # -- R5: part folding by shared prefix stem ------------------------------
+
+    def test_a_colour_variant_folds_its_own_shells(self):
+        """R5: `Vagon_tank_green` keeps its collider, shadow, ballistic and doors."""
+        document, _facts, _fake = self.build(
+            a_colour_variant_and_its_shells(), cross_check=False
+        )
+        self.assertEqual(document["counts"]["electedRoots"], 1)
+        root = document["candidates"][0]
+        self.assertEqual(root["normalizedName"], "vagon_tank_green")
+        self.assertEqual(root["renderableDescendantCount"], 4)
+        self.assertEqual(root["descendantCount"], 4)
+        self.assertEqual(document["counts"]["renderersUnattributed"], 0)
+        self.assertEqual(document["counts"]["ambiguousFoldCount"], 0)
+
+        # Name variant: the other three colour/variant families the scope holds.
+        for stem, variant_word in (
+            ("Vagon_hopper", "black"),
+            ("Vagon_gondola_small", "green"),
+            ("Vagon_movable_doors", "grey"),
+        ):
+            variant, _facts, _fake = self.build(
+                a_colour_variant_and_its_shells(stem=stem, variant=variant_word),
+                cross_check=False,
+            )
+            self.assertEqual(variant["counts"]["electedRoots"], 1, stem)
+            self.assertEqual(
+                variant["candidates"][0]["normalizedName"],
+                f"{stem}_{variant_word}".casefold(),
+                stem,
+            )
+
+        # Structure variant: the shells nested inside one another rather than as
+        # four siblings.
+        nested, _facts, _fake = self.build(
+            a_colour_variant_and_its_shells(nested=True), cross_check=False
+        )
+        self.assertEqual(nested["counts"]["electedRoots"], 1)
+        self.assertEqual(nested["candidates"][0]["renderableDescendantCount"], 4)
+
+        # CONTROL 1: a shared stem alone folds nothing — the tail must be shell
+        # vocabulary.  `kryt` and `hopper` are body words, so these stay two.
+        control, _facts, _fake = self.build(
+            a_stem_sharing_pair_of_real_placements(), cross_check=False
+        )
+        self.assertEqual(control["counts"]["electedRoots"], 2)
+        self.assertEqual(
+            sorted(item["normalizedName"] for item in control["candidates"]),
+            ["vagon_tank_hopper", "vagon_tank_kryt"],
+        )
+
+        # CONTROL 2: the prefix clause is segment-aware, so `vagon_tanker` is not
+        # a part of `vagon_tank` — they are two different words.
+        self.assertIsNone(roots_module._part_fold_reason("vagon_tanker", "vagon_tank"))
+        self.assertEqual(
+            roots_module._part_fold_reason("vagon_tank_collider", "vagon_tank_green"),
+            roots_module.FOLD_SHARED_STEM,
+        )
+        # CONTROL 3: five numbered siblings are still five placements.
+        siblings, _facts, _fake = self.build(
+            five_numbered_wagons_under_a_same_named_parent(), cross_check=False
+        )
+        self.assertEqual(siblings["counts"]["electedRoots"], 5)
+
+    # -- R6: a fold names cannot settle is named, not picked -----------------
+
+    def test_a_fold_names_cannot_settle_is_named_never_picked(self):
+        """R6: `Vagon -> {Vagon_Long_01, Vagon_Long_02}` 8 m apart."""
+        document, _facts, _fake = self.build(
+            an_ambiguous_prefix_fold(), cross_check=False
+        )
+        # The tool does NOT split them — names give it no licence to — and it does
+        # not pretend the fold was settled either.
+        self.assertEqual(document["counts"]["electedRoots"], 1)
+        self.assertEqual(document["counts"]["ambiguousFoldCount"], 1)
+        row = document["diagnostics"]["ambiguousFolds"][0]
+        self.assertEqual(row["rule"], "R6-ambiguous-prefix-fold")
+        self.assertEqual(row["foldedChildCount"], 2)
+        self.assertAlmostEqual(row["spanM"], 8.0, places=3)
+        self.assertEqual(len(row["nameHash"]), 64)
+        self.assertNotIn("name", row)
+        self.assertNotIn("Vagon_Long", json.dumps(document))
+        # A count that might be an undercount is a floor, and a floor has no verdict.
+        self.assertTrue(document["counts"]["rootCountIsLowerBound"])
+        self.assertEqual(document["claimVerdict"]["overall"], "inconclusive")
+
+        # Name variant: a different family and qualifier.
+        variant, _facts, _fake = self.build(
+            an_ambiguous_prefix_fold(family="Konteyner", qualifier="Big"),
+            cross_check=False,
+        )
+        self.assertEqual(variant["counts"]["ambiguousFoldCount"], 1)
+
+        # Structure variant: three folded siblings instead of two.
+        three, _facts, _fake = self.build(
+            an_ambiguous_prefix_fold(count=3), cross_check=False
+        )
+        self.assertEqual(three["counts"]["ambiguousFoldCount"], 1)
+        self.assertEqual(three["diagnostics"]["ambiguousFolds"][0]["foldedChildCount"], 3)
+
+        # CONTROL 1: two shells standing on top of each other are not two
+        # placements, and the threshold that says so is a pinned parameter.
+        close, _facts, _fake = self.build(
+            an_ambiguous_prefix_fold(pitch=0.4), cross_check=False
+        )
+        self.assertEqual(close["counts"]["ambiguousFoldCount"], 0)
+        self.assertFalse(close["counts"]["rootCountIsLowerBound"])
+
+        # CONTROL 2: differently-named children read as parts of one object
+        # (`_A` and `_B`), which is not the ambiguity this rule is about.
+        lettered, _facts, _fake = self.build(oversized_single_object(), cross_check=False)
+        self.assertEqual(lettered["counts"]["electedRoots"], 1)
+        self.assertEqual(lettered["counts"]["ambiguousFoldCount"], 0)
+
+        # CONTROL 3: a fold the shell vocabulary settles is not ambiguous.
+        shells, _facts, _fake = self.build(
+            a_colour_variant_and_its_shells(), cross_check=False
+        )
+        self.assertEqual(shells["counts"]["ambiguousFoldCount"], 0)
+
+    # -- roster semantics ----------------------------------------------------
+
+    def test_the_artifact_says_what_it_does_and_does_not_establish(self):
+        """An artifact that overstates its own authority is the failure mode."""
+        with tempfile.TemporaryDirectory() as temp_value:
+            base = Path(temp_value)
+            source = self.make_source(base)
+            output = base / "roster.json"
+            report = base / "report.json"
+            code, stdout, stderr = self.run_main(
+                [
+                    "--source", str(source),
+                    "--output", str(output),
+                    "--report", str(report),
+                    "--acknowledge-local-game-files",
+                    "--terrain", str(base / "absent.json"),
+                    "--prop-features", str(base / "absent.json"),
+                ],
+                FakeUnityPy(claim_scene().environments()),
+            )
+            self.assertEqual(code, 0, stderr)
+            document = json.loads(output.read_text(encoding="utf-8"))
+            roster = json.loads(report.read_text(encoding="utf-8"))
+
+        self.assertIn("CANDIDATE ROSTER", stdout)
+        self.assertIn("awaits visual confirmation", stdout)
+        for artifact in (document, roster):
+            self.assertEqual(artifact["artifactKind"], "conservative-candidate-roster")
+            self.assertTrue(artifact["awaitingVisualConfirmation"])
+            self.assertTrue(artifact["establishes"])
+            self.assertTrue(artifact["doesNotEstablish"])
+            blob = " ".join(artifact["doesNotEstablish"]).casefold()
+            # The three things a reader must not conclude, named in the artifact.
+            self.assertIn("collider", blob)
+            self.assertIn("acquisition layer", blob)
+            self.assertIn("photograph", blob)
+        # The rows are candidates, not findings.
+        self.assertNotIn("roots", document)
+        self.assertTrue(document["candidates"])
+        for row in document["candidates"]:
+            self.assertTrue(row["awaitingVisualConfirmation"])
+            self.assertIn(row["band"], ("established", "probable", "unresolved"))
+            self.assertEqual(
+                row["evidenceChannelsFired"],
+                roots_module._evidence_channels_fired(row["confidenceChannels"]),
+            )
+        # The roster carries the floor flag where the count is read.
+        self.assertIn("rootCountIsLowerBound", roster["counts"])
+        self.assertEqual(
+            roster["counts"]["rootCountIsLowerBound"],
+            document["counts"]["rootCountIsLowerBound"],
+        )
+        self.assertEqual(document["schemaVersion"], 2)
+        self.assertEqual(roster["rootsSchemaVersion"], 2)
+
+    def test_evidence_channels_fired_names_every_channel_that_moved_the_score(self):
+        document, _facts, _fake = self.build(
+            claim_scene(), terrain={"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
+        )
+        for row in document["candidates"]:
+            channels = row["confidenceChannels"]
+            self.assertEqual(set(channels), set(roots_module.CHANNEL_CODES))
+            expected = []
+            for code in roots_module.CHANNEL_CODES:
+                value = channels[code]
+                if not isinstance(value, (int, float)) or value == 0:
+                    continue
+                expected.append("R+" if code == "R" and value > 0 else
+                                "R-" if code == "R" else code)
+            self.assertEqual(row["evidenceChannelsFired"], expected, row["rootId"])
+            self.assertEqual(
+                round(sum(v for v in channels.values() if isinstance(v, (int, float))), 3),
+                row["confidence"],
+                row["rootId"],
+            )
+
+
+# --------------------------------------------------------------------------
 # §1 safety
 # --------------------------------------------------------------------------
 
@@ -2282,14 +3093,14 @@ class SafetyTests(RootsTestCase):
 
     def test_unapproved_output_field_fails_closed(self):
         with self.assertRaises(RootsError) as raised:
-            roots_module.assert_bounded_payload({"roots": [{"m_Vertices": [1, 2, 3]}]})
+            roots_module.assert_bounded_payload({"candidates":[{"m_Vertices": [1, 2, 3]}]})
         self.assertIn("m_Vertices", str(raised.exception))
 
     def test_bulk_scalar_array_and_binary_and_nan_fail_closed(self):
         with self.assertRaises(RootsError):
             roots_module.assert_bounded_payload({"counts": {"electedRoots": list(range(65))}})
         with self.assertRaises(RootsError) as raised:
-            roots_module.assert_bounded_payload({"roots": b"\x00\x01"})
+            roots_module.assert_bounded_payload({"candidates":b"\x00\x01"})
         # The refusal must name the reason: the unsupported-type catch-all would
         # also stop bytes, so a message that says only "unsupported value type"
         # means the binary branch is gone and nobody would notice.
@@ -2297,7 +3108,7 @@ class SafetyTests(RootsTestCase):
         with self.assertRaises(RootsError):
             roots_module.assert_bounded_payload({"counts": {"electedRoots": float("nan")}})
         with self.assertRaises(RootsError):
-            roots_module.assert_bounded_payload({"roots": {"name": "x" * 1025}})
+            roots_module.assert_bounded_payload({"candidates":{"name": "x" * 1025}})
 
     def test_the_payload_guard_gates_the_real_build_and_publish_path(self):
         """D1t: the walker must run on a REAL document, not only on unit inputs.
@@ -3048,7 +3859,7 @@ class GuardMutationTests(RootsTestCase):
         self.assertEqual(mutated["diagnostics"]["droppedForbiddenFieldCount"], 0)
 
     def test_mutation_widening_the_output_allowlist_stops_the_refusal(self):
-        payload = {"roots": [{"m_Vertices": [1, 2, 3]}]}
+        payload = {"candidates":[{"m_Vertices": [1, 2, 3]}]}
         with self.assertRaises(RootsError):
             roots_module.assert_bounded_payload(payload)
         widened = roots_module.ROOTS_ALLOWED_OUTPUT_KEYS | {"m_Vertices"}
@@ -3209,6 +4020,204 @@ class GuardMutationTests(RootsTestCase):
         partial, _facts, _fake = self.build(claim_scene(), allow_partial=True)
         self.assertFalse(partial["complete"])
         self.assertEqual(partial["claimVerdict"]["overall"], "inconclusive")
+
+    # -- the 2026-09-01 structural repairs, each broken on purpose ----------
+
+    def build_with_mutation(self, name, value, scene, **kwargs):
+        """Swap a module attribute for the duration of one build."""
+        original = getattr(roots_module, name)
+        setattr(roots_module, name, value)
+        try:
+            return self.build(scene, **kwargs)
+        finally:
+            setattr(roots_module, name, original)
+
+    def test_mutation_R1_direct_child_branches_hide_a_placement(self):
+        """The published branch rule, restored: two containers become one root."""
+
+        def direct_children_only(forest, key, own_name, group_rule):
+            branches = []
+            for child in forest.children.get(key, ()):
+                if not forest.has_renderable_descendant.get(child):
+                    continue
+                if child in forest.lod_interior:
+                    continue
+                child_name = forest.nodes[child].get("normalizedName") or ""
+                if roots_module._is_part_of(child_name, own_name):
+                    continue
+                branches.append(child)
+            return branches
+
+        healthy, _facts, _fake = self.build(
+            placements_behind_one_intermediate_node(), cross_check=False
+        )
+        self.assertEqual(healthy["counts"]["electedRoots"], 2)
+        mutated, _facts, _fake = self.build_with_mutation(
+            "_placement_branches",
+            direct_children_only,
+            placements_behind_one_intermediate_node(),
+            cross_check=False,
+        )
+        # The undercount, and the two flags that made it invisible.
+        self.assertEqual(mutated["counts"]["electedRoots"], 1)
+        self.assertFalse(mutated["counts"]["rootCountIsLowerBound"])
+        self.assertTrue(mutated["complete"])
+
+    def test_mutation_R3_a_silent_accounting_restores_a_verdict_it_may_not_render(self):
+        """Blind the accounting and the withheld verdict comes back.
+
+        The mutation is driven through the one loss NO other ledger sees: a
+        renderer whose owning GameObject never parsed.  There is no unrootable
+        node, no rejection and no ambiguous fold, so the accounting invariant is
+        the only thing standing between that loss and a published verdict.
+        """
+        terrain = {"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
+        healthy, _facts, _fake = self.build(
+            claim_scene(), terrain=terrain, mutate_facts=_orphan_a_renderer
+        )
+        counts = healthy["counts"]
+        self.assertEqual(counts["unrootableNodeCount"], 0)
+        self.assertEqual(counts["unresolvedRejectionCount"], 0)
+        self.assertEqual(counts["ambiguousFoldCount"], 0)
+        self.assertEqual(counts["renderersUnattributed"], 1)
+        self.assertEqual(
+            healthy["diagnostics"]["unattributedRenderers"][0]["reason"],
+            "renderer-owner-not-in-scene",
+        )
+        self.assertTrue(counts["rootCountIsLowerBound"])
+        self.assertEqual(healthy["claimVerdict"]["overall"], "inconclusive")
+
+        original = roots_module.account_for_renderers
+
+        def blind(forest, renderers, attributed, election):
+            result = original(forest, renderers, attributed, election)
+            total = result["renderersTotal"]
+            return {
+                "renderersTotal": total,
+                "renderersAttributed": total,
+                "renderersUnattributed": 0,
+                "unattributedRendererOwnerCount": 0,
+                "unattributedRenderers": [],
+                "unattributedRenderersTruncated": False,
+            }
+
+        mutated, _facts, _fake = self.build_with_mutation(
+            "account_for_renderers",
+            blind,
+            claim_scene(),
+            terrain=terrain,
+            mutate_facts=_orphan_a_renderer,
+        )
+        self.assertEqual(mutated["counts"]["renderersUnattributed"], 0)
+        self.assertFalse(mutated["counts"]["rootCountIsLowerBound"])
+        self.assertEqual(mutated["claimVerdict"]["overall"], "supported")
+
+    def test_mutation_R3_the_two_ledgers_are_independent(self):
+        """Blinding the accounting does not blind the rejection ledger."""
+        terrain = {"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
+        original = roots_module.account_for_renderers
+
+        def blind(forest, renderers, attributed, election):
+            result = original(forest, renderers, attributed, election)
+            total = result["renderersTotal"]
+            return {
+                "renderersTotal": total,
+                "renderersAttributed": total,
+                "renderersUnattributed": 0,
+                "unattributedRendererOwnerCount": 0,
+                "unattributedRenderers": [],
+                "unattributedRenderersTruncated": False,
+            }
+
+        mutated, _facts, _fake = self.build_with_mutation(
+            "account_for_renderers",
+            blind,
+            claim_scene_with_a_rendering_group(),
+            terrain=terrain,
+        )
+        self.assertEqual(mutated["counts"]["renderersUnattributed"], 0)
+        self.assertEqual(mutated["counts"]["unresolvedRejectionCount"], 1)
+        self.assertTrue(mutated["counts"]["rootCountIsLowerBound"])
+        self.assertEqual(mutated["claimVerdict"]["overall"], "inconclusive")
+
+    def test_mutation_R4_emptying_the_negative_lexicon_makes_a_barrel_a_wagon(self):
+        terrain = {"envelope": TERRAIN_ENVELOPE, "railway": CLAIM_RAILWAY}
+        healthy, _facts, _fake = self.build(
+            barrels_and_a_wagon_beside_the_rails(), terrain=terrain
+        )
+        barrel = next(
+            item for item in healthy["candidates"]
+            if item["normalizedName"] == BARREL_NAME.casefold()
+        )
+        self.assertEqual(barrel["band"], "unresolved")
+
+        mutated, _facts, _fake = self.build_with_mutation(
+            "NEGATIVE_NAME_TOKENS",
+            frozenset(),
+            barrels_and_a_wagon_beside_the_rails(),
+            terrain=terrain,
+        )
+        barrel = next(
+            item for item in mutated["candidates"]
+            if item["normalizedName"] == BARREL_NAME.casefold()
+        )
+        # The published reading, restored exactly: 0.70, established, and
+        # channel-identical to the real wagon standing beside it.
+        self.assertEqual(barrel["confidence"], 0.70)
+        self.assertEqual(barrel["band"], "established")
+        self.assertEqual(barrel["class"], roots_module.CLASS_RAIL_COVERED)
+        # Two barrels join the one real wagon in the count a verdict is built on.
+        self.assertEqual(healthy["counts"]["railRootsInScopeConfident"], 1)
+        self.assertEqual(mutated["counts"]["railRootsInScopeConfident"], 3)
+
+    def test_mutation_R5_the_published_fold_fragments_a_colour_variant(self):
+        """Restore `child.startswith(parent)` and the wagon becomes four shells."""
+
+        def published(child_name, parent_name):
+            if child_name == "" or child_name.isdigit():
+                return roots_module.FOLD_EMPTY_OR_INDEX
+            if (
+                parent_name
+                and child_name != parent_name
+                and child_name.startswith(parent_name)
+            ):
+                return roots_module.FOLD_PREFIX_UNQUALIFIED
+            if child_name in roots_module.PART_NAME_TOKENS:
+                return roots_module.FOLD_PART_TOKEN
+            return None
+
+        healthy, _facts, _fake = self.build(
+            a_colour_variant_and_its_shells(), cross_check=False
+        )
+        self.assertEqual(healthy["counts"]["electedRoots"], 1)
+        mutated, _facts, _fake = self.build_with_mutation(
+            "_part_fold_reason",
+            published,
+            a_colour_variant_and_its_shells(),
+            cross_check=False,
+        )
+        self.assertEqual(mutated["counts"]["electedRoots"], 4)
+        self.assertEqual(
+            sorted(item["normalizedName"] for item in mutated["candidates"]),
+            sorted(f"vagon_tank_{shell}" for shell in COLOUR_VARIANT_SHELLS),
+        )
+
+    def test_mutation_R6_dropping_the_ambiguity_row_makes_the_fold_silent(self):
+        healthy, _facts, _fake = self.build(
+            an_ambiguous_prefix_fold(), cross_check=False
+        )
+        self.assertEqual(healthy["counts"]["ambiguousFoldCount"], 1)
+        self.assertTrue(healthy["counts"]["rootCountIsLowerBound"])
+
+        mutated, _facts, _fake = self.build_with_mutation(
+            "ambiguous_folds_under",
+            lambda forest, members, separation_m: [],
+            an_ambiguous_prefix_fold(),
+            cross_check=False,
+        )
+        self.assertEqual(mutated["counts"]["ambiguousFoldCount"], 0)
+        self.assertFalse(mutated["counts"]["rootCountIsLowerBound"])
+        self.assertEqual(mutated["counts"]["electedRoots"], 1)
 
     def test_mutation_supplying_the_acknowledgement_passes_the_first_gate(self):
         with tempfile.TemporaryDirectory() as temp_value:

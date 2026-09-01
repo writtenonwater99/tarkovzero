@@ -1,11 +1,32 @@
 #!/usr/bin/env python3
-"""Measure which placed industrial objects stand inside the Customs rail-yard scope.
+"""Build a CONSERVATIVE CANDIDATE ROSTER for the Customs rail-yard scope.
 
-This is a measuring instrument, not a labeller.  It counts **placement roots**
-(the outermost transform of one placed object), reports where they stand in the
-source frame `eft-unity-world-metres-y-up`, classifies them from names and
-material names only, and pre-registers the claim under test so a run can
-*contradict* the claim rather than only confirm it.
+> **Decision 2026-09-01 — this tool's output is not the truth about the rail yard.**
+> An external red team established that this repository holds no independent
+> identity source: `extract-customs-industrial-roots.py` imports
+> `census-customs-assets.py`, which imports `extract-customs-unity.py` as its
+> selector, and the repository's "second source" was itself produced by that same
+> selector.  Agreement between them is not validation.  What this tool emits is a
+> **retrieval and coordinate-correlation aid** whose every row is confirmed later
+> against geo-tagged in-game photographs — EFT writes world position and camera
+> quaternion into the screenshot filename, so a survey raid produces independently
+> sourced evidence.  An artifact that overstates its own authority is the primary
+> failure mode, so every row carries `awaitingVisualConfirmation`, every count
+> carries its uncertainty, and the document states what it does not establish.
+
+It counts **placement roots** (the outermost transform of one placed object),
+reports where they stand in the source frame `eft-unity-world-metres-y-up`,
+classifies them from names and material names only, and pre-registers the claim
+under test so a run can *contradict* the claim rather than only confirm it.  The
+verdict machinery stays because contradicting a claim is useful; it may never
+present itself as the final word, so a run whose accounting does not balance is
+`inconclusive` by construction.
+
+**The accounting invariant.** Every renderer in the scene ends up attributed to
+exactly one elected root or to a named diagnostic row.  Nothing may vanish.
+`counts.renderersAttributed + counts.renderersUnattributed ==
+counts.renderersTotal`, any unattributed renderer makes the count a lower bound,
+and a lower bound may not render a verdict.
 
 Everything security-relevant is reused from `scripts/census-customs-assets.py`:
 the audited two-stage selector, the safe Unity stream, the dependency-loading
@@ -32,9 +53,38 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence as Seq, TextIO, Tuple
 
 
-ROOTS_SCHEMA_VERSION = 1
-REPORT_SCHEMA_VERSION = 1
-GENERATOR_NAME = "tarkovzero-customs-industrial-roots"
+ROOTS_SCHEMA_VERSION = 2
+REPORT_SCHEMA_VERSION = 2
+GENERATOR_NAME = "tarkovzero-customs-industrial-candidate-roster"
+
+# What the artifact IS, stated in the artifact.  An external red team established
+# on 2026-09-01 that this repository holds no independent identity source: the
+# extractor and the "second source" share one acquisition layer, so agreement
+# between them is not validation.  The output is therefore a retrieval and
+# coordinate-correlation aid whose rows are confirmed later against geo-tagged
+# in-game photographs, never a settled statement about the game.
+ARTIFACT_KIND = "conservative-candidate-roster"
+ARTIFACT_ESTABLISHES = (
+    "Which placement roots this scene serialization contains, where each one stands "
+    "in the source frame, and which name/material/adjacency channels fired on it.",
+    "A per-row confidence band and the competing readings, so a reader can see how "
+    "thin the evidence for each candidate is.",
+    "Counts that can CONTRADICT a pre-registered claim: a count this instrument "
+    "cannot reach is evidence against a claim that asserts it.",
+    "A full accounting of every renderer in the scene: each one is attributed to "
+    "exactly one candidate or to a named diagnostic row.",
+)
+ARTIFACT_DOES_NOT_ESTABLISH = (
+    "That any row is a placed wagon rather than a child, a collider shell, an LOD "
+    "node, or an inactive placeholder. An explicit name proves only that a LABEL is "
+    "separable.",
+    "Body type, colour, size, or condition beyond what a literal token states; no "
+    "mesh, bounds, height or pixel is ever read.",
+    "An independently sourced identity. The extractor and the repository's second "
+    "source share one acquisition layer, so their agreement is not validation.",
+    "Anything at all until each row is confirmed against geo-tagged in-game "
+    "photographs from a survey raid; every row carries awaitingVisualConfirmation.",
+)
 
 
 def _load_census_module() -> Any:
@@ -172,6 +222,61 @@ PART_NAME_TOKENS = frozenset(
     )
 )
 
+# R5's second half.  `PART_NAME_TOKENS` is matched against a WHOLE normalized name,
+# which is why a shell authored as `Vagon_tank_collider` under `Vagon_tank_green`
+# never folded: neither name is the other's prefix (`green` ≠ `collider`) and the
+# child's whole name is not a part token.  These are the segment-level shell words
+# that may appear as the TAIL of a name whose head is shared with its parent's.
+PART_SUFFIX_TOKENS = frozenset(
+    (
+        "ballistic",
+        "ballistics",
+        "door",
+        "doors",
+        "doorleaf",
+        "leaf",
+        "leaves",
+        "hatch",
+        "hatches",
+        "glass",
+        "window",
+        "windows",
+        "interior",
+        "exterior",
+        "decal",
+        "decals",
+        "proxy",
+        "occluder",
+        "occlusion",
+        "navmesh",
+        "trigger",
+        "physic",
+        "physics",
+        "phys",
+        "cap",
+        "caps",
+        "lid",
+        "paint",
+        "logo",
+        "low",
+        "high",
+        "hi",
+        "lo",
+        "mid",
+        "inner",
+        "outer",
+        "shell",
+        "shells",
+        "dummy",
+        "helper",
+        "socket",
+        "attach",
+    )
+)
+# A segment that may appear in the tail of a folded child's name.  Bare digits fold
+# too: `Vagon_tank_green -> Vagon_tank_02` is the same object's second shell.
+FOLDABLE_PART_TOKENS = PART_NAME_TOKENS | PART_SUFFIX_TOKENS
+
 # `container`/`containers` are conditional (see `_is_group`) and are therefore
 # not members of this unconditional set.
 GROUP_NAME_TOKENS = frozenset(
@@ -217,7 +322,12 @@ TANK_TOKENS = frozenset(
 HOPPER_TOKENS = frozenset(
     ("hopper", "hoper", "bunker", "dump", "ore", "coal", "ugol", "gravel", "ballast", "shcheben")
 )
-FLAT_TOKENS = frozenset(("flat", "platform", "platforma", "flatcar"))
+# `platform` is deliberately ABSENT and lives in NEGATIVE_NAME_TOKENS instead: the
+# Russian `platforma` is the flat-wagon word, while the bare English `platform`
+# names loading platforms, walkway platforms and stair platforms, of which the
+# scope box holds hundreds.  Scoring the two spellings alike made every one of
+# them a flat wagon.
+FLAT_TOKENS = frozenset(("flat", "platforma", "flatcar", "flatbed"))
 GONDOLA_TOKENS = frozenset(("gondola", "poluvagon", "polu", "opentop"))
 CONTAINER_TOKENS = frozenset(("container", "konteyner", "kontejner", "cont", "iso"))
 LENGTH_HINT_6M = frozenset(("6m", "20ft", "20f"))
@@ -226,6 +336,56 @@ STATIC_TANK_QUALIFIERS = frozenset(("static", "ground", "storage", "rezervuar", 
 
 GENERIC_NAMES = frozenset(
     ("prop", "props", "object", "obj", "mesh", "model", "static", "group", "item", "thing", "new", "gameobject")
+)
+
+# --------------------------------------------------------------------------
+# R4 — the negative evidence channel (D)
+# --------------------------------------------------------------------------
+#
+# The positive lexicon is a set of words that, if present, RAISE a reading.  It had
+# no counterpart, so a name that names a completely different object could only ever
+# be scored on the words it happened to share.  Measured: a real
+# `Metal_barrel_04_closed_old_blue` standing three metres from the rails scored
+# 0.35 (N, via `closed`) + 0.20 (M) + 0.10 (R+) + 0.05 (F) = 0.70 — `established`,
+# `rail-wagon-covered`, channel-identical to a genuine `Vagon_shutted_closed`.  At
+# least 34 such barrels, plus roughly seven hundred railings and platforms, stand
+# inside the scope box.
+#
+# This is therefore a real channel with a pinned weight, not a blocklist bolted on
+# the side: the token is EVIDENCE, it is reported in `confidenceChannels.D` and in
+# `evidenceChannelsFired`, and it lowers a score exactly as a positive token raises
+# one.  The magnitude is chosen so the channel is decisive against own-name
+# evidence: the largest score reachable without an ancestor-path hit is
+# N + M + L + S + F + R+ = 0.90, and 0.90 + D must land below `probable` (0.40).
+# `test_negative_evidence_defeats_every_own_name_channel` pins that arithmetic, so
+# the weight cannot be softened without a red test.
+NEGATIVE_NAME_TOKENS = frozenset(
+    (
+        "barrel",
+        "barrels",
+        "bochka",
+        "cylinder",
+        "cylinders",
+        "railing",
+        "railings",
+        "handrail",
+        "perila",
+        "stepladder",
+        "ladder",
+        "ladders",
+        "lestnica",
+        "lestnitsa",
+        "platform",
+        "platforms",
+        "fence",
+        "fences",
+        "zabor",
+        "stair",
+        "stairs",
+        "staircase",
+        "scaffold",
+        "scaffolding",
+    )
 )
 
 CLASS_RAIL_LOCOMOTIVE = "rail-locomotive"
@@ -318,7 +478,21 @@ CHANNEL_WEIGHTS = {
     "A": -0.25,
     "X": -0.20,
     "G": -0.30,
+    "D": -0.60,
 }
+# The channel codes a row reports, in table order.  `R` is emitted as `R+` / `R-`
+# in `evidenceChannelsFired` because the two readings are different evidence.
+CHANNEL_CODES = ("N", "P", "M", "L", "S", "F", "R", "A", "X", "G", "D")
+# The strongest score a row can reach on its OWN evidence — no ancestor path hit.
+# Pinned here so the D weight is checkable against it rather than asserted.
+MAX_OWN_NAME_POSITIVE = (
+    CHANNEL_WEIGHTS["N"]
+    + CHANNEL_WEIGHTS["M"]
+    + CHANNEL_WEIGHTS["L"]
+    + CHANNEL_WEIGHTS["S"]
+    + CHANNEL_WEIGHTS["F"]
+    + CHANNEL_WEIGHTS["R+"]
+)
 CONFIDENCE_CEILING = 0.95
 BAND_ESTABLISHED = 0.70
 BAND_PROBABLE = 0.40
@@ -333,6 +507,10 @@ ROOTS_ALLOWED_OUTPUT_KEYS = frozenset(
         "name",
         "unityPyVersion",
         "selectionMode",
+        "artifactKind",
+        "establishes",
+        "doesNotEstablish",
+        "awaitingVisualConfirmation",
         "parameters",
         "source",
         "sceneIndices",
@@ -344,7 +522,7 @@ ROOTS_ALLOWED_OUTPUT_KEYS = frozenset(
         "claimVerdict",
         "classification",
         "counts",
-        "roots",
+        "candidates",
         "families",
         "crossChecks",
         "diagnostics",
@@ -431,7 +609,14 @@ ROOTS_ALLOWED_OUTPUT_KEYS = frozenset(
         "rootCountIsLowerBound",
         "skippedNonRootsObjects",
         "skippedObjects",
-        # roots
+        # renderer accounting (the invariant) + fold ambiguity
+        "renderersTotal",
+        "renderersAttributed",
+        "renderersUnattributed",
+        "unattributedRendererOwnerCount",
+        "ambiguousFoldCount",
+        "negativeEvidenceRootsInScope",
+        # candidates
         "rootId",
         "objectId",
         "asset",
@@ -479,6 +664,8 @@ ROOTS_ALLOWED_OUTPUT_KEYS = frozenset(
         "A",
         "X",
         "G",
+        "D",
+        "evidenceChannelsFired",
         "competingClasses",
         "score",
         # families
@@ -502,6 +689,11 @@ ROOTS_ALLOWED_OUTPUT_KEYS = frozenset(
         "droppedForbiddenFieldCount",
         "unrootableNodes",
         "unresolvedRejections",
+        "unattributedRenderers",
+        "unattributedRenderersTruncated",
+        "rendererCount",
+        "ambiguousFolds",
+        "foldedChildCount",
         "rule",
         "inexactRoots",
         "spanRejected",
@@ -1259,65 +1451,161 @@ def _pivot_span_of(forest: Forest, members: Seq[Tuple[str, int]]) -> float:
     return max(max(xs) - min(xs), max(zs) - min(zs))
 
 
-def _is_part_of(child_name: str, parent_name: str) -> bool:
-    """True when `child_name` reads as a sub-part of the node named `parent_name`.
+FOLD_EMPTY_OR_INDEX = "empty-or-index"
+FOLD_PREFIX_PART = "segment-prefix-part"
+FOLD_PREFIX_UNQUALIFIED = "segment-prefix-unqualified"
+FOLD_PART_TOKEN = "part-token"
+FOLD_SHARED_STEM = "shared-prefix-stem"
+FOLD_ALL_PART_TOKENS = "all-part-tokens"
 
-    The final clause is name-only and therefore *ancestor-blind*: `Mesh` reads as
-    a part of whatever stands above it.  That is correct where the caller already
-    knows the two names are parent and child (R4's exclusion below), and it is
-    the reason a *count of distinct descendant names* cannot see two placements
-    whose renderers both hang off a child literally named `Mesh` — hence the
-    branch rule in `_is_group`.
+
+def _is_fold_segment(segment: str) -> bool:
+    return segment.isdigit() or segment in FOLDABLE_PART_TOKENS
+
+
+def _part_fold_reason(child_name: str, parent_name: str) -> Optional[str]:
+    """Why `child_name` reads as a sub-part of `parent_name`, or None.
+
+    The reason is returned, not just a boolean, because R6 needs to know WHICH
+    clause folded a child: a fold made by the unqualified segment-prefix clause is
+    a fold that names alone cannot justify, and the artifact has to say so.
 
     > **Decision 2026-09-01 — an identical name is an INSTANCE, never a part.**
-    > The published predicate returned True when the two normalized names were
-    > equal, and again when the child's name merely started with the parent's,
-    > which is the same thing for an equal pair.  Because `normalized_name` folds
-    > the trailing index, `Container -> {Container_01, Container_02}` — Unity's
-    > ordinary way of authoring two placements under one wrapper — presented as
-    > `container` under `container` and both children were swallowed as parts of
-    > the wrapper, so two containers were reported as one.  Nothing is ever named
-    > exactly what it is a part OF; a body is `Body`, not `Vagon`.  So equality is
-    > now the *opposite* signal — same family name, different placement — and the
-    > prefix clause fires only on a strictly longer name (`Railcar_Long_A` under
-    > `Railcar_Long`), which is what genuine sub-part naming looks like.
+    > Because `normalized_name` folds the trailing index, `Container ->
+    > {Container_01, Container_02}` presents as `container` under `container`;
+    > equality is therefore the *opposite* signal — same family, different
+    > placement.  Nothing is named exactly what it is a part OF; a body is `Body`.
+
+    > **Decision 2026-09-01 (R5) — folding is by shared prefix STEM, not by exact
+    > parent prefix.** The published clause required `child.startswith(parent)`,
+    > which a colour variant breaks: `Vagon_tank_green`'s own collider, shadow,
+    > ballistic and door-leaf shells are authored `Vagon_tank_<shell>`, and
+    > `vagon_tank_collider` does not start with `vagon_tank_green`.  Nine of the
+    > twenty-six in-box rail placements carry a colour or variant suffix
+    > (`Vagon_tank_green`, `Vagon_hopper_black`, `Vagon_gondola_small_green`,
+    > `Vagon_movable_doors_grey`), so each fragmented into its shells: the
+    > placement was rejected as a multi-branch group and its shells were elected
+    > as separate "objects".  A child now folds when it shares a leading segment
+    > run with its parent and everything after that run is shell vocabulary.
+
+    The prefix clause is also SEGMENT-aware now.  `child.startswith(parent)` on raw
+    text makes `vagon_tanker` a part of `vagon_tank`, which is two different words.
     """
     if child_name == "" or child_name.isdigit():
-        return True
-    if parent_name and child_name != parent_name and child_name.startswith(parent_name):
-        return True
-    return child_name in PART_NAME_TOKENS
+        return FOLD_EMPTY_OR_INDEX
+    if child_name == parent_name:
+        return None
+    child_segments = _tokenize(child_name)
+    parent_segments = _tokenize(parent_name)
+    if (
+        parent_segments
+        and len(child_segments) > len(parent_segments)
+        and child_segments[: len(parent_segments)] == parent_segments
+    ):
+        remainder = child_segments[len(parent_segments):]
+        if all(_is_fold_segment(segment) for segment in remainder):
+            return FOLD_PREFIX_PART
+        # `Railcar_Long -> Railcar_Long_A` and `Vagon -> Vagon_Long_01`.  Genuine
+        # sub-part naming looks exactly like a second placement here; §R6 carries
+        # the ambiguity into the artifact instead of pretending it is settled.
+        return FOLD_PREFIX_UNQUALIFIED
+    if child_name in PART_NAME_TOKENS:
+        return FOLD_PART_TOKEN
+    if parent_segments and child_segments:
+        common = 0
+        for child_segment, parent_segment in zip(child_segments, parent_segments):
+            if child_segment != parent_segment:
+                break
+            common += 1
+        if 1 <= common < len(child_segments) and all(
+            _is_fold_segment(segment) for segment in child_segments[common:]
+        ):
+            return FOLD_SHARED_STEM
+    if child_segments and all(_is_fold_segment(segment) for segment in child_segments):
+        # `Shadow_Mesh`, `Collider_Low`, `LOD1_Proxy`: every segment is shell
+        # vocabulary, so the node names no object of its own whatever stands above.
+        return FOLD_ALL_PART_TOKENS
+    return None
+
+
+def _is_part_of(child_name: str, parent_name: str) -> bool:
+    """True when `child_name` reads as a sub-part of the node named `parent_name`."""
+    return _part_fold_reason(child_name, parent_name) is not None
 
 
 def _placement_branches(
-    forest: Forest, key: Tuple[str, int], own_name: str
+    forest: Forest,
+    key: Tuple[str, int],
+    own_name: str,
+    group_rule: Mapping[Tuple[str, int], Optional[str]],
 ) -> List[Tuple[str, int]]:
-    """Direct children that carry a renderer somewhere and are not parts of `key`.
+    """The NEAREST NON-PART DESCENDANT FRONTIER beneath `key`.
 
-    Each such child is one candidate *placement* underneath `key`, whatever its
-    own descendants happen to be named.  Counting branches instead of descendant
-    names is what separates `Containers -> {Container_01 -> Mesh,
-    Container_02 -> Mesh}` (two placements) from `Vagon_02 -> Body -> Mesh`
-    (one placement, a part-named branch).
+    > **Decision 2026-09-01 (R1) — the frontier is not the direct-child set.**
+    > The published rule looked only at `children(key)`, so one ordinary
+    > intermediate node hid every placement beneath it.  Measured: inserting a
+    > single `Stack` node —
+    > `Depot_A -> Stack -> {Container_01 -> Mesh, Container_02 -> Mesh}` — dropped
+    > `electedRoots` from 2 to 1, silently, with `complete: true` and
+    > `rootCountIsLowerBound: false`.  `Depot_A` saw one branch (`Stack`), the
+    > distinct-name rule saw one folded family (`mesh` reads as a part of
+    > anything), 7 m is far under the span guard, and the wrapper was elected as
+    > one root for two containers.  An undercount is the exact error that would
+    > falsely confirm a low claimed count.
 
-    A child that R1 already marked a LOD interior is never a branch: it is a
-    level of detail of the object above it, not a placement of its own.
+    The walk therefore descends THROUGH two kinds of node and stops at everything
+    else:
+
+    * a child that reads as a part of `key` (§`_part_fold_reason`) — its own
+      children are re-tested against `key`'s name, which is what makes
+      `Vagon -> Body -> Mesh` stay one placement; and
+    * a child that a grouping rule already rejected — a group is by definition not
+      a placement, so the placements are the things underneath it.
+
+    A LOD interior is never a branch (R1 owns it), a subtree with no renderer
+    anywhere is not a branch, and a node whose hierarchy is incomplete is opaque:
+    it is ledgered by the election, so the walk must not pretend to see past it.
     """
     branches: List[Tuple[str, int]] = []
-    for child in forest.children.get(key, ()):
+    seen: set = set()
+    stack: List[Tuple[Tuple[str, int], int]] = [
+        (child, 1) for child in forest.children.get(key, ())
+    ]
+    while stack:
+        child, depth = stack.pop()
+        if child in seen or depth > MAX_HIERARCHY_DEPTH:
+            continue
+        seen.add(child)
         if not forest.has_renderable_descendant.get(child):
             continue
         if child in forest.lod_interior:
             continue
-        child_name = forest.nodes[child].get("normalizedName") or ""
+        record = forest.nodes[child]
+        child_name = record.get("normalizedName") or ""
         if _is_part_of(child_name, own_name):
+            stack.extend(
+                (grandchild, depth + 1) for grandchild in forest.children.get(child, ())
+            )
+            continue
+        if not record.get("hierarchyComplete"):
+            branches.append(child)
+            continue
+        if group_rule.get(child) is not None:
+            stack.extend(
+                (grandchild, depth + 1) for grandchild in forest.children.get(child, ())
+            )
             continue
         branches.append(child)
+    branches.sort()
     return branches
 
 
 def _is_group(
-    forest: Forest, key: Tuple[str, int], span: float, max_span: float
+    forest: Forest,
+    key: Tuple[str, int],
+    span: float,
+    max_span: float,
+    branches: Seq[Tuple[str, int]],
 ) -> Optional[str]:
     """Return the rejection rule that makes this node a grouping node, or None.
 
@@ -1365,13 +1653,102 @@ def _is_group(
             return "R4-group-name"
     if span > max_span:
         return "R5-span"
-    if wrapper and len(_placement_branches(forest, key, own_name)) >= 2:
+    if wrapper and len(branches) >= 2:
         return "R4-multi-branch"
     return None
 
 
+def compute_placement_structure(
+    forest: Forest, *, max_span: float
+) -> Tuple[
+    Dict[Tuple[str, int], List[Tuple[str, int]]],
+    Dict[Tuple[str, int], Optional[str]],
+    Dict[Tuple[str, int], float],
+]:
+    """Frontier, grouping rule and pivot span for EVERY node, computed once.
+
+    The frontier of a node reads the grouping rule of its descendants and the
+    grouping rule of a node reads its own frontier, so the two are mutually
+    recursive.  `forest.order` is parents-before-children, so walking it in
+    reverse settles every descendant before the node above it and no recursion is
+    needed.  Nodes made unreachable by a parent cycle sit at the end of `order`
+    and are therefore visited first; their descendants' rules default to `None`,
+    which is safe because the election ledgers the whole component anyway.
+    """
+    group_rule: Dict[Tuple[str, int], Optional[str]] = {}
+    frontier: Dict[Tuple[str, int], List[Tuple[str, int]]] = {}
+    spans: Dict[Tuple[str, int], float] = {}
+    for key in reversed(forest.order):
+        own_name = forest.nodes[key].get("normalizedName") or ""
+        branches = _placement_branches(forest, key, own_name, group_rule)
+        span = forest.pivot_span(key)
+        frontier[key] = branches
+        spans[key] = span
+        group_rule[key] = _is_group(forest, key, span, max_span, branches)
+    return frontier, group_rule, spans
+
+
+def ambiguous_folds_under(
+    forest: Forest,
+    members: Seq[Tuple[str, int]],
+    *,
+    separation_m: float,
+) -> List[Dict[str, Any]]:
+    """R6: folds that names alone cannot justify, named rather than picked.
+
+    `Vagon -> {Vagon_Long_01, Vagon_Long_02}` standing 8 m apart folds to ONE root
+    through the segment-prefix clause, because `vagon_long` genuinely is `vagon`
+    plus a qualifier — and two identically-named siblings standing apart is
+    equally the spelling of two placements.  There is no name evidence that
+    settles it, so the artifact does not pick: it emits a row saying the count
+    under this node is ambiguous, and the roster's count becomes a lower bound.
+
+    Only the UNQUALIFIED prefix fold is ambiguous.  `Vagon_tank_green ->
+    Vagon_tank_collider` folds through the shell vocabulary, which is settled, and
+    `Railcar_Long -> {Railcar_Long_A, Railcar_Long_B}` folds two DIFFERENTLY named
+    children, which reads as two parts of one object rather than two instances.
+    """
+    rows: List[Dict[str, Any]] = []
+    for member in members:
+        own_name = forest.nodes[member].get("normalizedName") or ""
+        buckets: Dict[str, List[Tuple[str, int]]] = {}
+        for child in forest.children.get(member, ()):
+            if not forest.has_renderable_descendant.get(child):
+                continue
+            if child in forest.lod_interior:
+                continue
+            child_name = forest.nodes[child].get("normalizedName") or ""
+            if _part_fold_reason(child_name, own_name) != FOLD_PREFIX_UNQUALIFIED:
+                continue
+            buckets.setdefault(child_name, []).append(child)
+        for children in buckets.values():
+            if len(children) < 2:
+                continue
+            span = _pivot_span_of(forest, children)
+            if span <= separation_m:
+                continue
+            record = forest.nodes[member]
+            rows.append(
+                {
+                    "objectId": record["objectId"],
+                    "asset": record["asset"],
+                    "pathId": record["pathId"],
+                    "hierarchyPathHash": record.get("hierarchyPathHash"),
+                    "nameHash": forest.nodes[children[0]].get("nameHash"),
+                    "foldedChildCount": len(children),
+                    "spanM": round(span, 3),
+                    "rule": "R6-ambiguous-prefix-fold",
+                }
+            )
+    rows.sort(key=lambda item: (item["asset"].casefold(), item["pathId"], item["nameHash"] or ""))
+    return rows
+
+
 def _nested_placement_split(
-    forest: Forest, key: Tuple[str, int], own_name: str
+    forest: Forest,
+    key: Tuple[str, int],
+    own_name: str,
+    branches: Seq[Tuple[str, int]],
 ) -> List[Tuple[str, int]]:
     """Placements nested *inside* a node that carries geometry of its own.
 
@@ -1394,29 +1771,44 @@ def _nested_placement_split(
 
     A single differently-named branch stays part of the node's placement, which
     is the conservative reading and matches what a wrapper with one branch does.
+
+    `branches` is the R1 frontier, not the direct-child set, so an intermediate
+    node cannot hide a nested stack any more than it can hide a wrapper's.
     """
-    branches = _placement_branches(forest, key, own_name)
     if not branches:
         return []
     if len(branches) >= 2:
-        return branches
+        return list(branches)
     if any(
         (forest.nodes[child].get("normalizedName") or "") == own_name
         for child in branches
     ):
-        return branches
+        return list(branches)
     return []
 
 
-def elect_roots(
-    forest: Forest, *, max_span: float
-) -> Tuple[
-    List[Tuple[str, int]],
-    List[Dict[str, Any]],
-    List[Dict[str, Any]],
-    List[Dict[str, Any]],
-    Dict[Tuple[str, int], List[Tuple[str, int]]],
-]:
+class Election:
+    """Everything the election produced, so nothing has to be recomputed later."""
+
+    __slots__ = (
+        "elected",
+        "spanRejected",
+        "unrootable",
+        "unresolvedRejections",
+        "owned",
+        "rejected",
+        "ledgered",
+        "frontier",
+        "groupRule",
+        "spans",
+    )
+
+    def __init__(self, **fields: Any) -> None:
+        for name in self.__slots__:
+            setattr(self, name, fields[name])
+
+
+def elect_roots(forest: Forest, *, max_span: float) -> Election:
     """Breadth-first outermost-survivor election (rules R1, R4, R5).
 
     Spec §2.3's rule R2 ("parent(n) is elected and isPartOf(n, parent(n))") is
@@ -1429,6 +1821,7 @@ def elect_roots(
     Part-name folding is achieved structurally instead: the outermost survivor is
     elected and its whole subtree is left alone.
     """
+    frontier, group_rule, spans = compute_placement_structure(forest, max_span=max_span)
     elected: List[Tuple[str, int]] = []
     span_rejected: List[Dict[str, Any]] = []
     unrootable: List[Dict[str, Any]] = []
@@ -1463,8 +1856,8 @@ def elect_roots(
             continue
         if key in forest.lod_interior:  # R1
             continue
-        span = forest.pivot_span(key)
-        rule = _is_group(forest, key, span, max_span)
+        span = spans.get(key, 0.0)
+        rule = group_rule.get(key)
         if rule is not None:  # R4 / R5
             if rule == "R5-span":
                 span_rejected.append(
@@ -1481,7 +1874,7 @@ def elect_roots(
             continue
         own_name = record.get("normalizedName") or ""
         split = (
-            _nested_placement_split(forest, key, own_name)
+            _nested_placement_split(forest, key, own_name, frontier.get(key, ()))
             if key in forest.renderable
             else []
         )
@@ -1509,13 +1902,19 @@ def elect_roots(
             continue
         _ledger(key, "hierarchy-unreachable")
 
-    # A rejection is only sound if the descent it ordered actually elected
-    # something.  A group whose every child is a LOD interior (R1 owns them) or
-    # is otherwise unelectable takes its whole subtree out of the count, and the
-    # published implementation wrote no row at all — the objects simply were not
-    # there any more.  Walking up from each elected root marks every node whose
-    # descent produced a placement; a rejected node outside that set is ledgered
-    # and the artifact reports it.  Objects never disappear silently.
+    # > **Decision 2026-09-01 (R2) — the A1 ledger asked the wrong question.**
+    # A rejection was ledgered only when its descent elected NOTHING.  That test
+    # cannot see the commoner loss: a rejected node that carries its OWN renderer
+    # or LODGroup.  A rejected node is never elected and is never inside an elected
+    # root's owned subtree — rejection only ever happens strictly above the roots
+    # its descent produces — so its own geometry belongs to nobody, and the
+    # published ledger stayed silent about it the moment any child survived.
+    # `Yard` (a renderer) over `Vagon_Yardside` (a renderer) elected one root, lost
+    # the yard's geometry, and reported `complete: true` with an empty ledger.
+    #
+    # Both losses are now the same question — "did anything this node stood for
+    # leave the count?" — asked twice: once about the descent, once about the
+    # node's own renderers.
     resolved: set = set()
     for key in elected:
         cursor: Optional[Tuple[str, int]] = key
@@ -1525,9 +1924,17 @@ def elect_roots(
 
     unresolved_rejections: List[Dict[str, Any]] = []
     for key, rule in rejected:
-        if key in resolved:
-            continue
         node = forest.nodes[key]
+        own_renderers = len(forest.renderers_by_key.get(key, ()))
+        descent_elected_nothing = key not in resolved
+        if not descent_elected_nothing and not own_renderers:
+            continue
+        if descent_elected_nothing and own_renderers:
+            reason = "descent-elected-nothing-and-own-geometry-unattributed"
+        elif descent_elected_nothing:
+            reason = "descent-elected-nothing"
+        else:
+            reason = "own-geometry-unattributed"
         unresolved_rejections.append(
             {
                 "objectId": node["objectId"],
@@ -1535,6 +1942,8 @@ def elect_roots(
                 "pathId": node["pathId"],
                 "hierarchyPathHash": node.get("hierarchyPathHash"),
                 "rule": rule,
+                "reason": reason,
+                "rendererCount": own_renderers,
                 "renderableDescendantCount": len(forest.renderable_descendants(key)),
             }
         )
@@ -1543,7 +1952,114 @@ def elect_roots(
     span_rejected.sort(key=lambda item: (item["asset"].casefold(), item["pathId"]))
     unrootable.sort(key=lambda item: (item["asset"].casefold(), item["pathId"]))
     unresolved_rejections.sort(key=lambda item: (item["asset"].casefold(), item["pathId"]))
-    return elected, span_rejected, unrootable, unresolved_rejections, owned
+    return Election(
+        elected=elected,
+        spanRejected=span_rejected,
+        unrootable=unrootable,
+        unresolvedRejections=unresolved_rejections,
+        owned=owned,
+        rejected=rejected,
+        ledgered=ledgered,
+        frontier=frontier,
+        groupRule=group_rule,
+        spans=spans,
+    )
+
+
+# --------------------------------------------------------------------------
+# the accounting invariant
+# --------------------------------------------------------------------------
+
+MAX_UNATTRIBUTED_RENDERER_ROWS = 500
+
+
+def account_for_renderers(
+    forest: Forest,
+    renderers: Seq[Mapping[str, Any]],
+    attributed: Mapping[Tuple[str, int], Tuple[str, int]],
+    election: Election,
+) -> Dict[str, Any]:
+    """Every renderer belongs to one candidate or to a named diagnostic row.
+
+    Until this invariant exists and is asserted, a green suite means only that the
+    submitted fixtures pass: the election can drop geometry — a rejected node's
+    own renderers, a rejection whose descent elects nothing, an unrootable node, a
+    renderer whose owning GameObject never parsed — and no count moves.  Here the
+    universe of renderers is enumerated, the attributed ones are subtracted, and
+    whatever is left is given a reason and a row.  `renderersAttributed +
+    renderersUnattributed == renderersTotal` is arithmetic, not a claim, and
+    `_finalize_artifact` refuses a document where it does not hold.
+    """
+    rejected_keys = {key for key, _rule in election.rejected}
+    unrootable_keys = {
+        (entry["asset"], entry["pathId"]) for entry in election.unrootable
+    }
+    resolved_owners: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    total = 0
+    unattributed = 0
+
+    def _reason(owner: Optional[Tuple[str, int]]) -> str:
+        if owner is None or owner not in forest.nodes:
+            return "renderer-owner-not-in-scene"
+        if owner in rejected_keys:
+            return "rejected-node-own-geometry"
+        if owner in unrootable_keys:
+            return "unrootable-node"
+        cursor: Optional[Tuple[str, int]] = forest.parent.get(owner)
+        seen: set = set()
+        while cursor is not None and cursor not in seen:
+            seen.add(cursor)
+            if cursor in rejected_keys:
+                return "rejection-elected-nothing"
+            if cursor in unrootable_keys:
+                return "unrootable-ancestor"
+            cursor = forest.parent.get(cursor)
+        return "unattributed-no-known-cause"
+
+    for record in renderers:
+        renderer_key = _object_key(record)
+        if renderer_key is None:
+            continue
+        total += 1
+        if renderer_key in attributed:
+            continue
+        unattributed += 1
+        path_id = record.get("gameObjectPathId")
+        owner: Optional[Tuple[str, int]] = None
+        if isinstance(path_id, int) and not isinstance(path_id, bool):
+            owner = (record["asset"], path_id)
+        bucket_key = owner if owner is not None else renderer_key
+        row = resolved_owners.get(bucket_key)
+        if row is None:
+            node = forest.nodes.get(owner) if owner is not None else None
+            row = _drop_none(
+                {
+                    "objectId": node["objectId"] if node is not None else None,
+                    "asset": bucket_key[0],
+                    "pathId": bucket_key[1],
+                    "hierarchyPathHash": node.get("hierarchyPathHash")
+                    if node is not None
+                    else None,
+                    "reason": _reason(owner),
+                    "rendererCount": 0,
+                }
+            )
+            resolved_owners[bucket_key] = row
+        row["rendererCount"] += 1
+
+    rows = sorted(
+        resolved_owners.values(),
+        key=lambda item: (item["asset"].casefold(), item["pathId"], item["reason"]),
+    )
+    truncated = len(rows) > MAX_UNATTRIBUTED_RENDERER_ROWS
+    return {
+        "renderersTotal": total,
+        "renderersAttributed": total - unattributed,
+        "renderersUnattributed": unattributed,
+        "unattributedRendererOwnerCount": len(rows),
+        "unattributedRenderers": rows[:MAX_UNATTRIBUTED_RENDERER_ROWS],
+        "unattributedRenderersTruncated": truncated,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -1743,8 +2259,9 @@ def _score_class(
     competing_base: float,
     rail_on_track_m: float,
     rail_off_track_m: float,
+    negative_name: bool,
 ) -> Tuple[float, Dict[str, Any]]:
-    channels: Dict[str, Any] = {key: 0 for key in ("N", "P", "M", "L", "S", "F", "R", "A", "X", "G")}
+    channels: Dict[str, Any] = {key: 0 for key in CHANNEL_CODES}
     # N is reserved for a token carried by a node that actually holds a renderer
     # or a LODGroup.  A name on a renderer-less node — the root's own name when
     # it is a bare wrapper, or any ancestor segment — is weak evidence and scores
@@ -1783,10 +2300,45 @@ def _score_class(
         channels["X"] = CHANNEL_WEIGHTS["X"]
     if generic_name:
         channels["G"] = CHANNEL_WEIGHTS["G"]
+    # R4: the object's own name says it is something this tool does not count.
+    # `unclassified` is the residual, not a reading, so nothing contradicts it.
+    if negative_name and class_name != CLASS_UNCLASSIFIED:
+        channels["D"] = CHANNEL_WEIGHTS["D"]
 
     total = sum(value for value in channels.values() if isinstance(value, (int, float)))
     confidence = round(max(0.0, min(CONFIDENCE_CEILING, total)), 3)
     return confidence, channels
+
+
+def _evidence_channels_fired(channels: Mapping[str, Any]) -> List[str]:
+    """The channel codes that actually moved this row's score, in table order."""
+    fired: List[str] = []
+    for code in CHANNEL_CODES:
+        value = channels.get(code)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        if value == 0:
+            continue
+        if code == "R":
+            fired.append("R+" if value > 0 else "R-")
+        else:
+            fired.append(code)
+    return fired
+
+
+def _has_negative_name_evidence(evidence: Mapping[str, Any]) -> bool:
+    """R4's channel reads the root's OWN evidence, never an ancestor's name.
+
+    An ancestor may add weight to a reading and may never delete or select one
+    (the 2026-09-01 decision in `_own_evidence_tokens`); a wrapper called
+    `Barrels_Zone` must therefore not disqualify a genuine wagon standing under it,
+    exactly as `Kryt_Zone` must not promote one.
+    """
+    for token_list in _own_evidence_tokens(evidence):
+        for token in token_list:
+            if token in NEGATIVE_NAME_TOKENS:
+                return True
+    return False
 
 
 def _band(confidence: float) -> str:
@@ -1834,9 +2386,12 @@ def build_roots_document(
 ) -> Dict[str, Any]:
     max_span = parameters["maxPlacementSpanM"]
     forest = Forest(facts["gameObjects"], facts["renderers"], facts["lodGroups"])
-    elected, span_rejected, unrootable, unresolved_rejections, owned = elect_roots(
-        forest, max_span=max_span
-    )
+    election = elect_roots(forest, max_span=max_span)
+    elected = election.elected
+    span_rejected = election.spanRejected
+    unrootable = election.unrootable
+    unresolved_rejections = election.unresolvedRejections
+    owned = election.owned
 
     railway = terrain.get("railway") if cross_check else None
     envelope = terrain.get("envelope") if cross_check else None
@@ -1854,6 +2409,7 @@ def build_roots_document(
         name_counts[name] = name_counts.get(name, 0) + 1
 
     prepared: List[Dict[str, Any]] = []
+    renderer_attribution: Dict[Tuple[str, int], Tuple[str, int]] = {}
     for key in elected:
         record = forest.nodes[key]
         position = _world_position(record)
@@ -1874,6 +2430,20 @@ def build_roots_document(
         # was split from; each of those is a root in its own right and its
         # geometry, materials and pivots belong to it, not to this row.
         subtree = owned.get(key) or forest.subtree_nodes.get(key, [key])
+        # The accounting invariant's positive half: this root now OWNS these
+        # renderers.  A second claim on the same renderer means the ownership
+        # partition is not disjoint, which is a programming error, not a finding.
+        for member in subtree:
+            for renderer in forest.renderers_by_key.get(member, ()):
+                renderer_key = _object_key(renderer)
+                if renderer_key is None:
+                    continue
+                if renderer_key in renderer_attribution:
+                    raise RootsError(
+                        "a renderer was attributed to two elected roots; the "
+                        "ownership partition is not disjoint"
+                    )
+                renderer_attribution[renderer_key] = key
         renderable_members = [
             member for member in subtree if member in forest.renderable
         ]
@@ -1959,6 +2529,7 @@ def build_roots_document(
                 "record": record,
                 "position": position,
                 "worldExact": world_exact,
+                "subtree": subtree,
                 "subtreeCount": len(subtree) - 1,
                 "renderableCount": len(renderable_members),
                 "pivotSpan": pivot_span,
@@ -1982,6 +2553,30 @@ def build_roots_document(
 
     unrootable.sort(key=lambda item: (item["asset"].casefold(), item["pathId"]))
 
+    # -- the accounting invariant ------------------------------------------
+    accounting = account_for_renderers(
+        forest, facts["renderers"], renderer_attribution, election
+    )
+    if (
+        accounting["renderersAttributed"] + accounting["renderersUnattributed"]
+        != accounting["renderersTotal"]
+    ):  # pragma: no cover - arithmetic, kept as a fail-closed assertion
+        raise RootsError("renderer accounting does not balance")
+
+    # -- R6: folds names alone cannot justify -------------------------------
+    ambiguous_folds: List[Dict[str, Any]] = []
+    for item in prepared:
+        ambiguous_folds.extend(
+            ambiguous_folds_under(
+                forest,
+                item["subtree"],
+                separation_m=parameters["coincidentRootM"],
+            )
+        )
+    ambiguous_folds.sort(
+        key=lambda entry: (entry["asset"].casefold(), entry["pathId"], entry["nameHash"] or "")
+    )
+
     # -- classification ----------------------------------------------------
     roots: List[Dict[str, Any]] = []
     for item in prepared:
@@ -1990,6 +2585,7 @@ def build_roots_document(
         rail_distance = _rail_distance(x, z, railway)
         normalized = record.get("normalizedName") or ""
         generic = normalized == "" or normalized in GENERIC_NAMES
+        negative_name = _has_negative_name_evidence(item["evidence"])
         candidates = _candidate_classes(
             item["evidence"],
             rail_distance=rail_distance,
@@ -2023,6 +2619,7 @@ def build_roots_document(
                 competing_base=competing_base,
                 rail_on_track_m=parameters["railOnTrackM"],
                 rail_off_track_m=parameters["railOffTrackM"],
+                negative_name=negative_name,
             )
             scored.append((confidence, CLASS_RANK[class_name], class_name, channels))
         scored.sort(key=lambda entry: (-entry[0], entry[1]))
@@ -2050,6 +2647,7 @@ def build_roots_document(
                 competing_base=0.0,
                 rail_on_track_m=parameters["railOnTrackM"],
                 rail_off_track_m=parameters["railOffTrackM"],
+                negative_name=negative_name,
             )
             competing = []
 
@@ -2092,8 +2690,17 @@ def build_roots_document(
                 "confidence": confidence,
                 "band": _band(confidence),
                 "confidenceChannels": channels,
+                "evidenceChannelsFired": _evidence_channels_fired(channels),
                 "competingClasses": competing,
+                # Not a decoration.  Every row of this artifact is a CANDIDATE:
+                # an explicit name proves a label is separable, never that the
+                # GameObject wearing it is a placed wagon rather than a child, a
+                # collider shell, an LOD node, or an inactive placeholder.  Only a
+                # geo-tagged in-game photograph settles that, and none has been
+                # taken, so the flag is unconditionally true.
+                "awaitingVisualConfirmation": True,
                 "_industrial": item["industrial"],
+                "_negative": negative_name,
                 "_mirrored": (-x, -z),
             }
         )
@@ -2317,7 +2924,19 @@ def build_roots_document(
     complete = computed_complete and not allow_partial
     # An unresolved rejection means placed objects left the count without ever
     # becoming a root, so the count is a floor, exactly as an unrootable node is.
-    root_count_is_lower_bound = bool(unrootable) or bool(unresolved_rejections)
+    # R3: the count is a FLOOR whenever anything left it.  An unrootable node and
+    # an unresolved rejection were already floors; a renderer nobody owns is the
+    # same statement made about geometry instead of about nodes, and it is the one
+    # that catches a rule change that quietly stops attributing something.  An
+    # ambiguous fold (R6) is a floor too: `Vagon -> {Vagon_Long_01, Vagon_Long_02}`
+    # 8 m apart is either one object or two and names cannot say which, so the
+    # honest reading of the count is "at least this many".
+    root_count_is_lower_bound = (
+        bool(unrootable)
+        or bool(unresolved_rejections)
+        or accounting["renderersUnattributed"] > 0
+        or bool(ambiguous_folds)
+    )
 
     # -- separability ------------------------------------------------------
     # Separability is read against the same band set the verdicts are computed
@@ -2519,6 +3138,9 @@ def build_roots_document(
         and nine_proxy_container == 3
         and anchor_rows != "unavailable"
     )
+    # R3, explicitly: a floor may not render a verdict.  `root_count_is_lower_bound`
+    # is true whenever ANY renderer is unattributed, so a rule change that starts
+    # dropping geometry can no longer leave a "supported" behind it.
     if not complete or not frame_verified or root_count_is_lower_bound:
         overall = "inconclusive"
     elif nine_proxy:
@@ -2564,8 +3186,11 @@ def build_roots_document(
         key=lambda item: (-item["instanceCount"], item["normalizedName"], item["class"])
     )
 
+    negative_in_scope = sum(1 for item in source_in_scope if item["_negative"])
+
     for item in roots:
         item.pop("_industrial", None)
+        item.pop("_negative", None)
         item.pop("_mirrored", None)
 
     document = {
@@ -2577,6 +3202,13 @@ def build_roots_document(
             ),
             "selectionMode": "catalog-first-customs-only",
         },
+        # What this artifact is, said inside the artifact rather than left to a
+        # reader's assumption.  A roster that reads as a settled fact about the
+        # game is the primary failure mode this document is shaped against.
+        "artifactKind": ARTIFACT_KIND,
+        "awaitingVisualConfirmation": True,
+        "establishes": list(ARTIFACT_ESTABLISHES),
+        "doesNotEstablish": list(ARTIFACT_DOES_NOT_ESTABLISH),
         "parameters": {
             "scopeId": scope["scopeId"],
             "scopeCenter": {"x": scope["center"][0], "z": scope["center"][1]},
@@ -2649,8 +3281,17 @@ def build_roots_document(
             "rootCountIsLowerBound": root_count_is_lower_bound,
             "skippedNonRootsObjects": facts["skippedNonRootsObjects"],
             "skippedObjects": len(facts["skippedObjects"]),
+            # The accounting invariant, in three numbers a reader can add up.
+            "renderersTotal": accounting["renderersTotal"],
+            "renderersAttributed": accounting["renderersAttributed"],
+            "renderersUnattributed": accounting["renderersUnattributed"],
+            "unattributedRendererOwnerCount": accounting[
+                "unattributedRendererOwnerCount"
+            ],
+            "ambiguousFoldCount": len(ambiguous_folds),
+            "negativeEvidenceRootsInScope": negative_in_scope,
         },
-        "roots": roots,
+        "candidates": roots,
         "families": families,
         "crossChecks": {"anchors": anchor_rows, "anchorsVerdict": anchors_verdict},
         "diagnostics": {
@@ -2661,6 +3302,11 @@ def build_roots_document(
             "droppedForbiddenFieldCount": facts["droppedForbiddenFieldCount"],
             "unrootableNodes": unrootable,
             "unresolvedRejections": unresolved_rejections,
+            "unattributedRenderers": accounting["unattributedRenderers"],
+            "unattributedRenderersTruncated": accounting[
+                "unattributedRenderersTruncated"
+            ],
+            "ambiguousFolds": ambiguous_folds,
             "inexactRoots": inexact,
             "spanRejected": span_rejected,
             "coincidentRootGroups": coincident_groups,
@@ -2684,6 +3330,14 @@ def build_operator_report(document: Mapping[str, Any]) -> Dict[str, Any]:
             "name": f"{GENERATOR_NAME}-report",
             "selectionMode": "roots-derived",
         },
+        # The roster is the artifact an operator actually reads, so the statement
+        # of what it does and does not establish travels WITH it.  A projection
+        # that dropped the caveat would be the same overstatement one indirection
+        # away.
+        "artifactKind": ARTIFACT_KIND,
+        "awaitingVisualConfirmation": True,
+        "establishes": list(ARTIFACT_ESTABLISHES),
+        "doesNotEstablish": list(ARTIFACT_DOES_NOT_ESTABLISH),
         "rootsSchemaVersion": _integer(document.get("schemaVersion")),
         "sourceRootName": _clean_text(
             _value(document.get("source"), "rootName") or "game-data"
@@ -2713,6 +3367,14 @@ def build_operator_report(document: Mapping[str, Any]) -> Dict[str, Any]:
             "unresolvedRejectionCount": counts.get("unresolvedRejectionCount"),
             "coincidentRootGroupCount": counts.get("coincidentRootGroupCount"),
             "outsideTerrainEnvelopeCount": frame_check.get("outsideTerrainEnvelopeCount"),
+            # A roster whose count is a floor must SAY it is a floor where the
+            # count is read, not only in the document it was projected from.
+            "rootCountIsLowerBound": counts.get("rootCountIsLowerBound"),
+            "renderersTotal": counts.get("renderersTotal"),
+            "renderersAttributed": counts.get("renderersAttributed"),
+            "renderersUnattributed": counts.get("renderersUnattributed"),
+            "ambiguousFoldCount": counts.get("ambiguousFoldCount"),
+            "negativeEvidenceRootsInScope": counts.get("negativeEvidenceRootsInScope"),
         },
     }
     return _finalize_artifact(report)
@@ -2974,9 +3636,12 @@ def main(
         census._publish_json_noclobber(artifacts)
         counts = document["counts"]
         print(
-            f"wrote Customs industrial roots: {output_path.name} "
-            f"({counts['electedRoots']} elected roots, {counts['rootsInScope']} in scope, "
-            f"claim verdict {document['claimVerdict']['overall']})",
+            f"wrote Customs industrial CANDIDATE ROSTER: {output_path.name} "
+            f"({counts['electedRoots']} candidates, {counts['rootsInScope']} in scope, "
+            f"claim verdict {document['claimVerdict']['overall']}, "
+            f"{counts['renderersUnattributed']} unattributed renderers"
+            + (", COUNT IS A LOWER BOUND" if counts["rootCountIsLowerBound"] else "")
+            + "); every row awaits visual confirmation",
             file=stdout,
         )
         if report is not None and report_path is not None:
