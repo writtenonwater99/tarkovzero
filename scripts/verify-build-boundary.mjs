@@ -27,6 +27,24 @@ const REPOSITORY_ROOT = resolve(SCRIPT_DIR, '..');
 
 export const DEFAULT_DIST_DIR = resolve(REPOSITORY_ROOT, 'dist');
 export const DEFAULT_LOCAL_ROOT = resolve(REPOSITORY_ROOT, '.local-game-derived');
+/**
+ * Second local root: the independently-authored Customs vegetation pack
+ * (docs/plans/VEGETATION-SERVING.md). It is original authored work, not
+ * game-derived data — a different threat model from `DEFAULT_LOCAL_ROOT` —
+ * but the one property that matters here (it must never reach `dist/`) is
+ * identical, so it is scanned by the same verifier, as a second root, not
+ * folded into the first.
+ */
+export const DEFAULT_VEGETATION_ROOT = resolve(REPOSITORY_ROOT, '.local-candidates', 'vegetation-full-v2');
+/**
+ * Third local root: the offline-built vegetation texture-array set
+ * (docs/plans/VEGETATION-DRAWCALLS.md, `scripts/vegetation-asset-factory/build_texture_arrays.py`) —
+ * `veg-layers.json` plus the nine `veg-l{0,1,2}-{basecolor,orm,normal}.bin` blobs it declares. Same
+ * threat model and same one property that matters (never reach `dist/`) as
+ * `DEFAULT_VEGETATION_ROOT`, so it is scanned by the same verifier, as a third root.
+ */
+export const DEFAULT_VEGETATION_ARRAYTEX_ROOT =
+  resolve(REPOSITORY_ROOT, '.local-candidates', 'vegetation-arraytex-v1');
 
 /** Path segments that may never appear anywhere inside the build output. */
 export const FORBIDDEN_PATH_SEGMENTS = Object.freeze([
@@ -34,21 +52,66 @@ export const FORBIDDEN_PATH_SEGMENTS = Object.freeze([
   'local-game-derived',
   '@local-game-derived',
   'local_game_derived',
+  '.local-candidates',
+  'local-candidates',
+  '@vegetation-authored',
+  'local_candidates',
+  // `.local-candidates/` holds several other candidate packages that must
+  // stay just as unreachable as they are today; catching the package name
+  // itself (not only its parent directory name) is a second independent
+  // tripwire if a future build step ever copies
+  // `.local-candidates/vegetation-full-v2/…` in without preserving the
+  // `.local-candidates` segment.
+  'vegetation-full-v2',
+  'vegetation_full_v2',
+  'vegetation-full',
+  'vegetation_full',
+  // Same tripwire, for the third root (the texture-array set): the package directory name itself,
+  // not only its `.local-candidates` parent, plus the dev-only fetch prefix's own name — mirrors
+  // `vegetation-full-v2`/`@vegetation-authored` above exactly.
+  'vegetation-arraytex-v1',
+  'vegetation_arraytex_v1',
+  'vegetation-arraytex',
+  'vegetation_arraytex',
+  '@vegetation-arraytex',
 ]);
 
-/** File names that only a local extraction produces. */
-export const FORBIDDEN_FILE_NAMES = Object.freeze(['extraction-report.json']);
+/** File names that only a local extraction, or the vegetation pack, produces. */
+export const FORBIDDEN_FILE_NAMES = Object.freeze([
+  'extraction-report.json',
+  'pack-index.json',
+  'pack-index.receipt.json',
+  'generation-manifest.json',
+  // The texture-array set's own index and receipt — same status as `pack-index.json` above.
+  'veg-layers.json',
+  'veg-layers.receipt.json',
+]);
 
-/** File suffixes that only a local extraction produces. */
+/**
+ * File suffixes that only a local extraction produces.
+ *
+ * Deliberately does NOT include `.glb`. `.f32le` is unique to the terrain
+ * package, so forbidding it outright is free. `.glb` is not unique —
+ * `public/assets/3d/customs/authored/fortress/*.glb` already ships to
+ * `dist/` legitimately, so a blanket suffix ban would fail every future
+ * production build on its own admitted assets. `.glb` protection for the
+ * vegetation pack rests on the hash check alone (byte-for-byte identity,
+ * immune to renaming or relocation) plus the path/name checks above, which
+ * catch the common case of a lazy recursive copy. See
+ * docs/plans/VEGETATION-SERVING.md §3 ("Why the suffix check does *not*
+ * gain `.glb`") — do not "fix" this apparent gap by adding `.glb` here.
+ */
 export const FORBIDDEN_FILE_SUFFIXES = Object.freeze(['.f32le']);
 
 /**
- * Literals that only appear if an absolute game-install path, or the local
- * package root, was baked into an artifact. The dev-only fetch prefix
- * (`/@local-game-derived/`) is deliberately absent: it is a loopback-gated URL
- * constant in application source, not local truth, and it resolves to nothing
- * in production. The filesystem root name (`.local-game-derived`) IS listed,
- * because it can only appear if build tooling touched the local directory.
+ * Literals that only appear if an absolute game-install path, or a local
+ * package root, was baked into an artifact. The dev-only fetch prefixes
+ * (`/@local-game-derived/`, `/@vegetation-authored/`) are deliberately
+ * absent: they are loopback-gated URL constants in application source, not
+ * local truth, and they resolve to nothing in production. The filesystem
+ * root names (`.local-game-derived`, `.local-candidates`) ARE listed,
+ * because they can only appear if build tooling touched the local
+ * directory.
  */
 export const FORBIDDEN_CONTENT_LITERALS = Object.freeze([
   '.local-game-derived',
@@ -56,6 +119,7 @@ export const FORBIDDEN_CONTENT_LITERALS = Object.freeze([
   'EscapeFromTarkov.exe',
   'Battlestate Games',
   'BsgLauncher',
+  '.local-candidates',
 ]);
 
 /** Absolute install paths: a drive letter or UNC prefix followed by the game. */
@@ -74,7 +138,23 @@ export const FORBIDDEN_CONTENT_PATTERNS = Object.freeze([
 ]);
 
 const SHA256_HEX = /\b[0-9a-f]{64}\b/g;
-const HASH_MANIFEST_NAMES = Object.freeze(['manifest.json', 'extraction-report.json']);
+// `pack-index.json` declares every asset's `sha256` (prefixed `sha256:…`, but
+// `SHA256_HEX`'s `\b` boundary matches the same either way). `pack-index.receipt.json`
+// additionally declares `catalogSha256` and `generationManifestSha256`. Scraping both
+// catches a build artifact byte-identical to a *declared* hash even if the specific
+// GLB were later deleted from the pack — the same belt-and-suspenders the terrain
+// route already gets from `extraction-report.json`.
+const HASH_MANIFEST_NAMES = Object.freeze([
+  'manifest.json',
+  'extraction-report.json',
+  'pack-index.json',
+  'pack-index.receipt.json',
+  // Same belt-and-suspenders for the texture-array root: `veg-layers.json` declares each blob's
+  // `sha256` per (lod, slot), and `veg-layers.receipt.json` additionally declares `packIndexSha256`
+  // and its own `sha256`.
+  'veg-layers.json',
+  'veg-layers.receipt.json',
+]);
 
 class BuildBoundaryError extends Error {
   constructor(code, message) {
@@ -196,22 +276,39 @@ function contentViolations(file, bytes) {
 }
 
 /**
- * Verify that `distDir` contains no local game-derived truth.
+ * Verify that `distDir` contains no local game-derived (or locally-authored,
+ * unshipped) truth.
  *
  * Pure with respect to the filesystem: it only reads. Callers (including tests)
  * may point it at temporary fixture directories.
+ *
+ * Accepts either the legacy singular `localRoot` (normalized to a one-element
+ * array, so every existing call site keeps working unchanged) or `localRoots`
+ * (an array, for scanning more than one root at once). When neither is given,
+ * defaults to `[DEFAULT_LOCAL_ROOT, DEFAULT_VEGETATION_ROOT, DEFAULT_VEGETATION_ARRAYTEX_ROOT]` —
+ * the common case, since `npm run build` invokes this with no arguments and must keep
+ * protecting all three roots.
  */
 export async function verifyBuildBoundary({
   distDir = DEFAULT_DIST_DIR,
-  localRoot = DEFAULT_LOCAL_ROOT,
+  localRoot,
+  localRoots,
 } = {}) {
   const dist = resolve(distDir);
-  const local = resolve(localRoot);
-  if (dist === local || local.startsWith(dist + sep) || dist.startsWith(local + sep)) {
-    throw new BuildBoundaryError(
-      'ERR_BUILD_BOUNDARY_ARGS',
-      'the build output directory and the local game-derived root must not contain each other',
-    );
+  const rawRoots = Array.isArray(localRoots)
+    ? localRoots
+    : localRoot !== undefined
+      ? [localRoot]
+      : [DEFAULT_LOCAL_ROOT, DEFAULT_VEGETATION_ROOT, DEFAULT_VEGETATION_ARRAYTEX_ROOT];
+  const locals = rawRoots.map((root) => resolve(root));
+
+  for (const local of locals) {
+    if (dist === local || local.startsWith(dist + sep) || dist.startsWith(local + sep)) {
+      throw new BuildBoundaryError(
+        'ERR_BUILD_BOUNDARY_ARGS',
+        'the build output directory and a local root must not contain each other',
+      );
+    }
   }
 
   const files = await listFiles(dist);
@@ -222,7 +319,25 @@ export async function verifyBuildBoundary({
     );
   }
 
-  const localPackage = await collectLocalPackageHashes(local);
+  const localResults = await Promise.all(locals.map(async (local) => ({
+    root: local,
+    ...(await collectLocalPackageHashes(local)),
+  })));
+  const localPackagePresent = localResults.some((entry) => entry.present);
+  // Union the per-root hash maps. When more than one root is in play, label
+  // each source with the root it came from (relative to the repo) so a hash
+  // violation's `detail` names which local root the matched file lives
+  // under, not just its path within that root — first root wins a rare
+  // cross-root digest collision, same "first writer wins" semantics
+  // `collectLocalPackageHashes` already uses within one root.
+  const hashes = new Map();
+  for (const entry of localResults) {
+    const label = locals.length > 1 ? `${relative(REPOSITORY_ROOT, entry.root)}/` : '';
+    for (const [digest, source] of entry.hashes) {
+      if (!hashes.has(digest)) hashes.set(digest, `${label}${source}`);
+    }
+  }
+
   const violations = [];
   let scannedBytes = 0;
 
@@ -239,7 +354,7 @@ export async function verifyBuildBoundary({
     scannedBytes += bytes.byteLength;
     violations.push(...contentViolations(file, bytes));
     const digest = sha256(bytes);
-    const source = localPackage.hashes.get(digest);
+    const source = hashes.get(digest);
     if (source !== undefined) {
       violations.push(violation(
         'hash',
@@ -253,32 +368,45 @@ export async function verifyBuildBoundary({
     verifier: 'build-boundary',
     pass: violations.length === 0,
     distDir: dist,
-    localRoot: local,
-    localPackagePresent: localPackage.present,
-    localPackageHashCount: localPackage.hashes.size,
+    localRoot: locals[0],
+    localRoots: locals,
+    localPackagePresent,
+    localPackageHashCount: hashes.size,
     fileCount: files.length,
     scannedBytes,
     violations,
   };
 }
 
+/**
+ * `--local-root PATH` is repeatable: pass it more than once to scan more than
+ * one local root (collected into `localRoots`, in the order given). Omitting
+ * it entirely leaves `localRoots` undefined, so `verifyBuildBoundary()` falls
+ * through to its own default — `DEFAULT_LOCAL_ROOT`, `DEFAULT_VEGETATION_ROOT`,
+ * and `DEFAULT_VEGETATION_ARRAYTEX_ROOT` — which is what keeps `npm run build`
+ * (no arguments) protecting all three roots without any `package.json` change.
+ */
 function parseArguments(argv) {
-  const options = { distDir: DEFAULT_DIST_DIR, localRoot: DEFAULT_LOCAL_ROOT, help: false };
+  const options = { distDir: DEFAULT_DIST_DIR, localRoots: undefined, help: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--help' || argument === '-h') {
       options.help = true;
       continue;
     }
-    const key = argument === '--dist-dir' ? 'distDir' : argument === '--local-root' ? 'localRoot' : null;
-    if (key === null) {
+    if (argument !== '--dist-dir' && argument !== '--local-root') {
       throw new BuildBoundaryError('ERR_BUILD_BOUNDARY_ARGS', `unsupported argument: ${argument}`);
     }
     const value = argv[index + 1];
     if (!value || value.startsWith('--')) {
       throw new BuildBoundaryError('ERR_BUILD_BOUNDARY_ARGS', `${argument} requires a path`);
     }
-    options[key] = resolve(process.cwd(), value);
+    const resolved = resolve(process.cwd(), value);
+    if (argument === '--dist-dir') {
+      options.distDir = resolved;
+    } else {
+      options.localRoots = [...(options.localRoots ?? []), resolved];
+    }
     index += 1;
   }
   return options;
@@ -296,9 +424,10 @@ async function main() {
   if (options.help) {
     process.stdout.write(`${JSON.stringify({
       verifier: 'build-boundary',
-      usage: 'node scripts/verify-build-boundary.mjs [--dist-dir PATH] [--local-root PATH]',
+      usage: 'node scripts/verify-build-boundary.mjs [--dist-dir PATH] [--local-root PATH ...repeatable]',
       defaultDistDir: relative(REPOSITORY_ROOT, DEFAULT_DIST_DIR),
-      defaultLocalRoot: relative(REPOSITORY_ROOT, DEFAULT_LOCAL_ROOT),
+      defaultLocalRoots: [DEFAULT_LOCAL_ROOT, DEFAULT_VEGETATION_ROOT, DEFAULT_VEGETATION_ARRAYTEX_ROOT]
+        .map((root) => relative(REPOSITORY_ROOT, root)),
       writesFiles: false,
     }, null, 2)}\n`);
     return;
