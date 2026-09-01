@@ -1,26 +1,53 @@
 #!/usr/bin/env node
 
 /**
- * Independent second source for the Customs industrial rail-yard identity question.
+ * ============================================================================
+ * READ THIS BEFORE YOU READ ANY NUMBER THIS SCRIPT PRINTS
+ * ============================================================================
  *
- * This script deliberately shares no code, spec, or heuristic with the primary
- * industrial-roots extractor. It reads ONE artefact that already exists on disk:
- * a scalar-only Unity facts dump (GameObject names, hierarchy paths, parent
- * pointers, local TRS). It never touches a game install.
+ * THIS IS NOT AN INDEPENDENT SOURCE. It shares an acquisition layer with the
+ * primary industrial-roots extractor. The only input it has ever been run
+ * against — the scalar-only Unity facts dump — was itself produced by
+ * scripts/extract-customs-unity.py, and that same script is the selector the
+ * primary extractor imports (extract-customs-industrial-roots.py imports
+ * census-customs-assets.py, which imports extract-customs-unity.py). Anything
+ * the selector dropped is invisible to BOTH instruments in exactly the same
+ * way. AGREEMENT BETWEEN THE TWO IS THEREFORE NOT VALIDATION. It is one
+ * acquisition read twice.
+ *
+ * What this script IS: a differently-reasoned reading of that one dump. It
+ * parses names and composes transforms on its own terms, so it can disagree
+ * with the extractor about *interpretation*. It cannot disagree about
+ * *acquisition*, and it cannot confirm the extractor.
+ *
+ * WHAT THE OUTPUT IS: a CONSERVATIVE CANDIDATE ROSTER — a retrieval and
+ * coordinate-correlation aid for a later survey raid, not the truth about the
+ * Customs rail yard. Every count below is "how many GameObjects carrying this
+ * NAME resolved to a world position inside this box", never "how many wagons
+ * are in the yard". An explicit name proves a LABEL is separable; it does not
+ * prove a matching GameObject is a placed, visible wagon rather than a child,
+ * a collider, an LOD node, or an inactive placeholder. Confirmation has to come
+ * from outside this repository — geo-tagged in-game photographs, whose
+ * filenames carry world position and camera quaternion.
+ *
+ * ----------------------------------------------------------------------------
  *
  * What the dump carries: names, hierarchyPath, parentGameObjectPathId, active,
  * localPosition / localRotation / localScale, sceneIndex, scenePath, asset.
- * What it does NOT carry: renderers, meshes, materials, textures, colours.
- * Every colour statement below therefore rests on a NAME token, never on a
+ * What it does NOT carry: renderers, meshes, materials, textures, colours,
+ * bounds. Every colour statement below rests on a NAME token, never on a
  * material — see CAPABILITY_STATEMENT.
  *
  * Coordinate frame (see resolveWorkingFrame): world positions are composed in
  * the dump's own frame, which is Unity world metres, Y up. The scene manifest
  * calls that frame 'eft-unity-world-metres-y-up' and the rail-yard scope box is
  * expressed in the same frame (ground plane X/Z, centre {x, z}, widthM/depthM).
- * The runtime frame 'three-z-up-metres' is reachable by runtimeFromSource
- * [-x, -z, y]; the script computes it too and reports scope containment under
- * BOTH readings so the frame choice is evidence, not an assumption.
+ * The frame strings and the scope box below are READ FROM the manifest at run
+ * time and the literals are asserted against it (ERR_SECOND_SOURCE_MANIFEST_DRIFT);
+ * they are not a hand-copied snapshot. The runtime frame 'three-z-up-metres' is
+ * reachable by runtimeFromSource [-x, -z, y]; the script computes it too and
+ * reports scope containment under BOTH readings so the frame choice is
+ * evidence, not an assumption.
  */
 
 import { createReadStream } from 'node:fs';
@@ -31,13 +58,37 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(SCRIPT_DIR, '..');
 
-export const DEFAULT_FACTS_PATH = '/tmp/tarkovzero-customs-unity-facts.json';
+/**
+ * The local scalar-only dump. It is an existing local artefact, never the game
+ * install. Override with --facts.
+ */
+export const DEFAULT_FACTS_PATH = resolve(
+  REPOSITORY_ROOT,
+  '.local-game-derived/unity-facts/customs-unity-facts.json',
+);
 export const SCENE_MANIFEST_PATH = resolve(
   REPOSITORY_ROOT,
   'public/assets/3d/customs/scene-manifest.json',
 );
 /** Hand-traced from a satellite render; never derived from the facts dump. */
 export const TRACED_PROPS_PATH = resolve(REPOSITORY_ROOT, 'data/customs-props.json');
+
+/**
+ * Printed before every number this script emits, and carried in the JSON
+ * result. Anyone reading a count must meet this sentence first.
+ */
+export const PROVENANCE_STATEMENT = Object.freeze([
+  'NOT AN INDEPENDENT SOURCE. This reading shares an acquisition layer with the primary',
+  'industrial-roots extractor: its input dump was produced by scripts/extract-customs-unity.py,',
+  'the same selector that extractor imports (via census-customs-assets.py). Agreement between',
+  'the two is NOT independent validation — it is one acquisition read twice.',
+  '',
+  'OUTPUT IS A CONSERVATIVE CANDIDATE ROSTER, not the truth about the Customs rail yard.',
+  'Each count is "GameObjects carrying this NAME that resolved inside this box", never',
+  '"wagons in the yard". A name proves a LABEL is separable; it does not prove the object is a',
+  'placed, visible wagon rather than a child, collider, LOD node, or inactive placeholder.',
+  'Confirmation must come from outside this repository — geo-tagged in-game photographs.',
+]);
 
 export const SOURCE_FRAME = 'eft-unity-world-metres-y-up';
 export const RUNTIME_FRAME = 'three-z-up-metres';
@@ -59,22 +110,47 @@ export const HANDOFF_CLAIM = Object.freeze({
 
 export const DEFAULT_MAX_PARENT_DEPTH = 128;
 export const DEFAULT_DEDUPE_TOLERANCE_M = 0.5;
+/** Two roots closer than this are reported as a suspected duplicate placement. */
+export const DEFAULT_DUPLICATE_TOLERANCE_M = 0.5;
+
+/**
+ * Hierarchy roots excluded by DEFAULT, each with the reason and the falsifier.
+ * Nothing is filtered silently: every exclusion is reported with its own count
+ * and can be re-admitted from the CLI with --include-hierarchy-root.
+ */
+export const DEFAULT_EXCLUSIONS = Object.freeze([
+  Object.freeze({
+    hierarchyRoot: 'NewYear_Event',
+    reason:
+      'Seasonal garland-anchor subtree. Its container_6m nodes are decoration anchors placed ON existing '
+      + 'containers (measured against this dump 2026-09-01: of the 50 in-scope garland roots, 47 sit within '
+      + '1e-6 m of a non-garland container root and all 50 within 0.40 m), so counting them double-counts the '
+      + 'same physical box and manufactures colourless containers that make the colour question undecidable.',
+    falsifier:
+      'If an in-scope NewYear_Event root is ever measured further than the duplicate tolerance from every '
+      + 'non-NewYear_Event root, this exclusion is wrong for that object and must be reconsidered.',
+  }),
+]);
 
 export const CAPABILITY_STATEMENT = Object.freeze({
   can: Object.freeze([
-    'Enumerate every GameObject whose NAME declares a rail-body or shipping-container type.',
+    'Enumerate every GameObject whose NAME declares a rail-body, locomotive, bogie or shipping-container type.',
     'Compose a world position for each from the local TRS chain through parentGameObjectPathId.',
     'Decide scope membership against the rail-yard box on the X/Z ground plane.',
-    'Reduce nested LOD / collider / door children to the placed root that owns them.',
+    'Reduce nested LOD / collider / shadow / ballistic / door children to the placed root that owns them.',
+    'Flag roots that sit at the same world position as another root, whatever their names.',
     'Report a per-name-token census with positions, scenes and hierarchy paths.',
     'Report a colour token WHEN the author put one in the name (…_Red_close, …_green).',
+    'Report which authored group owns each body, so a claim about "a consist" can be aimed at one group.',
   ]),
   cannot: Object.freeze([
+    'Validate the primary extractor. Both instruments read one dump produced by one selector; agreement between them carries no independent evidence.',
+    'Establish that a named GameObject is a placed, visible wagon rather than a child, collider, LOD node, or inactive placeholder — beyond the boolean active flag it carries.',
     'Establish colour, material, texture or paint for any object whose name lacks a colour token — the dump has no renderer, mesh or material fields at all.',
     'Confirm that a name-borne colour token matches the material actually assigned in the scene.',
     'Measure any object dimension: no bounds, no mesh, so "6 m" is read from the name token container_6m, never from geometry.',
-    'Distinguish a visible prop from a disabled or culling-only placeholder beyond the boolean active flag it carries.',
-    'Say anything about objects the dump omitted; it is an inventory of what was extracted, not proof of what exists.',
+    'Say anything about objects the dump omitted; it is an inventory of what the selector extracted, not proof of what exists.',
+    'Settle any count. Every number here is a candidate to be confirmed against geo-tagged in-game photographs.',
   ]),
 });
 
@@ -88,6 +164,109 @@ class SecondSourceError extends Error {
 
 function fail(code, message) {
   throw new SecondSourceError(code, message);
+}
+
+/* ------------------------------------------------------------------ *
+ * Scene manifest — the frame strings and the scope box are READ, not copied
+ * ------------------------------------------------------------------ */
+
+/**
+ * The literals this module exports, in the shape the manifest stores them.
+ * Kept as one object so the drift check compares a whole contract, never a
+ * hand-picked subset.
+ */
+export function declaredContract() {
+  return {
+    frames: {
+      source: SOURCE_FRAME,
+      runtime: RUNTIME_FRAME,
+      runtimeFromSource: RUNTIME_FROM_SOURCE,
+    },
+    scope: {
+      id: RAIL_YARD_SCOPE.id,
+      center: { x: RAIL_YARD_SCOPE.center.x, z: RAIL_YARD_SCOPE.center.z },
+      widthM: RAIL_YARD_SCOPE.widthM,
+      depthM: RAIL_YARD_SCOPE.depthM,
+    },
+  };
+}
+
+/** Pulls just the frame + scope contract out of a parsed scene manifest. */
+export function contractFromManifest(manifest) {
+  if (!manifest || typeof manifest !== 'object') {
+    fail('ERR_SECOND_SOURCE_MANIFEST_SHAPE', 'scene manifest is not an object');
+  }
+  const frames = manifest.frames;
+  const scope = manifest.scope;
+  if (!frames || typeof frames !== 'object') {
+    fail('ERR_SECOND_SOURCE_MANIFEST_SHAPE', 'scene manifest has no "frames" object');
+  }
+  if (!scope || typeof scope !== 'object' || !scope.center || typeof scope.center !== 'object') {
+    fail('ERR_SECOND_SOURCE_MANIFEST_SHAPE', 'scene manifest has no "scope" object with a "center"');
+  }
+  return {
+    frames: {
+      source: frames.source,
+      runtime: frames.runtime,
+      runtimeFromSource: frames.runtimeFromSource,
+    },
+    scope: {
+      id: scope.id,
+      center: { x: scope.center.x, z: scope.center.z },
+      widthM: scope.widthM,
+      depthM: scope.depthM,
+    },
+  };
+}
+
+/**
+ * Compares the module literals against the manifest field by field and THROWS
+ * on any disagreement. A silently stale snapshot is exactly the failure this
+ * replaces, so there is no tolerant mode: drift is a stop, not a warning.
+ */
+export function assertManifestAgreement(manifestContract, declared = declaredContract()) {
+  const disagreements = [];
+  const compare = (path, mine, theirs) => {
+    if (mine !== theirs) {
+      disagreements.push(`${path}: script literal ${JSON.stringify(mine)} != manifest ${JSON.stringify(theirs)}`);
+    }
+  };
+  compare('frames.source', declared.frames.source, manifestContract.frames.source);
+  compare('frames.runtime', declared.frames.runtime, manifestContract.frames.runtime);
+  compare('frames.runtimeFromSource', declared.frames.runtimeFromSource, manifestContract.frames.runtimeFromSource);
+  compare('scope.id', declared.scope.id, manifestContract.scope.id);
+  compare('scope.center.x', declared.scope.center.x, manifestContract.scope.center.x);
+  compare('scope.center.z', declared.scope.center.z, manifestContract.scope.center.z);
+  compare('scope.widthM', declared.scope.widthM, manifestContract.scope.widthM);
+  compare('scope.depthM', declared.scope.depthM, manifestContract.scope.depthM);
+
+  if (disagreements.length > 0) {
+    fail(
+      'ERR_SECOND_SOURCE_MANIFEST_DRIFT',
+      `scene manifest disagrees with this script's frame/scope literals:\n  - ${disagreements.join('\n  - ')}`,
+    );
+  }
+  return { agrees: true, checked: 8, contract: manifestContract };
+}
+
+/** Reads the manifest from disk. An unreadable manifest is a hard failure. */
+export async function loadSceneManifestContract(path = SCENE_MANIFEST_PATH) {
+  let text;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch (error) {
+    fail(
+      'ERR_SECOND_SOURCE_MANIFEST_UNREADABLE',
+      `cannot read the scene manifest at ${path}: ${error?.message ?? error}`,
+    );
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    fail('ERR_SECOND_SOURCE_MANIFEST_UNREADABLE', `scene manifest at ${path} is not JSON: ${error?.message ?? error}`);
+  }
+  return contractFromManifest(parsed);
 }
 
 /* ------------------------------------------------------------------ *
@@ -419,11 +598,75 @@ export function isWithinScopeRuntimeXY(runtimePosition, scope) {
 }
 
 /* ------------------------------------------------------------------ *
- * Name tokens
+ * Name lexicon — derived from the dump's own name space, not guessed
  * ------------------------------------------------------------------ */
 
+/**
+ * Every rolling-stock / container name family the dump actually contains, with
+ * the census that put it here. Re-derive with:
+ *   grep -oP '"name": "\K[^"]*' <dump> | sort -u
+ *
+ * Recorded from .local-game-derived/unity-facts/customs-unity-facts.json
+ * (481,126 GameObjects, 43,555 distinct names) on 2026-09-01. The counts are
+ * raw name occurrences across all scenes, before any root reduction.
+ */
+export const NAME_SPACE_CENSUS = Object.freeze([
+  Object.freeze({ prefix: 'Vagon_tank', role: 'body', note: 'plus _green, _red colour variants' }),
+  Object.freeze({ prefix: 'Vagon_hopper', role: 'body', note: 'plus _black' }),
+  Object.freeze({ prefix: 'Vagon_shutted_closed', role: 'body', note: 'the closed freight wagon' }),
+  Object.freeze({ prefix: 'Vagon_gondola_small', role: 'body', note: 'plus _green; a family the handoff claim never listed' }),
+  Object.freeze({ prefix: 'Vagon_gondola_large', role: 'body', note: 'plus _black_02; a family the handoff claim never listed' }),
+  Object.freeze({
+    prefix: 'Vagon_movable_doors_<colour>',
+    role: 'body',
+    note:
+      'sliding-door boxcar. Owns two Train_wheels bogie sets AND a body mesh (Vagon_movable_door_LOD0 / '
+      + '_COLLIDER / _SHADOW_LOD0 / _BALLISTIC_*), so it is a placed wagon, not a door part. Only '
+      + 'Vagon_movable_doors_grey exists in this dump.',
+  }),
+  Object.freeze({ prefix: 'Vagon_movable_door', role: 'part', note: 'singular: the boxcar body/door mesh + its LOD/collider/shadow/ballistic siblings' }),
+  Object.freeze({ prefix: 'Vagon_movable_door_slide_0N', role: 'part', note: 'one sliding door leaf' }),
+  Object.freeze({
+    prefix: 'Locomotive',
+    role: 'body',
+    note:
+      'MISSED ENTIRELY by the pre-repair lexicon. 8 placed roots in the dump, 2 of them inside the scope '
+      + 'box; data/customs-prop-features.json lists locomotive_west and locomotive_east as rail-yard features.',
+  }),
+  Object.freeze({
+    prefix: 'Train_wheels',
+    role: 'part',
+    note:
+      'bogie set. Admitted as a PART so that a Train_wheels root with no rail-body ancestor becomes a visible '
+      + 'diagnostic: it would mean a bogied vehicle whose body name the lexicon does not know.',
+  }),
+  Object.freeze({ prefix: 'container_6m', role: 'body', note: 'plus damage/colour/close variants and door_0N_[LR] parts' }),
+  Object.freeze({ prefix: 'container_12m', role: 'body', note: 'plus damage/colour/close variants and door_0N_[LR] parts' }),
+]);
+
+/**
+ * Names in the dump that LOOK like the lexicon but are authored group nodes,
+ * not objects: 'vagon_01_indoor Group', 'vagon_02_indoor Group',
+ * 'vagon_03_indoor Group', 'platforma_stuff Group'. Unity's authoring
+ * convention gives an organisational empty a trailing ' Group'. The pre-repair
+ * filter admitted the three vagon_* ones and classified each as a wagon body.
+ */
+const AUTHORED_GROUP_SUFFIX = /\sgroup$/i;
+
 const INSTANCE_SUFFIX = /\s*\((\d+)\)\s*$/;
-const TECHNICAL_SUFFIX = /_(?:LOD\d+|COLLIDER|SHADOW_LOD\d+|SHADOW|BALLISTIC_[A-Za-z]+|decal_LOD\d+|decal)$/i;
+/**
+ * Trailing renderer / collider / shadow / ballistic decorations.
+ *
+ * `_col` is in the list because it is this dump's OTHER collider convention
+ * (25 distinct names use it: railway_rail_final_col, garage_01_col,
+ * Kabina_door_L_col, balistic_col …). Measured 2026-09-01: no name inside the
+ * current lexicon ends in `_col`, so adding it changes zero rows on this dump.
+ * It is a guard against a latent defect, not a live correction — the previous
+ * regex would have classified `Vagon_tank_01_col` as a body, and stripping is
+ * iterative so `…_LOD0_col` now reduces correctly too.
+ */
+const TECHNICAL_SUFFIX =
+  /_(?:LOD\d+|COLLIDER|COL|SHADOW_LOD\d+|SHADOW|BALLISTIC_[A-Za-z]+|decal_LOD\d+|decal)$/i;
 const COLOUR_WORDS = new Set([
   'red', 'green', 'blue', 'darkblue', 'yellow', 'orange', 'black', 'grey', 'gray', 'white', 'brown',
 ]);
@@ -435,7 +678,8 @@ export function stripInstanceSuffix(name) {
 
 /**
  * Reduces an authored name to its stable body token: duplicate marker off,
- * then every trailing renderer/collider/shadow/ballistic decoration off.
+ * then every trailing renderer/collider/shadow/ballistic decoration off,
+ * repeatedly (names stack them: reciever_1_LOD0_SHADOW_LOD0).
  */
 export function bodyTokenFromName(name) {
   let token = stripInstanceSuffix(name);
@@ -451,13 +695,36 @@ export function hasTechnicalSuffix(name) {
   return TECHNICAL_SUFFIX.test(stripInstanceSuffix(name));
 }
 
+/** Families whose members are rail rolling stock (as opposed to containers). */
+export const RAIL_BODY_FAMILIES = Object.freeze(new Set([
+  'tank-wagon',
+  'hopper-wagon',
+  'closed-freight-wagon',
+  'gondola-wagon',
+  'sliding-door-boxcar',
+  'locomotive',
+]));
+
+export function isRailBodyFamily(family) {
+  return RAIL_BODY_FAMILIES.has(family) || String(family).startsWith('rolling-stock-unrecognised:');
+}
+
 /**
  * Classifies a body token from the token alone. Returns null for anything that
  * is not rail rolling stock or a shipping container. `role` is 'body' for a
- * placeable body and 'part' for a named sub-assembly (doors, wheels).
+ * placeable body and 'part' for a named sub-assembly (doors, bogies).
  */
 export function classifyBodyToken(token) {
   if (typeof token !== 'string' || token.length === 0) return null;
+  if (AUTHORED_GROUP_SUFFIX.test(token)) return null;
+
+  if (/^train_wheels$/.test(token)) {
+    return { family: 'bogie', role: 'part', part: 'bogie', colour: null, damaged: false, closed: false };
+  }
+
+  if (/^locomotive$/.test(token)) {
+    return { family: 'locomotive', role: 'body', part: null, colour: null, damaged: false, closed: false };
+  }
 
   const containerMatch = /^container_(6m|12m)(?:_(.*))?$/.exec(token);
   if (containerMatch) {
@@ -495,8 +762,20 @@ export function classifyBodyToken(token) {
       return { family: 'gondola-wagon', role: 'body', part: null, colour, damaged: false, closed: false };
     }
     if (head === 'movable') {
-      // Vagon_movable_door_slide_0N is a leaf door; Vagon_movable_doors_* is the
-      // door assembly. Neither is asserted to be a wagon body by this source.
+      // 'Vagon_movable_doorS_<colour>' (plural) is the placed boxcar: it owns two
+      // Train_wheels bogie sets and a body mesh. 'Vagon_movable_door…' (singular)
+      // is that boxcar's own mesh/collider/shadow naming, and
+      // 'Vagon_movable_door_slide_0N' is one sliding leaf. Only the plural is a body.
+      if (segments[1] === 'doors') {
+        return {
+          family: 'sliding-door-boxcar',
+          role: 'body',
+          part: null,
+          colour,
+          damaged: false,
+          closed: false,
+        };
+      }
       return {
         family: 'wagon-movable-door-assembly',
         role: 'part',
@@ -506,25 +785,43 @@ export function classifyBodyToken(token) {
         closed: false,
       };
     }
-    return { family: `wagon-other:${head ?? ''}`, role: 'body', part: null, colour, damaged: false, closed: false };
+    // An unrecognised vagon_* head. Surfaced as a body so it cannot be lost, but
+    // named so the report can flag it as a name the lexicon does not know.
+    return {
+      family: `rolling-stock-unrecognised:${head ?? ''}`,
+      role: 'body',
+      part: null,
+      colour,
+      damaged: false,
+      closed: false,
+      unrecognised: true,
+    };
   }
 
   return null;
 }
 
-/** Cheap pre-filter run against every streamed name before any parsing work. */
+/**
+ * Cheap pre-filter run against every streamed name before any parsing work.
+ * Widened past the original /^(?:vagon_|container_(?:6m|12m))/i, which could
+ * not see a single locomotive or bogie.
+ */
+const CANDIDATE_PREFIX = /^(?:vagon_|locomotive|container_(?:6m|12m)|train_wheels)/i;
+
 export function isCandidateName(name) {
-  return /^(?:vagon_|container_(?:6m|12m))/i.test(stripInstanceSuffix(name));
+  const base = stripInstanceSuffix(name);
+  if (AUTHORED_GROUP_SUFFIX.test(base)) return false;
+  return CANDIDATE_PREFIX.test(base);
 }
 
 /* ------------------------------------------------------------------ *
- * Root reduction and dedupe
+ * Root reduction, dedupe and duplicate detection
  * ------------------------------------------------------------------ */
 
 /**
  * A match is a placed root when no ancestor of it is also a match. That is what
- * collapses container_6m_door_01_L, Vagon_tank_LOD1 and friends into the one
- * object that was actually placed.
+ * collapses container_6m_door_01_L, Vagon_tank_LOD1, Train_wheels and friends
+ * into the one object that was actually placed.
  */
 export function selectPlacedRoots(matches, lookup, { maxDepth = DEFAULT_MAX_PARENT_DEPTH } = {}) {
   const matchKeys = new Set(matches.map((match) => match.key));
@@ -551,39 +848,97 @@ export function selectPlacedRoots(matches, lookup, { maxDepth = DEFAULT_MAX_PARE
   return { roots, nested };
 }
 
-function quantize(value, toleranceM) {
-  return Math.round(value / toleranceM);
+function distance3(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+/**
+ * Groups rows by a key function and true metric distance to the group
+ * representative. The previous implementation quantized each axis into bins,
+ * which splits a genuine pair that straddles a bin edge; a distance test does
+ * not. Input is sorted first so grouping is order-independent.
+ */
+function clusterByDistance(rows, keyOf, toleranceM) {
+  const sorted = [...rows].sort((a, b) => (
+    String(keyOf(a)).localeCompare(String(keyOf(b)))
+    || a.world.x - b.world.x
+    || a.world.y - b.world.y
+    || a.world.z - b.world.z
+  ));
+  const groups = [];
+  const byKey = new Map();
+  for (const row of sorted) {
+    const key = String(keyOf(row));
+    const bucket = byKey.get(key);
+    let joined = null;
+    if (bucket) {
+      for (const group of bucket) {
+        if (distance3(group.representative.world, row.world) <= toleranceM) {
+          joined = group;
+          break;
+        }
+      }
+    }
+    if (joined) {
+      joined.members.push(row);
+    } else {
+      const group = { key, representative: row, members: [row] };
+      groups.push(group);
+      if (bucket) bucket.push(group);
+      else byKey.set(key, [group]);
+    }
+  }
+  return groups;
 }
 
 /**
  * Collapses the same physical object placed in more than one scene (a multiScene
  * copy and its background/LOD twin) into a single occupancy, keyed by body token
- * plus quantized world position.
+ * plus world proximity.
  */
 export function dedupePlacedRoots(rows, { toleranceM = DEFAULT_DEDUPE_TOLERANCE_M } = {}) {
-  const groups = new Map();
-  for (const row of rows) {
-    const key = [
-      row.token,
-      quantize(row.world.x, toleranceM),
-      quantize(row.world.y, toleranceM),
-      quantize(row.world.z, toleranceM),
-    ].join('|');
-    const existing = groups.get(key);
-    if (existing) {
-      existing.duplicates.push(row);
-    } else {
-      groups.set(key, { key, representative: row, duplicates: [] });
+  return clusterByDistance(rows, (row) => row.token, toleranceM).map((group) => {
+    const duplicates = group.members.slice(1);
+    return {
+      ...group.representative,
+      duplicateCount: duplicates.length,
+      scenes: [...new Set(group.members.map((member) => member.sceneIndex))].sort((a, b) => a - b),
+      names: [...new Set(group.members.map((member) => member.name))],
+    };
+  });
+}
+
+/**
+ * Finds roots that occupy the same world position REGARDLESS of name. This is
+ * the check that catches a decoration anchor sitting on a real object: the
+ * name-keyed dedupe above cannot see it, because the two names differ.
+ *
+ * Returns one entry per cluster of two or more roots, with the hierarchy roots
+ * involved, so the reader can tell "one object counted twice" from "two objects
+ * genuinely stacked".
+ */
+export function detectPositionDuplicates(rows, { toleranceM = DEFAULT_DUPLICATE_TOLERANCE_M } = {}) {
+  const groups = clusterByDistance(rows, () => 'all', toleranceM)
+    .filter((group) => group.members.length > 1);
+  return groups.map((group) => {
+    let spreadM = 0;
+    for (const member of group.members) {
+      spreadM = Math.max(spreadM, distance3(group.representative.world, member.world));
     }
-  }
-  return [...groups.values()].map((group) => ({
-    ...group.representative,
-    duplicateCount: group.duplicates.length,
-    scenes: [
-      ...new Set([group.representative.sceneIndex, ...group.duplicates.map((d) => d.sceneIndex)]),
-    ].sort((a, b) => a - b),
-    names: [...new Set([group.representative.name, ...group.duplicates.map((d) => d.name)])],
-  }));
+    return {
+      position: { ...group.representative.world },
+      count: group.members.length,
+      spreadM,
+      hierarchyRoots: [...new Set(group.members.map((member) => hierarchyRootOf(member.hierarchyPath)))].sort(),
+      members: group.members.map((member) => ({
+        name: member.name,
+        token: member.token,
+        family: member.family,
+        hierarchyPath: member.hierarchyPath,
+        sceneIndex: member.sceneIndex,
+      })),
+    };
+  }).sort((a, b) => b.count - a.count || a.position.x - b.position.x);
 }
 
 export function summarizeCounts(rows) {
@@ -628,9 +983,11 @@ export function analyseColourDecidability(rows) {
 }
 
 /**
- * Scores the handoff's 3 closed / 2 tank / 1 hopper / 2 red-6m claim. Colour is
- * only decidable for containers whose name carries a colour token; any
- * colourless 6 m container in scope forces 'cannot-address' rather than a guess.
+ * Scores the handoff's 3 closed / 2 tank / 1 hopper / 2 red-6m claim, and — as
+ * importantly — lists the body families the claim never mentioned at all.
+ * Colour is only decidable for containers whose name carries a colour token;
+ * any colourless 6 m container in scope forces 'cannot-address' rather than a
+ * guess.
  */
 export function evaluateHandoffClaim(rows, claim = HANDOFF_CLAIM) {
   const bodies = rows.filter((row) => row.role === 'body');
@@ -671,9 +1028,16 @@ export function evaluateHandoffClaim(rows, claim = HANDOFF_CLAIM) {
         : 'every in-scope 6 m container root carries a colour token in its name.',
   });
 
+  const claimedFamilies = new Set(['closed-freight-wagon', 'tank-wagon', 'hopper-wagon', 'container-6m', 'container-12m']);
+  const unlisted = [...new Set(bodies.map((row) => row.family))]
+    .filter((family) => !claimedFamilies.has(family))
+    .map((family) => ({ family, observed: countFamily(family) }))
+    .sort((a, b) => b.observed - a.observed || a.family.localeCompare(b.family));
+
   const verdicts = items.map((item) => item.status);
   return {
     items,
+    familiesTheClaimNeverListed: unlisted,
     overall: verdicts.includes('contradicts')
       ? 'contradicts'
       : verdicts.includes('cannot-address')
@@ -716,14 +1080,17 @@ export function hierarchyRootOf(hierarchyPath) {
 }
 
 /* ------------------------------------------------------------------ *
- * Frame verification against an independent in-repo artefact
+ * Frame verification against an in-repo artefact
+ *
+ * NOTE ON INDEPENDENCE: data/customs-props.json was hand-traced from a
+ * satellite render, so it is independent OF THE DUMP for the frame question
+ * and nothing else. It carries no wagon identities and cannot confirm a count.
  * ------------------------------------------------------------------ */
 
 /**
  * Nearest-neighbour match between composed world positions and the repository's
- * hand-traced prop table (data/customs-props.json), which was traced from a
- * satellite render and never derived from this dump. Agreement with NO transform
- * applied is the evidence that both are expressed in the same frame.
+ * hand-traced prop table. Agreement with NO transform applied is the evidence
+ * that both are expressed in the same frame.
  */
 export function crossCheckAgainstTracedProps(rows, tracedProps, { toleranceM = 3 } = {}) {
   const pairs = [];
@@ -763,21 +1130,39 @@ export function crossCheckAgainstTracedProps(rows, tracedProps, { toleranceM = 3
 
 /**
  * Decides, from the data rather than from belief, which frame the scope box is
- * written in: the reading that actually puts rail bodies inside the box wins.
+ * written in: the reading that actually puts resolved roots inside the box wins.
+ *
+ * The decision is taken over EVERY resolved root of any family (that is the
+ * larger sample); the rail-only tallies are reported alongside so the reader can
+ * see the decision does not hang on the container mass. The pre-repair report
+ * labelled these numbers "rail bodies", which they never were.
  */
 export function resolveWorkingFrame(candidates, scope) {
   let sourceHits = 0;
   let runtimeHits = 0;
+  let railSourceHits = 0;
+  let railRuntimeHits = 0;
   for (const row of candidates) {
-    if (isWithinScopeXZ(row.world, scope)) sourceHits += 1;
-    if (isWithinScopeRuntimeXY(row.runtime, scope)) runtimeHits += 1;
+    const rail = row.role === 'body' && isRailBodyFamily(row.family);
+    if (isWithinScopeXZ(row.world, scope)) {
+      sourceHits += 1;
+      if (rail) railSourceHits += 1;
+    }
+    if (isWithinScopeRuntimeXY(row.runtime, scope)) {
+      runtimeHits += 1;
+      if (rail) railRuntimeHits += 1;
+    }
   }
   return {
     sourceFrame: SOURCE_FRAME,
     runtimeFrame: RUNTIME_FRAME,
     runtimeFromSource: RUNTIME_FROM_SOURCE,
+    measuredOver: 'every resolved root of any family',
+    resolvedRootsConsidered: candidates.length,
     sourceHits,
     runtimeHits,
+    railBodySourceHits: railSourceHits,
+    railBodyRuntimeHits: railRuntimeHits,
     chosen: sourceHits >= runtimeHits ? 'source' : 'runtime',
   };
 }
@@ -790,7 +1175,7 @@ function nodeKey(asset, pathId) {
   return `${asset}:${pathId}`;
 }
 
-class FactsStore {
+export class FactsStore {
   constructor() {
     this.capacity = 1024;
     this.size = 0;
@@ -885,24 +1270,52 @@ class FactsStore {
  * Runner
  * ------------------------------------------------------------------ */
 
+/**
+ * @param {object}  [options]
+ * @param {string}  [options.factsPath]           dump on disk
+ * @param {Function}[options.createFactsStream]   () => AsyncIterable<string>; test seam
+ * @param {string}  [options.sceneManifestPath]   manifest on disk (read, then asserted)
+ * @param {object}  [options.sceneManifest]       pre-parsed manifest; test seam
+ * @param {string[]}[options.excludeHierarchyRoots] defaults to DEFAULT_EXCLUSIONS
+ * @param {string[]}[options.includeHierarchyRoots] re-admits a default exclusion
+ * @param {Array}   [options.tracedProps]         pre-loaded traced props; test seam
+ */
 export async function runSecondSource({
   factsPath = DEFAULT_FACTS_PATH,
+  createFactsStream = null,
   scope = RAIL_YARD_SCOPE,
   maxDepth = DEFAULT_MAX_PARENT_DEPTH,
   dedupeToleranceM = DEFAULT_DEDUPE_TOLERANCE_M,
+  duplicateToleranceM = DEFAULT_DUPLICATE_TOLERANCE_M,
   highWaterMark = 1 << 24,
-  excludeHierarchyRoots = [],
+  sceneManifestPath = SCENE_MANIFEST_PATH,
+  sceneManifest = null,
+  excludeHierarchyRoots = null,
+  includeHierarchyRoots = [],
   tracedPropsPath = TRACED_PROPS_PATH,
+  tracedProps = null,
   onProgress = null,
 } = {}) {
+  // S5: the frame strings and the scope box are checked against the manifest
+  // BEFORE any work, and a disagreement stops the run.
+  const manifestContract = sceneManifest
+    ? contractFromManifest(sceneManifest)
+    : await loadSceneManifestContract(sceneManifestPath);
+  const manifestCheck = {
+    ...assertManifestAgreement(manifestContract),
+    sceneManifestPath: sceneManifest ? '(injected)' : sceneManifestPath,
+  };
+
   const store = new FactsStore();
   const matches = [];
   const scanner = createGameObjectScanner({ arrayKey: 'gameObjects' });
 
-  const stream = createReadStream(factsPath, { encoding: 'utf8', highWaterMark });
+  const stream = createFactsStream
+    ? createFactsStream()
+    : createReadStream(factsPath, { encoding: 'utf8', highWaterMark });
   let parsed = 0;
   for await (const chunk of stream) {
-    for (const raw of scanner.push(chunk)) {
+    for (const raw of scanner.push(String(chunk))) {
       const record = JSON.parse(raw);
       store.add(record);
       parsed += 1;
@@ -920,6 +1333,7 @@ export async function runSecondSource({
             colour: classification.colour,
             damaged: classification.damaged,
             closed: classification.closed,
+            unrecognised: classification.unrecognised === true,
             technicalSuffix: hasTechnicalSuffix(record.name),
             asset: record.asset,
             sceneIndex: record.sceneIndex,
@@ -934,7 +1348,7 @@ export async function runSecondSource({
     if (onProgress && parsed > 0) onProgress(parsed);
     if (scanner.finished) break;
   }
-  stream.destroy();
+  if (typeof stream.destroy === 'function') stream.destroy();
   scanner.end();
 
   const lookup = (key) => store.lookup(key);
@@ -958,37 +1372,81 @@ export async function runSecondSource({
   }
 
   const frame = resolveWorkingFrame(resolved, scope);
-  const excluded = new Set(excludeHierarchyRoots);
-  const kept = excluded.size === 0
+
+  // S1: exclusions are named, counted and reported — never silent.
+  const readmitted = new Set(includeHierarchyRoots);
+  const activeExclusions = (
+    excludeHierarchyRoots === null
+      ? DEFAULT_EXCLUSIONS.filter((rule) => !readmitted.has(rule.hierarchyRoot))
+      : excludeHierarchyRoots.map((hierarchyRoot) => ({
+        hierarchyRoot,
+        reason: 'requested on the command line',
+        falsifier: null,
+      }))
+  );
+  const excludedRoots = new Set(activeExclusions.map((rule) => rule.hierarchyRoot));
+
+  const resolvedInScopeBeforeExclusions = resolved.filter((row) => isWithinScopeXZ(row.world, scope));
+  const exclusionReport = activeExclusions.map((rule) => ({
+    ...rule,
+    excludedInScopeRoots: resolvedInScopeBeforeExclusions
+      .filter((row) => hierarchyRootOf(row.hierarchyPath) === rule.hierarchyRoot).length,
+    excludedRootsAnywhere: resolved
+      .filter((row) => hierarchyRootOf(row.hierarchyPath) === rule.hierarchyRoot).length,
+  }));
+
+  const kept = excludedRoots.size === 0
     ? resolved
-    : resolved.filter((row) => !excluded.has(hierarchyRootOf(row.hierarchyPath)));
+    : resolved.filter((row) => !excludedRoots.has(hierarchyRootOf(row.hierarchyPath)));
   const inScopeAll = kept.filter((row) => isWithinScopeXZ(row.world, scope));
   const inScopeActive = inScopeAll.filter((row) => row.activeInHierarchy);
   const deduped = dedupePlacedRoots(inScopeActive, { toleranceM: dedupeToleranceM });
-  const railBodies = deduped.filter((row) => row.role === 'body' && row.family.endsWith('-wagon'));
+
+  // S1: the position-based detector, run on BOTH readings, so the reader can see
+  // what the exclusion removed and whether anything else is stacked.
+  const positionDuplicatesBeforeExclusions = detectPositionDuplicates(
+    resolvedInScopeBeforeExclusions,
+    { toleranceM: duplicateToleranceM },
+  );
+  const positionDuplicatesAfterExclusions = detectPositionDuplicates(
+    deduped,
+    { toleranceM: duplicateToleranceM },
+  );
+
+  const railBodies = deduped.filter((row) => row.role === 'body' && isRailBodyFamily(row.family));
+  const bogieRoots = resolved.filter((row) => row.family === 'bogie');
 
   let frameCrossCheck = null;
   try {
-    const traced = JSON.parse(await readFile(tracedPropsPath, 'utf8'));
-    const rail = (traced.props ?? []).filter(
+    const props = tracedProps ?? (JSON.parse(await readFile(tracedPropsPath, 'utf8')).props ?? []);
+    const rail = props.filter(
       (prop) => prop.type === 'railcar'
         || prop.type === 'tanker'
         || /rail|locomotive|wagon/i.test(prop.name ?? ''),
     );
-    const allRailBodies = resolved.filter((row) => row.role === 'body' && row.family.endsWith('-wagon'));
+    const allRailBodies = resolved.filter((row) => row.role === 'body' && isRailBodyFamily(row.family));
     frameCrossCheck = crossCheckAgainstTracedProps(allRailBodies, rail, { toleranceM: 3 });
-    frameCrossCheck.tracedPropsPath = tracedPropsPath;
+    frameCrossCheck.tracedPropsPath = tracedProps ? '(injected)' : tracedPropsPath;
   } catch (error) {
     frameCrossCheck = { unavailable: String(error?.message ?? error), tracedPropsPath };
   }
 
   return {
-    factsPath,
+    provenance: PROVENANCE_STATEMENT,
+    outputKind: 'conservative-candidate-roster',
+    factsPath: createFactsStream ? '(injected stream)' : factsPath,
+    manifestCheck,
     scope,
     scopeBounds: scopeBounds(scope),
     frame,
     frameCrossCheck,
-    excludeHierarchyRoots: [...excluded],
+    exclusions: exclusionReport,
+    readmittedHierarchyRoots: [...readmitted],
+    positionDuplicates: {
+      toleranceM: duplicateToleranceM,
+      beforeExclusions: positionDuplicatesBeforeExclusions,
+      afterExclusions: positionDuplicatesAfterExclusions,
+    },
     consists: groupByHierarchyParent(railBodies),
     colourDecidability: analyseColourDecidability(deduped),
     totals: {
@@ -998,19 +1456,29 @@ export async function runSecondSource({
       placedRoots: roots.length,
       placedRootsResolved: resolved.length,
       placedRootsUnresolved: unresolved.length,
+      rootsInScopeBeforeExclusions: resolvedInScopeBeforeExclusions.length,
+      rootsExcluded: resolvedInScopeBeforeExclusions.length - inScopeAll.length,
       rootsInScope: inScopeAll.length,
       rootsInScopeActive: inScopeActive.length,
       rootsInScopeAfterDedupe: deduped.length,
+      positionDuplicateClustersBeforeExclusions: positionDuplicatesBeforeExclusions.length,
+      positionDuplicateClustersRemaining: positionDuplicatesAfterExclusions.length,
+      railBodiesInScope: railBodies.length,
       orphanTechnicalRoots: roots.filter((row) => row.technicalSuffix).length,
+      orphanBogieRoots: bogieRoots.length,
+      unrecognisedRollingStockRoots: resolved.filter((row) => row.unrecognised).length,
     },
     unresolved,
     orphanTechnicalRoots: roots.filter((row) => row.technicalSuffix),
+    orphanBogieRoots: bogieRoots,
+    unrecognisedRollingStock: resolved.filter((row) => row.unrecognised),
     summaryAllRoots: summarizeCounts(resolved),
     summaryInScope: summarizeCounts(deduped),
     rows: deduped.sort((a, b) => a.token.localeCompare(b.token) || a.world.x - b.world.x),
-    outOfScope: resolved.filter((row) => !isWithinScopeXZ(row.world, scope)),
+    outOfScope: kept.filter((row) => !isWithinScopeXZ(row.world, scope)),
     verdict: evaluateHandoffClaim(deduped),
     capabilities: CAPABILITY_STATEMENT,
+    lexicon: NAME_SPACE_CENSUS,
   };
 }
 
@@ -1022,25 +1490,39 @@ export function formatReport(result) {
   const lines = [];
   const push = (line = '') => lines.push(line);
 
-  push('CUSTOMS INDUSTRIAL — INDEPENDENT SECOND SOURCE (Unity facts dump, scalar-only)');
-  push(`facts: ${result.factsPath}`);
+  const rule = '='.repeat(96);
+  push(rule);
+  push('CUSTOMS INDUSTRIAL RAIL YARD — CONSERVATIVE CANDIDATE ROSTER (one Unity facts dump, scalar-only)');
+  push(rule);
+  for (const line of result.provenance) push(line);
+  push(rule);
+  push();
+  push(`facts   : ${result.factsPath}`);
+  push(
+    `manifest: ${result.manifestCheck.sceneManifestPath} `
+    + `(${result.manifestCheck.checked} frame/scope fields agree with this script's literals)`,
+  );
   push();
   push('FRAME');
-  push(`  source frame declared by scene-manifest : ${result.frame.sourceFrame}`);
-  push(`  runtime frame                            : ${result.frame.runtimeFrame}`);
-  push(`  runtimeFromSource                        : ${result.frame.runtimeFromSource}`);
-  push(`  rail bodies inside box read as SOURCE x/z : ${result.frame.sourceHits}`);
-  push(`  rail bodies inside box read as RUNTIME x/y: ${result.frame.runtimeHits}`);
+  push(`  source frame declared by scene-manifest   : ${result.frame.sourceFrame}`);
+  push(`  runtime frame                             : ${result.frame.runtimeFrame}`);
+  push(`  runtimeFromSource                         : ${result.frame.runtimeFromSource}`);
+  push(`  measured over                             : ${result.frame.measuredOver} (${result.frame.resolvedRootsConsidered} roots)`);
+  push(`  resolved roots, ANY family, inside box as SOURCE x/z : ${result.frame.sourceHits}`);
+  push(`  resolved roots, ANY family, inside box as RUNTIME x/y: ${result.frame.runtimeHits}`);
+  push(`    of which rail rolling stock, SOURCE x/z            : ${result.frame.railBodySourceHits}`);
+  push(`    of which rail rolling stock, RUNTIME x/y           : ${result.frame.railBodyRuntimeHits}`);
   push(`  working frame chosen                      : ${result.frame.chosen}`);
   const cross = result.frameCrossCheck;
   if (cross && !cross.unavailable) {
-    push('  independent check vs hand-traced data/customs-props.json (no transform applied):');
+    push('  frame-only check vs hand-traced data/customs-props.json (no transform applied):');
     push(
       `    ${cross.matched}/${cross.tracedCount} traced rail props matched a composed rail body within `
       + `${cross.toleranceM} m; median residual ${fixed(cross.medianResidualM)} m, max ${fixed(cross.maxResidualM)} m`,
     );
+    push('    (this tests the FRAME only. The traced table carries no identities and confirms no count.)');
   } else if (cross) {
-    push(`  independent check unavailable: ${cross.unavailable}`);
+    push(`  frame-only check unavailable: ${cross.unavailable}`);
   }
   push();
   push('SCOPE');
@@ -1051,22 +1533,62 @@ export function formatReport(result) {
   const b = result.scopeBounds;
   push(`  bounds: x [${b.minX}, ${b.maxX}]  z [${b.minZ}, ${b.maxZ}]`);
   push();
-  push('TOTALS');
-  for (const [key, value] of Object.entries(result.totals)) {
-    push(`  ${key.padEnd(28)} ${value}`);
+  push('EXCLUSIONS APPLIED (nothing is filtered silently)');
+  if (result.exclusions.length === 0) {
+    push('  none');
+  }
+  for (const exclusion of result.exclusions) {
+    push(`  hierarchy root "${exclusion.hierarchyRoot}" — ${exclusion.excludedInScopeRoots} in-scope root(s) removed `
+      + `(${exclusion.excludedRootsAnywhere} anywhere in the dump)`);
+    push(`      why      : ${exclusion.reason}`);
+    if (exclusion.falsifier) push(`      falsifier: ${exclusion.falsifier}`);
+  }
+  if (result.readmittedHierarchyRoots.length > 0) {
+    push(`  re-admitted by request: ${result.readmittedHierarchyRoots.join(', ')}`);
   }
   push();
-  push('IN-SCOPE ROOTS BY NAME TOKEN (deduped)');
+  push('POSITION DUPLICATES (same world position, ANY name — the check a name-keyed dedupe cannot make)');
+  const dup = result.positionDuplicates;
+  push(`  tolerance: ${dup.toleranceM} m`);
+  push(`  before exclusions: ${dup.beforeExclusions.length} cluster(s) of 2+ co-located in-scope roots`);
+  push(`  after  exclusions: ${dup.afterExclusions.length} cluster(s) remaining`);
+  for (const cluster of dup.afterExclusions.slice(0, 20)) {
+    push(
+      `    ${cluster.count} roots within ${fixed(cluster.spreadM, 4)} m at `
+      + `(${fixed(cluster.position.x)}, ${fixed(cluster.position.y)}, ${fixed(cluster.position.z)}) `
+      + `[${cluster.hierarchyRoots.join(', ')}]`,
+    );
+    for (const member of cluster.members) push(`        ${member.name}  ${member.hierarchyPath}`);
+  }
+  push();
+  push('TOTALS');
+  for (const [key, value] of Object.entries(result.totals)) {
+    push(`  ${key.padEnd(42)} ${value}`);
+  }
+  push();
+  push('LEXICON SELF-CHECK');
+  push(
+    `  bogie (Train_wheels) roots with no rail-body ancestor: ${result.totals.orphanBogieRoots} `
+    + '— a non-zero count would mean a bogied vehicle whose body name this lexicon does not know.',
+  );
+  push(
+    `  vagon_* names with an unrecognised head              : ${result.totals.unrecognisedRollingStockRoots}`,
+  );
+  for (const row of result.unrecognisedRollingStock.slice(0, 10)) {
+    push(`      ${row.name}  ${row.hierarchyPath}`);
+  }
+  push();
+  push('IN-SCOPE ROOTS BY NAME TOKEN (deduped) — CANDIDATES, NOT CONFIRMED OBJECTS');
   for (const [token, count] of result.summaryInScope.byToken) {
     push(`  ${String(count).padStart(4)}  ${token}`);
   }
   push();
-  push('IN-SCOPE ROOTS BY BODY FAMILY (deduped)');
+  push('IN-SCOPE ROOTS BY BODY FAMILY (deduped) — CANDIDATES, NOT CONFIRMED OBJECTS');
   for (const [family, count] of result.summaryInScope.byFamily) {
     push(`  ${String(count).padStart(4)}  ${family}`);
   }
   push();
-  push('IN-SCOPE ROOTS — COMPOSED WORLD POSITIONS');
+  push('IN-SCOPE ROOTS — COMPOSED WORLD POSITIONS (survey targets for photographic confirmation)');
   for (const row of result.rows) {
     push(
       `  ${row.name.padEnd(30)} token=${row.token.padEnd(28)} family=${row.family.padEnd(28)}`
@@ -1076,7 +1598,7 @@ export function formatReport(result) {
     push(`      path: ${row.hierarchyPath}`);
   }
   push();
-  push('RAIL BODIES GROUPED BY AUTHORED GROUP (a "consist" is one of these, not the whole box)');
+  push('RAIL ROLLING STOCK GROUPED BY AUTHORED GROUP (a "consist" is one of these, not the whole box)');
   for (const consist of result.consists) {
     push(`  ${String(consist.count).padStart(3)}  ${consist.group}`);
     push(`       ${consist.families.map(([family, count]) => `${count} ${family}`).join(', ')}`);
@@ -1091,19 +1613,29 @@ export function formatReport(result) {
     push(`      ${String(count).padStart(3)} colourless under ${group}`);
   }
   push();
-  push('VERDICT ON THE HANDOFF CLAIM (3 closed / 2 tank / 1 hopper / 2 red 6 m containers)');
+  push('THE HANDOFF CLAIM (3 closed / 2 tank / 1 hopper / 2 red 6 m containers), SCORED AGAINST CANDIDATES');
   for (const item of result.verdict.items) {
     push(
       `  ${item.item.padEnd(24)} claimed=${item.claimed}  observed=${item.observed}  ${item.status}`,
     );
     if (item.note) push(`      ${item.note}`);
   }
+  push('  BODY FAMILIES THE CLAIM NEVER LISTED:');
+  for (const row of result.verdict.familiesTheClaimNeverListed) {
+    push(`    ${String(row.observed).padStart(4)}  ${row.family}`);
+  }
   push(`  OVERALL: ${result.verdict.overall}`);
+  push('  "observed" is a candidate count from ONE dump read by ONE selector. It is not a measurement of the game.');
   push();
   push('WHAT THIS SOURCE CAN ESTABLISH');
   for (const line of result.capabilities.can) push(`  + ${line}`);
   push('WHAT THIS SOURCE CANNOT ESTABLISH');
   for (const line of result.capabilities.cannot) push(`  - ${line}`);
+  push();
+  push(rule);
+  push('REMINDER: shared acquisition layer with the primary extractor. Agreement is not validation.');
+  push('Every count above is a candidate awaiting confirmation from geo-tagged in-game photographs.');
+  push(rule);
 
   return lines.join('\n');
 }
@@ -1117,6 +1649,8 @@ function parseArgs(argv) {
     else if (arg === '--all-roots') options.allRoots = true;
     else if (arg === '--exclude-hierarchy-root') {
       options.excludeHierarchyRoots = [...(options.excludeHierarchyRoots ?? []), argv[i + 1]];
+    } else if (arg === '--include-hierarchy-root') {
+      options.includeHierarchyRoots = [...(options.includeHierarchyRoots ?? []), argv[i + 1]];
     }
   }
   return options;
@@ -1128,14 +1662,15 @@ if (isDirectRun) {
   const options = parseArgs(process.argv.slice(2));
   const result = await runSecondSource({
     factsPath: options.factsPath ?? DEFAULT_FACTS_PATH,
-    excludeHierarchyRoots: options.excludeHierarchyRoots ?? [],
+    excludeHierarchyRoots: options.excludeHierarchyRoots ?? null,
+    includeHierarchyRoots: options.includeHierarchyRoots ?? [],
   });
   if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     process.stdout.write(`${formatReport(result)}\n`);
     if (options.allRoots) {
-      process.stdout.write('\nALL PLACED ROOTS (any position)\n');
+      process.stdout.write('\nALL PLACED ROOTS (any position, exclusions NOT applied)\n');
       for (const [token, count] of result.summaryAllRoots.byToken) {
         process.stdout.write(`  ${String(count).padStart(4)}  ${token}\n`);
       }
