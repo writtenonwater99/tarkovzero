@@ -391,13 +391,85 @@ function vegetationIndicatorFromDegradations({ mount, degradations }) {
 }
 
 /**
+ * The CUSTOMS TRUTH strip's vegetation segment — the same verdict as the chip, in the strip's voice.
+ *
+ * The strip used to paint `${exactVegetationPlan.renderedCount} AUTHORED VEGETATION` from the render
+ * PLAN. A plan is a statement of intent: it is 7,108 whether the pack mounted, failed, was still
+ * loading, or was suppressed by query. An independent reviewer measured the strip reading
+ * "7,108 AUTHORED VEGETATION" on a GLB-404 run where 0 of 8,805 placements were authored — thirty
+ * pixels above the chip that correctly said the pack had failed. A green reassurance directly over
+ * an amber failure is worse than either alone, because the reader believes the one that agrees with
+ * what he hoped, and the two forests are near-indistinguishable at the default orbit.
+ *
+ * So the number here is a function of `indicator.state` and NOTHING else:
+ *
+ *   * `authored` / `authored-degraded` — a live runtime exists, so the authored half is countable:
+ *     the placements it actually holds (drawn + frustum-rejected), from the same `accounting` the
+ *     conservation sum uses;
+ *   * `loading` / `procedural` — by the definition of those states nothing authored is on screen, so
+ *     the count is literally `0`, never the plan's ambition;
+ *   * `disposed` / `inconsistent` — the authored half cannot be read at all, so there is NO number.
+ *     `accountedPlacements` is null in exactly these states for exactly this reason; a strip that
+ *     printed `0` here would be asserting a measurement it does not have.
+ *
+ * A positive count is therefore reachable only from a state whose chip says a live authored runtime
+ * exists. The strip cannot claim authored vegetation while the chip denies it — not because the two
+ * were written to agree, but because they are two renderings of one `indicator`.
+ */
+const STRIP_QUALIFIER = Object.freeze({
+  'runtime-disposed': 'VIEW DISPOSED',
+  'no-authored-plan': 'NO AUTHORED PLAN',
+  'authored-disabled-by-query': 'PROCEDURAL BY REQUEST',
+  'mount-in-flight': 'PACK LOADING',
+  'mount-failed': 'PACK FAILED TO MOUNT',
+  'authored-runtime-missing': 'STATUS INCONSISTENT',
+});
+
+/** States in which a live authored runtime exists and its placements can be counted. */
+const AUTHORED_LIVE_STATES = new Set(['authored', 'authored-degraded']);
+/** States in which nothing authored is on screen — a measured zero, not an unknown. */
+const AUTHORED_ABSENT_STATES = new Set(['loading', 'procedural']);
+
+export function vegetationTruthSegment({ indicator, accounting } = {}) {
+  const state = indicator?.state ?? 'inconsistent';
+  const visible = accounting?.parts?.authoredVisible ?? null;
+  const frustumCulled = accounting?.parts?.authoredFrustumCulled ?? null;
+  let authoredPlacements = null;
+  if (AUTHORED_LIVE_STATES.has(state)) {
+    authoredPlacements = visible === null || frustumCulled === null ? null : visible + frustumCulled;
+  } else if (AUTHORED_ABSENT_STATES.has(state)) {
+    authoredPlacements = 0;
+  }
+  const lead = authoredPlacements === null
+    ? 'AUTHORED VEGETATION UNREADABLE'
+    : `${authoredPlacements.toLocaleString('en-US')} AUTHORED VEGETATION`;
+  const qualifier = indicator?.healthy
+    ? null
+    : (STRIP_QUALIFIER[indicator?.code] ?? 'DEGRADED');
+  return Object.freeze({
+    // An em dash, never the strip's own ` · ` separator: a qualifier joined with the separator
+    // reads as a fifth top-level claim rather than as this segment's own caveat.
+    text: qualifier ? `${lead} — ${qualifier}` : lead,
+    state,
+    healthy: Boolean(indicator?.healthy),
+    code: indicator?.code ?? null,
+    authoredPlacements,
+  });
+}
+
+/**
  * The whole observability answer for one `renderStats()` call.
  *
  * `warnings` stays an array of strings — that is the field readers already know — `degradations`
- * carries the same list with a stable code beside each message, and `indicator` is the one-sentence,
+ * carries the same list with a stable code beside each message, `indicator` is the one-sentence,
  * on-screen answer built from that same `degradations` array (see `vegetationIndicatorFromDegradations`
- * above) — so a test can name a state without matching prose, and the screen cannot say something
- * `warnings` disagrees with.
+ * above), and `strip` is that same indicator in the CUSTOMS TRUTH strip's voice — so a test can name
+ * a state without matching prose, and neither on-screen readout can say something `warnings`
+ * disagrees with.
+ *
+ * `strip` is returned from HERE, rather than left for the caller to compute, so that a caller cannot
+ * paint the chip from this snapshot and the strip from a second, differently-timed read. One call,
+ * one verdict, two renderings of it.
  */
 export function describeVegetationObservability(snapshot = {}) {
   const accounting = vegetationPlacementAccounting(snapshot);
@@ -409,5 +481,6 @@ export function describeVegetationObservability(snapshot = {}) {
     degradations,
     warnings: Object.freeze(degradations.map((entry) => entry.message)),
     indicator,
+    strip: vegetationTruthSegment({ indicator, accounting }),
   });
 }

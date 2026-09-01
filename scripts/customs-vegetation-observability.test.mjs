@@ -465,3 +465,115 @@ test('THE CONTRACT: the indicator cannot disagree with warnings, across every en
     }
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// `strip` — the CUSTOMS TRUTH strip's vegetation segment.
+//
+// The strip sits ~38 px ABOVE the chip and used to be painted from the render PLAN's
+// `renderedCount`. An independent reviewer measured it reading "7,108 AUTHORED VEGETATION" on a
+// GLB-404 run where 0 of 8,805 placements were authored — a green reassurance directly over the
+// amber chip that had the failure right. With procedural and authored measured as nearly
+// indistinguishable at the default orbit (mean channel difference 2.4/2.2/1.5), that contradiction
+// is the single most likely thing to certify the wrong forest a second time.
+//
+// So the segment is a function of `indicator` and `accounting` — the same two objects the chip is
+// built from — and the tests below pin the property that makes the fix structural rather than
+// careful: a positive authored count is reachable from exactly the two states whose chip says a
+// live authored runtime exists.
+
+/** The two indicator states in which a live authored runtime exists and can be counted. */
+const AUTHORED_LIVE_STATES = new Set(['authored', 'authored-degraded']);
+
+test('the strip states the AUTHORED placements a live runtime holds, not the plan it was cut from', () => {
+  const { strip, indicator } = describeVegetationObservability(healthy());
+  assert.equal(indicator.state, 'authored');
+  assert.equal(strip.authoredPlacements, IN_SCOPE, 'visible + frustum-rejected, from the shared accounting');
+  assert.equal(strip.text, '7,108 AUTHORED VEGETATION');
+  assert.equal(strip.healthy, true);
+});
+
+test('THE MEASURED DEFECT: a pack that failed to mount can never read as authored vegetation', () => {
+  // The reviewer's GLB-404 run. The old strip printed `exactVegetationPlan.renderedCount` here —
+  // 7,108 — because a plan says nothing about whether anything mounted.
+  const { strip, indicator } = describeVegetationObservability(totalMountFailure());
+  assert.equal(indicator.state, 'procedural');
+  assert.equal(strip.authoredPlacements, 0, '0 of 8,805 placements were authored; the strip must say 0');
+  assert.doesNotMatch(strip.text, new RegExp(String(IN_SCOPE)), 'the plan count must not appear anywhere');
+  assert.doesNotMatch(strip.text, /7,108/);
+  assert.equal(strip.text, '0 AUTHORED VEGETATION — PACK FAILED TO MOUNT');
+  assert.equal(strip.healthy, false);
+});
+
+test('a mount still in flight claims nothing authored — the proxies on screen are procedural', () => {
+  const { strip } = describeVegetationObservability(totalMountFailure({
+    mount: { phase: 'loading', step: 'assets', loaded: 41, expected: 93, elapsedMs: 38_200, sinceProgressMs: 640 },
+  }));
+  assert.equal(strip.state, 'loading');
+  assert.equal(strip.authoredPlacements, 0);
+  assert.equal(strip.text, '0 AUTHORED VEGETATION — PACK LOADING');
+});
+
+test('?vegetation=procedural is reported as a request, and still claims zero authored', () => {
+  const { strip } = describeVegetationObservability(totalMountFailure({
+    request: 'procedural', reason: 'disabled-by-query', error: null, mount: null,
+  }));
+  assert.equal(strip.code, 'authored-disabled-by-query');
+  assert.equal(strip.authoredPlacements, 0);
+  assert.equal(strip.text, '0 AUTHORED VEGETATION — PROCEDURAL BY REQUEST');
+});
+
+test('a map with no authored plan says so, instead of dropping the segment and reading as silence', () => {
+  const { strip } = describeVegetationObservability(totalMountFailure({
+    hasAuthoredPlan: false, reason: 'no-exact-vegetation-plan', error: null, mount: null,
+    proceduralPlacements: 0, declaredInstances: null, culledOutsideScope: null,
+  }));
+  assert.equal(strip.text, '0 AUTHORED VEGETATION — NO AUTHORED PLAN');
+});
+
+test('a state whose authored half cannot be READ carries no number at all, not a zero', () => {
+  // `accountedPlacements` is null in exactly these two states because the terms are unreadable.
+  // A strip printing `0` here would be asserting a measurement it does not have — the same class
+  // of lie as printing 7,108, one digit smaller.
+  for (const [label, snapshot] of [
+    ['disposed', healthy({ disposed: true, runtime: null })],
+    ['inconsistent', healthy({ runtime: null })],
+  ]) {
+    const { strip, accountedPlacements } = describeVegetationObservability(snapshot);
+    assert.equal(accountedPlacements, null, `${label}: sanity — the sum is unavailable here`);
+    assert.equal(strip.authoredPlacements, null, `${label}: no count is available`);
+    assert.doesNotMatch(strip.text, /\d/, `${label}: got "${strip.text}"`);
+    assert.match(strip.text, /UNREADABLE/, `${label}: got "${strip.text}"`);
+  }
+});
+
+test('a partial pack states the placements it actually holds, and admits the degradation', () => {
+  const { strip } = describeVegetationObservability(degradedStatesTable()['partial-pack']);
+  assert.equal(strip.state, 'authored-degraded');
+  assert.equal(strip.authoredPlacements, 5411);
+  assert.equal(strip.text, '5,411 AUTHORED VEGETATION — DEGRADED');
+});
+
+test('THE CONTRACT: the strip and the chip are two renderings of one verdict, and cannot disagree', () => {
+  // What the fix rests on. Both readouts come from ONE `describeVegetationObservability()` call, so
+  // `healthy`, `state` and `code` are the same values twice — and the authored COUNT, the field
+  // that actually lied, is a function of that shared `state`: positive only where the chip itself
+  // reports a live authored runtime. No state added later can reintroduce the contradiction
+  // without also changing what the chip says.
+  const states = [healthy(), ...Object.values(degradedStatesTable())];
+  for (const snapshot of states) {
+    const { strip, indicator, warnings } = describeVegetationObservability(snapshot);
+    assert.equal(strip.healthy, indicator.healthy, 'strip.healthy must be indicator.healthy');
+    assert.equal(strip.healthy, warnings.length === 0, 'and therefore warnings.length === 0');
+    assert.equal(strip.state, indicator.state, 'strip.state must be indicator.state');
+    assert.equal(strip.code, indicator.code, 'strip.code must be indicator.code');
+    const claimsAuthored = strip.authoredPlacements !== null && strip.authoredPlacements > 0;
+    assert.equal(
+      claimsAuthored,
+      AUTHORED_LIVE_STATES.has(indicator.state),
+      `"${strip.text}" claims authored vegetation the chip's "${indicator.headline}" does not support`,
+    );
+    if (!strip.healthy) {
+      assert.ok(strip.text.includes(' — '), `a degraded strip must name the degradation: "${strip.text}"`);
+    }
+  }
+});

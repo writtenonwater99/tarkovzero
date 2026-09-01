@@ -19,8 +19,10 @@ import {
   authoredCameraFromWorldTarget,
   createAuthoredAssetStreamer,
   customsExactTerrainSurfaceStatus,
+  customsTruthStripCopy,
   seatAuthoredInstance,
 } from '../src/map3d-three.js';
+import { describeVegetationObservability } from '../src/customs-vegetation-observability.js';
 
 const customs3d = JSON.parse(await readFile(new URL('../public/data/customs-3d.json', import.meta.url), 'utf8'));
 const close = (actual, expected, epsilon = 1e-9, message = '') => {
@@ -161,6 +163,154 @@ test('exact terrain status separates the best available surface from the active 
     available: 'exact-control-mask-12-layer-original-pbr',
     active: 'detail-off-flat',
   });
+});
+
+// ── The CUSTOMS TRUTH strip ────────────────────────────────────────────────────────────────────
+// Every segment of that strip was a claim about what was PLANNED, written once. The one the
+// reviewer measured said "7,108 AUTHORED VEGETATION" on a run where the pack failed to mount and 0
+// of 8,805 placements were authored; the terrain segment had the same disease twice over (masks
+// claimed before the atlases were fetched, PBR claimed forever after one flip to vector). The tests
+// below pin the whole strip to measured state.
+
+/** The vegetation segment as `describeVegetationObservability()` publishes it, in each state. */
+const stripVegetation = (snapshot) => describeVegetationObservability(snapshot).strip;
+const PLAN_ONLY_SNAPSHOT = Object.freeze({
+  mode: 'authored',
+  hasAuthoredPlan: true,
+  mount: { phase: 'mounted', loaded: 93, expected: 93, elapsedMs: 71_400, sinceProgressMs: 120 },
+  routing: { authored: 7108, procedural: 0, rendered: 7108, culled: 1697, source: 8805 },
+  runtime: {
+    materialMode: 'shared-array-texture',
+    drawCalls: 31,
+    liveBuckets: 31,
+    visibleInstances: 4586,
+    frustumCulledInstances: 2522,
+  },
+  arrayTextures: { layers: 199, materials: 3, textures: 9 },
+  proceduralPlacements: 0,
+  declaredInstances: 8805,
+  culledOutsideScope: 1697,
+});
+/** The reviewer's GLB-404 run: the whole pack absent, every placement drawn as a procedural proxy. */
+const MOUNT_FAILED_SNAPSHOT = Object.freeze({
+  ...PLAN_ONLY_SNAPSHOT,
+  mode: 'procedural',
+  reason: 'ERR_CUSTOMS_GLB_HTTP',
+  error: 'authored vegetation GLB HTTP 404 from /@vegetation-authored/pine01/lod0.glb',
+  mount: { phase: 'failed', loaded: 0, expected: 93, elapsedMs: 2_140, sinceProgressMs: 2_140 },
+  routing: null,
+  runtime: null,
+  arrayTextures: null,
+  proceduralPlacements: 7108,
+});
+
+test('the truth strip names the surface that is DRAWING, not the best one that ever loaded', () => {
+  // `available` is what was built; `active` is what the tiles carry right now. The strip must read
+  // the second: a flip to vector or `?fx=none` swaps every tile to a flat material while the PBR
+  // runtime stays alive, and the old strip kept its "12-LAYER AUTHORED PBR" claim across both.
+  const vegetation = stripVegetation(PLAN_ONLY_SNAPSHOT);
+  const pbr = { hasExactTerrain: true, pbrAvailable: true, paletteAvailable: true };
+  const live = customsTruthStripCopy({
+    hasExactTerrain: true, surface: customsExactTerrainSurfaceStatus(pbr), vegetation,
+  });
+  assert.equal(live.title, 'CUSTOMS TRUTH');
+  assert.equal(live.detail, 'EXACT LOCAL TERRAIN · 12-LAYER AUTHORED PBR · 7,108 AUTHORED VEGETATION · FIXED RELIEF 2×');
+  assert.equal(live.state, 'exact');
+
+  const vector = customsTruthStripCopy({
+    hasExactTerrain: true, surface: customsExactTerrainSurfaceStatus({ ...pbr, look: 'vector' }), vegetation,
+  });
+  assert.match(vector.detail, /VECTOR FLAT SURFACE/);
+  assert.doesNotMatch(vector.detail, /PBR/, 'a vector frame draws no authored PBR');
+  assert.equal(vector.state, 'requested', 'a look the user asked for is not a degradation');
+
+  const detailOff = customsTruthStripCopy({
+    hasExactTerrain: true, surface: customsExactTerrainSurfaceStatus({ ...pbr, detail: false }), vegetation,
+  });
+  assert.match(detailOff.detail, /FLAT SURFACE — DETAIL OFF/);
+  assert.doesNotMatch(detailOff.detail, /PBR/);
+});
+
+test('a surface that fell back on its own says which fallback it is, and reads as degraded', () => {
+  const vegetation = stripVegetation(PLAN_ONLY_SNAPSHOT);
+  const palette = customsTruthStripCopy({
+    hasExactTerrain: true,
+    surface: customsExactTerrainSurfaceStatus({ hasExactTerrain: true, pbrAvailable: false, paletteAvailable: true }),
+    vegetation,
+  });
+  assert.match(palette.detail, /12-LAYER SURFACE MASKS — NO PBR/);
+  assert.equal(palette.state, 'degraded');
+
+  // The control atlases failed: every tile draws the neutral material. The old strip claimed
+  // "12-LAYER SURFACE MASKS" here, because it was written before those atlases were even fetched.
+  const neutral = customsTruthStripCopy({
+    hasExactTerrain: true,
+    surface: customsExactTerrainSurfaceStatus({ hasExactTerrain: true, pbrAvailable: false, paletteAvailable: false }),
+    vegetation,
+  });
+  assert.match(neutral.detail, /NEUTRAL SURFACE FALLBACK/);
+  assert.doesNotMatch(neutral.detail, /12-LAYER/, 'nothing 12-layer is on screen');
+  assert.equal(neutral.state, 'degraded');
+});
+
+test('THE MEASURED DEFECT: the strip cannot claim authored vegetation while the pack is absent', () => {
+  const copy = customsTruthStripCopy({
+    hasExactTerrain: true,
+    surface: customsExactTerrainSurfaceStatus({ hasExactTerrain: true, pbrAvailable: true, paletteAvailable: true }),
+    vegetation: stripVegetation(MOUNT_FAILED_SNAPSHOT),
+  });
+  assert.doesNotMatch(copy.detail, /7,108|7108/, 'the plan count must not appear on a failed mount');
+  assert.match(copy.detail, /0 AUTHORED VEGETATION — PACK FAILED TO MOUNT/);
+  assert.equal(copy.state, 'degraded', 'a green header over an amber chip is the contradiction being deleted');
+});
+
+test('a strip with nothing resolved yet says so, instead of borrowing the healthy wording', () => {
+  const booting = customsTruthStripCopy({ hasExactTerrain: true });
+  assert.equal(booting.detail, 'EXACT LOCAL TERRAIN · RESOLVING SURFACE · RESOLVING VEGETATION · FIXED RELIEF 2×');
+  assert.equal(booting.state, 'pending');
+  assert.doesNotMatch(booting.detail, /12-LAYER|AUTHORED VEGETATION/);
+});
+
+test('the legacy-terrain strip keeps its own title and still reports vegetation', () => {
+  const copy = customsTruthStripCopy({
+    hasExactTerrain: false,
+    surface: customsExactTerrainSurfaceStatus(),
+    vegetation: stripVegetation({ ...MOUNT_FAILED_SNAPSHOT, hasAuthoredPlan: false, reason: 'no-exact-vegetation-plan', mount: null }),
+  });
+  assert.equal(copy.title, 'THREE POC');
+  assert.equal(copy.detail, 'LEGACY TERRAIN FALLBACK · LOCALHOST · 0 AUTHORED VEGETATION — NO AUTHORED PLAN · FIXED RELIEF 2×');
+  assert.equal(copy.state, 'degraded');
+});
+
+test('the relief the strip prints is the relief the renderer uses, not a hand-typed 2', () => {
+  const vegetation = stripVegetation(PLAN_ONLY_SNAPSHOT);
+  const copy = customsTruthStripCopy({ hasExactTerrain: true, vegetation, relief: 3 });
+  assert.match(copy.detail, /FIXED RELIEF 3×/);
+  assert.doesNotMatch(copy.detail, /RELIEF 2×/);
+});
+
+test('THE CONTRACT: the strip wears the WORST of everything it reports', () => {
+  // The failure mode this whole pass exists to delete is a green reassurance painted directly above
+  // an amber contradiction. Green is reachable only when the terrain, the surface AND the
+  // vegetation are all what the strip claims.
+  const exact = customsExactTerrainSurfaceStatus({ hasExactTerrain: true, pbrAvailable: true, paletteAvailable: true });
+  const healthyVeg = stripVegetation(PLAN_ONLY_SNAPSHOT);
+  assert.equal(customsTruthStripCopy({ hasExactTerrain: true, surface: exact, vegetation: healthyVeg }).state, 'exact');
+
+  for (const [label, copy] of [
+    ['no exact terrain', customsTruthStripCopy({ hasExactTerrain: false, surface: exact, vegetation: healthyVeg })],
+    ['degraded surface', customsTruthStripCopy({
+      hasExactTerrain: true,
+      surface: customsExactTerrainSurfaceStatus({ hasExactTerrain: true, pbrAvailable: false, paletteAvailable: false }),
+      vegetation: healthyVeg,
+    })],
+    ['failed vegetation', customsTruthStripCopy({
+      hasExactTerrain: true, surface: exact, vegetation: stripVegetation(MOUNT_FAILED_SNAPSHOT),
+    })],
+    ['unresolved vegetation', customsTruthStripCopy({ hasExactTerrain: true, surface: exact })],
+  ]) {
+    assert.notEqual(copy.state, 'exact', `${label}: the strip must not read as fully live`);
+  }
 });
 
 test('EFT coordinates round-trip through the shared [-x,-z,y] world', () => {

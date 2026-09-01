@@ -58,6 +58,16 @@ body.view-3d #map3d{display:block}
   box-shadow:var(--shadow-hud);color:var(--cream);white-space:nowrap}
 .tz-three-proof-chip b{font:700 11px/1 var(--f-mono);letter-spacing:.1em;color:var(--acc)}
 .tz-three-proof-chip span{font:600 9px/1 var(--f-mono);letter-spacing:.08em;color:var(--text-mute)}
+/* The strip wears the WORST of the three things it reports (customsTruthStripCopy). It sits ~38px
+   above the vegetation chip, so a green header over an amber chip is a contradiction inside one
+   glance — exactly the frame that let a reviewer certify the wrong forest. Green is reserved for
+   "everything this strip claims is what is on screen". */
+.tz-three-proof-chip[data-state="requested"]{border-color:rgba(230,227,215,.28)}
+.tz-three-proof-chip[data-state="requested"] b{color:var(--cream)}
+.tz-three-proof-chip[data-state="pending"]{border-color:rgba(56,214,200,.5)}
+.tz-three-proof-chip[data-state="pending"] b{color:var(--live)}
+.tz-three-proof-chip[data-state="degraded"]{border-color:rgba(224,135,43,.62)}
+.tz-three-proof-chip[data-state="degraded"] b{color:var(--warn)}
 .tz-three-marker{position:absolute;left:0;top:0;max-width:190px;padding:2px 5px;border-radius:3px;
   background:rgba(8,12,10,.78);border:1px solid rgba(230,227,215,.2);color:var(--cream);
   font:700 10px/1.15 var(--f-display);letter-spacing:.045em;text-transform:uppercase;white-space:nowrap;

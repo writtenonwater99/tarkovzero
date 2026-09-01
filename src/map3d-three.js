@@ -138,6 +138,91 @@ export function customsExactTerrainSurfaceStatus({
   return Object.freeze({ available, active });
 }
 
+/**
+ * What the CUSTOMS TRUTH strip is allowed to say, given what is actually on screen.
+ *
+ * Every segment of that strip used to be a claim about what was PLANNED, written once and never
+ * re-read:
+ *
+ *   * `12-LAYER SURFACE MASKS` was painted the moment an exact terrain mesh compiled — before the
+ *     control atlases had even been fetched. If they failed, every tile drew the neutral material
+ *     and the strip said masks anyway;
+ *   * `12-LAYER AUTHORED PBR` was written inside the `try` that BUILT the PBR runtime, so it
+ *     survived every later flip to vector or `?fx=none`, both of which swap those same tiles to a
+ *     flat material. `status.exactTerrain.surface` was already updated on that flip; the strip was
+ *     not;
+ *   * `N AUTHORED VEGETATION` came from the render plan's `renderedCount` — see
+ *     `vegetationTruthSegment` in customs-vegetation-observability.js for the run where that read
+ *     7,108 with zero authored placements on screen;
+ *   * `FIXED RELIEF 2×` was a hand-typed `2` beside a `THREE_FIXED_RELIEF = 2` constant.
+ *
+ * So the strip is composed here, from measured state only, and repainted on the same tick as the
+ * vegetation chip. `surface` is `customsExactTerrainSurfaceStatus()`'s result and the label comes
+ * from its `active` field — what the tiles are drawing — never `available`. `vegetation` is the
+ * `strip` field of ONE `describeVegetationObservability()` call, the same call the chip's
+ * `indicator` comes from. `null` for either means "not resolved yet" and says so; it never
+ * borrows the healthy wording while it waits.
+ *
+ * `state` is the strip's own colour key, and it is the WORST of the three: a green header over an
+ * amber chip is the exact contradiction this whole pass exists to delete.
+ */
+export const CUSTOMS_TRUTH_SURFACE_COPY = Object.freeze({
+  'exact-control-mask-12-layer-original-pbr': Object.freeze({ label: '12-LAYER AUTHORED PBR', state: 'exact' }),
+  'exact-control-mask-original-palette': Object.freeze({ label: '12-LAYER SURFACE MASKS — NO PBR', state: 'degraded' }),
+  'neutral-fallback': Object.freeze({ label: 'NEUTRAL SURFACE FALLBACK', state: 'degraded' }),
+  'vector-flat': Object.freeze({ label: 'VECTOR FLAT SURFACE', state: 'requested' }),
+  'detail-off-flat': Object.freeze({ label: 'FLAT SURFACE — DETAIL OFF', state: 'requested' }),
+  'legacy-fallback': Object.freeze({ label: 'LEGACY TERRAIN FALLBACK', state: 'degraded' }),
+});
+
+/** exact < requested < pending < degraded. The strip wears the worst thing it is reporting. */
+const TRUTH_STATE_RANK = Object.freeze({ exact: 0, requested: 1, pending: 2, degraded: 3 });
+const worstTruthState = (...states) => states.reduce(
+  (worst, state) => ((TRUTH_STATE_RANK[state] ?? 3) > (TRUTH_STATE_RANK[worst] ?? 3) ? state : worst),
+  'exact',
+);
+
+/** The vegetation segment's contribution to the strip's colour, keyed off the shared indicator. */
+function vegetationTruthState(vegetation) {
+  if (!vegetation) return 'pending';
+  if (vegetation.healthy) return 'exact';
+  if (vegetation.state === 'loading') return 'pending';
+  if (vegetation.code === 'authored-disabled-by-query') return 'requested';
+  return 'degraded';
+}
+
+export function customsTruthStripCopy({
+  hasExactTerrain = false,
+  surface = null,
+  vegetation = null,
+  relief = THREE_FIXED_RELIEF,
+} = {}) {
+  const surfaceCopy = hasExactTerrain
+    ? (surface
+      ? (CUSTOMS_TRUTH_SURFACE_COPY[surface.active]
+        ?? Object.freeze({ label: String(surface.active ?? 'UNKNOWN SURFACE').toUpperCase(), state: 'degraded' }))
+      : Object.freeze({ label: 'RESOLVING SURFACE', state: 'pending' }))
+    // The legacy branch already names its fallback in the first segment; repeating it as the
+    // surface label would pad the strip without adding a fact.
+    : Object.freeze({ label: 'LOCALHOST', state: 'degraded' });
+  const segments = [
+    hasExactTerrain ? 'EXACT LOCAL TERRAIN' : 'LEGACY TERRAIN FALLBACK',
+    surfaceCopy.label,
+    vegetation ? vegetation.text : 'RESOLVING VEGETATION',
+    `FIXED RELIEF ${relief}×`,
+  ];
+  return Object.freeze({
+    title: hasExactTerrain ? 'CUSTOMS TRUTH' : 'THREE POC',
+    detail: segments.join(' · '),
+    segments: Object.freeze(segments),
+    state: worstTruthState(
+      hasExactTerrain ? 'exact' : 'degraded',
+      surfaceCopy.state,
+      vegetationTruthState(vegetation),
+    ),
+  });
+}
+
 function disposeTree(root, { materials = false } = {}) {
   const disposed = { textures: new Set(), materials: new Set() };
   root.traverse?.((node) => {
@@ -997,20 +1082,33 @@ export async function createView3d(container, mapData, src) {
 
   const overlay = document.createElement('div');
   overlay.className = 'tz-three-overlay';
+  // The CUSTOMS TRUTH strip. Every segment is written by `customsTruthStripCopy()` from measured
+  // state, and repainted on the same tick as the vegetation chip below by `updateTruthReadouts()`
+  // — the strip and the chip are two renderings of ONE observability call, so the frame can no
+  // longer show a green claim directly above an amber contradiction. Here at boot neither the
+  // control surfaces nor the vegetation mount has resolved, and the strip says exactly that
+  // instead of borrowing the healthy wording while it waits.
   const proofChip = document.createElement('div');
   proofChip.className = 'tz-three-proof-chip';
-  proofChip.innerHTML = exactTerrainMesh
-    ? `<b>CUSTOMS TRUTH</b><span>EXACT LOCAL TERRAIN · 12-LAYER SURFACE MASKS${exactVegetationPlan ? ` · ${exactVegetationPlan.renderedCount.toLocaleString()} AUTHORED VEGETATION` : ''} · FIXED RELIEF 2×</span>`
-    : '<b>THREE POC</b><span>LEGACY TERRAIN FALLBACK · LOCALHOST · FIXED RELIEF 2×</span>';
+  const proofChipTitle = document.createElement('b');
+  const proofChipDetail = document.createElement('span');
+  proofChip.append(proofChipTitle, proofChipDetail);
+  const paintTruthStrip = (copy) => {
+    proofChip.dataset.state = copy.state;
+    proofChipTitle.textContent = copy.title;
+    proofChipDetail.textContent = copy.detail;
+  };
+  paintTruthStrip(customsTruthStripCopy({ hasExactTerrain: Boolean(exactTerrainMesh) }));
   overlay.append(proofChip);
   const hoverChip = document.createElement('div');
   hoverChip.className = 'tz-three-hover';
   hoverChip.hidden = true;
   overlay.append(hoverChip);
-  // The vegetation status chip — see `updateVegetationChip()` below, near
+  // The vegetation status chip — see `updateTruthReadouts()` below, near
   // `vegetationObservabilitySnapshot`, for what drives it and why it cannot disagree with
-  // `renderStats().vegetation.warnings`. Built here, alongside the rest of the always-on HUD, so it
-  // exists on the very first frame rather than appearing only once a mount is in flight.
+  // `renderStats().vegetation.warnings` OR with the strip above it. Built here, alongside the rest
+  // of the always-on HUD, so it exists on the very first frame rather than appearing only once a
+  // mount is in flight.
   const vegetationChip = document.createElement('div');
   vegetationChip.className = 'tz-veg-chip';
   vegetationChip.hidden = true;
@@ -1118,10 +1216,10 @@ export async function createView3d(container, mapData, src) {
       exactTerrainPbrRuntime = candidateRuntime;
       exactTerrainMaterials = candidateMaterials;
       exactSurfaceCanvasFactory = null;
-      const proofDetail = proofChip.querySelector('span');
-      if (proofDetail) {
-        proofDetail.textContent = `EXACT LOCAL TERRAIN · 12-LAYER AUTHORED PBR${exactVegetationPlan ? ` · ${exactVegetationPlan.renderedCount.toLocaleString()} AUTHORED VEGETATION` : ''} · FIXED RELIEF 2×`;
-      }
+      // No strip write here. This block knows only that the PBR runtime was BUILT; whether those
+      // materials are what the tiles draw depends on `look` and `fx.detail`, which the user flips
+      // at runtime. `updateTruthReadouts()` reads that, every tick, from the same
+      // `customsExactTerrainSurfaceStatus()` call `renderStats().exactTerrain.surface` reports.
     } catch (error) {
       candidateRuntime?.dispose?.();
       exactTerrainPbrError = error;
@@ -1302,6 +1400,12 @@ export async function createView3d(container, mapData, src) {
     look,
     detail: fx.detail,
   });
+  // `updateTruthReadouts()` (defined far below, beside the chip it paints) reads `vegetationStatus`,
+  // which does not exist until the authored-vegetation section. Everything that wants a repaint
+  // before then — `applyLook()` on the initial world build — goes through this, and is a no-op
+  // until the readouts are armed. The boot strip states RESOLVING for both halves in the meantime.
+  let readoutsArmed = false;
+  const noteVegetationTransition = () => { if (readoutsArmed) updateTruthReadouts(); };
   const invalidateRender = (frames = 0) => {
     renderRequested = true;
     settleFrames = Math.max(settleFrames, Math.max(0, Number(frames) || 0));
@@ -2233,6 +2337,10 @@ export async function createView3d(container, mapData, src) {
     if (status.exactTerrain?.mode === 'local-exact') {
       status.exactTerrain.surface = exactTerrainSurfaceStatus().active;
     }
+    // The flip just changed which material every terrain tile draws, so the strip's surface claim
+    // changed with it. Repaint on the transition rather than waiting out the 400 ms tick — the
+    // whole point of the claim is that it describes the frame in front of the reader.
+    noteVegetationTransition();
     applyNature();
     updateUnderstoryLod();
     invalidateRender();
@@ -2542,6 +2650,7 @@ export async function createView3d(container, mapData, src) {
     if (!exactVegetationPlan) return;
     if (vegetationRequest === 'procedural') {
       vegetationStatus.reason = 'disabled-by-query';
+      noteVegetationTransition();
       return;
     }
     // A mount of its own, so a deadline can cancel THIS load without aborting the authored-asset
@@ -2598,6 +2707,7 @@ export async function createView3d(container, mapData, src) {
     };
     vegetationStatus.mount = progress;
     vegetationStatus.reason = 'loading-pack-index';
+    noteVegetationTransition();
     let timeoutFailure = null;
     const watchdog = setInterval(() => {
       const verdict = evaluateVegetationMount({
@@ -2638,6 +2748,9 @@ export async function createView3d(container, mapData, src) {
       vegetationStatus.reason = verdict.reason;
       vegetationStatus.error = error.message;
       console.warn(`[three-poc] ${error.message} — procedural vegetation is retained`);
+      // The deadline fired here, and the `finally` below may not run for a long time (a fetch that
+      // never settles is exactly what this watchdog exists for). Publish the verdict now.
+      noteVegetationTransition();
       mountAbort.abort(error);
     }, 1000);
 
@@ -2917,6 +3030,10 @@ export async function createView3d(container, mapData, src) {
       progress.fraction = settled.fraction;
       progress.timings.totalMs = progress.elapsedMs;
       progress.phase = timeoutFailure ? 'timed-out' : (vegetationStatus.mode === 'authored' ? 'mounted' : 'failed');
+      // The mount has settled one way or the other — swapped in, failed, or timed out. This is the
+      // transition a reviewer is watching for, and the one moment where a stale readout would
+      // paint a verdict that is already wrong. Repaint now; the 400 ms timer is the floor.
+      noteVegetationTransition();
     }
   }
 
@@ -3036,29 +3153,49 @@ export async function createView3d(container, mapData, src) {
       // for. The enumeration and its wording live in `customs-vegetation-observability.js`.
       warnings: observability.warnings,
       degradations: observability.degradations,
-      // The exact object the on-screen chip below is painted from — see `updateVegetationChip()`.
-      // Exposed here too so a console/e2e reader can assert the chip agrees with `renderStats()`
-      // without scraping the DOM.
+      // The exact objects the two on-screen readouts are painted from — see
+      // `updateTruthReadouts()`. `indicator` is the chip, `strip` is the CUSTOMS TRUTH strip's
+      // vegetation segment, and both come from this one call. Exposed here so a console/e2e reader
+      // can assert either readout agrees with `renderStats()` without scraping the DOM.
       indicator: observability.indicator,
+      strip: observability.strip,
     };
   }
 
   /**
-   * Paint the on-screen "which forest is this" chip from `authoredVegetationRenderStats().indicator`
-   * — the SAME `describeVegetationObservability()` call `renderStats().vegetation.warnings` reads,
-   * not a second read of `vegetationStatus`/`authoredVegetationRuntime` with its own branching. That
-   * is what makes "the chip says X while warnings says Y" structurally impossible rather than merely
-   * unlikely (see customs-vegetation-observability.js `vegetationIndicatorFromDegradations`).
+   * Paint BOTH on-screen vegetation readouts — the chip and the CUSTOMS TRUTH strip's vegetation
+   * segment — from ONE `describeVegetationObservability()` call, the same call
+   * `renderStats().vegetation.warnings` reads.
+   *
+   * One call, deliberately. The chip already could not disagree with `warnings` (see
+   * customs-vegetation-observability.js `vegetationIndicatorFromDegradations`); the strip could, and
+   * did — it read the render PLAN's `renderedCount` and told a reviewer "7,108 AUTHORED VEGETATION"
+   * thirty pixels above a chip correctly reporting that the pack had failed to mount. Two readouts
+   * fed by one `indicator` cannot fork; two readouts each fetching their own state always
+   * eventually do.
+   *
+   * The terrain half of the strip is repainted here too, from `exactTerrainSurfaceStatus()` — the
+   * same accessor `renderStats().exactTerrain.surface` publishes — because `look` and `fx.detail`
+   * swap the terrain materials at runtime and a one-shot claim about them goes stale on the first
+   * flip.
    *
    * Polled on its own timer rather than from `animate()` or the mount's watchdog: a 60-85 s mount
    * (>12 min after a camera move — see docs at the top of `mountAuthoredVegetation`) updates `mount`
-   * fields without ever calling `invalidateRender()`, and this chip owns none of that timing code —
-   * it only reads what that code already publishes.
+   * fields without ever calling `invalidateRender()`, and these readouts own none of that timing
+   * code — they only read what that code already publishes. The timer is a floor, not the only
+   * trigger: every transition that moves `vegetationStatus` calls this directly (see
+   * `noteVegetationTransition`), so the readouts are stale for a frame, not for up to 400 ms.
    */
   let vegetationChipHealthySinceMs = null;
-  function updateVegetationChip() {
+  function updateTruthReadouts() {
     const runtime = authoredVegetationRuntime?.active ? authoredVegetationRuntime.status : null;
-    const { indicator } = describeVegetationObservability(vegetationObservabilitySnapshot(runtime));
+    const { indicator, strip } = describeVegetationObservability(vegetationObservabilitySnapshot(runtime));
+    paintTruthStrip(customsTruthStripCopy({
+      hasExactTerrain: Boolean(exactTerrainMesh),
+      surface: exactTerrainSurfaceStatus(),
+      vegetation: strip,
+      relief,
+    }));
     vegetationChip.hidden = false;
     vegetationChip.dataset.state = indicator.state;
     vegetationChipHeadline.textContent = indicator.headline;
@@ -3077,8 +3214,13 @@ export async function createView3d(container, mapData, src) {
       vegetationChip.classList.remove('settled');
     }
   }
-  updateVegetationChip();
-  const vegetationChipInterval = setInterval(updateVegetationChip, 400);
+  // Arms the readouts. `applyLook()` runs before `vegetationStatus` is even constructed (the
+  // initial world build is above), and painting from there would read a const in its temporal dead
+  // zone; the flag makes "not paintable yet" an explicit state rather than a thrown error, and the
+  // boot strip already says RESOLVING for both halves until this line.
+  readoutsArmed = true;
+  updateTruthReadouts();
+  const vegetationChipInterval = setInterval(updateTruthReadouts, 400);
 
   const groundExtent = (() => {
     const xs = data.limit.map((p) => p[0]), zs = data.limit.map((p) => p[1]);
