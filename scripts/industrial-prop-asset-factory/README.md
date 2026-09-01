@@ -40,9 +40,36 @@ blender="$HOME/.local/share/tarkovzero-tools/blender-4.5.13/blender"
   --python scripts/industrial-prop-asset-factory/test_industrial_prop_factory.py
 
 python3 scripts/industrial-prop-asset-factory/test_validate_industrial_props.py
+# also wired into `npm test` as test:industrial-props
 ```
 
-Set `TZ_INDUSTRIAL_QA_RECEIPTS` to the comma-separated 15 proof receipts to activate real-output mutation tests.
+`test_validate_industrial_props.py` has two tiers:
+
+- **Static validator-logic tests** (geometry math, the mutation-rejection contract against a synthetic
+  document, LOD-progression math) need no Blender and no real GLBs. These always run, and `npm test` runs
+  them via `npm run test:industrial-props`.
+- **`test_real_receipt_mutations_are_rejected`** needs 15 real, hash-pinned receipts from an actual proof
+  build (LOD monotonicity, PBR completeness, and the forbidden-string scan checked against real Blender
+  output, plus the receipt↔GLB byte/sha256/triangle/bounds cross-check and the factory-script hash pin).
+  A plain `npm test` cannot produce those, so this case is **gated**, not silently faked: without
+  `TZ_INDUSTRIAL_QA_RECEIPTS` set it prints a loud, explicit banner naming exactly what did not run, every
+  time the file is imported — that banner is not conditional on `-v` or on which test you're running, so it
+  cannot be missed in `npm test` output.
+
+To run the full gated set against a real proof build:
+
+```bash
+npm run test:industrial-props:receipts -- "$proof_root"
+# or directly:
+python3 scripts/industrial-prop-asset-factory/run_qa_receipts_test.py "$proof_root"
+```
+
+`run_qa_receipts_test.py` discovers the 15 `*.receipt.json` files under `$proof_root/glb/`, points
+`TZ_INDUSTRIAL_QA_RECEIPTS` at them, and runs the test file so the real-output case executes instead of
+being skipped. It is intentionally **not** part of `npm test` — it needs an actual proof root as an
+argument, which only exists after someone runs `build_proof.py` (see above), and receipts are hash-pinned
+to the exact `industrial_prop_factory.py` that built them, so a stale proof root fails loudly (factory
+source hash mismatch) rather than passing on drifted output.
 
 ## Stable landmark mapping
 

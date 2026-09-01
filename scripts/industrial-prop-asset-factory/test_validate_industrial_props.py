@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 
@@ -17,6 +18,32 @@ SPEC = importlib.util.spec_from_file_location("validate_industrial_props", Path(
 validator = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(validator)
+
+
+RECEIPTS_ENV = "TZ_INDUSTRIAL_QA_RECEIPTS"
+
+if not os.environ.get(RECEIPTS_ENV):
+    # This print runs unconditionally at import time -- regardless of unittest
+    # verbosity, test filters (-k), or how this module is invoked -- so a plain
+    # `npm test` / `python3 test_validate_industrial_props.py` cannot pass this
+    # suite without someone seeing that real-output QA did not run.
+    print(
+        "\n"
+        "==================== INDUSTRIAL PROP QA: REAL-OUTPUT CHECKS SKIPPED ====================\n"
+        f"{RECEIPTS_ENV} is not set, so test_real_receipt_mutations_are_rejected did NOT run.\n"
+        "NOT VERIFIED against real Blender-built GLBs this run:\n"
+        "  - LOD monotonicity (triangle/byte cost strictly falling LOD0 > LOD1 > LOD2)\n"
+        "  - PBR material completeness and shared-ORM-texture policy on real outputs\n"
+        "  - forbidden-source-string scan (UnityFS/CAB-/StreamingAssets/EscapeFromTarkov/...) on real GLBs\n"
+        "  - receipt <-> GLB byte size / sha256 / triangle / vertex / bounds cross-check\n"
+        "  - factory script hash pin (industrial_prop_factory.py) against the receipts\n"
+        "Only validator math against synthetic fixtures ran; that is not a substitute.\n"
+        "To run the real checks: build a proof (README 'Build an offline proof'), then either\n"
+        f"  export {RECEIPTS_ENV}=<15 comma-separated receipt paths>, or\n"
+        "  npm run test:industrial-props:receipts -- <proof-root>\n"
+        "==========================================================================================\n",
+        file=sys.stderr,
+    )
 
 
 class ValidatorContracts(unittest.TestCase):
@@ -115,9 +142,9 @@ class ValidatorContracts(unittest.TestCase):
         with self.assertRaises(ValueError):
             validator.validate_lod_progression(baseline[:2])
 
-    @unittest.skipUnless(os.environ.get("TZ_INDUSTRIAL_QA_RECEIPTS"), "set TZ_INDUSTRIAL_QA_RECEIPTS to 15 comma-separated receipts")
+    @unittest.skipUnless(os.environ.get(RECEIPTS_ENV), f"set {RECEIPTS_ENV} to 15 comma-separated receipts (see the loud notice printed above)")
     def test_real_receipt_mutations_are_rejected(self) -> None:
-        sources = [Path(value).resolve() for value in os.environ["TZ_INDUSTRIAL_QA_RECEIPTS"].split(",")]
+        sources = [Path(value).resolve() for value in os.environ[RECEIPTS_ENV].split(",")]
         self.assertEqual(len(sources), len(validator.EXPECTED))
         with tempfile.TemporaryDirectory(prefix="tz-industrial-validator-mutation-") as directory:
             target_dir = Path(directory)
