@@ -83,7 +83,10 @@ export function hostHeaderHostname(value) {
   return parts[0].toLowerCase();
 }
 
-function decodeSegment(rawSegment) {
+// Exported so the sibling vegetation-authored route (vegetation-authored-dev.mjs)
+// can reuse this pure, root-agnostic primitive instead of reimplementing the same
+// percent-decoding/traversal-rejection regexes a second time.
+export function decodeSegment(rawSegment) {
   let decoded;
   try {
     decoded = decodeURIComponent(rawSegment);

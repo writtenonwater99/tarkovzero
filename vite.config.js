@@ -1,12 +1,26 @@
 import { defineConfig } from 'vite';
 import { localGameDerivedDevPlugin } from './scripts/lib/local-game-derived-dev.mjs';
 import { tarkovAssetCacheDevPlugin } from './scripts/lib/tarkov-asset-cache-dev.mjs';
+import { vegetationArraytexDevPlugin } from './scripts/lib/vegetation-arraytex-dev.mjs';
+import { vegetationAuthoredDevPlugin } from './scripts/lib/vegetation-authored-dev.mjs';
 
 export default defineConfig({
-  // `localGameDerivedDevPlugin` is `apply: 'serve'`: the user-owned Customs
-  // package lives outside `public/`, so a production build can neither copy it
-  // nor gain the route that reads it.
-  plugins: [tarkovAssetCacheDevPlugin(), localGameDerivedDevPlugin()],
+  // `localGameDerivedDevPlugin`, `vegetationAuthoredDevPlugin` and
+  // `vegetationArraytexDevPlugin` are all `apply: 'serve'`: their packages live
+  // outside `public/`, so a production build can neither copy them in nor gain
+  // the routes that read them.
+  //
+  // All three must be registered. A `/@…` prefix with no plugin behind it does
+  // NOT 404 — Vite's SPA fallback answers it with HTTP 200 and index.html, so
+  // `response.ok` is true and the miss only surfaces as a JSON parse error deep
+  // inside a consumer. That is exactly how the texture-array route was missing
+  // while the app reported a healthy authored-vegetation mount.
+  plugins: [
+    tarkovAssetCacheDevPlugin(),
+    localGameDerivedDevPlugin(),
+    vegetationAuthoredDevPlugin(),
+    vegetationArraytexDevPlugin(),
+  ],
   server: {
     proxy: {
       '/api/graphql': { target: 'https://api.tarkov.dev', changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, '') },
