@@ -40,6 +40,7 @@ import {
   evaluateVegetationMount,
   vegetationCameraSignature,
 } from './customs-vegetation-mount-policy.js';
+import { describeVegetationObservability } from './customs-vegetation-observability.js';
 import {
   EMPTY_RENDER_FRAME_LATCH,
   describeRenderFrame,
@@ -2386,6 +2387,10 @@ export async function createView3d(container, mapData, src) {
       arrays: CUSTOMS_VEGETATION_ARRAY_ROUTE,
     },
     totals: null,
+    // Declared, not implied. `warnings` reads both of these, and a field that only exists once
+    // something has gone wrong is a field a reader cannot tell "healthy" from "never written".
+    error: null,
+    disposed: false,
     arrayTextures: null,
     arrayTextureError: null,
     // The full diagnosis, not just a code: which URL, why, and what it costs. Null until
@@ -2648,9 +2653,20 @@ export async function createView3d(container, mapData, src) {
         vegetationStatus.arrayTextureFailure = null;
       } catch (error) {
         const reason = error?.code ?? error?.name ?? 'unavailable';
+        // WHICH url failed, not which url the sequence started at. Nine blobs hang off this index
+        // and any one of them can be the failure; naming veg-layers.json for a dead
+        // `veg-l1-normal.bin` sends the reader to a file that is provably fine. The loader
+        // annotates its errors with the blob it was fetching (`error.url`/`error.file`), so an
+        // absent `error.url` is exactly "the index itself never arrived".
+        const failedUrl = typeof error?.url === 'string' && error.url ? error.url : arrayIndexUrl;
         vegetationStatus.arrayTextureError = reason;
         vegetationStatus.arrayTextureFailure = {
-          url: arrayIndexUrl,
+          url: failedUrl,
+          indexUrl: arrayIndexUrl,
+          stage: failedUrl === arrayIndexUrl ? 'index' : 'blob',
+          file: typeof error?.file === 'string' ? error.file : null,
+          lod: Number.isInteger(error?.lod) ? error.lod : null,
+          slot: typeof error?.slot === 'string' ? error.slot : null,
           route: CUSTOMS_VEGETATION_ARRAY_ROUTE,
           reason,
           message: String(error?.message ?? error),
@@ -2658,7 +2674,7 @@ export async function createView3d(container, mapData, src) {
             'materialMode falls back to authored-per-primitive; the 199 -> 3 material collapse did not run',
         };
         console.warn(
-          `[three-poc] vegetation texture arrays did NOT load from ${arrayIndexUrl} (${reason}).`
+          `[three-poc] vegetation texture arrays did NOT load from ${failedUrl} (${reason}).`
           + ' The authored pack is drawing with its own per-primitive materials, so the draw-call'
           + ' count is the 199-material ceiling, not the 93-bucket floor.',
           error,
@@ -2767,8 +2783,35 @@ export async function createView3d(container, mapData, src) {
     invalidateRender();
   }
 
+  /**
+   * The plain-data view of the vegetation state that the observability collector reasons over.
+   *
+   * Assembled here and passed WHOLE, rather than letting the collector reach into closures: every
+   * state it has to answer for — including the ones where the runtime is gone — is then a value in
+   * one object that a test can construct by hand.
+   */
+  function vegetationObservabilitySnapshot(runtime) {
+    return {
+      mode: vegetationStatus.mode,
+      request: vegetationStatus.request,
+      reason: vegetationStatus.reason,
+      error: vegetationStatus.error,
+      disposed: vegetationStatus.disposed,
+      hasAuthoredPlan: Boolean(exactVegetationPlan),
+      mount: vegetationStatus.mount,
+      routing: vegetationStatus.totals,
+      runtime,
+      arrayTextures: vegetationStatus.arrayTextures,
+      arrayTextureFailure: vegetationStatus.arrayTextureFailure,
+      proceduralPlacements: proceduralVegetationPlan?.renderedCount ?? 0,
+      declaredInstances: exactVegetationPlan?.sourceCount ?? null,
+      culledOutsideScope: exactVegetationPlan?.culledCount ?? null,
+    };
+  }
+
   function authoredVegetationRenderStats() {
     const runtime = authoredVegetationRuntime?.active ? authoredVegetationRuntime.status : null;
+    const observability = describeVegetationObservability(vegetationObservabilitySnapshot(runtime));
     const proceduralBatches = treeGroup
       ? treeGroup.children.filter((mesh) => mesh.userData?.kind === 'exact-local-vegetation').length
       : 0;
@@ -2823,49 +2866,22 @@ export async function createView3d(container, mapData, src) {
       },
       // The one number the whole hybrid rests on: nothing lost, nothing duplicated. Authored
       // (drawn + frustum-rejected) + procedural + out-of-scope === the declared source count.
-      accountedPlacements: (runtime?.visibleInstances ?? 0)
-        + (runtime?.frustumCulledInstances ?? 0)
-        + (proceduralVegetationPlan?.renderedCount ?? 0)
-        + (exactVegetationPlan?.culledCount ?? 0),
+      // NULL when the authored half cannot be read at all (a disposed view, or `mode: 'authored'`
+      // with no runtime); `accounting.unavailable` says which. It used to be a bare four-term sum
+      // with `?? 0` on each, so a disposed view published 1,697 — a wrong number wearing a right
+      // number's clothes.
+      accountedPlacements: observability.accountedPlacements,
+      accounting: observability.accounting,
       arrayTextures: vegetationStatus.arrayTextures,
       arrayTextureError: vegetationStatus.arrayTextureError,
       arrayTextureFailure: vegetationStatus.arrayTextureFailure,
       // Degradations that are otherwise invisible in a healthy-looking status object. An empty
-      // array is the assertion "nothing quietly fell back"; anything in it is a defect with a
-      // named cause, and it is the first thing `renderStats()` should be read for.
-      warnings: vegetationWarnings(runtime),
+      // array is the assertion "the authored path is fully live"; anything in it is a defect with a
+      // named cause and a stated cost, and it is the first thing `renderStats()` should be read
+      // for. The enumeration and its wording live in `customs-vegetation-observability.js`.
+      warnings: observability.warnings,
+      degradations: observability.degradations,
     };
-  }
-
-  /**
-   * Collect every way the vegetation can be RUNNING and WRONG at the same time.
-   *
-   * All three of these used to be silent. The array route answering the SPA fallback left
-   * `materialMode: 'authored-per-primitive'` and a healthy `mode: 'authored'` side by side, and
-   * nothing in the status object said the two disagreed.
-   */
-  function vegetationWarnings(runtime) {
-    const warnings = [];
-    const failure = vegetationStatus.arrayTextureFailure;
-    if (failure) {
-      warnings.push(
-        `texture arrays unavailable (${failure.reason}) from ${failure.url}: ${failure.consequence}`,
-      );
-    }
-    if (runtime && runtime.materialMode !== 'shared-array-texture') {
-      warnings.push(
-        `materialMode is "${runtime.materialMode}", not "shared-array-texture": the pack is drawing`
-        + ` ${runtime.drawCalls} calls for ${runtime.liveBuckets} live buckets instead of one per bucket`,
-      );
-    }
-    if (runtime && vegetationStatus.arrayTextures && runtime.materialMode === 'shared-array-texture'
-      && runtime.drawCalls !== runtime.liveBuckets) {
-      warnings.push(
-        `drawCalls ${runtime.drawCalls} != liveBuckets ${runtime.liveBuckets} under the shared array`
-        + ' material, which should collapse every bucket to exactly one call',
-      );
-    }
-    return warnings;
   }
 
   const groundExtent = (() => {
@@ -3079,6 +3095,11 @@ export async function createView3d(container, mapData, src) {
       authoredAssetCache.clear();
       if (controlNotify) cancelAnimationFrame(controlNotify);
       if (vegetationRepackFrame) cancelAnimationFrame(vegetationRepackFrame);
+      // Recorded BEFORE the runtime is released, because `renderStats()` outlives this call — the
+      // api object is still reachable by whoever held it. Without this flag a disposed view is
+      // indistinguishable from a mount that has not started, and its placement sum silently loses
+      // the authored half's two terms instead of reporting that it cannot read them.
+      vegetationStatus.disposed = true;
       authoredVegetationRuntime?.dispose();
       authoredVegetationRuntime = null;
       authoredVegetationArrays?.dispose();

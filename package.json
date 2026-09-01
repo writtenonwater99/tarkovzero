@@ -24,7 +24,7 @@
     "test:customs-terrain-pbr": "node --test scripts/customs-terrain-control-atlas.test.mjs scripts/customs-terrain-material-contract.test.mjs scripts/customs-terrain-pbr-runtime.test.mjs",
     "test:customs-authored-vegetation": "node --test scripts/customs-authored-vegetation.test.mjs scripts/customs-vegetation-drawcalls.test.mjs",
     "test:customs-vegetation-arrays": "node --test scripts/customs-vegetation-arrays.test.mjs && python3 scripts/vegetation-asset-factory/test_texture_arrays.py",
-    "test:vegetation-observability": "node --test scripts/customs-vegetation-mount-policy.test.mjs scripts/render-frame-latch.test.mjs",
+    "test:vegetation-observability": "node --test scripts/customs-vegetation-mount-policy.test.mjs scripts/customs-vegetation-observability.test.mjs scripts/render-frame-latch.test.mjs",
     "test:local-boundary": "node --test scripts/local-game-derived-dev.test.mjs scripts/vegetation-authored-dev.test.mjs scripts/vegetation-arraytex-dev.test.mjs scripts/tarkov-asset-cache-dev.test.mjs scripts/verify-build-boundary.test.mjs",
     "test:map-accuracy-harness": "node --test companion/test/survey.test.mjs scripts/audit-map-accuracy.test.mjs",
     "audit:customs": "node scripts/audit-map-accuracy.mjs",

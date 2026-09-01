@@ -457,6 +457,93 @@ test('a blob whose bytes do not match its receipt fails closed', { skip: SKIP_AR
   );
 });
 
+// ── a failing blob names ITSELF, not the index that listed it ────────────────────────────────
+//
+// Nine blobs hang off one `veg-layers.json`. The loader used to fail with `texture array blob HTTP
+// 404` and no location at all, so the renderer had nothing to report but the index URL — which is
+// the one file that is provably fine, because it is what named the blob. The reader was sent to
+// look at a healthy artifact.
+
+/** Serve the synthetic index's blobs as real bytes, with receipts that actually hash. */
+function servableSyntheticIndex() {
+  const raw = syntheticIndex();
+  const bodies = new Map();
+  for (const array of raw.arrays) {
+    for (const slot of CUSTOMS_VEGETATION_TEXTURE_ARRAY_SLOTS) {
+      const blob = array.blobs[slot];
+      const bytes = new Uint8Array(blob.bytes).fill((array.lod * 3) + slot.length);
+      blob.sha256 = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+      bodies.set(blob.file, bytes);
+    }
+  }
+  return { bodies, index: validateCustomsVegetationTextureArrayIndex(raw) };
+}
+
+test('a dead blob is reported with its own url, file, lod and slot', async () => {
+  const { bodies, index } = servableSyntheticIndex();
+  const dead = 'veg-l1-basecolor.bin';
+  const fetched = [];
+  const fetchImpl = async (url) => {
+    const file = url.slice(url.lastIndexOf('/') + 1);
+    fetched.push(file);
+    if (file === dead) return { ok: false, status: 404, headers: { get: () => null } };
+    const bytes = bodies.get(file);
+    return {
+      ok: true,
+      headers: { get: (name) => (name === 'content-length' ? String(bytes.byteLength) : null) },
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    };
+  };
+
+  await assert.rejects(
+    loadCustomsVegetationTextureArrays({ index, baseUrl: '/@vegetation-arraytex/', fetchImpl }),
+    (error) => {
+      assert.ok(error instanceof CustomsVegetationTextureArrayError);
+      assert.equal(error.code, 'ERR_CUSTOMS_VEGETATION_TEXTURE_ARRAY_HTTP');
+      assert.equal(error.url, `/@vegetation-arraytex/${dead}`, 'the failing blob URL must travel with the error');
+      assert.equal(error.file, dead);
+      assert.equal(error.lod, 1);
+      assert.equal(error.slot, 'basecolor');
+      // "which of the nine" has to be answerable from the message alone, because that is what
+      // reaches the console.
+      assert.match(error.message, new RegExp(dead.replace('.', '\\.')));
+      assert.match(error.message, /HTTP 404/);
+      assert.doesNotMatch(error.message, /veg-layers\.json/, 'the index is not what failed');
+      return true;
+    },
+  );
+  // Three healthy blobs were served first: the failure is genuinely the fourth of nine, not the
+  // first thing the loader touched.
+  assert.equal(fetched.length, 4);
+  assert.equal(fetched.at(-1), dead);
+});
+
+test('a transport-level rejection is annotated with the blob, not replaced', async () => {
+  const { bodies, index } = servableSyntheticIndex();
+  const dead = 'veg-l0-normal.bin';
+  const fetchImpl = async (url) => {
+    const file = url.slice(url.lastIndexOf('/') + 1);
+    if (file === dead) throw new TypeError('Failed to fetch');
+    const bytes = bodies.get(file);
+    return {
+      ok: true,
+      headers: { get: () => String(bytes.byteLength) },
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    };
+  };
+  await assert.rejects(
+    loadCustomsVegetationTextureArrays({ index, baseUrl: '/@vegetation-arraytex/', fetchImpl }),
+    (error) => {
+      assert.ok(error instanceof TypeError, 'the original error and its stack are the diagnosis');
+      assert.equal(error.message, 'Failed to fetch');
+      assert.equal(error.url, `/@vegetation-arraytex/${dead}`);
+      assert.equal(error.file, dead);
+      assert.equal(error.slot, 'normal');
+      return true;
+    },
+  );
+});
+
 // ── the collapse itself: materialMode and drawCalls under a real runtime ──────────────────────
 //
 // This is the assertion whose absence let a dead /@vegetation-arraytex/ route ship. Every other
