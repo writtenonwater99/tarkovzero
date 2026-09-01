@@ -40,3 +40,5 @@ __pycache__/
 # Legacy location (pre-move). Kept ignored so an un-migrated checkout cannot
 # commit or deploy the package while the user relocates it.
 public/local-game-derived/
+# Rescued /tmp offline proof packages (rebuild products, not source assets) — see .local-candidates/README.md
+.local-candidates/
