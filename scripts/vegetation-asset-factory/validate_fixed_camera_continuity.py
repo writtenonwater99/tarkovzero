@@ -39,9 +39,20 @@ THRESHOLDS = {
 }
 
 
+CATALOG_PATH = Path(__file__).resolve().with_name("prototype_catalog.json")
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+def catalog_prototype_names() -> list[str]:
+    """Any catalog prototype may be measured; the metric is not tree02-specific."""
+    document = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    names = [entry["name"] for entry in document["prototypes"]]
+    require(len(names) == 31 and len(set(names)) == 31, "prototype catalog names changed")
+    return names
 
 
 def sha256_file(path: Path) -> str:
@@ -56,7 +67,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Validate nested fixed-camera silhouettes for one tree02 LOD0/1/2 proof."
     )
-    parser.add_argument("--prototype", choices=("tree02",), required=True)
+    parser.add_argument("--prototype", choices=sorted(catalog_prototype_names()), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("images", nargs=3, type=Path, metavar="PNG")
     args = parser.parse_args(argv)

@@ -161,6 +161,8 @@ def write_synthetic_set(root: Path, prototype: str = "pine02", costs=((900, 4000
                 "embeddedImageCount": 3,
                 "textureResolution": (128, 64, 32)[lod],
                 "seed": 106,
+                "alphaModeCounts": {"OPAQUE": 1, "MASK": 0, "BLEND": 0},
+                "proceduralAlphaCards": [],
             },
         }
         receipt.write_text(json.dumps(document), encoding="utf-8")

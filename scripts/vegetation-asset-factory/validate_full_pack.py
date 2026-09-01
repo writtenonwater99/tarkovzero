@@ -16,6 +16,7 @@ import types
 
 HERE = Path(__file__).resolve().parent
 CATALOG_PATH = HERE / "prototype_catalog.json"
+FACTORY_PATH = HERE / "vegetation_factory.py"
 SET_VALIDATOR_PATH = HERE / "validate_vegetation_outputs.py"
 PER_ASSET_BUDGET = {
     0: {"bytes": 1024 * 1024, "triangles": 12_000, "textureResolution": 128},
@@ -132,16 +133,48 @@ def validate_pack_index(pack_root: Path, pack_index_path: Path, catalog_by_name:
     return index
 
 
+def validate_generation_manifest(pack_root: Path) -> dict:
+    """The manifest's generator hash must name the factory that is on disk right now.
+
+    A pack whose manifest points at a factory revision nobody can produce is not
+    reproducible, and the drift is silent: it appears when the factory is edited after the
+    pack is built.  Committed-revision provenance is the separate, stronger gate in
+    verify_factory_provenance.py.
+    """
+    manifest_path = pack_root / "generation-manifest.json"
+    require(manifest_path.is_file() and not manifest_path.is_symlink(), "generation manifest is missing")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    generator = manifest.get("generator", {})
+    declared = generator.get("factorySha256")
+    actual = f"sha256:{sha256_file(FACTORY_PATH)}"
+    require(
+        declared == actual,
+        f"generation manifest claims factory {declared} but the on-disk "
+        f"scripts/vegetation-asset-factory/vegetation_factory.py hashes {actual}",
+    )
+    declared_catalog = generator.get("catalogSha256")
+    actual_catalog = f"sha256:{sha256_file(CATALOG_PATH)}"
+    require(
+        declared_catalog == actual_catalog,
+        f"generation manifest claims catalog {declared_catalog} but the on-disk catalog hashes {actual_catalog}",
+    )
+    require(len(manifest.get("records", [])) == 93, "generation manifest must carry 93 records")
+    return {"factorySha256": actual, "catalogSha256": actual_catalog}
+
+
 def main() -> None:
     args = parse_args(sys.argv[1:])
     set_validator = load_set_validator()
     catalog, catalog_by_name = set_validator.catalog()
+    generator_provenance = validate_generation_manifest(args.pack_root)
     pack_index = validate_pack_index(args.pack_root, args.pack_index, catalog_by_name)
     expected_glbs = sorted((args.pack_root / "assets").glob("*/*.glb"))
     expected_receipts = sorted((args.pack_root / "assets").glob("*/*.receipt.json"))
     require(len(expected_glbs) == 93 and len(expected_receipts) == 93, "pack filesystem must contain exactly 93 GLBs and receipts")
 
     aggregate = {lod: {"bytes": 0, "triangles": 0, "assets": 0} for lod in (0, 1, 2)}
+    alpha_census = {lod: {"OPAQUE": 0, "MASK": 0, "BLEND": 0} for lod in (0, 1, 2)}
+    card_census: list[dict] = []
     families: dict[str, dict[int, dict[str, int]]] = {}
     assets = []
     for name in sorted(catalog_by_name, key=str.lower):
@@ -166,6 +199,10 @@ def main() -> None:
             aggregate[lod]["bytes"] += detail["bytes"]
             aggregate[lod]["triangles"] += detail["triangles"]
             aggregate[lod]["assets"] += 1
+            for mode, count in detail["alphaModeCounts"].items():
+                alpha_census[lod][mode] += count
+            for audit in detail["cardMaterials"]:
+                card_census.append({"prototype": name, "lod": lod, **audit})
             family_stats[lod]["bytes"] += detail["bytes"]
             family_stats[lod]["triangles"] += detail["triangles"]
             family_stats[lod]["assets"] += 1
@@ -177,6 +214,11 @@ def main() -> None:
                 "perAssetBudget": PER_ASSET_BUDGET[lod],
             })
         assets.append({"prototype": name, "family": family, "seed": result["seed"], "lods": asset_lods})
+
+    # Pack-wide alpha invariant: the whole pack is OPAQUE + MASK, never BLEND.
+    blend_total = sum(alpha_census[lod]["BLEND"] for lod in (0, 1, 2))
+    require(blend_total == 0, f"pack still contains {blend_total} BLEND material(s)")
+    require(card_census, "pack contains no alpha-cut card material to validate")
 
     for lod in (0, 1, 2):
         require(aggregate[lod]["assets"] == 31, f"LOD{lod} aggregate asset count changed")
@@ -205,6 +247,12 @@ def main() -> None:
             "aggregate": AGGREGATE_BUDGET,
             "actual": aggregate,
         },
+        "generatorProvenance": generator_provenance,
+        "alpha": {
+            "materialsByLodAndMode": alpha_census,
+            "blendMaterials": blend_total,
+            "cardMaterials": card_census,
+        },
         "families": families,
         "assets": assets,
         "packIndex": {
@@ -226,6 +274,9 @@ def main() -> None:
         "output": str(args.output),
         "packIndexSha256": report["packIndex"]["sha256"],
         "aggregate": aggregate,
+        "alphaMaterialsByLod": alpha_census,
+        "blendMaterials": blend_total,
+        "cardMaterialCount": len(card_census),
         "totalBytes": sum(value["bytes"] for value in aggregate.values()),
         "totalTriangles": sum(value["triangles"] for value in aggregate.values()),
     }, indent=2, sort_keys=True))

@@ -83,6 +83,29 @@ DECIDUOUS_ATLAS_CELLS = (
     ((0.20, 0.97), (0.60, 0.07)),
 )
 TEXTURE_SIZE_BY_LOD = {0: 128, 1: 64, 2: 32}
+# Procedural foliage cards carry strictly binary alpha: material_sample() writes exactly
+# 1.0 or 0.0 and never a ramp, so every cutoff in (0, 1) reproduces mip 0 texel for texel.
+# The cutoff therefore only decides what survives minification.  These three values were
+# derived by holding alpha-test coverage as close as possible to each LOD texture's own
+# mip-0 silhouette across its whole box-mip chain, weighting each level by its texel count
+# and each card class by its Customs placement count (needle-pine 3,051 / leaf 3,261):
+#
+#   LOD  size   weighted relative coverage error   at cutoff   vs at 0.500
+#     0   128                             2.631%       0.485        2.707%
+#     1    64                             6.228%       0.454        6.782%
+#     2    32                            11.861%       0.547       12.257%
+#
+# The margin over a flat 0.5 is small on purpose-of-record: these procedural cards are fat
+# convex blobs, not sparse foliage sprays, so they do not measurably thin under
+# minification.  The map exists as authored structure for the Stage B atlas archetypes,
+# which do thin, and so a future card at LOD1/LOD2 lands on a derived value rather than a
+# reused LOD0 constant.
+PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD = {0: 0.485, 1: 0.454, 2: 0.547}
+# Alpha-0 RGB is written black by material_sample().  BLEND hid that; MASK does not, so
+# bilinear taps and every mip level would drag a black outline onto each leaf edge.  Flood
+# the nearest opaque colour across the entire transparent region, capped at the texture
+# size so the pass always terminates.
+PROCEDURAL_CARD_RGB_DILATION_MAX_PASSES = {0: 128, 1: 64, 2: 32}
 FAMILIES = (
     "birch",
     "deciduous-broadleaf",
@@ -337,6 +360,44 @@ def material_sample(
     )
 
 
+def dilate_card_rgb(base_pixels: Sequence[float], size: int, lod: int) -> tuple[list[float], int]:
+    """Flood the nearest opaque RGB outward under a card's alpha-0 region.
+
+    material_sample() writes (0, 0, 0) wherever the card alpha is 0.  Under BLEND that
+    black was hidden by the alpha itself; under MASK the surviving edge texels are
+    filtered against it and every leaf gains a dark outline.  Alpha is never touched, so
+    the cut silhouette stays bit-for-bit identical to the BLEND-era texels.
+    """
+    import numpy as np
+
+    rgba = np.asarray(base_pixels, dtype=np.float64).reshape((size, size, 4))
+    rgb = rgba[:, :, :3]
+    filled = rgba[:, :, 3] >= 0.5
+    require(bool(filled.any()), "alpha card has no opaque texel to dilate colour from")
+    passes = 0
+    for _ in range(PROCEDURAL_CARD_RGB_DILATION_MAX_PASSES[lod]):
+        if bool(filled.all()):
+            break
+        sums = np.zeros_like(rgb)
+        counts = np.zeros((size, size), dtype=np.float64)
+        sums[1:, :, :] += rgb[:-1, :, :] * filled[:-1, :, None]
+        counts[1:, :] += filled[:-1, :]
+        sums[:-1, :, :] += rgb[1:, :, :] * filled[1:, :, None]
+        counts[:-1, :] += filled[1:, :]
+        sums[:, 1:, :] += rgb[:, :-1, :] * filled[:, :-1, None]
+        counts[:, 1:] += filled[:, :-1]
+        sums[:, :-1, :] += rgb[:, 1:, :] * filled[:, 1:, None]
+        counts[:, :-1] += filled[:, 1:]
+        grow = (~filled) & (counts > 0)
+        if not bool(grow.any()):
+            break
+        rgb[grow] = sums[grow] / counts[grow, None]
+        filled[grow] = True
+        passes += 1
+    np.clip(rgb, 0.0, 1.0, out=rgb)
+    return rgba.ravel().tolist(), passes
+
+
 def create_image(name: str, size: int, pixels: Sequence[float], colorspace: str) -> bpy.types.Image:
     image = bpy.data.images.new(name, width=size, height=size, alpha=True, float_buffer=False)
     image.file_format = "PNG"
@@ -358,6 +419,11 @@ def create_material(kind: str, lod: int, seed: int) -> bpy.types.Material:
     for _, color, occlusion, roughness, metallic, alpha in samples:
         base_pixels.extend((*color, alpha))
         orm_pixels.extend((occlusion, roughness, metallic, 1.0))
+
+    alpha_card = kind.endswith("-card")
+    dilation_passes = 0
+    if alpha_card:
+        base_pixels, dilation_passes = dilate_card_rgb(base_pixels, size, lod)
 
     normal_pixels: list[float] = []
     strength = 2.1 if kind.startswith("bark-") else (1.35 if kind == "cut-wood" else 0.72)
@@ -386,11 +452,19 @@ def create_material(kind: str, lod: int, seed: int) -> bpy.types.Material:
     material["tz_original_authored"] = True
     material["tz_texture_resolution"] = size
     material["tz_orm_channels"] = "R=occlusion,G=roughness,B=metallic"
-    alpha_card = kind.endswith("-card")
     material["tz_alpha_card"] = alpha_card
     if alpha_card:
+        card_cutoff = PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD[lod]
+        # Both of these are Blender-viewport settings only.  The 4.2+ glTF exporter reads
+        # the node tree and never these, which is exactly why every card shipped as BLEND
+        # before this pass; they are kept in sync with the real cutoff so an EEVEE QA
+        # render matches the exported material instead of contradicting it.
         material.surface_render_method = "DITHERED"
-        material.alpha_threshold = 0.45
+        material.alpha_threshold = card_cutoff
+        material["tz_alpha_mode"] = "MASK"
+        material["tz_alpha_cutoff"] = card_cutoff
+        material["tz_edge_dilation_pixels"] = dilation_passes
+        material["tz_binary_source_alpha"] = True
 
     nodes = material.node_tree.nodes
     links = material.node_tree.links
@@ -413,7 +487,15 @@ def create_material(kind: str, lod: int, seed: int) -> bpy.types.Material:
     base_node.location = (-620, 180)
     links.new(base_node.outputs["Color"], bsdf.inputs["Base Color"])
     if alpha_card:
-        links.new(base_node.outputs["Alpha"], bsdf.inputs["Alpha"])
+        # A ShaderNodeMath GREATER_THAN between the image alpha and the BSDF Alpha input
+        # is what makes the exporter emit alphaMode MASK with this constant as
+        # alphaCutoff (io_scene_gltf2 detect_alpha_clip).  A direct alpha link is BLEND.
+        clip = nodes.new("ShaderNodeMath")
+        clip.operation = "GREATER_THAN"
+        clip.inputs[1].default_value = PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD[lod]
+        clip.location = (150, 170)
+        links.new(base_node.outputs["Alpha"], clip.inputs[0])
+        links.new(clip.outputs[0], bsdf.inputs["Alpha"])
 
     normal_node = nodes.new("ShaderNodeTexImage")
     normal_node.name = f"{prefix}_NormalNode"
@@ -2398,7 +2480,7 @@ def glb_json(path: Path) -> dict:
     return document
 
 
-def inspect_export(path: Path, expected_root: str) -> dict[str, int]:
+def inspect_export(path: Path, expected_root: str, lod: int) -> dict[str, object]:
     document = glb_json(path)
     require(not document.get("cameras"), "vegetation GLB unexpectedly contains a camera")
     require(not document.get("animations"), "vegetation GLB unexpectedly contains animation")
@@ -2412,12 +2494,25 @@ def inspect_export(path: Path, expected_root: str) -> dict[str, int]:
     roots = [node for node in document.get("nodes", []) if node.get("name") == expected_root]
     require(roots[0].get("extras", {}).get("tz_pivot") == "base-center", "GLB root pivot receipt changed")
     require(document.get("materials"), "GLB has no PBR materials")
+    card_cutoff = PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD[lod]
     for index, material in enumerate(document["materials"]):
         pbr = material.get("pbrMetallicRoughness", {})
         require("baseColorTexture" in pbr, f"GLB material {index} lacks base-color texture")
         require("metallicRoughnessTexture" in pbr, f"GLB material {index} lacks ORM texture")
         require("normalTexture" in material, f"GLB material {index} lacks normal texture")
         require("occlusionTexture" in material, f"GLB material {index} lacks occlusion texture")
+        name = str(material.get("name", ""))
+        alpha_mode = material.get("alphaMode", "OPAQUE")
+        # No vegetation material may ship as BLEND.  Alpha-cut foliage is authored as
+        # MASK; a BLEND here means the node tree lost its clip node again.
+        require(alpha_mode != "BLEND", f"GLB material {name or index} exported as BLEND")
+        if "_card_" in name:
+            require(alpha_mode == "MASK", f"GLB card material {name} is {alpha_mode}, not MASK")
+            require(
+                abs(float(material.get("alphaCutoff", -1.0)) - card_cutoff) <= 1e-6,
+                f"GLB card material {name} alphaCutoff is not the LOD{lod} value {card_cutoff}",
+            )
+            require(material.get("doubleSided") is True, f"GLB card material {name} is not double-sided")
     triangles = 0
     primitive_count = 0
     accessors = document.get("accessors", [])
@@ -2437,6 +2532,8 @@ def inspect_export(path: Path, expected_root: str) -> dict[str, int]:
         "primitives": primitive_count,
         "materials": len(document.get("materials", [])),
         "images": len(document.get("images", [])),
+        "materialNames": [str(material.get("name", "")) for material in document["materials"]],
+        "alphaModes": [material.get("alphaMode", "OPAQUE") for material in document["materials"]],
     }
 
 
@@ -2533,6 +2630,31 @@ def source_texture_records(
     return []
 
 
+def procedural_card_records(
+    builder: Builder,
+    lod: int,
+    exported_material_names: Sequence[str],
+) -> list[dict]:
+    """Receipt ledger for every procedural alpha card that survived export."""
+    exported = set(exported_material_names)
+    records = []
+    for kind, material in sorted(builder.materials.items()):
+        if not kind.endswith("-card") or material.name not in exported:
+            continue
+        records.append({
+            "materialFamily": kind,
+            "materialName": material.name,
+            "alphaMode": "MASK",
+            "alphaCutoff": PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD[lod],
+            "doubleSided": True,
+            "binarySourceAlpha": True,
+            "rgbDilationPasses": int(material["tz_edge_dilation_pixels"]),
+            "rgbDilationMaxPasses": PROCEDURAL_CARD_RGB_DILATION_MAX_PASSES[lod],
+            "textureResolution": int(material["tz_texture_resolution"]),
+        })
+    return records
+
+
 def asset_limitations(
     spec: dict,
     pine_alpha_proof: bool,
@@ -2553,7 +2675,11 @@ def asset_limitations(
             "Deciduous foliage uses an OpenAI-generated original alpha atlas with per-cell resampling, bounded mip gutters, below-cutoff fringe rejection, and RGB edge dilation; runtime mip, wind, and alpha-shadow behavior remain admission checks."
         )
     else:
-        common.append("Procedural foliage is a provisional geometry treatment pending family-specific alpha-card proofs.")
+        common.append(
+            "Procedural foliage cards are alpha-cut (MASK) with binary authored alpha and RGB edge dilation; "
+            "the opaque foliage blobs beneath them are a provisional geometry treatment pending the "
+            "family-specific alpha-atlas architecture."
+        )
     return common
 
 
@@ -2566,7 +2692,7 @@ def receipt_document(
     geometry: dict[str, int | float],
     bounds: dict[str, list[float]],
     output_temp: Path,
-    export_stats: dict[str, int],
+    export_stats: dict[str, object],
 ) -> dict:
     script_path = Path(__file__).resolve()
     binary = Path(bpy.app.binary_path).resolve()
@@ -2664,6 +2790,13 @@ def receipt_document(
             "stablePrototypeSeed": stable_seed(args.seed, spec["name"]),
             "blenderBoundsM": rounded_bounds(bounds),
             "rootNode": builder.root_name,
+            "alphaModeCounts": {
+                mode: list(export_stats["alphaModes"]).count(mode)
+                for mode in ("OPAQUE", "MASK", "BLEND")
+            },
+            "proceduralAlphaCards": procedural_card_records(
+                builder, args.lod, list(export_stats["materialNames"]),
+            ),
             **(
                 {
                     "continuityContract": builder.root.get("tz_continuity_contract"),
@@ -2709,7 +2842,7 @@ def main() -> None:
     receipt_temp = make_temp_path(args.receipt.parent, args.receipt.stem, ".partial.json")
     try:
         export_glb(output_temp)
-        export_stats = inspect_export(output_temp, builder.root_name)
+        export_stats = inspect_export(output_temp, builder.root_name, args.lod)
         require(
             export_stats["triangles"] == geometry["triangles"],
             f"exported triangle count {export_stats['triangles']} differs from authored {geometry['triangles']}",

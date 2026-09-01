@@ -11,13 +11,24 @@ from pathlib import Path
 import re
 import struct
 import sys
+import zlib
 
 
 HERE = Path(__file__).resolve().parent
 CATALOG_PATH = HERE / "prototype_catalog.json"
 GLB_MAGIC = b"glTF"
 GLB_JSON_CHUNK = 0x4E4F534A
+GLB_BIN_CHUNK = 0x004E4942
 TEXTURE_SIZE_BY_LOD = (128, 64, 32)
+# Mirrors vegetation_factory.PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD.
+PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD = (0.485, 0.454, 0.547)
+# Guard for the MASK dark-fringe failure: an alpha-0 texel this close to a surviving
+# opaque texel is inside the bilinear/mip footprint of a visible leaf edge, so it may not
+# still carry material_sample()'s black.
+CARD_DILATION_GUARD_RADIUS = 2
+# The dilated transparent region must carry real foliage colour, not a token nudge off
+# black.  A full flood lands within a percent of the opaque mean; an undilated card is 0.
+CARD_DILATION_MIN_LUMA_RATIO = 0.25
 PINE01_TEXTURE_SIZE_BY_LOD = (1024, 512, 256)
 PINE_ATLAS_SHA256 = "sha256:0a20e3492e4ebb7b4325483623d9062678fab3a044479060e2993a25768ff140"
 PINE_ALPHA_CUTOFF = 0.376
@@ -92,7 +103,7 @@ def read_receipt(path: Path) -> dict:
     return document
 
 
-def glb_json(path: Path) -> dict:
+def glb_chunks(path: Path) -> tuple[dict, bytes]:
     blob = path.read_bytes()
     require(len(blob) >= 20, f"GLB is truncated: {path}")
     magic, version, declared_length = struct.unpack_from("<4sII", blob, 0)
@@ -101,6 +112,7 @@ def glb_json(path: Path) -> dict:
     require(declared_length == len(blob), f"GLB declared length mismatch: {path}")
     offset = 12
     document = None
+    binary = b""
     while offset + 8 <= len(blob):
         chunk_length, chunk_type = struct.unpack_from("<II", blob, offset)
         offset += 8
@@ -109,10 +121,178 @@ def glb_json(path: Path) -> dict:
         if chunk_type == GLB_JSON_CHUNK:
             require(document is None, f"GLB contains more than one JSON chunk: {path}")
             document = json.loads(blob[offset:end].decode("utf-8"))
+        elif chunk_type == GLB_BIN_CHUNK:
+            require(not binary, f"GLB contains more than one BIN chunk: {path}")
+            binary = blob[offset:end]
         offset = end
     require(offset == len(blob), f"GLB has trailing bytes outside its chunk table: {path}")
     require(isinstance(document, dict), f"GLB has no JSON document: {path}")
-    return document
+    return document, binary
+
+
+def glb_json(path: Path) -> dict:
+    return glb_chunks(path)[0]
+
+
+def decode_png_rgba8(blob: bytes, label: str) -> tuple[int, int, bytearray]:
+    """Minimal, dependency-free 8-bit RGBA PNG decoder (non-interlaced)."""
+    require(blob[:8] == b"\x89PNG\r\n\x1a\n", f"{label} is not a PNG")
+    offset = 8
+    header = None
+    data = bytearray()
+    while offset + 8 <= len(blob):
+        length, kind = struct.unpack_from(">I4s", blob, offset)
+        offset += 8
+        end = offset + length
+        require(end + 4 <= len(blob), f"{label} PNG chunk exceeds file")
+        if kind == b"IHDR":
+            width, height, depth, colour, compression, filter_method, interlace = struct.unpack_from(
+                ">IIBBBBB", blob, offset,
+            )
+            require(depth == 8 and colour == 6, f"{label} PNG is not 8-bit RGBA (depth {depth}, colour {colour})")
+            require(compression == 0 and filter_method == 0 and interlace == 0, f"{label} PNG uses an unsupported layout")
+            require(0 < width <= 4096 and 0 < height <= 4096, f"{label} PNG dimensions are out of range")
+            header = (width, height)
+        elif kind == b"IDAT":
+            data += blob[offset:end]
+        elif kind == b"IEND":
+            break
+        offset = end + 4
+    require(header is not None, f"{label} PNG has no IHDR")
+    width, height = header
+    raw = zlib.decompress(bytes(data))
+    stride = width * 4
+    require(len(raw) == (stride + 1) * height, f"{label} PNG payload length is wrong")
+    out = bytearray(stride * height)
+    previous = bytearray(stride)
+    position = 0
+    for row in range(height):
+        filter_type = raw[position]
+        position += 1
+        line = bytearray(raw[position:position + stride])
+        position += stride
+        if filter_type == 1:
+            for index in range(4, stride):
+                line[index] = (line[index] + line[index - 4]) & 0xFF
+        elif filter_type == 2:
+            for index in range(stride):
+                line[index] = (line[index] + previous[index]) & 0xFF
+        elif filter_type == 3:
+            for index in range(stride):
+                left = line[index - 4] if index >= 4 else 0
+                line[index] = (line[index] + ((left + previous[index]) >> 1)) & 0xFF
+        elif filter_type == 4:
+            for index in range(stride):
+                left = line[index - 4] if index >= 4 else 0
+                up = previous[index]
+                upper_left = previous[index - 4] if index >= 4 else 0
+                estimate = left + up - upper_left
+                da, db, dc = abs(estimate - left), abs(estimate - up), abs(estimate - upper_left)
+                predictor = left if (da <= db and da <= dc) else (up if db <= dc else upper_left)
+                line[index] = (line[index] + predictor) & 0xFF
+        else:
+            require(filter_type == 0, f"{label} PNG uses unknown filter {filter_type}")
+        out[row * stride:(row + 1) * stride] = line
+        previous = line
+    return width, height, out
+
+
+def base_colour_png(document: dict, binary: bytes, material: dict, label: str) -> bytes:
+    texture_index = material.get("pbrMetallicRoughness", {}).get("baseColorTexture", {}).get("index")
+    require(isinstance(texture_index, int), f"{label} has no base-colour texture index")
+    source = document["textures"][texture_index].get("source")
+    require(isinstance(source, int), f"{label} base-colour texture has no image source")
+    image = document["images"][source]
+    view_index = image.get("bufferView")
+    require(isinstance(view_index, int), f"{label} base-colour image is not embedded in a buffer view")
+    require(image.get("mimeType") == "image/png", f"{label} base-colour image is not PNG")
+    view = document["bufferViews"][view_index]
+    start = int(view.get("byteOffset", 0))
+    length = int(view["byteLength"])
+    require(start + length <= len(binary), f"{label} base-colour buffer view exceeds the BIN chunk")
+    return binary[start:start + length]
+
+
+def audit_card_texture(document: dict, binary: bytes, material: dict, label: str) -> dict:
+    """Alpha must stay strictly binary and the alpha-0 RGB must be dilated, not black."""
+    width, height, pixels = decode_png_rgba8(base_colour_png(document, binary, material, label), label)
+    stride = width * 4
+    alpha_values = set()
+    opaque = bytearray(width * height)
+    transparent_indexes = []
+    for index in range(width * height):
+        value = pixels[index * 4 + 3]
+        alpha_values.add(value)
+        if value == 255:
+            opaque[index] = 1
+        elif value == 0:
+            transparent_indexes.append(index)
+    require(
+        alpha_values <= {0, 255},
+        f"{label} alpha is no longer strictly binary: {sorted(alpha_values)[:8]}...",
+    )
+    require(alpha_values == {0, 255}, f"{label} alpha lost one of its two states: {sorted(alpha_values)}")
+
+    def luma(index: int) -> float:
+        base = index * 4
+        return pixels[base] * 0.2126 + pixels[base + 1] * 0.7152 + pixels[base + 2] * 0.0722
+
+    opaque_luma = 0.0
+    opaque_count = 0
+    for index in range(width * height):
+        if opaque[index]:
+            opaque_luma += luma(index)
+            opaque_count += 1
+    require(opaque_count > 0, f"{label} has no opaque texel")
+    opaque_luma /= opaque_count
+
+    transparent_luma = 0.0
+    black_near_edge = 0
+    radius = CARD_DILATION_GUARD_RADIUS
+    for index in transparent_indexes:
+        transparent_luma += luma(index)
+        base = index * 4
+        if pixels[base] or pixels[base + 1] or pixels[base + 2]:
+            continue
+        y, x = divmod(index, width)
+        near_edge = False
+        for dy in range(-radius, radius + 1):
+            ny = y + dy
+            if ny < 0 or ny >= height:
+                continue
+            for dx in range(-radius, radius + 1):
+                nx = x + dx
+                if 0 <= nx < width and opaque[ny * width + nx]:
+                    near_edge = True
+                    break
+            if near_edge:
+                break
+        if near_edge:
+            black_near_edge += 1
+    transparent_count = len(transparent_indexes)
+    require(transparent_count > 0, f"{label} has no transparent texel")
+    transparent_luma /= transparent_count
+    require(
+        black_near_edge == 0,
+        f"{label} keeps {black_near_edge} pure-black alpha-0 texel(s) within "
+        f"{radius} texels of a surviving edge; RGB dilation did not run",
+    )
+    ratio = transparent_luma / opaque_luma if opaque_luma > 0 else 0.0
+    require(
+        ratio >= CARD_DILATION_MIN_LUMA_RATIO,
+        f"{label} alpha-0 RGB luma is {ratio:.4f} of its opaque luma; dilation is insufficient",
+    )
+    return {
+        "resolution": width,
+        "alphaValues": sorted(alpha_values),
+        "opaqueTexels": opaque_count,
+        "transparentTexels": transparent_count,
+        "coverage": round(opaque_count / (width * height), 6),
+        "opaqueMeanLuma": round(opaque_luma, 4),
+        "transparentMeanLuma": round(transparent_luma, 4),
+        "dilatedLumaRatio": round(ratio, 6),
+        "pureBlackTexelsNearEdge": black_near_edge,
+    }
 
 
 def triangle_count(document: dict) -> int:
@@ -166,7 +346,13 @@ def exact_cli(receipt: dict, prototype: str, lod: int, output_name: str, proof_k
         require(count == (1 if proof_kind == kind else 0), f"LOD{lod} argv {flag} proof contract changed")
 
 
-def inspect_glb(document: dict, prototype: str, lod: int, proof_kind: str | None = None) -> dict[str, int]:
+def inspect_glb(
+    document: dict,
+    prototype: str,
+    lod: int,
+    proof_kind: str | None = None,
+    binary: bytes = b"",
+) -> dict:
     require(not document.get("cameras"), f"LOD{lod} exports a camera")
     require(not document.get("animations"), f"LOD{lod} exports animation")
     require(not document.get("skins"), f"LOD{lod} exports a skin")
@@ -195,12 +381,36 @@ def inspect_glb(document: dict, prototype: str, lod: int, proof_kind: str | None
     materials = document.get("materials", [])
     images = document.get("images", [])
     require(materials, f"LOD{lod} has no PBR materials")
+    card_cutoff = PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD[lod]
+    alpha_mode_counts = {"OPAQUE": 0, "MASK": 0, "BLEND": 0}
+    card_audits = []
     for index, material in enumerate(materials):
         pbr = material.get("pbrMetallicRoughness", {})
         require("baseColorTexture" in pbr, f"LOD{lod} material {index} lacks base color texture")
         require("metallicRoughnessTexture" in pbr, f"LOD{lod} material {index} lacks ORM texture")
         require("normalTexture" in material, f"LOD{lod} material {index} lacks normal texture")
         require("occlusionTexture" in material, f"LOD{lod} material {index} lacks occlusion texture")
+        name = str(material.get("name", f"material{index}"))
+        alpha_mode = material.get("alphaMode", "OPAQUE")
+        require(alpha_mode in alpha_mode_counts, f"LOD{lod} material {name} has unknown alphaMode {alpha_mode!r}")
+        alpha_mode_counts[alpha_mode] += 1
+        # Pack-wide invariant: alpha-cut foliage ships as MASK.  A BLEND material means
+        # the exporter silently downgraded an authored cutout back into the sorted pass.
+        require(alpha_mode != "BLEND", f"LOD{lod} material {name} exports alphaMode BLEND")
+        if "_card_" in name:
+            label = f"LOD{lod} card material {name}"
+            require(alpha_mode == "MASK", f"{label} is {alpha_mode}, not MASK")
+            require(
+                abs(float(material.get("alphaCutoff", -1.0)) - card_cutoff) <= 1e-6,
+                f"{label} alphaCutoff {material.get('alphaCutoff')} is not the LOD{lod} value {card_cutoff}",
+            )
+            require(material.get("doubleSided") is True, f"{label} is not double-sided")
+            if binary:
+                card_audits.append({
+                    "materialName": name,
+                    "alphaCutoff": card_cutoff,
+                    **audit_card_texture(document, binary, material, label),
+                })
     if proof_kind == "pine":
         atlas_materials = [material for material in materials if "pine_scots_atlas" in material.get("name", "")]
         require(len(atlas_materials) == 1, f"LOD{lod} must contain one Scots-pine atlas material")
@@ -245,6 +455,8 @@ def inspect_glb(document: dict, prototype: str, lod: int, proof_kind: str | None
         "meshes": len(document.get("meshes", [])),
         "materials": len(materials),
         "images": len(images),
+        "alphaModeCounts": alpha_mode_counts,
+        "cardMaterials": card_audits,
     }
 
 
@@ -395,7 +607,32 @@ def validate_set(args: argparse.Namespace, catalog_document: dict, by_name: dict
         seed = generated.get("seed")
         require(isinstance(seed, int) and seed >= 0, f"LOD{lod} seed is invalid")
         seeds.add(seed)
-        gltf_stats = inspect_glb(glb_json(output), args.prototype, lod, proof_kind)
+        glb_document, glb_binary = glb_chunks(output)
+        gltf_stats = inspect_glb(glb_document, args.prototype, lod, proof_kind, glb_binary)
+        require(
+            generated.get("alphaModeCounts") == gltf_stats["alphaModeCounts"],
+            f"LOD{lod} alpha-mode receipt {generated.get('alphaModeCounts')} does not match the GLB "
+            f"{gltf_stats['alphaModeCounts']}",
+        )
+        declared_cards = generated.get("proceduralAlphaCards")
+        require(isinstance(declared_cards, list), f"LOD{lod} receipt lacks a proceduralAlphaCards ledger")
+        require(
+            [record.get("materialName") for record in declared_cards]
+            == [audit["materialName"] for audit in gltf_stats["cardMaterials"]],
+            f"LOD{lod} procedural card receipt does not enumerate the GLB's card materials",
+        )
+        for record in declared_cards:
+            require(record.get("alphaMode") == "MASK", f"LOD{lod} card receipt alphaMode changed")
+            require(
+                abs(float(record.get("alphaCutoff", -1.0)) - PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD[lod]) <= 1e-9,
+                f"LOD{lod} card receipt alphaCutoff changed",
+            )
+            require(record.get("doubleSided") is True, f"LOD{lod} card receipt doubleSided changed")
+            require(record.get("binarySourceAlpha") is True, f"LOD{lod} card receipt binary-alpha claim changed")
+            require(
+                isinstance(record.get("rgbDilationPasses"), int) and record["rgbDilationPasses"] >= 2,
+                f"LOD{lod} card receipt records insufficient RGB dilation",
+            )
         require(generated.get("triangles") == gltf_stats["triangles"], f"LOD{lod} authored triangle receipt mismatch")
         require(generated.get("exportedTriangles") == gltf_stats["triangles"], f"LOD{lod} exported triangle receipt mismatch")
         require(generated.get("materialCount") == gltf_stats["materials"], f"LOD{lod} material receipt mismatch")

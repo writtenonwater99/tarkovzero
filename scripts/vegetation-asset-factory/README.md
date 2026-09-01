@@ -45,6 +45,31 @@ LOD0/1/2 reduce branch depth, foliage clusters/cards, mesh sides, and embedded t
 (128/64/32). Every material contains deterministic original base-color, tangent-normal, and ORM
 textures embedded in the GLB. No camera, light, fog, animation, or external URI is exported.
 
+### Alpha cards are MASK, never BLEND
+
+`material_sample()` writes card alpha as exactly 1.0 or 0.0 — a strictly binary cut with no ramp.
+Until Stage A those cards still exported as `alphaMode: BLEND`, because Blender 4.2+ decides the
+glTF alpha mode from the **node tree** and the factory's `surface_render_method`/`alpha_threshold`
+settings are viewport-only. A direct image-alpha → BSDF-alpha link is always BLEND.
+
+Every card now routes its alpha through a `ShaderNodeMath` `GREATER_THAN`, which is what
+`io_scene_gltf2`'s `detect_alpha_clip` reads, so the export is `MASK` with the constant operand as
+`alphaCutoff`. Two properties make this safe and permanent:
+
+- **`PROCEDURAL_CARD_ALPHA_CUTOFF_BY_LOD = {0: 0.485, 1: 0.454, 2: 0.547}`** — per-LOD, derived by
+  holding alpha-test coverage against each LOD texture's own mip-0 silhouette across its whole box
+  mip chain (see the constant's comment for the numbers). With binary source alpha every cutoff in
+  `(0, 1)` reproduces mip 0 texel for texel, so the choice only governs minification.
+- **RGB dilation is mandatory.** `material_sample()` writes `(0, 0, 0)` under alpha 0. BLEND hid
+  that; MASK does not, and bilinear/mip taps would drag a black outline onto every leaf edge.
+  `dilate_card_rgb()` floods the nearest opaque colour across the entire transparent region before
+  the image is created; alpha is never touched.
+
+`inspect_export()` refuses to publish any GLB carrying a BLEND material, `validate_vegetation_outputs.py`
+decodes each card's embedded PNG and asserts the alpha is still binary and no alpha-0 texel within two
+texels of a surviving edge is pure black, and `validate_full_pack.py` asserts zero BLEND materials
+across the whole pack.
+
 ## Pinned build
 
 Use the reviewed Blender 4.5 LTS binary and always build into a temporary directory first:
@@ -153,9 +178,15 @@ The full-pack validator applies explicit per-asset and aggregate byte/triangle/t
 the Node pass keeps the official Khronos validator warm in one process and requires zero errors,
 warnings, infos, and hints across all 93 files.
 
-Sample byte determinism and no-clobber behavior across different families/LODs:
+Byte determinism and no-clobber behaviour. There is no sample cap: `--all` verifies every record in
+the generation manifest, and `--jobs` parallelises it (93/93 takes ~27 s at `--jobs 4`).
 
 ```bash
+python3 scripts/vegetation-asset-factory/verify_pack_reproducibility.py \
+  --pack-root "$PACK" --blender "$BLENDER" --all --jobs 4 \
+  --output "$PACK/validation/reproducibility-report.json"
+
+# or a named subset
 python3 scripts/vegetation-asset-factory/verify_pack_reproducibility.py \
   --pack-root "$PACK" --blender "$BLENDER" \
   --sample pine01:0 --sample filbert_dry01:1 --sample grass_dry3:2 \
@@ -164,6 +195,21 @@ python3 scripts/vegetation-asset-factory/verify_pack_reproducibility.py \
 
 The verifier rebuilds each sample to a fresh path, requires a byte-identical GLB, then deliberately
 targets the published output/receipt pair and requires the factory to fail without changing it.
+
+Finally, require the pack's declared generator to exist in git:
+
+```bash
+python3 scripts/vegetation-asset-factory/verify_factory_provenance.py \
+  --pack-root "$PACK" --ref HEAD \
+  --output "$PACK/validation/factory-provenance-report.json"
+```
+
+`validate_full_pack.py` already refuses a manifest whose `generator.factorySha256` disagrees with the
+factory on disk. This gate is the stronger half: it also requires that hash to equal the SHA-256 of
+`vegetation_factory.py` **as committed at a git ref**. It exists because
+`.local-candidates/vegetation-full` recorded `sha256:03337cdb…c16f384` as its generator while the
+only factory blob git has ever held hashes `sha256:ef3b4b8a…3da38c` — a revision nobody can check
+out. An uncommitted working tree fails here by design; commit the factory, then rebuild.
 
 For visual review, render one representative form from every family at LOD0/1/2 with
 `render_preview.py`, then pass each labelled PNG triplet to `build_contact_sheet.py`:
