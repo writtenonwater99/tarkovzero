@@ -1161,7 +1161,11 @@ def batch_meshes_for_export() -> dict[str, int]:
         joined += 1
     bpy.ops.object.select_all(action="DESELECT")
     after = sum(obj.type == "MESH" and obj.visible_get() for obj in bpy.context.scene.objects)
-    return {"meshObjectsBeforeBatch": total_before, "meshObjectsAfterBatch": after, "batchGroups": joined}
+    # Report the bands that actually shipped. A batch whose geometry straddles the
+    # upper floor is labelled "cross-floor"; the receipt must say so rather than
+    # promise a two-storey slice the exported names cannot honour.
+    bands = sorted({band for band, _family in groups})
+    return {"meshObjectsBeforeBatch": total_before, "meshObjectsAfterBatch": after, "batchGroups": joined, "batchBands": bands}
 
 
 def blender_bounds() -> dict[str, list[float]]:
@@ -1300,7 +1304,7 @@ def receipt_document(args: argparse.Namespace, facts: dict, authored: dict[str, 
             "sha256": f"sha256:{sha256_file(args.output)}",
             "gltf": {"unit": "metre", "upAxis": "+y", "forwardAxis": "+x", "pivot": "base-centre-origin"},
             "boundsM": stats["boundsM"],
-            "floors": ["ground", "floor-1", "roof"],
+            "floors": list(authored.get("batchBands", [])),
         },
         "canonicalPlacement": {
             "recommendedEftPivotM": {"x": pivot[0], "y": pivot[1], "z": pivot[2]},

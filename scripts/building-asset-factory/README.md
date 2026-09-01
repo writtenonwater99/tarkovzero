@@ -32,10 +32,16 @@ independent validator derive these values separately.
 ## Deterministic outputs
 
 The Blender 4.5.13 LTS factory emits LOD0/1/2 GLBs with embedded base-colour, normal,
-and packed occlusion/metallic-roughness textures. It batches authored fragments by floor
-and material family, preserves named slab nodes and opening-void empties, and removes
-unused duplicate UV layers before export. Every output and receipt uses a no-clobber
-contract; pre-existing targets cause failure.
+and packed occlusion/metallic-roughness textures. It batches authored fragments by
+material family and by **measured vertical occupancy**, preserves named slab nodes and
+opening-void empties, and removes unused duplicate UV layers before export. Every output
+and receipt uses a no-clobber contract; pre-existing targets cause failure.
+
+A batch band is earned, not declared. `ground` contains nothing above the upper floor,
+`floor-1` nothing below it, and a piece that genuinely spans both — a downpipe, a stair
+rail — lands in `cross-floor` rather than being filed under whichever floor its top edge
+touches. `receipt.asset.floors` reports the bands that actually shipped, so a consumer
+slicing by band gets the geometry the name promises.
 
 Create a fresh candidate directory and build all three LODs:
 
@@ -102,7 +108,16 @@ python3 scripts/building-asset-factory/verify_crackhouse_reproducibility.py \
   --output "$TZ_CRACKHOUSE_OUT/qa/reproducibility.json"
 ```
 
-Create fixed-camera visual evidence:
+Run the QA camera-rig contracts before trusting any render as evidence. Pointing
+`TZ_CRACKHOUSE_QA_GLBS` at the built LODs adds the real-model framing check:
+
+```bash
+TZ_CRACKHOUSE_QA_GLBS="$TZ_CRACKHOUSE_OUT/crackhouse-shell-lod0.glb,$TZ_CRACKHOUSE_OUT/crackhouse-shell-lod1.glb,$TZ_CRACKHOUSE_OUT/crackhouse-shell-lod2.glb" \
+  "$TZ_CRACKHOUSE_BLENDER" --background --factory-startup --disable-autoexec \
+  --python-exit-code 1 --python scripts/building-asset-factory/test_crackhouse_qa_rig.py
+```
+
+Create fixed-camera visual evidence (run once per view: `oblique`, `south`, `east`):
 
 ```bash
 python3 scripts/building-asset-factory/build_contact_sheet.py \
@@ -112,6 +127,19 @@ python3 scripts/building-asset-factory/build_contact_sheet.py \
   --item "LOD2=$TZ_CRACKHOUSE_OUT/crackhouse-shell-lod2.glb" \
   --output "$TZ_CRACKHOUSE_OUT/qa/crackhouse-lod-oblique.png"
 ```
+
+### What the QA rig is, and what it is not
+
+Every camera, light, and the ground plane come from one frozen reference envelope
+(`REFERENCE_MIN`/`REFERENCE_MAX` in `render_crackhouse_preview.py`). Nothing in the rig
+reads the imported GLB, so the three panels of a sheet are one camera and one light rig
+and the LODs can be compared against each other. `ortho_scale` is derived by projecting
+that envelope and adding `FRAME_MARGIN`, so a view cannot silently crop the subject; a
+model that leaves the envelope fails the render instead of being framed out of it.
+
+`QA_Ground` sits 4 mm below the envelope floor, not below the model's own floor. It is an
+asset-base datum that exposes base-pivot drift between LODs. It is **not** terrain
+evidence and these renders make no foundation-contact claim.
 
 ## Admission boundary
 
