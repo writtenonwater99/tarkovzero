@@ -266,19 +266,148 @@ export function vegetationDegradations({
 }
 
 /**
+ * The on-screen answer to "which forest is this", derived from `degradations` and nothing else.
+ *
+ * This exists because a 71.5 s authored mount (>12 min after a camera move) made it possible to open
+ * the review URL, see A forest, and judge it — while the one on screen was the procedural fallback
+ * that has been there since August. `renderStats().vegetation.warnings` already named that state
+ * correctly; nothing surfaced it on screen, so the founder had to paste a console expression to find
+ * out which forest he was looking at.
+ *
+ * The five mutually-exclusive codes below are the ones `vegetationDegradations` pushes from its one
+ * if/else-if chain — a snapshot produces at most one of them — so finding one here IS finding the
+ * reason nothing authored is confirmed live, never a choice among candidates. Everything past that
+ * chain (`partial-pack`, the array/material/draw-call/accounting codes) can coexist WITH
+ * `mode: 'authored'`, and is folded into `secondary`: authored of full pack (open, healthy) vs.
+ * authored-but-degraded are different indicator states even though both have a live runtime.
+ *
+ * The load-bearing property, asserted in the test file: `healthy` here is `degradations.length === 0`
+ * — the exact same emptiness `warnings` already reports — so the indicator can no more disagree with
+ * `warnings` than a value can disagree with itself. There is no second read of the runtime anywhere
+ * in this function.
+ */
+const PRIMARY_INDICATOR_CODES = new Set([
+  'runtime-disposed',
+  'no-authored-plan',
+  'authored-disabled-by-query',
+  'mount-in-flight',
+  'mount-failed',
+  'authored-runtime-missing',
+]);
+
+/** `90000` -> `"1:30"`, `8400` -> `"8s"`. Never negative, never fractional. */
+function formatClock(ms) {
+  const totalSeconds = Math.max(0, Math.round(int(ms, 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, '0')}` : `${seconds}s`;
+}
+
+/** What step the loader is inside, for a mount whose GLB count is what actually moves. */
+const MOUNT_STEP_LABEL = Object.freeze({
+  'pack-index': 'fetching the pack index',
+  'texture-arrays': 'loading shared texture arrays',
+  assets: 'loading GLBs',
+});
+
+/**
+ * "41 of 93 GLBs · loading GLBs · 38s elapsed — 12s since the last file" — real counts, not a
+ * spinner. `mount` is read directly (not reconstructed from a warning's prose) because the mount-time
+ * fields (`loaded`, `expected`, `elapsedMs`, `sinceProgressMs`, `step`) are already the exact snapshot
+ * `vegetationDegradations` used to write the `mount-in-flight` message beside this one — same object,
+ * two views of it.
+ */
+function formatMountProgress(mount) {
+  const loaded = int(mount?.loaded, 0);
+  const expected = int(mount?.expected, null);
+  const since = int(mount?.sinceProgressMs, 0);
+  const phase = text(mount?.phase);
+  const stepLabel = MOUNT_STEP_LABEL[text(mount?.step)] ?? (phase === 'assembling' ? 'assembling' : 'loading');
+  const count = expected !== null ? `${loaded} of ${expected} GLBs` : `${loaded} GLBs`;
+  const stale = since >= 5000 ? ` — ${formatClock(since)} since the last file` : '';
+  return `${count} · ${stepLabel} · ${formatClock(mount?.elapsedMs)} elapsed${stale}`;
+}
+
+/**
+ * One frozen `{state, healthy, headline, detail, code}` for whatever `degradations` found.
+ *
+ * `state` is a small closed vocabulary a UI can key CSS/color off (`loading`, `procedural`,
+ * `authored`, `authored-degraded`, `disposed`, `inconsistent`) — never free text, so a caller cannot
+ * accidentally fork the wording between the on-screen chip and this function.
+ */
+function vegetationIndicatorFromDegradations({ mount, degradations }) {
+  const primary = degradations.find((entry) => PRIMARY_INDICATOR_CODES.has(entry.code)) ?? null;
+  if (primary) {
+    switch (primary.code) {
+      case 'mount-in-flight':
+        return Object.freeze({
+          state: 'loading', healthy: false, code: primary.code,
+          headline: 'Loading authored vegetation…',
+          detail: formatMountProgress(mount),
+        });
+      case 'runtime-disposed':
+        return Object.freeze({
+          state: 'disposed', healthy: false, code: primary.code,
+          headline: 'Vegetation view disposed', detail: primary.message,
+        });
+      case 'authored-runtime-missing':
+        return Object.freeze({
+          state: 'inconsistent', healthy: false, code: primary.code,
+          headline: 'Vegetation status inconsistent — reload', detail: primary.message,
+        });
+      case 'no-authored-plan':
+        return Object.freeze({
+          state: 'procedural', healthy: false, code: primary.code,
+          headline: 'Procedural forest — no authored plan for this map', detail: primary.message,
+        });
+      case 'authored-disabled-by-query':
+        return Object.freeze({
+          state: 'procedural', healthy: false, code: primary.code,
+          headline: 'Procedural forest — disabled by ?vegetation=procedural', detail: primary.message,
+        });
+      default: // 'mount-failed'
+        return Object.freeze({
+          state: 'procedural', healthy: false, code: primary.code,
+          headline: 'Procedural forest — authored pack failed to mount', detail: primary.message,
+        });
+    }
+  }
+  // No primary code fired: `vegetationDegradations`' if/else-if chain only reaches here when
+  // `mode === 'authored'` AND a live runtime exists. What is left is whether anything in the
+  // secondary set (partial pack, array textures, material fallback, draw calls, accounting) fired
+  // alongside it — the difference between "fully live" and "live but degraded".
+  const secondary = degradations; // every remaining entry, since primary is null
+  if (secondary.length === 0) {
+    return Object.freeze({
+      state: 'authored', healthy: true, code: null,
+      headline: 'Authored vegetation — live', detail: null,
+    });
+  }
+  return Object.freeze({
+    state: 'authored-degraded', healthy: false, code: secondary[0].code,
+    headline: `Authored vegetation — ${secondary.length} degradation${secondary.length === 1 ? '' : 's'}`,
+    detail: secondary.map((entry) => entry.message).join(' '),
+  });
+}
+
+/**
  * The whole observability answer for one `renderStats()` call.
  *
- * `warnings` stays an array of strings — that is the field readers already know — and `degradations`
- * carries the same list with a stable code beside each message, so a test can name a state without
- * matching prose.
+ * `warnings` stays an array of strings — that is the field readers already know — `degradations`
+ * carries the same list with a stable code beside each message, and `indicator` is the one-sentence,
+ * on-screen answer built from that same `degradations` array (see `vegetationIndicatorFromDegradations`
+ * above) — so a test can name a state without matching prose, and the screen cannot say something
+ * `warnings` disagrees with.
  */
 export function describeVegetationObservability(snapshot = {}) {
   const accounting = vegetationPlacementAccounting(snapshot);
   const degradations = vegetationDegradations({ ...snapshot, accounting });
+  const indicator = vegetationIndicatorFromDegradations({ mount: snapshot.mount, degradations });
   return Object.freeze({
     accounting,
     accountedPlacements: accounting.placements,
     degradations,
     warnings: Object.freeze(degradations.map((entry) => entry.message)),
+    indicator,
   });
 }

@@ -374,3 +374,83 @@ test('reuses the shared loopback helpers verbatim from local-game-derived-dev.mj
   assert.equal(isLoopbackAddress('127.0.0.1'), true);
   assert.equal(hostHeaderHostname('LOCALHOST:5173'), 'localhost');
 });
+
+// ── the authorization memo ───────────────────────────────────────────────────────────────────
+//
+// The route used to re-read and re-JSON.parse the 1.85 MB pack index on EVERY request, which cost
+// 24.4 ms per file on a warm /mnt/c page cache and made the 93-GLB mount's dominant term the
+// authorization rather than the payload (measured over the whole pass at eight concurrent
+// requests: 613 ms re-deriving every time vs. 150 ms deriving once). What is memoized is the
+// DERIVATION, so the two properties below are what keep it a memo rather than a hole: a rewritten
+// index takes effect on the very next request, and an index that becomes unreadable revokes
+// everything it had authorized.
+
+test('a rewritten pack index takes effect on the next request, memo or not', async (t) => {
+  const { root, packageRoot } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const middleware = createVegetationAuthoredMiddleware(packageRoot);
+  const url = '/@vegetation-authored/assets/birch01/unlisted-lod0.glb';
+
+  // Present on disk, absent from the index: refused, and now the memo holds that answer.
+  assert.equal((await call(middleware, request({ url }))).statusCode, 404);
+  assert.equal((await call(middleware, request({ url }))).statusCode, 404);
+
+  // Same path, newly listed. mtime has 1 ms resolution on some filesystems, so the write is
+  // separated from the reads it must invalidate.
+  await new Promise((resolve) => { setTimeout(resolve, 12); });
+  await writeFile(join(packageRoot, 'pack-index.json'), JSON.stringify({
+    ...PACK_INDEX_VALUE,
+    authoredAssets: [{
+      ...PACK_INDEX_VALUE.authoredAssets[0],
+      lods: [
+        ...PACK_INDEX_VALUE.authoredAssets[0].lods,
+        { lod: 0, file: 'assets/birch01/unlisted-lod0.glb', bytes: 1, sha256: `sha256:${'e'.repeat(64)}` },
+      ],
+    }],
+  }));
+  const served = await call(middleware, request({ url }));
+  assert.equal(served.statusCode, 200, 'a stale allowlist must not outlive the document it came from');
+
+  // And the reverse: delisting revokes on the next request too.
+  await new Promise((resolve) => { setTimeout(resolve, 12); });
+  await writeFile(join(packageRoot, 'pack-index.json'), PACK_INDEX);
+  assert.equal((await call(middleware, request({ url }))).statusCode, 404);
+});
+
+test('an index that becomes unreadable authorizes nothing it had authorized before', async (t) => {
+  const { root, packageRoot } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const middleware = createVegetationAuthoredMiddleware(packageRoot);
+  const url = '/@vegetation-authored/assets/birch01/birch01-lod0.glb';
+  assert.equal((await call(middleware, request({ url }))).statusCode, 200);
+
+  await new Promise((resolve) => { setTimeout(resolve, 12); });
+  await writeFile(join(packageRoot, 'pack-index.json'), '{ not json');
+  assert.equal(
+    (await call(middleware, request({ url }))).statusCode,
+    404,
+    'a corrupt index revokes the memo rather than leaving the last good allowlist standing',
+  );
+  // Including the index itself, exactly as before the memo existed.
+  assert.equal(
+    (await call(middleware, request({ url: '/@vegetation-authored/pack-index.json' }))).statusCode,
+    404,
+  );
+});
+
+test('two middlewares over different roots do not share one memo', async (t) => {
+  const first = await fixture();
+  const second = await fixture();
+  t.after(() => rm(first.root, { recursive: true, force: true }));
+  t.after(() => rm(second.root, { recursive: true, force: true }));
+  await new Promise((resolve) => { setTimeout(resolve, 12); });
+  await writeFile(join(second.packageRoot, 'pack-index.json'), JSON.stringify({
+    ...PACK_INDEX_VALUE, authoredAssets: [],
+  }));
+  const a = createVegetationAuthoredMiddleware(first.packageRoot);
+  const b = createVegetationAuthoredMiddleware(second.packageRoot);
+  const url = '/@vegetation-authored/assets/birch01/birch01-lod0.glb';
+  assert.equal((await call(a, request({ url }))).statusCode, 200);
+  assert.equal((await call(b, request({ url }))).statusCode, 404);
+  assert.equal((await call(a, request({ url }))).statusCode, 200);
+});

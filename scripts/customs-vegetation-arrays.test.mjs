@@ -34,6 +34,7 @@ import {
   loadCustomsVegetationTextureArrays,
   resolveCustomsVegetationLayer,
   sliceCustomsVegetationArrayLevel,
+  stripCustomsVegetationGlbImages,
   validateCustomsVegetationTextureArrayIndex,
 } from '../src/customs-vegetation-texture-arrays.js';
 
@@ -512,10 +513,48 @@ test('a dead blob is reported with its own url, file, lod and slot', async () =>
       return true;
     },
   );
-  // Three healthy blobs were served first: the failure is genuinely the fourth of nine, not the
-  // first thing the loader touched.
-  assert.equal(fetched.length, 4);
-  assert.equal(fetched.at(-1), dead);
+  // The loader opens all nine at once, so the diagnosis cannot lean on request ORDER the way it
+  // could when the fetches were serial: the dead blob is the fourth of nine by declaration and
+  // may be the first, last or middle one to settle. Every one of the nine was asked for, and the
+  // error above still named exactly which of them failed.
+  assert.equal(fetched.length, 9, 'all nine blobs are requested concurrently, not one at a time');
+  assert.ok(fetched.includes(dead));
+  assert.equal(new Set(fetched).size, 9, 'each blob is requested exactly once');
+});
+
+test('one dead blob disposes every texture the other eight already built', async () => {
+  const { bodies, index } = servableSyntheticIndex();
+  // The dead blob settles FIRST and the eight healthy ones settle after it. That ordering is the
+  // whole point: under `Promise.all` the loader would reject and run `dispose()` on an empty map
+  // at t=0, and the eight textures built afterwards would never be released at all. `allSettled`
+  // waits for every one of them, so the disposal covers all eight.
+  const dead = 'veg-l0-basecolor.bin';
+  const fetchImpl = async (url) => {
+    const file = url.slice(url.lastIndexOf('/') + 1);
+    const bytes = bodies.get(file);
+    if (file === dead) return { ok: false, status: 500, headers: { get: () => null } };
+    await new Promise((resolve) => { setTimeout(resolve, 10); });
+    return {
+      ok: true,
+      headers: { get: (name) => (name === 'content-length' ? String(bytes.byteLength) : null) },
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    };
+  };
+  const disposed = [];
+  const originalDispose = THREE.DataArrayTexture.prototype.dispose;
+  THREE.DataArrayTexture.prototype.dispose = function trackedDispose(...args) {
+    disposed.push(this.name);
+    return originalDispose.apply(this, args);
+  };
+  try {
+    await assert.rejects(
+      loadCustomsVegetationTextureArrays({ index, baseUrl: '/@vegetation-arraytex/', fetchImpl }),
+      (error) => error.code === 'ERR_CUSTOMS_VEGETATION_TEXTURE_ARRAY_HTTP',
+    );
+  } finally {
+    THREE.DataArrayTexture.prototype.dispose = originalDispose;
+  }
+  assert.equal(disposed.length, 8, 'every texture built before the failure is released');
 });
 
 test('a transport-level rejection is annotated with the blob, not replaced', async () => {
@@ -803,4 +842,155 @@ test('the same fixture without the arrays pays one call per primitive, which is 
   } finally {
     runtime.dispose();
   }
+});
+
+// ── stripping the pack's dead images out of a verified GLB ───────────────────────────────────
+//
+// Under the array material every one of the pack's 597 embedded PNGs is decoded by GLTFLoader and
+// then released unused. Removing them from the JSON chunk is what takes the mount's dominant cost
+// (3,781 ms of summed `gltf.parseAsync`) off the clock, and the property that makes it safe is
+// that NOTHING the array path reads is lost: geometry, the binary chunk, and each material's name,
+// alpha mode and cutoff all survive byte for byte.
+
+const PACK_ROOT = join(HERE, '..', '.local-candidates', 'vegetation-full-v2');
+const PACK_PRESENT = existsSync(join(PACK_ROOT, 'pack-index.json'));
+const SKIP_PACK = PACK_PRESENT ? false : 'vegetation-full-v2 is not built locally';
+
+const GLB_JSON = 0x4e4f534a;
+
+function glbChunks(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const jsonLength = view.getUint32(12, true);
+  assert.equal(view.getUint32(16, true), GLB_JSON);
+  return {
+    json: JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + jsonLength))),
+    bin: bytes.subarray(20 + jsonLength),
+    total: view.getUint32(8, true),
+    byteLength: bytes.byteLength,
+  };
+}
+
+function minimalGlb(json, bin = new Uint8Array([1, 2, 3, 4, 0, 0, 0, 0])) {
+  const encoded = new TextEncoder().encode(JSON.stringify(json));
+  const padded = (encoded.byteLength + 3) & ~3;
+  const out = new Uint8Array(20 + padded + 8 + bin.byteLength);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x46546c67, true);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, out.byteLength, true);
+  view.setUint32(12, padded, true);
+  view.setUint32(16, GLB_JSON, true);
+  out.fill(0x20, 20 + encoded.byteLength, 20 + padded);
+  out.set(encoded, 20);
+  view.setUint32(20 + padded, bin.byteLength, true);
+  view.setUint32(24 + padded, 0x004e4942, true);
+  out.set(bin, 28 + padded);
+  return out.buffer;
+}
+
+test('the strip keeps every material identity the array path binds on', () => {
+  const source = minimalGlb({
+    asset: { version: '2.0' },
+    materials: [
+      {
+        name: 'TZ_VEG_leaf_card_L0',
+        alphaMode: 'MASK',
+        alphaCutoff: 0.5,
+        doubleSided: true,
+        extras: { tz_material_family: 'leaf' },
+        normalTexture: { index: 0, scale: 0.78 },
+        occlusionTexture: { index: 1 },
+        pbrMetallicRoughness: { baseColorTexture: { index: 2 }, metallicRoughnessTexture: { index: 1 } },
+      },
+    ],
+    images: [{ mimeType: 'image/png', bufferView: 0 }],
+    textures: [{ source: 0, sampler: 0 }],
+    samplers: [{ wrapS: 10497, wrapT: 10497 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 4 }],
+    buffers: [{ byteLength: 8 }],
+  });
+  const stripped = stripCustomsVegetationGlbImages(source);
+  assert.equal(stripped.images, 1);
+  assert.equal(stripped.materials, 1);
+
+  const before = glbChunks(source);
+  const after = glbChunks(stripped.bytes);
+  assert.deepEqual(after.json.materials, [{
+    name: 'TZ_VEG_leaf_card_L0',
+    alphaMode: 'MASK',
+    alphaCutoff: 0.5,
+    doubleSided: true,
+    extras: { tz_material_family: 'leaf' },
+  }], 'name, alpha mode, cutoff and sidedness are what the array path reads');
+  assert.equal(after.json.images, undefined);
+  assert.equal(after.json.textures, undefined);
+  assert.equal(after.json.samplers, undefined);
+  // Nothing is renumbered, so every accessor offset the geometry depends on is still correct.
+  assert.deepEqual(after.json.meshes, before.json.meshes);
+  assert.deepEqual(after.json.accessors, before.json.accessors);
+  assert.deepEqual(after.json.bufferViews, before.json.bufferViews);
+  assert.deepEqual(after.json.buffers, before.json.buffers);
+  assert.deepEqual([...after.bin], [...before.bin], 'the binary chunk is carried over byte for byte');
+  assert.equal(after.total, after.byteLength, 'the rebuilt header declares its own real length');
+});
+
+test('the strip refuses a shape it has not proved safe, rather than flattening it', () => {
+  const withExtension = minimalGlb({
+    asset: { version: '2.0' },
+    extensionsUsed: ['KHR_texture_transform'],
+    materials: [{ name: 'a' }],
+  });
+  assert.throws(
+    () => stripCustomsVegetationGlbImages(withExtension),
+    (error) => error.code === 'ERR_CUSTOMS_VEGETATION_GLB_STRIP_UNSUPPORTED',
+  );
+  const unknownMaterialKey = minimalGlb({
+    asset: { version: '2.0' },
+    materials: [{ name: 'a', clearcoatTexture: { index: 0 } }],
+  });
+  assert.throws(
+    () => stripCustomsVegetationGlbImages(unknownMaterialKey),
+    (error) => error.code === 'ERR_CUSTOMS_VEGETATION_GLB_STRIP_UNSUPPORTED',
+  );
+  assert.throws(
+    () => stripCustomsVegetationGlbImages(new Uint8Array(64).buffer),
+    (error) => error.code === 'ERR_CUSTOMS_VEGETATION_GLB_STRIP',
+  );
+});
+
+test('every GLB in the real pack strips to zero images with its geometry intact', { skip: SKIP_PACK }, async () => {
+  const packIndex = JSON.parse(await readFile(join(PACK_ROOT, 'pack-index.json'), 'utf8'));
+  let images = 0;
+  let materials = 0;
+  let files = 0;
+  for (const asset of packIndex.authoredAssets) {
+    for (const lod of asset.lods) {
+      const source = await readFile(join(PACK_ROOT, lod.file));
+      const buffer = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+      const stripped = stripCustomsVegetationGlbImages(buffer);
+      const before = glbChunks(buffer);
+      const after = glbChunks(stripped.bytes);
+      assert.equal(after.json.images, undefined, `${lod.file} still declares images`);
+      assert.deepEqual(after.json.accessors, before.json.accessors, `${lod.file} accessors moved`);
+      assert.deepEqual(after.json.bufferViews, before.json.bufferViews, `${lod.file} bufferViews moved`);
+      assert.deepEqual(after.json.nodes, before.json.nodes, `${lod.file} node hierarchy changed`);
+      assert.equal(after.bin.byteLength, before.bin.byteLength, `${lod.file} binary chunk resized`);
+      assert.deepEqual(
+        after.json.materials.map((material) => material.name),
+        before.json.materials.map((material) => material.name),
+        `${lod.file} lost a material name, which is the texture-array layer key`,
+      );
+      images += stripped.images;
+      materials += stripped.materials;
+      files += 1;
+    }
+  }
+  // The measured pack: 93 GLBs, 199 materials, 597 embedded PNGs that the array material makes
+  // dead on arrival. Pinned so a rebuild that changes the shape fails here rather than silently.
+  assert.equal(files, 93);
+  assert.equal(materials, 199);
+  assert.equal(images, 597);
 });

@@ -29,6 +29,7 @@ import {
 } from './customs-authored-vegetation-rollout.js';
 import {
   loadCustomsVegetationTextureArrays,
+  stripCustomsVegetationGlbImages,
   validateCustomsVegetationTextureArrayIndex,
 } from './customs-vegetation-texture-arrays.js';
 import {
@@ -1006,6 +1007,17 @@ export async function createView3d(container, mapData, src) {
   hoverChip.className = 'tz-three-hover';
   hoverChip.hidden = true;
   overlay.append(hoverChip);
+  // The vegetation status chip — see `updateVegetationChip()` below, near
+  // `vegetationObservabilitySnapshot`, for what drives it and why it cannot disagree with
+  // `renderStats().vegetation.warnings`. Built here, alongside the rest of the always-on HUD, so it
+  // exists on the very first frame rather than appearing only once a mount is in flight.
+  const vegetationChip = document.createElement('div');
+  vegetationChip.className = 'tz-veg-chip';
+  vegetationChip.hidden = true;
+  const vegetationChipHeadline = document.createElement('b');
+  const vegetationChipDetail = document.createElement('span');
+  vegetationChip.append(vegetationChipHeadline, vegetationChipDetail);
+  overlay.append(vegetationChip);
   container.append(overlay);
 
   const scene = new THREE.Scene();
@@ -2556,6 +2568,33 @@ export async function createView3d(container, mapData, src) {
       timedOut: null,
       cameraAtStart: camera.position.toArray(),
       cameraMovedDuringLoadM: null,
+      // Embedded PNGs the array material made unnecessary to decode (597 for the whole pack), and
+      // the reason the strip refused if it did. `glbImagesSkipped: 0` with a live array material
+      // means the mount paid the full GLTF image decode for textures it then threw away.
+      glbImagesSkipped: 0,
+      glbImageStripFailure: null,
+      // Where the mount's wall clock actually goes, measured rather than guessed. Every field is
+      // milliseconds. The `glb*` rows are SUMMED across all 93 loads (so they exceed the wall span
+      // whenever anything overlaps); `packIndexMs`, `arrayIndexMs`, `arrayBlobsMs`, `glbWallMs` and
+      // `assembleMs` are disjoint wall-clock spans that add up to `totalMs`.
+      timings: {
+        packIndexMs: null,
+        routeMs: null,
+        arrayIndexMs: null,
+        arrayBlobsMs: null,
+        // How much of the array load was NOT already covered by the pack-index/route head that
+        // runs beside it. `arrayIndexMs + arrayBlobsMs` is what the arrays cost; `arrayWaitMs` is
+        // what they cost the MOUNT, and a healthy overlap drives it toward zero.
+        arrayWaitMs: null,
+        glbWallMs: null,
+        glbFetchMs: 0,
+        glbHashMs: 0,
+        glbParseMs: 0,
+        glbBytes: 0,
+        assembleMs: null,
+        swapMs: null,
+        totalMs: null,
+      },
     };
     vegetationStatus.mount = progress;
     vegetationStatus.reason = 'loading-pack-index';
@@ -2604,11 +2643,68 @@ export async function createView3d(container, mapData, src) {
 
     let arrays = null;
     let runtime = null;
+    // Reported, not assumed. `glbImagesSkipped` is how many embedded PNGs the array material made
+    // unnecessary to decode; `glbImageStripFailure` is non-null exactly when the strip refused and
+    // the mount fell back to the full, slow decode.
+    let glbImagesSkipped = 0;
+    let glbImageStripFailure = null;
+    const timings = progress.timings;
+    const clock = () => performance.now();
+    let phaseAt = clock();
+    const stamp = (field) => {
+      const at = clock();
+      timings[field] = Math.round(at - phaseAt);
+      phaseAt = at;
+    };
+    // ── The two heads of the mount, started together ───────────────────────────────────────────
+    //
+    // The texture-array set is addressed by a FIXED URL and depends on nothing the pack index or
+    // the router produces, so waiting for a 1.85 MB `pack-index.json` before asking for the first
+    // array blob only ever cost wall clock. Measured serially at the default pose: 1,003 ms for
+    // the pack index, 48 ms for the array index and 624 ms for the nine blobs — 672 ms of the
+    // mount spent strictly after work that could have been running the whole time.
+    //
+    // This task RESOLVES on failure rather than throwing. The arrays are an optimisation, not a
+    // correctness requirement (without them the pack still batches per (family, LOD), just with
+    // its own per-primitive materials), so their absence is a reported DEGRADATION and must not
+    // abandon the swap — see `arrayTextureFailure` below, which is what makes a 199 -> 3 material
+    // collapse that never ran distinguishable from one that did.
+    const arrayIndexUrl = `${CUSTOMS_VEGETATION_ARRAY_ROUTE}veg-layers.json`;
+    const arrayTask = (async () => {
+      const startedAt = clock();
+      let indexAt = startedAt;
+      try {
+        const arrayIndex = validateCustomsVegetationTextureArrayIndex(
+          await fetchLocalVegetationJson(arrayIndexUrl, { signal: mountAbort.signal }),
+        );
+        indexAt = clock();
+        const loaded = await loadCustomsVegetationTextureArrays({
+          index: arrayIndex,
+          baseUrl: CUSTOMS_VEGETATION_ARRAY_ROUTE,
+          signal: mountAbort.signal,
+        });
+        return {
+          arrays: loaded,
+          error: null,
+          indexMs: Math.round(indexAt - startedAt),
+          blobsMs: Math.round(clock() - indexAt),
+        };
+      } catch (error) {
+        return {
+          arrays: null,
+          error,
+          indexMs: Math.round(indexAt - startedAt),
+          blobsMs: Math.round(clock() - indexAt),
+        };
+      }
+    })();
+
     try {
       const packIndex = await fetchLocalVegetationJson(
         `${CUSTOMS_AUTHORED_VEGETATION_ROUTE}pack-index.json`,
         { signal: mountAbort.signal },
       );
+      stamp('packIndexMs');
       const catalog = normalizeCustomsAuthoredVegetationCatalog(packIndex);
       // Founder decision: admit ALL 31 authored families, not a subset. The router still runs —
       // it is what proves the two halves are complementary and total, and it is the seam a
@@ -2626,32 +2722,22 @@ export async function createView3d(container, mapData, src) {
         (sum, assetId) => sum + (catalog.assetsById[assetId]?.lods?.length ?? 0),
         0,
       );
+      stamp('routeMs');
       progress.step = 'texture-arrays';
 
-      // The texture arrays collapse the pack's 199 materials into one per LOD tier. They are an
-      // optimisation, not a correctness requirement: without them the pack still batches per
-      // (family, LOD), just with its own per-primitive materials, so their absence degrades the
-      // draw-call count and is reported — it does not abandon the swap.
-      //
-      // "Reported" is load-bearing and used not to be. This catch is a DEGRADATION, not a
-      // failure: the mount continues, and for one release the only trace it left was a string on
-      // an object nothing read, so a 199 -> 1 material collapse that never ran looked exactly like
-      // one that did. Every path out of here now names the URL and the reason, warns on the
-      // console, and lands in `renderStats().vegetation.warnings` where it is visible without one.
-      const arrayIndexUrl = `${CUSTOMS_VEGETATION_ARRAY_ROUTE}veg-layers.json`;
-      try {
-        const arrayIndex = validateCustomsVegetationTextureArrayIndex(
-          await fetchLocalVegetationJson(arrayIndexUrl, { signal: mountAbort.signal }),
-        );
-        arrays = await loadCustomsVegetationTextureArrays({
-          index: arrayIndex,
-          baseUrl: CUSTOMS_VEGETATION_ARRAY_ROUTE,
-          signal: mountAbort.signal,
-        });
+      // Everything above ran WITH the array task, not before it, so this is only the part of the
+      // array load that the pack index did not already cover.
+      const arrayResult = await arrayTask;
+      stamp('arrayWaitMs');
+      timings.arrayIndexMs = arrayResult.indexMs;
+      timings.arrayBlobsMs = arrayResult.blobsMs;
+      arrays = arrayResult.arrays;
+      if (arrays) {
         vegetationStatus.arrayTextures = { ...arrays.stats };
         vegetationStatus.arrayTextureError = null;
         vegetationStatus.arrayTextureFailure = null;
-      } catch (error) {
+      } else {
+        const error = arrayResult.error;
         const reason = error?.code ?? error?.name ?? 'unavailable';
         // WHICH url failed, not which url the sequence started at. Nine blobs hang off this index
         // and any one of them can be the failure; naming veg-layers.json for a dead
@@ -2681,7 +2767,48 @@ export async function createView3d(container, mapData, src) {
         );
       }
 
+      // Explicit rather than inherited from the last `stamp()`: the array phase has a catch that
+      // can leave `phaseAt` pointing at whichever sub-step threw, and a GLB span measured from
+      // there would silently bill the arrays' failure to the loader.
+      phaseAt = clock();
+      let lastGlbDoneAt = null;
       progress.step = 'assets';
+
+      /**
+       * Hand the GLTF parser bytes with no images in them when the array material is live.
+       *
+       * The pack's own 597 PNGs are never sampled once the shared `DataArrayTexture` material is
+       * built — the runtime releases the whole decoded value straight after the merge — so
+       * decoding them is pure cost, and the measured cost was the mount: 3,781 ms of summed parse
+       * against 49 ms of SHA-256 and 64 ms of merge.
+       *
+       * The strip runs INSIDE `parse`, i.e. after `loadVerifiedCustomsGlb` has already bound the
+       * receipt to the bytes that arrived, so the integrity check is untouched. When it refuses
+       * (a pack shape it has not proved safe), the original bytes are parsed instead: the mount
+       * gets slower and stays exactly as correct. That is reported once, not per file, and lands
+       * beside the other degradations.
+       */
+      const parseAuthoredGlb = (gltf) => (bytes, gltfBaseUrl) => {
+        if (!arrays) return gltf.parseAsync(bytes, gltfBaseUrl);
+        let prepared = null;
+        try {
+          prepared = stripCustomsVegetationGlbImages(bytes);
+        } catch (error) {
+          if (!glbImageStripFailure) {
+            glbImageStripFailure = String(error?.message ?? error);
+            console.warn(
+              '[three-poc] vegetation GLBs are being parsed WITH their embedded images because the'
+              + ` image strip refused them (${glbImageStripFailure}). Every one of those images is`
+              + ' decoded and then discarded by the array material, so the mount pays the full'
+              + ' GLTF decode for nothing. Correctness is unaffected.',
+              error,
+            );
+          }
+          return gltf.parseAsync(bytes, gltfBaseUrl);
+        }
+        glbImagesSkipped += prepared.images;
+        return gltf.parseAsync(prepared.bytes, gltfBaseUrl);
+      };
       runtime = await createCustomsAuthoredVegetationRuntime({
         plan: route.authored,
         catalog,
@@ -2697,16 +2824,35 @@ export async function createView3d(container, mapData, src) {
             url,
             request,
             signal: requestSignal,
-            parse: (bytes, gltfBaseUrl) => gltf.parseAsync(bytes, gltfBaseUrl),
+            parse: parseAuthoredGlb(gltf),
+            onTiming: (row) => {
+              timings.glbFetchMs += row.fetchMs;
+              timings.glbHashMs += row.hashMs;
+              timings.glbParseMs += row.parseMs;
+              timings.glbBytes += row.bytes;
+            },
           });
           // The only progress signal that exists: one verified, decoded GLB. Counted AFTER the
           // parse, so a loader that opens 93 requests and finishes none reads as zero progress
           // rather than as a mount that is nearly done.
           progress.loaded += 1;
           progress.lastProgressMs = performance.now();
+          lastGlbDoneAt = progress.lastProgressMs;
           return value;
         },
       });
+      // The runtime resolves only after it has merged and seated everything, so the span past the
+      // last decoded GLB is exactly the CPU assembly: primitive slicing, layer binding,
+      // mergeGeometries, 8,805 instance matrices and the first partition.
+      const runtimeReadyAt = clock();
+      progress.glbImagesSkipped = glbImagesSkipped;
+      progress.glbImageStripFailure = glbImageStripFailure;
+      timings.glbWallMs = Math.round((lastGlbDoneAt ?? runtimeReadyAt) - phaseAt);
+      timings.assembleMs = Math.round(runtimeReadyAt - (lastGlbDoneAt ?? runtimeReadyAt));
+      timings.glbFetchMs = Math.round(timings.glbFetchMs);
+      timings.glbHashMs = Math.round(timings.glbHashMs);
+      timings.glbParseMs = Math.round(timings.glbParseMs);
+      phaseAt = runtimeReadyAt;
 
       // Single swap. Everything above this line is reversible by doing nothing.
       authoredVegetationRuntime = runtime;
@@ -2731,9 +2877,17 @@ export async function createView3d(container, mapData, src) {
       repackAuthoredVegetation('mount');
       applyNature();
       invalidateRender(2);
+      stamp('swapMs');
     } catch (error) {
       runtime?.dispose?.();
       arrays?.dispose?.();
+      // The array task was started BEFORE the pack index was awaited, so a failure up there can
+      // land while nine `DataArrayTexture`s are still being built behind it. `arrays` is null on
+      // that path and disposing it releases nothing; the task's own result has to be collected and
+      // released, or the mount leaks 20 MB of GPU textures every time the pack index 404s.
+      arrayTask.then((result) => {
+        if (result?.arrays && result.arrays !== arrays) result.arrays.dispose?.();
+      }, () => {});
       vegetationStatus.mode = 'procedural';
       // A deadline that already fired owns the reason. The error that arrives here is the abort it
       // raised, and reporting `AbortError` over it would hide the diagnosis in the noise of every
@@ -2761,6 +2915,7 @@ export async function createView3d(container, mapData, src) {
       progress.elapsedMs = Math.round(settled.elapsedMs);
       progress.sinceProgressMs = Math.round(settled.sinceProgressMs);
       progress.fraction = settled.fraction;
+      progress.timings.totalMs = progress.elapsedMs;
       progress.phase = timeoutFailure ? 'timed-out' : (vegetationStatus.mode === 'authored' ? 'mounted' : 'failed');
     }
   }
@@ -2881,8 +3036,49 @@ export async function createView3d(container, mapData, src) {
       // for. The enumeration and its wording live in `customs-vegetation-observability.js`.
       warnings: observability.warnings,
       degradations: observability.degradations,
+      // The exact object the on-screen chip below is painted from — see `updateVegetationChip()`.
+      // Exposed here too so a console/e2e reader can assert the chip agrees with `renderStats()`
+      // without scraping the DOM.
+      indicator: observability.indicator,
     };
   }
+
+  /**
+   * Paint the on-screen "which forest is this" chip from `authoredVegetationRenderStats().indicator`
+   * — the SAME `describeVegetationObservability()` call `renderStats().vegetation.warnings` reads,
+   * not a second read of `vegetationStatus`/`authoredVegetationRuntime` with its own branching. That
+   * is what makes "the chip says X while warnings says Y" structurally impossible rather than merely
+   * unlikely (see customs-vegetation-observability.js `vegetationIndicatorFromDegradations`).
+   *
+   * Polled on its own timer rather than from `animate()` or the mount's watchdog: a 60-85 s mount
+   * (>12 min after a camera move — see docs at the top of `mountAuthoredVegetation`) updates `mount`
+   * fields without ever calling `invalidateRender()`, and this chip owns none of that timing code —
+   * it only reads what that code already publishes.
+   */
+  let vegetationChipHealthySinceMs = null;
+  function updateVegetationChip() {
+    const runtime = authoredVegetationRuntime?.active ? authoredVegetationRuntime.status : null;
+    const { indicator } = describeVegetationObservability(vegetationObservabilitySnapshot(runtime));
+    vegetationChip.hidden = false;
+    vegetationChip.dataset.state = indicator.state;
+    vegetationChipHeadline.textContent = indicator.headline;
+    vegetationChipDetail.textContent = indicator.detail ?? '';
+    vegetationChipDetail.hidden = !indicator.detail;
+    // "Say so plainly and then get out of the way": once healthy, the chip keeps its full,
+    // unmissable size for a few seconds — long enough to register as a verdict, not a flicker — then
+    // shrinks and dims rather than vanishing outright, because a truthful indicator that disappears
+    // is indistinguishable from one that was never wired up. Any non-healthy tick resets the clock
+    // immediately, so a mount that degrades mid-review is never left looking settled.
+    if (indicator.healthy) {
+      if (vegetationChipHealthySinceMs === null) vegetationChipHealthySinceMs = performance.now();
+      vegetationChip.classList.toggle('settled', performance.now() - vegetationChipHealthySinceMs > 4000);
+    } else {
+      vegetationChipHealthySinceMs = null;
+      vegetationChip.classList.remove('settled');
+    }
+  }
+  updateVegetationChip();
+  const vegetationChipInterval = setInterval(updateVegetationChip, 400);
 
   const groundExtent = (() => {
     const xs = data.limit.map((p) => p[0]), zs = data.limit.map((p) => p[1]);
@@ -3087,6 +3283,7 @@ export async function createView3d(container, mapData, src) {
     }),
     dispose: () => {
       stopped = true;
+      clearInterval(vegetationChipInterval);
       localTerrainAbort.abort();
       authoredStreamer.dispose();
       authoredAbort.abort();

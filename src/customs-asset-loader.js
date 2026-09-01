@@ -53,6 +53,7 @@ export async function loadVerifiedCustomsGlb({
   fetchImpl = globalThis.fetch,
   digestImpl = browserSha256,
   parse,
+  onTiming = null,
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new CustomsAssetIntegrityError('fetch is unavailable');
   if (typeof parse !== 'function') throw new CustomsAssetIntegrityError('verified GLB loading requires parse()');
@@ -62,6 +63,12 @@ export async function loadVerifiedCustomsGlb({
   if (typeof request.sha256 !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.sha256)) {
     throw new CustomsAssetIntegrityError('asset request has no valid SHA-256 receipt');
   }
+  // One optional stopwatch, three phases. It exists because "the mount takes 71.5 s" is not a
+  // diagnosis: fetch, SHA-256 and GLTF parse are three different fixes, and a prior pass in this
+  // project was spent optimising the wrong one from a guess. `now()` falls back to Date so the
+  // Node tests (which pass no `onTiming` anyway) never depend on `performance`.
+  const now = () => (globalThis.performance ?? Date).now();
+  const startedAt = onTiming ? now() : 0;
   const response = await fetchImpl(url, { signal, credentials: 'same-origin' });
   if (!response?.ok) {
     throw new CustomsAssetIntegrityError(`GLB HTTP ${response?.status ?? 'failure'}`, 'ERR_CUSTOMS_ASSET_HTTP');
@@ -81,11 +88,23 @@ export async function loadVerifiedCustomsGlb({
       `GLB byte length ${bytes.byteLength} does not match manifest ${request.bytes}`,
     );
   }
+  const fetchedAt = onTiming ? now() : 0;
   const digest = await digestImpl(bytes);
   if (`sha256:${digest}` !== request.sha256) {
     throw new CustomsAssetIntegrityError('GLB SHA-256 does not match manifest receipt');
   }
-  return parse(bytes, new URL('.', url).href);
+  const hashedAt = onTiming ? now() : 0;
+  const value = await parse(bytes, new URL('.', url).href);
+  if (onTiming) {
+    onTiming({
+      url,
+      bytes: bytes.byteLength,
+      fetchMs: fetchedAt - startedAt,
+      hashMs: hashedAt - fetchedAt,
+      parseMs: now() - hashedAt,
+    });
+  }
+  return value;
 }
 
 /**

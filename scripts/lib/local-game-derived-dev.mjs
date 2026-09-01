@@ -170,6 +170,13 @@ export function resolveLocalGameDerivedRequest({ method, url, headers = {}, remo
  * Resolve a validated relative path inside `root`, refusing symlink escapes.
  *
  * Returns the real absolute path of a regular file, or null.
+ *
+ * `mtimeMs` comes off the `stat` this already performs and is reported rather
+ * than discarded so a caller that memoizes something DERIVED from a file (the
+ * vegetation routes cache their authorization set from a manifest that way) can
+ * key the memo on the file's identity without paying a second `stat`. On
+ * `/mnt/c` that saved syscall is ~4 ms per request, on a route the runtime hits
+ * 93 times in one mount.
  */
 export async function resolveLocalGameDerivedFile(root, segments) {
   let realRoot;
@@ -191,7 +198,7 @@ export async function resolveLocalGameDerivedFile(root, segments) {
   } catch {
     return null;
   }
-  return entry.isFile() ? { path: realTarget, size: entry.size } : null;
+  return entry.isFile() ? { path: realTarget, size: entry.size, mtimeMs: entry.mtimeMs } : null;
 }
 
 /**

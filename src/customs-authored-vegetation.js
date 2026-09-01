@@ -1383,7 +1383,11 @@ export async function createCustomsAuthoredVegetationRuntime({
   alphaPolicy = CUSTOMS_AUTHORED_VEGETATION_ALPHA_POLICY,
   textureArrays = null,
   frustum = null,
-  concurrency = 4,
+  // 93 small files over a loopback dev route, not a CDN. Measured against the real route, whole
+  // pass, best of two: 1 -> 1,635 ms, 2 -> 507, 4 -> 233, 8 -> 149, 12 -> 146, 16 -> 149. Eight is
+  // the knee — past it the dev server's own file reads, not the number of open sockets, are the
+  // limit — and four left a third of that on the table.
+  concurrency = 8,
   signal = null,
 } = {}) {
   if (typeof loadGlb !== 'function') fail('authored vegetation runtime requires loadGlb()');

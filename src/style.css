@@ -74,6 +74,36 @@ button.tz-three-marker{appearance:none;cursor:pointer;pointer-events:auto}
 .tz-three-hover{position:absolute;z-index:5;max-width:320px;padding:5px 7px;background:rgba(8,12,10,.94);
   border:1px solid var(--line);border-radius:var(--r-sm);color:var(--text);font:600 11px/1.25 var(--f-body);
   box-shadow:var(--shadow-hud);pointer-events:none}
+
+/* ---------- vegetation status chip — "which forest is this", on screen (see map3d-three.js
+   updateVegetationChip()). Sits below the proof chip, top-center: obvious enough that a reviewer
+   scanning the frame cannot miss it, quiet enough it never sits over the vegetation being judged. */
+.tz-veg-chip{position:absolute;top:96px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:2px;max-width:min(88vw,440px);
+  padding:6px 12px;background:rgba(9,13,11,.92);border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-hud);text-align:center;
+  transition:opacity var(--t-med),transform var(--t-med),padding var(--t-med)}
+.tz-veg-chip b{font:700 11px/1.25 var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--text)}
+.tz-veg-chip span{display:block;font:600 9.5px/1.35 var(--f-mono);letter-spacing:.02em;color:var(--text-mute);
+  white-space:normal}
+/* state accents: loading = live cyan, procedural/authored-degraded = warn amber,
+   disposed/inconsistent = danger red, fully-live authored = the one accent that means "go". */
+.tz-veg-chip[data-state="loading"]{border-color:rgba(56,214,200,.55);animation:tz-veg-pulse 2.2s ease-in-out infinite}
+.tz-veg-chip[data-state="loading"] b{color:var(--live)}
+.tz-veg-chip[data-state="procedural"] b,.tz-veg-chip[data-state="authored-degraded"] b{color:var(--warn)}
+.tz-veg-chip[data-state="procedural"],.tz-veg-chip[data-state="authored-degraded"]{border-color:rgba(224,135,43,.6)}
+.tz-veg-chip[data-state="disposed"] b,.tz-veg-chip[data-state="inconsistent"] b{color:var(--danger)}
+.tz-veg-chip[data-state="disposed"],.tz-veg-chip[data-state="inconsistent"]{border-color:rgba(210,69,63,.6)}
+.tz-veg-chip[data-state="authored"]{border-color:rgba(45,190,108,.5)}
+.tz-veg-chip[data-state="authored"] b{color:var(--acc)}
+/* "say so plainly, then get out of the way": healthy for >4s shrinks and dims instead of vanishing —
+   a truthful indicator that disappears reads exactly like one that was never wired up. */
+.tz-veg-chip.settled{opacity:.46;padding:3px 10px;transform:translateX(-50%) scale(.82)}
+.tz-veg-chip.settled span{display:none}
+@keyframes tz-veg-pulse{
+  0%,100%{box-shadow:var(--shadow-hud),0 0 0 0 rgba(56,214,200,.38)}
+  50%{box-shadow:var(--shadow-hud),0 0 0 5px rgba(56,214,200,0)}
+}
 .leaflet-container{background:rgb(10,16,14);font-family:var(--f-body)}
 #map.base-roadmap,.leaflet-container.base-roadmap{background:#DCDFD8}
 body.trees-off #map .roadmap .trees{display:none}

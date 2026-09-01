@@ -306,14 +306,17 @@ test('the accounting helper never reports zero for a term it cannot read', () =>
   }
 });
 
-test('THE CONTRACT: empty warnings means, and only means, the authored path is fully live', () => {
-  // Every enumerated degraded state, in one table. Any state added to the runtime that is not
-  // represented here is a state whose honesty nothing checks.
-  const degraded = {
+/**
+ * Every enumerated degraded state, in one table, shared by the warnings contract test below and the
+ * vegetation-indicator suite at the end of this file. A state added to the runtime that is not
+ * represented here is a state whose honesty nothing checks — for either consumer.
+ */
+function degradedStatesTable() {
+  return {
     'runtime-disposed': healthy({ disposed: true, runtime: null }),
     'no-authored-plan': totalMountFailure({ hasAuthoredPlan: false, reason: 'no-exact-vegetation-plan', mount: null }),
     'authored-disabled-by-query': totalMountFailure({ request: 'procedural', reason: 'disabled-by-query', mount: null }),
-    'mount-in-flight': totalMountFailure({ mount: { phase: 'loading', loaded: 41, expected: 93 } }),
+    'mount-in-flight': totalMountFailure({ mount: { phase: 'loading', loaded: 41, expected: 93, elapsedMs: 38_200, sinceProgressMs: 640, step: 'assets' } }),
     'mount-failed': totalMountFailure(),
     'authored-runtime-missing': healthy({ runtime: null }),
     'partial-pack': healthy({
@@ -332,6 +335,10 @@ test('THE CONTRACT: empty warnings means, and only means, the authored path is f
     'draw-calls-above-buckets': healthy({ runtime: liveRuntime({ drawCalls: 57 }) }),
     'placement-accounting-broken': healthy({ runtime: liveRuntime({ visibleInstances: VISIBLE - 3 }) }),
   };
+}
+
+test('THE CONTRACT: empty warnings means, and only means, the authored path is fully live', () => {
+  const degraded = degradedStatesTable();
 
   assert.deepEqual(
     Object.keys(degraded).sort(),
@@ -351,4 +358,110 @@ test('THE CONTRACT: empty warnings means, and only means, the authored path is f
   }
 
   assert.deepEqual(describeVegetationObservability(healthy()).warnings, []);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// `indicator` — the on-screen answer to "which forest is this", built from the exact same
+// `degradations` array `warnings` comes from. See `vegetationIndicatorFromDegradations` in
+// customs-vegetation-observability.js for why that makes disagreement structurally impossible; the
+// tests below are what makes that a checked claim rather than a comment.
+
+/** The primary, mutually-exclusive codes vs. the ones that can coexist with a live authored mount. */
+const PRIMARY_STATE_OF = {
+  'runtime-disposed': 'disposed',
+  'no-authored-plan': 'procedural',
+  'authored-disabled-by-query': 'procedural',
+  'mount-in-flight': 'loading',
+  'mount-failed': 'procedural',
+  'authored-runtime-missing': 'inconsistent',
+};
+
+test('the indicator names a state for every degradation code the observability module enumerates', () => {
+  const degraded = degradedStatesTable();
+  assert.deepEqual(
+    Object.keys(degraded).sort(),
+    [...VEGETATION_DEGRADATION_CODES].sort(),
+    'the shared table must still cover every enumerated code',
+  );
+
+  for (const [code, snapshot] of Object.entries(degraded)) {
+    const { indicator, warnings } = describeVegetationObservability(snapshot);
+    assert.equal(indicator.healthy, false, `${code}: indicator must not claim health in a degraded state`);
+    assert.ok(indicator.headline.length > 0, `${code}: indicator must say something`);
+    assert.ok(indicator.detail == null || indicator.detail.length > 0, `${code}: detail must not be an empty string`);
+    assert.notEqual(indicator.state, 'authored', `${code}: indicator must not say "authored, live" while degraded`);
+    const expectedState = PRIMARY_STATE_OF[code] ?? 'authored-degraded';
+    assert.equal(indicator.state, expectedState, `${code}: got state "${indicator.state}"`);
+    assert.ok(warnings.length > 0, `${code}: sanity — the shared table must still be a degraded snapshot`);
+  }
+});
+
+test('mount-in-flight surfaces real progress — count, elapsed and step — not a bare "loading"', () => {
+  const { indicator } = describeVegetationObservability(totalMountFailure({
+    mount: { phase: 'loading', step: 'assets', loaded: 41, expected: 93, elapsedMs: 38_200, sinceProgressMs: 640 },
+  }));
+  assert.equal(indicator.state, 'loading');
+  assert.match(indicator.detail, /41 of 93 GLBs/);
+  assert.match(indicator.detail, /38s elapsed/);
+  assert.doesNotMatch(indicator.detail, /since the last file/, 'sub-5s staleness must not be reported as stalled');
+});
+
+test('a mount stalled long enough says so, with the stall clock, not just the count', () => {
+  const { indicator } = describeVegetationObservability(totalMountFailure({
+    mount: { phase: 'loading', step: 'assets', loaded: 41, expected: 93, elapsedMs: 131_400, sinceProgressMs: 90_100 },
+  }));
+  assert.equal(indicator.state, 'loading');
+  assert.match(indicator.detail, /41 of 93 GLBs/);
+  assert.match(indicator.detail, /2:11 elapsed/);
+  assert.match(indicator.detail, /1:30 since the last file/);
+});
+
+test('a mount before its first GLB still reports a real (if unbounded) count, not a silent spinner', () => {
+  const { indicator } = describeVegetationObservability(totalMountFailure({
+    mount: { phase: 'loading', step: 'pack-index', loaded: 0, expected: null, elapsedMs: 900, sinceProgressMs: 900 },
+  }));
+  assert.equal(indicator.state, 'loading');
+  assert.match(indicator.detail, /0 GLBs/);
+  assert.match(indicator.detail, /fetching the pack index/);
+});
+
+test('the fully live state says so plainly, with nothing left to explain', () => {
+  const { indicator } = describeVegetationObservability(healthy());
+  assert.deepEqual(indicator, { state: 'authored', healthy: true, code: null, headline: 'Authored vegetation — live', detail: null });
+});
+
+test('several degradations at once fold into ONE authored-degraded indicator, not a pick of one', () => {
+  const result = describeVegetationObservability(healthy({
+    arrayTextures: null,
+    arrayTextureFailure: { url: '/@vegetation-arraytex/veg-l1-normal.bin', reason: 'ERR_HTTP', consequence: 'no collapse' },
+    runtime: liveRuntime({ materialMode: 'authored-per-primitive', drawCalls: 199, liveBuckets: 31 }),
+  }));
+  assert.equal(codesOf(result).length, 2, 'sanity: this snapshot degrades two ways at once');
+  assert.deepEqual(codesOf(result), ['array-textures-unavailable', 'material-mode-fallback']);
+  assert.equal(result.indicator.state, 'authored-degraded');
+  assert.equal(result.indicator.healthy, false);
+  assert.equal(result.indicator.code, codesOf(result)[0]);
+  for (const message of result.warnings) assert.ok(result.indicator.detail.includes(message));
+});
+
+test('THE CONTRACT: the indicator cannot disagree with warnings, across every enumerated state', () => {
+  // The property the whole design rests on: `indicator.healthy` and `warnings.length === 0` are the
+  // same fact read twice, and "authored, live" is the one indicator state that empty warnings can
+  // produce. A future degradation added to `vegetationDegradations` without a matching case in
+  // `vegetationIndicatorFromDegradations` cannot make these disagree — it can only fall into the
+  // generic `authored-degraded` bucket alongside `mode: 'authored'`, or (if it changes the primary
+  // if/else-if chain) be missing from `PRIMARY_STATE_OF` above, which the first test in this suite
+  // would then fail on an unmapped code.
+  const states = [healthy(), ...Object.values(degradedStatesTable())];
+  for (const snapshot of states) {
+    const { indicator, warnings, degradations } = describeVegetationObservability(snapshot);
+    assert.equal(indicator.healthy, warnings.length === 0, 'indicator.healthy must track warnings.length === 0 exactly');
+    assert.equal(indicator.state === 'authored', degradations.length === 0, '"authored, live" must be exactly the empty-degradations state');
+    if (degradations.length > 0) {
+      const codes = degradations.map((entry) => entry.code);
+      assert.ok(codes.includes(indicator.code), `indicator.code "${indicator.code}" must be one of the reported degradations ${JSON.stringify(codes)}`);
+    } else {
+      assert.equal(indicator.code, null);
+    }
+  }
 });

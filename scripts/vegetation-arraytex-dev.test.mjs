@@ -405,3 +405,46 @@ test('vite.config.js registers the arraytex plugin, and the runtime agrees on th
     'the runtime fetch prefix drifted from the route the plugin serves',
   );
 });
+
+// ── the authorization memo ───────────────────────────────────────────────────────────────────
+//
+// Same memo, same reasoning and the same two properties as the sibling authored route's (see
+// `vegetation-authored-dev.test.mjs`): the DERIVATION from `veg-layers.json` is cached, keyed on
+// that file's own identity, so a rewritten index takes effect on the very next request and an
+// unreadable one revokes everything it had authorized.
+
+test('a rewritten array index takes effect on the next request, memo or not', async (t) => {
+  const { root, packageRoot } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const middleware = createVegetationArraytexMiddleware(packageRoot);
+  const url = `${VEGETATION_ARRAYTEX_ROUTE}veg-l2-normal.bin`;
+  assert.equal((await call(middleware, request({ url }))).statusCode, 200);
+  assert.equal((await call(middleware, request({ url }))).statusCode, 200);
+
+  await new Promise((resolve) => { setTimeout(resolve, 12); });
+  await writeFile(join(packageRoot, 'veg-layers.json'), JSON.stringify({
+    ...INDEX_VALUE,
+    arrays: INDEX_VALUE.arrays.filter((entry) => entry.lod !== 2),
+  }));
+  assert.equal(
+    (await call(middleware, request({ url }))).statusCode,
+    404,
+    'a delisted blob must stop being served on the next request, not on the next restart',
+  );
+});
+
+test('an unreadable array index authorizes nothing it had authorized before', async (t) => {
+  const { root, packageRoot } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const middleware = createVegetationArraytexMiddleware(packageRoot);
+  const url = `${VEGETATION_ARRAYTEX_ROUTE}veg-l0-basecolor.bin`;
+  assert.equal((await call(middleware, request({ url }))).statusCode, 200);
+
+  await new Promise((resolve) => { setTimeout(resolve, 12); });
+  await writeFile(join(packageRoot, 'veg-layers.json'), '{ not json');
+  assert.equal((await call(middleware, request({ url }))).statusCode, 404);
+  assert.equal(
+    (await call(middleware, request({ url: `${VEGETATION_ARRAYTEX_ROUTE}veg-layers.json` }))).statusCode,
+    404,
+  );
+});

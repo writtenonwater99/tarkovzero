@@ -200,17 +200,39 @@ export function collectAuthorizedVegetationArrayPaths(indexValue) {
   return authorized;
 }
 
-async function isAuthorizedVegetationArrayPath(root, segments) {
-  const indexFile = await resolveLocalGameDerivedFile(root, VEGETATION_ARRAYTEX_INDEX_SEGMENTS);
-  if (!indexFile || indexFile.size > MAX_INDEX_BYTES) return false;
-  try {
-    const bytes = await readFile(indexFile.path);
-    const index = JSON.parse(bytes.toString('utf8'));
-    return collectAuthorizedVegetationArrayPaths(index).has(segments.join('/'));
-  } catch {
-    // An unreadable or invalid index authorizes nothing, including itself.
-    return false;
-  }
+/**
+ * One authorizer per middleware, re-deriving its allowlist from
+ * `veg-layers.json` only when that file changes. Same shape, same reasoning and
+ * the same guard posture as the sibling authored route's — see the long comment
+ * on `createVegetationPathAuthorizer` in `vegetation-authored-dev.mjs`: the
+ * DERIVATION is cached, never the decision, and the key is the index's own
+ * resolved path, size and mtime, so a rebuilt index re-derives on the next
+ * request.
+ */
+function createVegetationArrayPathAuthorizer(root) {
+  let cached = null;
+  return async function isAuthorizedVegetationArrayPath(segments) {
+    const indexFile = await resolveLocalGameDerivedFile(root, VEGETATION_ARRAYTEX_INDEX_SEGMENTS);
+    if (!indexFile || indexFile.size > MAX_INDEX_BYTES) return false;
+    const wanted = segments.join('/');
+    if (cached && cached.path === indexFile.path && cached.size === indexFile.size
+      && cached.mtimeMs === indexFile.mtimeMs) {
+      return cached.authorized.has(wanted);
+    }
+    try {
+      const bytes = await readFile(indexFile.path);
+      const index = JSON.parse(bytes.toString('utf8'));
+      const authorized = collectAuthorizedVegetationArrayPaths(index);
+      cached = {
+        path: indexFile.path, size: indexFile.size, mtimeMs: indexFile.mtimeMs, authorized,
+      };
+      return authorized.has(wanted);
+    } catch {
+      // An unreadable or invalid index authorizes nothing, including itself.
+      cached = null;
+      return false;
+    }
+  };
 }
 
 function endWith(res, status, headers = {}) {
@@ -244,6 +266,7 @@ function cacheControlFor(segments) {
 
 /** Build the connect-style middleware that serves `root` under the fixed route. */
 export function createVegetationArraytexMiddleware(root) {
+  const isAuthorizedVegetationArrayPath = createVegetationArrayPathAuthorizer(root);
   return async function vegetationArraytexMiddleware(req, res, next) {
     const decision = resolveVegetationArraytexRequest({
       method: req.method,
@@ -255,7 +278,7 @@ export function createVegetationArraytexMiddleware(root) {
       if (decision.status === null) return next();
       return endWith(res, decision.status, decision.allow ? { Allow: decision.allow } : {});
     }
-    if (!(await isAuthorizedVegetationArrayPath(root, decision.segments))) return endWith(res, 404);
+    if (!(await isAuthorizedVegetationArrayPath(decision.segments))) return endWith(res, 404);
 
     const file = await resolveLocalGameDerivedFile(root, decision.segments);
     if (!file) return endWith(res, 404);
