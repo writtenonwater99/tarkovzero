@@ -42,3 +42,6 @@ __pycache__/
 public/local-game-derived/
 # Rescued /tmp offline proof packages (rebuild products, not source assets) — see .local-candidates/README.md
 .local-candidates/
+
+# Playwright MCP scratch output (browser verification runs)
+.playwright-mcp/
