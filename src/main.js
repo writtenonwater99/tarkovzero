@@ -14,6 +14,7 @@ import { createAssistant } from './assistant.js';
 import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
 import { localRendererMode } from './local-renderer-gate.js';
+import { loadSurveyTargets, surveyColor } from './customs-survey-targets.js';
 // zOff() is the 2D↔3D zoom relation. It is this MAP's CRS scale and nothing else, so the two views
 // always report the same metres per pixel — see the note in camera.js.
 import { CAM, zoomOffsetFor, fitZoom, setFitBox } from './camera.js';
@@ -1656,6 +1657,73 @@ booted = true;
 updateHud();
 setView(starts3d ? '3d' : '2d');
 omni.applyQaQuery();
+
+/* ------------------------------------------------------------ survey targets --- */
+/**
+ * The in-raid walk list: 26 numbered rail-stock candidates from the local Unity facts, drawn on the
+ * 2D map because that is the view a player navigates with while raiding. Customs + localhost only,
+ * and silent when the roster is not there (see src/customs-survey-targets.js) — every other visitor
+ * and every production build simply never gets the row or the layer.
+ *
+ * ELEVATED targets are the question the raid answers (real objects, or unreachable backdrop
+ * scenery?), so they are drawn as diamonds with a bright ring instead of plain circles.
+ */
+loadSurveyTargets(mapData.key).then((targets) => {
+  if (!targets.length) return;
+  const layer = L.layerGroup();
+  for (const t of targets) {
+    const colour = surveyColor(t.family);
+    const done = t.status === 'done';
+    const cls = `sv-pin${t.elevated ? ' sv-elev' : ''}${done ? ' sv-done' : ' sv-todo'}`;
+    const marker = L.marker(pos(t), {
+      icon: L.divIcon({
+        className: '',
+        html: `<div class="${cls}" style="--sv:${colour}"><span>${t.n}</span></div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        popupAnchor: [0, -11],
+      }),
+      // Above the place labels, under the live player arrow: this is a walking aid, not the map.
+      zIndexOffset: 500,
+    });
+    const rows = [
+      `<b>#${t.n}</b> ${esc(t.family)}`,
+      done
+        ? `<div class="sv-got">SHOT — ${t.shotCount}&times;, closest ${t.closestM} m</div>`
+        : `<div class="sv-shoot">${esc(t.shoot)}</div>`,
+      `<div class="sv-src">${esc(t.sourceName)}</div>`,
+      `<div>x <b>${t.x}</b> &nbsp; z <b>${t.z}</b></div>`,
+      t.stopName ? `<div>${esc(t.stopName)}${t.stop != null ? ` (stop ${t.stop})` : ''}</div>` : '',
+      t.elevated ? `<div class="sv-warn">ELEVATED y=${t.y}</div>` : `<div>y ${t.y}</div>`,
+    ];
+    marker.bindPopup(`<div class="sv-pop">${rows.filter(Boolean).join('')}</div>`);
+    marker.bindTooltip(
+      done
+        ? `#${t.n} ${esc(t.family)} · shot`
+        : `#${t.n} ${esc(t.family)} — SHOOT THIS${t.elevated ? ' · ELEVATED' : ''}`,
+      { direction: 'top', offset: [0, -12], className: 'mk-name', opacity: 1 },
+    );
+    if (!done) marker.setZIndexOffset(900);
+    layer.addLayer(marker);
+  }
+
+  // Same shape as Trees/Rocks above: a persisted On/Off segmented control in the View panel.
+  const row = $('#survey-row');
+  if (row) row.hidden = false;
+  let surveyOn = queryFlag('survey', store.get('survey', true));
+  function setSurvey(on, persist = true) {
+    surveyOn = on;
+    if (on) layer.addTo(map); else map.removeLayer(layer);
+    $$('#survey-toggle .seg-cell').forEach((b) => {
+      const active = b.dataset.survey === (on ? '1' : '0');
+      b.classList.toggle('on', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
+    if (persist) store.set('survey', on);
+  }
+  $$('#survey-toggle .seg-cell').forEach((b) => (b.onclick = () => setSurvey(b.dataset.survey === '1')));
+  setSurvey(surveyOn, false);
+});
 
 // ?debug=roads — draw the 3D road/track network over the 2D map to check it against the satellite
 if (new URLSearchParams(location.search).get('debug') === 'roads') {

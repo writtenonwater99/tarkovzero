@@ -897,3 +897,27 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 
 /* label density: Auto shows which way it is leaning without claiming to be pressed */
 #label-density .seg-cell.auto-on:not(.on){color:var(--text);box-shadow:inset 0 -2px 0 var(--acc-dim)}
+
+/* ------------------------------------------------------------ survey targets --
+   Localhost-only walk list for the Customs rail stock (src/customs-survey-targets.js).
+   A plain circle is a ground-level candidate; a DIAMOND with a bright ring is an ELEVATED one —
+   the raid's actual question, so it has to read as different at a glance, not just as a colour. */
+.sv-pin{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  background:var(--sv);border:2px solid rgba(6,10,8,.85);
+  box-shadow:0 0 0 1px rgba(255,255,255,.35),0 2px 5px rgba(0,0,0,.6)}
+.sv-pin span{font:800 10px/1 var(--f-mono);color:#0a0e0c;letter-spacing:-.03em}
+.sv-pin.sv-elev{border-radius:3px;transform:rotate(45deg);
+  box-shadow:0 0 0 2px #fff,0 0 10px 2px var(--sv),0 2px 5px rgba(0,0,0,.6)}
+.sv-pin.sv-elev span{transform:rotate(-45deg)}
+.leaflet-marker-icon:hover .sv-pin{filter:brightness(1.15)}
+.sv-pop .sv-src{font:600 10px/1.4 var(--f-mono);color:var(--text-mute);margin:2px 0}
+.sv-pop .sv-warn{margin-top:3px;color:#ffd60a;font:800 10.5px/1.4 var(--f-mono);letter-spacing:.06em}
+
+/* Survey progress: shot targets recede, remaining ones demand attention. Set by the
+   status recomputed from the geo-tagged screenshots after each raid. */
+.sv-pin.sv-done { opacity: .28; filter: grayscale(.7); }
+.sv-pin.sv-todo { box-shadow: 0 0 0 2px #fff, 0 0 12px 3px var(--sv); animation: sv-pulse 1.6s ease-in-out infinite; }
+@keyframes sv-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+.sv-pop .sv-shoot { margin: 4px 0; padding: 5px 7px; border-left: 3px solid var(--accent, #ff9f1c);
+  background: rgba(255,159,28,.12); font-size: 12px; line-height: 1.35; max-width: 260px; }
+.sv-pop .sv-got { margin: 3px 0; font-size: 11px; opacity: .6; letter-spacing: .04em; }

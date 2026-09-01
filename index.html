@@ -224,6 +224,16 @@
                     <button type="button" class="seg-cell" data-rocks="0" aria-pressed="false">Off</button>
                   </div>
                 </div>
+                <!-- Localhost-only walk list for the Customs rail stock. Hidden until the
+                     dev-only roster actually loads (src/customs-survey-targets.js), so every
+                     other visitor and every production build never sees the row. -->
+                <div class="line" id="survey-row" hidden>
+                  <span class="line-lab" title="Numbered rail-stock survey targets from the local Unity facts. Diamonds are ELEVATED candidates — the ones to confirm are real objects, not backdrop scenery.">Survey</span>
+                  <div id="survey-toggle" class="seg" role="group" aria-label="Survey targets">
+                    <button type="button" class="seg-cell on" data-survey="1" aria-pressed="true">On</button>
+                    <button type="button" class="seg-cell" data-survey="0" aria-pressed="false">Off</button>
+                  </div>
+                </div>
                 <div class="line">
                   <span class="line-lab">Labels</span>
                   <div id="label-density" class="seg" role="group" aria-label="Label density">
