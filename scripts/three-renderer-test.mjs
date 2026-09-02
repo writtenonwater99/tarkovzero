@@ -1029,7 +1029,9 @@ test('renderer integration consumes the shared contract without untracked outlin
   assert.match(renderer, /textures\.normal\.channel = 1/);
   assert.match(renderer, /root\.rotation\.z = pose\.rotationZ/);
   assert.match(renderer, /Array\.isArray\(prop\.path\)/);
-  assert.match(renderer, /\[buildingGroup, propGroup, authoredRoot, dynamicRoot\]/);
+  // `wallStructureGroup` joins the pick list so a GATE can report its inferred provenance on hover.
+  // Nothing else under it carries a `userData.label`, so fence panels stay silent.
+  assert.match(renderer, /\[buildingGroup, propGroup, wallStructureGroup, authoredRoot, dynamicRoot\]/);
   assert.match(renderer, /visibleInteractionData\(hit\.object\)/);
   assert.match(renderer, /customs\.prop\.industrial_rail_yard\.red_container_stack/);
   assert.match(renderer, /if \(container\.__tz3d === api\) delete container\.__tz3d/);

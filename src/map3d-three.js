@@ -75,6 +75,7 @@ import { assertLocalThree } from './local-renderer-gate.js';
 import { createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight } from './surfaces.js';
 import { buildTerrain, gameToTerrainTextureUv } from './terrain.js';
 import { buildOpenFrameBuildingAsset, buildPropAsset } from './three-prop-assets.js';
+import { drapedPanelMeshData, planWallStructures } from './wall-runs.js';
 import {
   RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, buildUnderstoryTuftPlan, cameraPose, centroid,
   createAsyncAttachGuard, disposeMaterialResources, drapedLinearSegmentMeshData, gameToWorld,
@@ -306,6 +307,40 @@ function outlineFor(mesh, material) {
   const line = new THREE.LineSegments(edges, material);
   line.renderOrder = 2;
   mesh.add(line);
+}
+
+/**
+ * The diamond mask that makes a chain-link panel read as chain-link.
+ *
+ * It is drawn rather than shipped because it is four strokes, and because an alpha MASK — not a
+ * blended translucent slab — is what lets the fence cast a fence-shaped shadow: `alphaTest` is
+ * honoured by the depth pass, so the holes are holes to the shadow map too. Blending would give a
+ * smoked-glass wall that shadows like a solid one.
+ */
+function chainLinkAlphaTexture(size = 64) {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.clearRect(0, 0, size, size);
+  context.strokeStyle = '#c8cbc4';
+  context.lineWidth = Math.max(1.5, size / 22);
+  context.lineCap = 'square';
+  // Two families of diagonals, wrapped, so the tile repeats without a visible seam.
+  for (const sign of [1, -1]) {
+    for (let offset = -size; offset <= size * 2; offset += size / 4) {
+      context.beginPath();
+      context.moveTo(offset, sign > 0 ? 0 : size);
+      context.lineTo(offset + size, sign > 0 ? size : 0);
+      context.stroke();
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
 }
 
 async function loadTexture(url, { color = false } = {}) {
@@ -1271,6 +1306,7 @@ export async function createView3d(container, mapData, src) {
         metalness: 0,
       }),
     ]));
+  const chainLinkTexture = chainLinkAlphaTexture();
   const materials = {
     terrain: new THREE.MeshStandardMaterial({
       color: textures.groundAtlas ? 0xffffff : 0x9ea783,
@@ -1303,7 +1339,19 @@ export async function createView3d(container, mapData, src) {
     road: new THREE.MeshStandardMaterial({ color: 0x575b55, roughness: 0.96, metalness: 0.01 }),
     dirt: new THREE.MeshStandardMaterial({ color: 0x756d5b, roughness: 1, metalness: 0 }),
     water: new THREE.MeshPhysicalMaterial({ color: 0x4f7474, roughness: 0.2, metalness: 0.06, transmission: 0.08, transparent: true, opacity: 0.86, side: THREE.DoubleSide }),
-    fence: new THREE.LineBasicMaterial({ color: 0x8a8d85, transparent: true, opacity: 0.8 }),
+    // A chain-link panel is a surface with holes, not a translucent slab: `alphaTest` keeps it
+    // opaque where the wire is, invisible where it is not, and shadow-casting in exactly that
+    // shape. `chainLinkTexture` is null only when there is no DOM (tests), and the material then
+    // degrades to a thin solid panel rather than disappearing.
+    chainLink: new THREE.MeshStandardMaterial({
+      color: chainLinkTexture ? 0xffffff : 0x8a8d85,
+      map: chainLinkTexture, alphaMap: chainLinkTexture,
+      alphaTest: chainLinkTexture ? 0.42 : 0,
+      transparent: false, side: THREE.DoubleSide,
+      roughness: 0.62, metalness: 0.42,
+    }),
+    fenceSteel: new THREE.MeshStandardMaterial({ color: 0x7c8079, roughness: 0.58, metalness: 0.52 }),
+    gateSteel: new THREE.MeshStandardMaterial({ color: 0x6a6f68, roughness: 0.5, metalness: 0.62 }),
     rail: new THREE.LineBasicMaterial({ color: 0x686762, transparent: true, opacity: 0.9 }),
     railSteel: new THREE.MeshStandardMaterial({ color: 0x5d615f, roughness: 0.44, metalness: 0.72 }),
     sleeper: new THREE.MeshStandardMaterial({ color: 0x554638, roughness: 0.96, metalness: 0.03 }),
@@ -1379,6 +1427,7 @@ export async function createView3d(container, mapData, src) {
   let seatedBuildings = [];
   let surfaceRenderStats = { floors: 0, roofs: 0, underground: 0, stableIds: [] };
   let treeGroup = null, rockGroup = null, propGroup = null, understoryGroup = null, understoryTuftGroup = null;
+  let wallStructureGroup = null;
   // Which half of the exact vegetation plan the PROCEDURAL proxies draw. It starts as the whole
   // plan and is narrowed to the router's procedural complement the moment the authored pack
   // mounts — never before, which is what makes the swap atomic.
@@ -1392,6 +1441,19 @@ export async function createView3d(container, mapData, src) {
   };
   let overlayItems = [];
   let railwayRenderStats = { railSegments: 0, ballastSegments: 0, sleepers: 0, triangles: 0 };
+  let wallRenderStats = {
+    runs: 0, panels: 0, posts: 0, gates: 0, lengthM: 0, triangles: 0,
+    byClass: {}, gateProvenance: [], dimensionStatus: {},
+  };
+  /**
+   * One plan for every barrier on the map, built once and shared by the fence pass and the prop
+   * pass. Heights and thicknesses come from `wall-runs.js`'s class table and nowhere else, so the
+   * mesh-bounds lane replaces numbers in that table instead of editing this file.
+   */
+  let wallPlanCache = null;
+  const wallStructurePlan = () => (wallPlanCache ??= planWallStructures({
+    fences: data.fences, props: data.props, roads: data.roads,
+  }));
   let renderRequested = true, settleFrames = 0;
   const exactTerrainSurfaceStatus = () => customsExactTerrainSurfaceStatus({
     hasExactTerrain: Boolean(exactTerrainMesh),
@@ -1682,10 +1744,7 @@ export async function createView3d(container, mapData, src) {
       mesh.castShadow = mesh.receiveShadow = true;
       worldRoot.add(mesh);
     }
-    for (const fence of data.fences || []) {
-      const geometry = lineGeometry(fence.path, H, 1.9);
-      if (geometry) worldRoot.add(new THREE.Line(geometry, materials.fence));
-    }
+    addWallStructures();
     const railSurfaceY = exactTerrainMesh
       ? (x, z) => H(x, z) + RAILWAY_TRACK_PROFILE.trackBedLiftM
       : H;
@@ -1752,6 +1811,232 @@ export async function createView3d(container, mapData, src) {
       ballastSegments,
       sleepers: track.sleepers.length,
       triangles: track.railIndices.length / 3 + track.sleepers.length * 12,
+    };
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Walls, fences and gates
+  //
+  // Every number below arrives on `run.spec` / `gate.spec`, which is one entry of `wall-runs.js`'s
+  // class table. There is deliberately no literal height, thickness, post width or spacing in this
+  // section: when the mesh-bounds lane lands, it edits that table and this code does not move.
+  // -------------------------------------------------------------------------------------------
+
+  const geometryTriangles = (geometry) => (geometry?.index
+    ? geometry.index.count
+    : geometry?.attributes?.position?.count ?? 0) / 3;
+
+  /** Draped closed prisms along a path — the shape a solid wall, a rail or a coping actually is. */
+  function prismsAlongPath(path, widthM, heightM, offsetM = 0) {
+    const prisms = [];
+    for (let index = 1; index < path.length; index++) {
+      const prism = drapedLinearSegmentMeshData(path[index - 1], path[index], widthM, heightM, offsetM, H);
+      if (prism) prisms.push(prism);
+    }
+    return prisms;
+  }
+
+  function mergedPrismGeometry(prisms) {
+    if (!prisms.length) return null;
+    const positions = [], indices = [];
+    let vertex = 0;
+    for (const prism of prisms) {
+      for (const value of prism.positions) positions.push(value);
+      for (const index of prism.indices) indices.push(index + vertex);
+      vertex += prism.positions.length / 3;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  /**
+   * Merge the alpha-masked panels of one or more mesh-fill paths into a single geometry.
+   *
+   * `u` accumulates along each path so the wire pattern stays continuous across a run's vertices
+   * instead of restarting — a restart is visible as a seam every 2 m on a resampled fence.
+   */
+  function mergedPanelGeometry(paths, spec, heightM = spec.heightM) {
+    const positions = [], uvs = [], indices = [];
+    let vertex = 0;
+    for (const path of paths) {
+      let u = 0;
+      for (let index = 1; index < path.length; index++) {
+        const quad = drapedPanelMeshData(path[index - 1], path[index], heightM, 0, H, spec.meshUvScaleM, u);
+        if (!quad) continue;
+        for (const [x, z, y] of quad.corners) positions.push(...gameToWorld(x, z, y));
+        for (const value of quad.uvs) uvs.push(value);
+        for (const index2 of quad.indices) indices.push(index2 + vertex);
+        vertex += 4;
+        u += quad.lengthM;
+      }
+    }
+    if (!indices.length) return null;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  /** One draw call for every post of a class; a unit box translated so its base sits on the ground. */
+  function postInstancedMesh(posts, material, name) {
+    if (!posts.length) return null;
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    geometry.translate(0, 0, 0.5);
+    const mesh = new THREE.InstancedMesh(geometry, material, posts.length);
+    const dummy = new THREE.Object3D();
+    posts.forEach((post, index) => {
+      // A 9 cm square post is orientation-invariant at every zoom this map reaches, so no yaw is
+      // carried; the run's direction is already read from the panel and the rails.
+      dummy.position.set(...gameToWorld(post.x, post.z, H(post.x, post.z)));
+      dummy.scale.set(post.widthM, post.widthM, post.heightM);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    });
+    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.computeBoundingSphere();
+    mesh.name = name;
+    return mesh;
+  }
+
+  const addWallMesh = (parent, geometry, material, name) => {
+    if (!geometry) return 0;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.castShadow = mesh.receiveShadow = true;
+    parent.add(mesh);
+    return geometryTriangles(geometry);
+  };
+
+  /** Panels, rails and posts for the mesh-fill (chain-link) half of one run. */
+  function buildMeshRunParts(paths, spec, parent, label) {
+    let triangles = 0;
+    triangles += addWallMesh(parent, mergedPanelGeometry(paths, spec), materials.chainLink, `${label}:infill`);
+    const rails = [];
+    for (const path of paths) {
+      for (const offsetM of spec.railOffsetsM) {
+        rails.push(...prismsAlongPath(path, spec.railThicknessM, spec.railThicknessM, offsetM));
+      }
+    }
+    triangles += addWallMesh(parent, mergedPrismGeometry(rails), materials.fenceSteel, `${label}:rails`);
+    return triangles;
+  }
+
+  /** A solid wall run: the wall body plus its coping, kept as one node per source row. */
+  function buildSolidWallNode(run, material) {
+    const group = new THREE.Group();
+    group.name = `wall-run:${run.id}`;
+    const bodies = [], caps = [];
+    for (const panel of run.panels) {
+      bodies.push(...prismsAlongPath(panel.path, run.spec.thicknessM, run.spec.heightM, 0));
+      if (run.spec.capHeightM > 0) {
+        caps.push(...prismsAlongPath(panel.path, run.spec.capWidthM, run.spec.capHeightM, run.spec.heightM));
+      }
+    }
+    let triangles = 0;
+    triangles += addWallMesh(group, mergedPrismGeometry(bodies), material, 'body');
+    triangles += addWallMesh(group, mergedPrismGeometry(caps), materials.fenceSteel, 'coping');
+    const posts = postInstancedMesh(run.posts, materials.fenceSteel, 'posts');
+    if (posts) { group.add(posts); triangles += geometryTriangles(posts.geometry) * run.posts.length; }
+    return group.children.length ? { group, triangles } : null;
+  }
+
+  /**
+   * A gate: two jambs and two leaves standing in an opening.
+   *
+   * The opening is not created here — it is already a gap in the source runs. What this adds is the
+   * structure that says "this is a way through a fence" instead of "the fence stops for no reason".
+   * The label carries the gate's provenance verbatim, because none of these was measured.
+   */
+  function buildGateNode(gate) {
+    const group = new THREE.Group();
+    group.name = `gate:${gate.id}`;
+    let triangles = 0;
+    const jambs = postInstancedMesh(gate.jambs, materials.gateSteel, 'jambs');
+    if (jambs) { group.add(jambs); triangles += geometryTriangles(jambs.geometry) * gate.jambs.length; }
+    const leafPaths = gate.leaves.map((leaf) => [leaf.a, leaf.b]);
+    if (gate.spec.fill === 'mesh') {
+      triangles += addWallMesh(group, mergedPanelGeometry(leafPaths, gate.spec), materials.chainLink, 'leaves');
+      const frame = [];
+      for (const path of leafPaths) {
+        for (const offsetM of gate.spec.railOffsetsM) {
+          frame.push(...prismsAlongPath(path, gate.spec.gate.leafFrameThicknessM, gate.spec.gate.leafFrameThicknessM, offsetM));
+        }
+      }
+      triangles += addWallMesh(group, mergedPrismGeometry(frame), materials.gateSteel, 'leaf-frames');
+    } else {
+      const leaves = [];
+      for (const path of leafPaths) {
+        leaves.push(...prismsAlongPath(path, gate.spec.gate.leafFrameThicknessM, gate.spec.heightM, 0));
+      }
+      triangles += addWallMesh(group, mergedPrismGeometry(leaves), materials.gateSteel, 'leaves');
+    }
+    group.userData = {
+      kind: 'gate', assetKind: 'wall-gate',
+      label: `Gate · ${gate.spanM.toFixed(1)} m opening · ${gate.provenance} · dimensions ${gate.spec.status}`,
+      provisional: true, stableId: null,
+      provenance: gate.provenance, evidence: gate.evidence,
+    };
+    return group.children.length ? { group, triangles } : null;
+  }
+
+  function addWallStructures() {
+    const plan = wallStructurePlan();
+    wallStructureGroup = new THREE.Group();
+    wallStructureGroup.name = 'wall-structures';
+    let triangles = 0;
+
+    // Solid runs come from prop rows and are attached in addProps(), where floor visibility,
+    // hover labels and authored-asset suppression already work. Only the mesh-fill runs — every
+    // `data.fences` row — are drawn here, batched per class into three draw calls.
+    const meshRuns = plan.runs.filter((run) => run.spec.fill === 'mesh');
+    const byClass = new Map();
+    for (const run of meshRuns) {
+      const bucket = byClass.get(run.classId) ?? { spec: run.spec, paths: [], posts: [] };
+      for (const panel of run.panels) bucket.paths.push(panel.path);
+      bucket.posts.push(...run.posts);
+      byClass.set(run.classId, bucket);
+    }
+    for (const [classId, bucket] of byClass) {
+      const group = new THREE.Group();
+      group.name = `wall-class:${classId}`;
+      triangles += buildMeshRunParts(bucket.paths, bucket.spec, group, classId);
+      const posts = postInstancedMesh(bucket.posts, materials.fenceSteel, `${classId}:posts`);
+      if (posts) { group.add(posts); triangles += geometryTriangles(posts.geometry) * bucket.posts.length; }
+      if (group.children.length) wallStructureGroup.add(group);
+    }
+
+    const gateGroup = new THREE.Group();
+    gateGroup.name = 'gates';
+    for (const gate of plan.gates) {
+      const built = buildGateNode(gate);
+      if (!built) continue;
+      triangles += built.triangles;
+      gateGroup.add(built.group);
+    }
+    if (gateGroup.children.length) wallStructureGroup.add(gateGroup);
+    worldRoot.add(wallStructureGroup);
+
+    wallRenderStats = {
+      runs: plan.stats.runs,
+      panels: plan.runs.reduce((total, run) => total + run.panels.length, 0),
+      posts: plan.stats.posts,
+      gates: gateGroup.children.length,
+      lengthM: plan.stats.lengthM,
+      panelLengthM: plan.stats.panelLengthM,
+      openingLengthM: plan.stats.openingLengthM,
+      triangles,
+      byClass: plan.stats.byClass,
+      gateProvenance: plan.stats.gateProvenance,
+      gateCandidates: plan.inference?.candidates ?? null,
+      gateRejected: plan.inference?.rejected.length ?? null,
+      dimensionStatus: plan.stats.dimensionStatus,
     };
   }
 
@@ -1838,30 +2123,34 @@ export async function createView3d(container, mapData, src) {
     return safeText(prop.name ?? prop.type) || 'prop';
   }
 
+  /** Wall-prop runs from the shared plan, indexed by their row position in `data.props`. */
+  let wallRunsByPropIndexCache = null;
+  const wallRunsByPropIndex = () => (wallRunsByPropIndexCache ??= new Map(
+    wallStructurePlan().runs
+      .filter((run) => run.meta?.kind === 'wall-prop')
+      .map((run) => [run.meta.sourceIndex, run]),
+  ));
+  const unclassifiedPathProps = [];
+
   function addProps() {
     propGroup = new THREE.Group();
     propGroup.name = 'props';
-    for (const prop of data.props || []) {
+    for (const [propIndex, prop] of (data.props || []).entries()) {
       const root = new THREE.Group();
       let assetKind = prop.type ?? 'prop';
       if (Array.isArray(prop.path) && prop.path.length >= 2) {
-        const h = Math.max(0.2, Number(prop.h) || 2.5);
-        const width = Math.max(0.08, Number(prop.w) || 0.4);
-        const dz = Number(prop.dz) || 0;
-        for (let index = 1; index < prop.path.length; index++) {
-          const [ax, az] = prop.path[index - 1], [bx, bz] = prop.path[index];
-          if (![ax, az, bx, bz].every(Number.isFinite)) continue;
-          const segment = drapedLinearSegmentMeshData([ax, az], [bx, bz], width, h, dz, H);
-          if (!segment) continue;
-          const geometry = new THREE.BufferGeometry();
-          geometry.setAttribute('position', new THREE.BufferAttribute(segment.positions, 3));
-          geometry.setIndex(new THREE.BufferAttribute(segment.indices, 1));
-          geometry.computeVertexNormals();
-          const mesh = new THREE.Mesh(geometry, materialForProp(prop));
-          mesh.castShadow = mesh.receiveShadow = true;
-          mesh.name = `segment:${index}`;
-          root.add(mesh);
-        }
+        // `prop.h` and `prop.w` are deliberately NOT read. A wall's height and thickness come from
+        // the class table in wall-runs.js, which is the one place the bounds lane has to edit;
+        // a row that keeps its own numbers puts them back out of reach. A path row the planner
+        // did not classify is skipped and counted rather than drawn at an invented size.
+        const run = wallRunsByPropIndex().get(propIndex);
+        if (!run) { unclassifiedPathProps.push(prop.name ?? prop.type ?? `prop:${propIndex}`); continue; }
+        const built = buildSolidWallNode(run, materialForProp(prop));
+        if (!built) continue;
+        root.add(built.group);
+        // addProps() runs after addWallStructures(), so the solid runs' cost is folded in here;
+        // otherwise `renderStats().walls.triangles` would describe the fences only and read low.
+        wallRenderStats.triangles += built.triangles;
         assetKind = 'linear-wall';
       } else if (Array.isArray(prop.poly) && prop.poly.length >= 3) {
         const shape = shapeFromRing(prop.poly);
@@ -2130,6 +2419,8 @@ export async function createView3d(container, mapData, src) {
     if (!buildingGroup || !undergroundGroup) return;
     buildingGroup.visible = floor !== 'U';
     if (propGroup) propGroup.visible = floor !== 'U';
+    // Fences and gates are surface features; the underground view is not the place for them.
+    if (wallStructureGroup) wallStructureGroup.visible = floor !== 'U';
     undergroundGroup.visible = floor === 'U';
     for (const mesh of buildingGroup.children) {
       if (mesh.userData.kind === 'floor-surface') {
@@ -3295,7 +3586,10 @@ export async function createView3d(container, mapData, src) {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
-    const interaction = raycaster.intersectObjects([buildingGroup, propGroup, authoredRoot, dynamicRoot].filter(Boolean), true)
+    // `wallStructureGroup` joins the pick list for its GATES only: nothing else under it carries a
+    // `userData.label`, and `visibleInteractionData` returns null without one, so hovering a fence
+    // panel stays silent while a gate can say out loud that its placement was inferred.
+    const interaction = raycaster.intersectObjects([buildingGroup, propGroup, wallStructureGroup, authoredRoot, dynamicRoot].filter(Boolean), true)
       .map((hit) => ({ hit, user: visibleInteractionData(hit.object) }))
       .find((candidate) => candidate.user);
     const user = interaction?.user;
@@ -3411,6 +3705,7 @@ export async function createView3d(container, mapData, src) {
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
       railway: { ...railwayRenderStats },
+      walls: { ...wallRenderStats, unclassifiedPathProps: [...unclassifiedPathProps] },
       provisional: true,
     }),
     diagnostics: () => ({
@@ -3422,6 +3717,7 @@ export async function createView3d(container, mapData, src) {
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
       railway: { ...railwayRenderStats },
+      walls: { ...wallRenderStats, unclassifiedPathProps: [...unclassifiedPathProps] },
     }),
     dispose: () => {
       stopped = true;
@@ -3450,6 +3746,7 @@ export async function createView3d(container, mapData, src) {
       else for (const material of exactTerrainMaterials.values()) material?.dispose?.();
       for (const texture of exactSurfaceTextures.values()) texture?.dispose?.();
       for (const texture of Object.values(textures)) texture?.dispose?.();
+      chainLinkTexture?.dispose?.();
       if (container.__tz3d === api) delete container.__tz3d;
       container.replaceChildren();
     },
