@@ -81,7 +81,14 @@ export async function loadSurveyTargets(mapKey) {
   if (!import.meta.env.DEV) return [];
   if (!isLoopbackPage()) return [];
   try {
-    const mod = await import('../.local-game-derived/unity-facts/survey-targets.json');
+    // The specifier is held in a variable and marked @vite-ignore deliberately. Rollup resolves a
+    // STATIC dynamic-import path at build time — before it eliminates this statically-false
+    // `import.meta.env.DEV` branch — so a literal here fails the production build outright on any
+    // machine where `.local-game-derived/` is absent, which is every machine except this one and is
+    // exactly what .vercelignore guarantees on Vercel's builder. Keeping it dynamic lets the branch
+    // be dropped as dead code without Rollup ever trying to find the file.
+    const specifier = '../.local-game-derived/unity-facts/survey-targets.json';
+    const mod = await import(/* @vite-ignore */ specifier);
     return normalize(mod?.default ?? mod);
   } catch {
     return [];
