@@ -13,7 +13,7 @@ import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
 import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
-import { localRendererMode } from './local-renderer-gate.js';
+import { resolveRendererMode } from './renderer-gate.js';
 import { loadSurveyTargets, surveyColor } from './customs-survey-targets.js';
 // zOff() is the 2D↔3D zoom relation. It is this MAP's CRS scale and nothing else, so the two views
 // always report the same metres per pixel — see the note in camera.js.
@@ -60,19 +60,22 @@ const avoidOffset = () => offsetOf(avoidRect());
 
 const requestedMap = new URLSearchParams(location.search).get('map');
 const mapData = selectMap(requestedMap);
-// Renderer migration is an explicit localhost proof, never a production mode. The current deck.gl
-// view remains the default and the only renderer for Reserve/Woods. This lets the Three.js slice
-// exercise the real UI/live/quest stack without turning an unfinished asset lane into a release.
+// The Three renderer is opt-in and Customs-only, in every environment including production. It is
+// NOT the default: deck.gl stays the renderer every visitor gets unless they ask for the other one
+// by name. See `docs/LOCAL-THREE-POC.md` § "Reaching the renderer" for the argument — briefly, the
+// Three path is Customs-only, drops the Relief and Fog controls, discards the persisted look
+// preference, and needs WebGPU-or-WebGL2 breadth this project has not measured across visitor GPUs,
+// so making it the silent default would change the product for everyone on the busiest map on the
+// strength of one machine's frames.
+//
+// What this gate does NOT decide is whether local game-derived data may load. That is a separate,
+// unchanged question (`canLoadLocalGameDerivedAssets`, dev + loopback only), asked inside the
+// renderer — see src/renderer-gate.js.
 const rendererRequest = new URLSearchParams(location.search).get('renderer');
-const rendererMode = localRendererMode({
-  dev: import.meta.env?.DEV === true,
-  hostname: location.hostname,
-  mapKey: mapData.key,
-  rendererRequest,
-});
-if (rendererRequest === 'three' && rendererMode !== 'three') console.warn('Three.js proof is localhost-only and Customs-only; using deck.gl');
-// Renderer-specific chrome is CSS-gated by this class. localRendererMode() guarantees it can only
-// appear for the localhost Customs proof; production and Reserve/Woods retain their current UI.
+const rendererMode = resolveRendererMode({ mapKey: mapData.key, rendererRequest });
+if (rendererRequest === 'three' && rendererMode !== 'three') console.warn('The Three renderer is Customs-only; using deck.gl');
+// Renderer-specific chrome is CSS-gated by this class. resolveRendererMode() guarantees it can only
+// appear for a Customs ?renderer=three request; Reserve/Woods and the default view keep their UI.
 document.body.classList.toggle('renderer-three', rendererMode === 'three');
 if (rendererMode === 'three') {
   // Customs truth mode has one visual contract: no fog and fixed 2x terrain relief.

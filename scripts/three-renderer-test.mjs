@@ -13,8 +13,10 @@ import {
 } from '../src/three-world.js';
 import { buildOpenFrameBuildingAsset, buildPropAsset, propAssetKind, propDimensions } from '../src/three-prop-assets.js';
 import {
-  assertLocalThree, canUseLocalThree, isLoopbackHostname, localRendererMode, normalizeHostname,
-} from '../src/local-renderer-gate.js';
+  assertThreeRenderer, canLoadLocalGameDerivedAssets, canRunThreeRenderer, describeRendererGate,
+  isLoopbackHostname, normalizeHostname, resolveRendererMode,
+} from '../src/renderer-gate.js';
+import { loadCustomsLocalTerrainPackage } from '../src/customs-local-terrain-loader.js';
 import { createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight } from '../src/surfaces.js';
 import { emptyCustomsAssetManifest, normalizeCustomsAssetManifest } from '../src/customs-asset-manifest.js';
 import {
@@ -282,6 +284,99 @@ test('the legacy-terrain strip keeps its own title and still reports vegetation'
   assert.equal(copy.title, 'THREE POC');
   assert.equal(copy.detail, 'LEGACY TERRAIN FALLBACK · LOCALHOST · 0 AUTHORED VEGETATION — NO AUTHORED PLAN · FIXED RELIEF 2×');
   assert.equal(copy.state, 'degraded');
+});
+
+// ── The RELEASE strip: the production frame must describe itself, not a localhost one ──────────
+//
+// Before the gate split, the production Three renderer could not run, so nothing had to be true of
+// this strip. Running it unchanged in production would have printed
+// `THREE POC · LEGACY TERRAIN FALLBACK · LOCALHOST · … — NO AUTHORED PLAN` on tarkovzero.com: three
+// wrong words (it is not a POC of anything the visitor can change, it is not legacy, it is not
+// localhost) and one alarm (`NO AUTHORED PLAN`) for the shipped configuration. Both readouts still
+// come from ONE `describeVegetationObservability()` call — the release wording is a code in that
+// module, not a second source of truth in the renderer.
+
+/** A release build: no local package was even requested, so there is no plan and no error. */
+const RELEASE_VEGETATION_SNAPSHOT = Object.freeze({
+  mode: 'procedural',
+  hasAuthoredPlan: false,
+  localEnhancements: false,
+  reason: 'release-build-public-tree-positions',
+  mount: null,
+  routing: null,
+  runtime: null,
+  arrayTextures: null,
+  // The public tree positions the release frame actually seats — measured on a real `vite preview`
+  // run of `dist/` at 2,348 (`diagnostics().sources.trees`). It is NOT zero, and the readouts must
+  // not say it is: see the `publicTreePlacements` note in map3d-three.js.
+  proceduralPlacements: 2348,
+  declaredInstances: null,
+  culledOutsideScope: null,
+});
+
+test('a release build names the public heightfield and the public tree positions', () => {
+  const observability = describeVegetationObservability(RELEASE_VEGETATION_SNAPSHOT);
+  assert.equal(observability.indicator.code, 'authored-unavailable-in-release');
+  assert.equal(observability.indicator.state, 'procedural');
+  assert.equal(observability.indicator.healthy, false, 'no authored vegetation IS on screen');
+  assert.equal(observability.indicator.headline, 'Procedural forest — public tree positions (release build)');
+  assert.match(observability.indicator.detail, /public tree position from \/data\/customs-3d\.json/);
+  assert.match(observability.indicator.detail, /the shipped configuration, not a failed load/);
+  assert.match(
+    observability.indicator.detail,
+    /— 2348 of them —/,
+    'the release message must state the placements actually drawn, never a bare 0',
+  );
+  assert.equal(observability.accounting.parts.procedural, 2348);
+  // The chip and the strip are two renderings of that one verdict, as they already were.
+  assert.equal(observability.strip.authoredPlacements, 0);
+  assert.equal(observability.strip.code, observability.indicator.code);
+
+  const copy = customsTruthStripCopy({
+    hasExactTerrain: false,
+    localEnhancements: false,
+    publicSurface: 'semantic-ground-atlas',
+    vegetation: observability.strip,
+  });
+  assert.equal(copy.title, 'CUSTOMS PUBLIC DATA');
+  assert.equal(
+    copy.detail,
+    'PUBLIC HEIGHTFIELD · SEMANTIC GROUND ATLAS · 0 AUTHORED VEGETATION — PUBLIC TREE POSITIONS · FIXED RELIEF 2×',
+  );
+  assert.doesNotMatch(copy.detail, /EXACT LOCAL TERRAIN/, 'the release frame has no exact terrain to claim');
+  assert.doesNotMatch(copy.detail, /LOCALHOST|LEGACY/, 'it is neither');
+  assert.equal(copy.state, 'requested', 'the shipped configuration is not a degradation');
+});
+
+test('a release build still reports a ground bake that actually failed', () => {
+  const copy = customsTruthStripCopy({
+    hasExactTerrain: false,
+    localEnhancements: false,
+    publicSurface: 'tileable-fallback',
+    vegetation: describeVegetationObservability(RELEASE_VEGETATION_SNAPSHOT).strip,
+  });
+  assert.match(copy.detail, /TILEABLE GROUND FALLBACK/);
+  assert.equal(copy.state, 'degraded', 'a bake that fell back on its own is a real defect, gate or no gate');
+
+  const booting = customsTruthStripCopy({ hasExactTerrain: false, localEnhancements: false });
+  assert.equal(
+    booting.detail,
+    'PUBLIC HEIGHTFIELD · RESOLVING SURFACE · RESOLVING VEGETATION · FIXED RELIEF 2×',
+  );
+  assert.equal(booting.state, 'pending');
+});
+
+test('the release code cannot be reached by an absent plan on a dev machine', () => {
+  // Same missing plan, opposite meaning. `localEnhancements` is the only input that separates them,
+  // so a dev machine whose local package failed still gets the amber defect wording it needs.
+  const devMachine = describeVegetationObservability({
+    ...RELEASE_VEGETATION_SNAPSHOT, localEnhancements: true, reason: 'no-exact-vegetation-plan',
+  });
+  assert.equal(devMachine.indicator.code, 'no-authored-plan');
+  assert.equal(
+    customsTruthStripCopy({ hasExactTerrain: false, vegetation: devMachine.strip }).state,
+    'degraded',
+  );
 });
 
 test('the relief the strip prints is the relief the renderer uses, not a hand-typed 2', () => {
@@ -983,20 +1078,108 @@ test('DOM overlay anchors stay wholly inside the moving safe rectangle', () => {
   assert.equal(seatOverlayAnchor({ ...options, x: NaN, y: 300 }), null);
 });
 
-test('Three proof gate requires Vite DEV, loopback, Customs, and an explicit request', () => {
-  const allowed = { dev: true, hostname: 'localhost', mapKey: 'customs', rendererRequest: 'three' };
-  assert.equal(canUseLocalThree(allowed), true);
-  assert.equal(localRendererMode(allowed), 'three');
+// ── The renderer gate: two questions, deliberately not one ────────────────────────────────────
+//
+// The old gate fused them into `canUseLocalThree({dev, hostname, mapKey, rendererRequest})`, so the
+// only way to let the renderer run in production was to relax the boundary that keeps the founder's
+// game-derived data off the internet. These tests pin the split: (a) may Three run, (b) may it read
+// local data — and specifically that no input to (a) can move (b).
+
+test('(a) the Three renderer runs for Customs on an explicit request, in ANY environment', () => {
+  const asked = { mapKey: 'customs', rendererRequest: 'three' };
+  assert.equal(canRunThreeRenderer(asked), true);
+  assert.equal(resolveRendererMode(asked), 'three');
+  // Production is the case that used to be refused. It is now the point.
+  assert.equal(
+    describeRendererGate({ ...asked, dev: false, hostname: 'tarkovzero.com' }).renderer,
+    'three',
+  );
+  assert.equal(resolveRendererMode({ ...asked, mapKey: 'woods' }), 'deck', 'Reserve/Woods have no Three path');
+  assert.equal(resolveRendererMode({ ...asked, mapKey: 'reserve' }), 'deck');
+  assert.equal(resolveRendererMode({ ...asked, rendererRequest: null }), 'deck', 'deck.gl stays the default');
+  assert.equal(resolveRendererMode({ ...asked, rendererRequest: 'deck' }), 'deck');
+  assert.equal(resolveRendererMode({ ...asked, rendererRequest: 'THREE' }), 'deck', 'the request is exact');
+  assert.equal(resolveRendererMode({}), 'deck');
+  assert.doesNotThrow(() => assertThreeRenderer(asked));
+  assert.throws(() => assertThreeRenderer({ ...asked, mapKey: 'woods' }), /explicit \?renderer=three/);
+  assert.throws(() => assertThreeRenderer({ ...asked, rendererRequest: null }), /explicit \?renderer=three/);
+});
+
+test('(b) local game-derived data stays dev + loopback ONLY — unchanged by the release gate', () => {
+  assert.equal(canLoadLocalGameDerivedAssets({ dev: true, hostname: 'localhost' }), true);
   for (const hostname of ['localhost', '127.0.0.1', '::1', '[::1]', 'LOCALHOST']) {
     assert.equal(isLoopbackHostname(hostname), true, hostname);
+    assert.equal(canLoadLocalGameDerivedAssets({ dev: true, hostname }), true, hostname);
   }
   assert.equal(normalizeHostname('[::1]'), '::1');
-  assert.equal(localRendererMode({ ...allowed, dev: false }), 'deck');
-  assert.equal(localRendererMode({ ...allowed, hostname: 'tarkovzero.example' }), 'deck');
-  assert.equal(localRendererMode({ ...allowed, mapKey: 'woods' }), 'deck');
-  assert.equal(localRendererMode({ ...allowed, rendererRequest: null }), 'deck');
-  assert.doesNotThrow(() => assertLocalThree(allowed));
-  assert.throws(() => assertLocalThree({ ...allowed, hostname: '192.168.1.4' }), /loopback hostname/);
+
+  // A production build: DEV is absent from the bundle entirely, so `undefined` must not read as
+  // permission, and no hostname can buy it back.
+  for (const hostname of ['tarkovzero.com', 'tarkovzero.vercel.app', '192.168.1.4', 'localhost']) {
+    assert.equal(canLoadLocalGameDerivedAssets({ dev: false, hostname }), false, hostname);
+    assert.equal(canLoadLocalGameDerivedAssets({ hostname }), false, `undefined dev: ${hostname}`);
+    assert.equal(canLoadLocalGameDerivedAssets({ dev: 'true', hostname }), false, `string dev: ${hostname}`);
+    assert.equal(canLoadLocalGameDerivedAssets({ dev: 1, hostname }), false, `truthy dev: ${hostname}`);
+  }
+  // A dev server bound to a LAN address is not loopback either.
+  assert.equal(canLoadLocalGameDerivedAssets({ dev: true, hostname: '192.168.1.4' }), false);
+  assert.equal(canLoadLocalGameDerivedAssets({ dev: true, hostname: 'tarkovzero.com' }), false);
+  assert.equal(canLoadLocalGameDerivedAssets({}), false);
+
+  // The load-bearing separation: nothing that answers (a) is an input to (b).
+  for (const mapKey of ['customs', 'woods', 'reserve', null]) {
+    for (const rendererRequest of ['three', 'deck', null]) {
+      assert.equal(
+        canLoadLocalGameDerivedAssets({ dev: false, hostname: 'tarkovzero.com', mapKey, rendererRequest }),
+        false,
+        `${mapKey}/${rendererRequest} must not unlock local data`,
+      );
+    }
+  }
+});
+
+test('(b) production cannot reach local data even if the gate were bypassed', async () => {
+  // The gate is layer 1 of four. This is layer 2, asserted directly: the loader refuses a
+  // non-loopback page origin BEFORE it fetches, with its own hostname set that does not import
+  // from the gate module. A regression in the gate cannot make this pass.
+  const fetchThatMustNotRun = () => {
+    throw new Error('the loader fetched from a production origin');
+  };
+  for (const origin of ['https://tarkovzero.com/', 'https://tarkovzero.vercel.app/?renderer=three', 'http://192.168.1.4:4173/']) {
+    await assert.rejects(
+      loadCustomsLocalTerrainPackage({ fetch: fetchThatMustNotRun, location: origin }),
+      (error) => {
+        assert.equal(error.code, 'ERR_CUSTOMS_LOCAL_TERRAIN_UNAVAILABLE');
+        assert.match(error.message, /localhost, 127\.0\.0\.1, or \[::1\]/);
+        return true;
+      },
+      origin,
+    );
+  }
+});
+
+test('describeRendererGate names WHY local data is out of reach, so a frame can say so', () => {
+  const production = describeRendererGate({
+    dev: false, hostname: 'tarkovzero.com', mapKey: 'customs', rendererRequest: 'three',
+  });
+  assert.deepEqual({ ...production }, {
+    renderer: 'three',
+    request: 'three',
+    mapKey: 'customs',
+    localEnhancements: false,
+    localEnhancementReason: 'release-build',
+  });
+  assert.equal(
+    describeRendererGate({ dev: true, hostname: '192.168.1.4', mapKey: 'customs', rendererRequest: 'three' })
+      .localEnhancementReason,
+    'non-loopback-host',
+    'a LAN-bound dev server is refused for a different reason than a release build, and says which',
+  );
+  assert.equal(
+    describeRendererGate({ dev: true, hostname: 'localhost', mapKey: 'customs', rendererRequest: 'three' })
+      .localEnhancementReason,
+    'dev-loopback',
+  );
 });
 
 test('renderer integration consumes the shared contract without untracked outline materials', async () => {
@@ -1008,7 +1191,9 @@ test('renderer integration consumes the shared contract without untracked outlin
     readFile(new URL('../src/style.css', import.meta.url), 'utf8'),
     readFile(new URL('../public/assets/3d/customs/scene-manifest.json', import.meta.url), 'utf8'),
   ]);
-  assert.match(main, /localRendererMode\(\{[\s\S]*dev: import\.meta\.env\?\.DEV === true,[\s\S]*hostname: location\.hostname/);
+  // main.js asks question (a) ONLY: no environment inputs reach the renderer selector any more.
+  assert.match(main, /const rendererMode = resolveRendererMode\(\{ mapKey: mapData\.key, rendererRequest \}\)/);
+  assert.doesNotMatch(main, /resolveRendererMode\([\s\S]{0,200}location\.hostname/);
   assert.match(main, /document\.body\.classList\.toggle\('renderer-three', rendererMode === 'three'\)/);
   assert.match(main, /if \(rendererMode === 'three'\) \{[\s\S]*\$\('#relief-row'\)\?\.remove\(\)[\s\S]*\$\('#fx-row \[data-fx="fog"\]'\)\?\.remove\(\)/);
   assert.match(main, /const THREE_FIXED_RELIEF = 2/);
@@ -1025,7 +1210,28 @@ test('renderer integration consumes the shared contract without untracked outlin
   assert.match(main, /store\.get\('relief', 1\)/);
   assert.match(html, /class="seg-cell on" data-relief="1" aria-pressed="true"/);
   assert.match(html, /id="relief-row"/);
-  assert.match(renderer, /assertLocalThree\(\{/);
+  // The renderer's own entry point asks question (a) with NO environment inputs.
+  assert.match(renderer, /assertThreeRenderer\(\{\n\s*mapKey: mapData\.key,\n\s*rendererRequest,\n\s*\}\)/);
+  // THE BOUNDARY, asserted on the source: the ONE call that reaches the local game-derived package
+  // is behind `localEnhancementsAllowed`, and that flag comes from the gate's (b) half. A future
+  // edit that fetches the package unconditionally fails here, not in a browser.
+  assert.match(
+    renderer,
+    /const localEnhancementsAllowed = rendererGate\.localEnhancements;/,
+  );
+  assert.match(
+    renderer,
+    /const localTerrainRequest = localEnhancementsAllowed\n\s*\? loadCustomsLocalTerrainPackage\(/,
+  );
+  assert.equal(
+    (renderer.match(/loadCustomsLocalTerrainPackage\(/g) ?? []).length,
+    1,
+    'exactly one call site may reach the local terrain package, and it is the gated one',
+  );
+  // The release path's placement count is MEASURED from the trees it seated, not defaulted to 0.
+  assert.match(renderer, /proceduralPlacements: proceduralVegetationPlan\?\.renderedCount \?\? publicTreePlacements/);
+  assert.match(renderer, /publicTreePlacements = trees\.length/);
+  assert.match(renderer, /kind: 'public-tree-proxy'/);
   assert.match(renderer, /let fx = \{ \.\.\.parseThreeFx\(src\.fx\), fog: false \}/);
   assert.match(renderer, /measuredSurfaceY\(bridge, relief\)/);
   assert.match(renderer, /const THREE_FIXED_RELIEF = 2/);

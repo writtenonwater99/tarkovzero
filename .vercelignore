@@ -1,0 +1,12 @@
+.local-game-derived
+.local-candidates
+scratch
+output
+.e2e
+.playwright-cli
+.playwright-mcp
+.render
+.pytest_cache
+companion
+relay
+dist

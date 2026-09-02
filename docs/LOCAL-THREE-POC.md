@@ -1,10 +1,82 @@
-# Customs Three.js proof — localhost only
+# Customs Three.js renderer
 
-This proof replaces only the 3D presentation layer. Leaflet, map coordinates, marker filtering,
+This renderer replaces only the 3D presentation layer. Leaflet, map coordinates, marker filtering,
 quests, live tracking, floors, UI, camera hand-off, and generated Customs data stay in the existing
 application.
 
-It is intentionally unavailable in production builds and unavailable for Reserve/Woods.
+It is Customs-only, opt-in, and — since 2026-09-01 — available in production on **public data
+only**. Its local game-derived enhancements remain unavailable outside dev + loopback.
+
+## Reaching the renderer
+
+`?renderer=three`, on Customs, in any environment:
+
+```text
+https://tarkovzero.com/?map=customs&view=3d&renderer=three
+```
+
+**It is deliberately NOT the default for Customs in production, and the default was not changed.**
+The argument, so a later reader does not have to reconstruct it:
+
+- **It is one map.** deck.gl serves Customs, Reserve and Woods from one code path. Defaulting
+  Customs to Three splits the product in two and makes the map switcher a renderer switcher as a
+  side effect — the same site behaving differently depending on which map you landed on.
+- **It removes controls a visitor already has.** Three mode fixes relief at 2×, forces the
+  realistic look, and deletes the Relief row and the Fog toggle from the View panel. A default that
+  silently discards a stored `tz:look` / `tz:relief` preference is a regression for anyone who set
+  one, and they never asked for a new renderer.
+- **Its breadth is unmeasured.** `WebGPURenderer` with a WebGL2 fallback has been exercised on one
+  machine's GPU. deck.gl has months of real traffic behind it. A default is a promise about every
+  visitor's hardware; a query parameter is a promise about the person who typed it.
+- **It is a preview of an unfinished thing.** In production the authored vegetation placements are
+  absent by design (they are local game-derived), so the production Three frame is not the frame
+  the founder has been reviewing locally. Shipping it as the default would present the reduced
+  version as the product.
+
+What ships behind the query parameter is nevertheless a complete, legitimate scene: the public
+heightfield from `public/data/customs-3d.json`, the public tree positions from the same file, the
+authored walls/gates/fences from its `props` and `fences` arrays, the terrain PBR materials and
+Fortress under `public/assets/`. Every byte of it is already in `dist/` today.
+
+Flip back at any time by dropping the parameter, or with `?renderer=deck`.
+
+## The two gates, and why they are two
+
+`src/renderer-gate.js` answers two questions that used to be one predicate:
+
+| Question | Predicate | Answer |
+| --- | --- | --- |
+| (a) May the Three renderer run at all? | `canRunThreeRenderer({mapKey, rendererRequest})` | Customs + `?renderer=three`, **any** environment |
+| (b) May it load local game-derived enhancements? | `canLoadLocalGameDerivedAssets({dev, hostname})` | Vite DEV **and** a loopback hostname, and nothing else |
+
+(a) takes no environment inputs at all, and (b) takes no map or request inputs, so neither can drift
+into the other. `describeRendererGate()` returns both plus a `localEnhancementReason`
+(`dev-loopback` / `non-loopback-host` / `release-build`), and that object is published verbatim as
+`window.tz.renderStats().gate`.
+
+Fusing them was the reason the renderer could not ship: the only way to let it run in production
+was to relax the boundary. They are separate now precisely so that relaxing (b) is never the price
+of shipping (a).
+
+## What a production frame says about itself
+
+The CUSTOMS TRUTH strip and the vegetation chip are two renderings of one
+`describeVegetationObservability()` call, and both are gate-aware. On tarkovzero.com the strip reads:
+
+```text
+CUSTOMS PUBLIC DATA
+PUBLIC HEIGHTFIELD · SEMANTIC GROUND ATLAS · 0 AUTHORED VEGETATION — PUBLIC TREE POSITIONS · FIXED RELIEF 2×
+```
+
+and the chip reads `Procedural forest — public tree positions (release build)`. Neither claims exact
+terrain, authored PBR, or authored vegetation, because none of those is on screen. The strip's state
+is `requested`, not `degraded`: the public configuration is what the build ships, and painting the
+intended state amber trains a reader to ignore the one colour that has to mean something. A ground
+bake that genuinely fell back (`TILEABLE GROUND FALLBACK`) still reads `degraded`, gate or no gate.
+
+The observability code for the release case is `authored-unavailable-in-release`, in
+`src/customs-vegetation-observability.js` — a code in the same enumeration as every other
+degradation, not a second source of truth in the renderer.
 
 ## Renderer decision
 
@@ -23,7 +95,7 @@ Official references:
 - https://www.khronos.org/gltf/pbr
 - https://www.khronos.org/ktx/
 
-## Start
+## Start (local, with the exact terrain package)
 
 ```sh
 npm run prepare-three-assets
@@ -35,6 +107,9 @@ Open:
 ```text
 http://127.0.0.1:5173/?map=customs&view=3d&renderer=three&look=realistic#4.4/230/-110
 ```
+
+This is the only configuration in which the local game-derived enhancements load. Anything served
+from a build — `vite preview`, Vercel — answers (b) with `release-build` and draws the public scene.
 
 Force the fallback backend:
 
@@ -149,6 +224,19 @@ alone with `npm run verify:build-boundary`; point it at fixtures with `--dist-di
 The loopback URL constant `/@local-game-derived/customs/manifest.json` is application source and is
 still bundled into `dist/`; that is intentional and is not a leak. In production it resolves to
 nothing, and `loadCustomsLocalTerrainPackage` refuses any non-loopback page origin before fetching.
+
+Since the renderer runs in production, there are four independent layers, and the boundary holds if
+any one of them does:
+
+1. `canLoadLocalGameDerivedAssets()` in `src/renderer-gate.js` — the production renderer never even
+   calls the loader (`createView3d` guards the single call site with `localEnhancementsAllowed`);
+2. `loadCustomsLocalTerrainPackage`'s own `LOOPBACK_HOSTNAMES` origin check, which does not import
+   from the gate module and so cannot regress with it;
+3. the `apply: 'serve'` Vite plugin — in a build there is no route and no server behind the URL;
+4. `scripts/verify-build-boundary.mjs` after every `vite build`.
+
+Layer 1 exists so the frame can *say* "release build" instead of presenting an unfetched package as
+a failure. Layers 2-4 are what make it safe. Never weaken one to make something ship.
 
 ### Migrating an existing package
 

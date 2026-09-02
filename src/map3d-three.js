@@ -71,7 +71,7 @@ import {
   planCustomsAssetFrame,
   resolveProceduralSuppression,
 } from './customs-asset-runtime.js';
-import { assertLocalThree } from './local-renderer-gate.js';
+import { assertThreeRenderer, describeRendererGate } from './renderer-gate.js';
 import { createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight } from './surfaces.js';
 import { buildTerrain, gameToTerrainTextureUv } from './terrain.js';
 import { buildOpenFrameBuildingAsset, buildPropAsset } from './three-prop-assets.js';
@@ -189,36 +189,76 @@ function vegetationTruthState(vegetation) {
   if (!vegetation) return 'pending';
   if (vegetation.healthy) return 'exact';
   if (vegetation.state === 'loading') return 'pending';
+  // Two codes mean "you are looking at exactly what was asked for", not "something broke": the
+  // query switch, and a release build where local game-derived data is out of reach BY DESIGN.
+  // Painting either amber trains the reader to ignore the one colour that has to mean something.
   if (vegetation.code === 'authored-disabled-by-query') return 'requested';
+  if (vegetation.code === 'authored-unavailable-in-release') return 'requested';
   return 'degraded';
 }
 
+/**
+ * The ground the RELEASE build is drawing, when there is no exact local terrain to draw instead.
+ *
+ * The public heightfield is textured by the shared realistic terrain bake (`buildTerrain()`'s
+ * semantic ground atlas). If that bake fails, the tiles fall back to a tileable material — a real
+ * degradation, and the only one of these two that should read as one.
+ */
+export const CUSTOMS_PUBLIC_SURFACE_COPY = Object.freeze({
+  'semantic-ground-atlas': Object.freeze({ label: 'SEMANTIC GROUND ATLAS', state: 'requested' }),
+  'tileable-fallback': Object.freeze({ label: 'TILEABLE GROUND FALLBACK', state: 'degraded' }),
+});
+
+/**
+ * @param {boolean} localEnhancements Whether local game-derived data was even ALLOWED to load
+ *   (`canLoadLocalGameDerivedAssets()`). This is the difference between "the exact package was
+ *   permitted and did not arrive" — a defect, amber — and "this is a release build serving public
+ *   data, exactly as designed" — not a defect. Without it the production strip called its own
+ *   intended configuration a failure, and read `LEGACY TERRAIN FALLBACK · LOCALHOST` on a page
+ *   that is neither legacy nor localhost.
+ * @param {string|null} publicSurface Which ground material the public heightfield is wearing, when
+ *   `localEnhancements` is false. `null` means not resolved yet.
+ */
 export function customsTruthStripCopy({
   hasExactTerrain = false,
   surface = null,
   vegetation = null,
   relief = THREE_FIXED_RELIEF,
+  localEnhancements = true,
+  publicSurface = null,
 } = {}) {
-  const surfaceCopy = hasExactTerrain
-    ? (surface
+  const releasePublicData = !hasExactTerrain && !localEnhancements;
+  let surfaceCopy;
+  if (hasExactTerrain) {
+    surfaceCopy = surface
       ? (CUSTOMS_TRUTH_SURFACE_COPY[surface.active]
         ?? Object.freeze({ label: String(surface.active ?? 'UNKNOWN SURFACE').toUpperCase(), state: 'degraded' }))
-      : Object.freeze({ label: 'RESOLVING SURFACE', state: 'pending' }))
-    // The legacy branch already names its fallback in the first segment; repeating it as the
-    // surface label would pad the strip without adding a fact.
-    : Object.freeze({ label: 'LOCALHOST', state: 'degraded' });
+      : Object.freeze({ label: 'RESOLVING SURFACE', state: 'pending' });
+  } else if (releasePublicData) {
+    surfaceCopy = publicSurface
+      ? (CUSTOMS_PUBLIC_SURFACE_COPY[publicSurface]
+        ?? Object.freeze({ label: String(publicSurface).toUpperCase(), state: 'degraded' }))
+      : Object.freeze({ label: 'RESOLVING SURFACE', state: 'pending' });
+  } else {
+    // Local data was permitted and did not arrive. The first segment already names that fallback;
+    // repeating it as the surface label would pad the strip without adding a fact.
+    surfaceCopy = Object.freeze({ label: 'LOCALHOST', state: 'degraded' });
+  }
+  const terrainSegment = hasExactTerrain
+    ? 'EXACT LOCAL TERRAIN'
+    : releasePublicData ? 'PUBLIC HEIGHTFIELD' : 'LEGACY TERRAIN FALLBACK';
   const segments = [
-    hasExactTerrain ? 'EXACT LOCAL TERRAIN' : 'LEGACY TERRAIN FALLBACK',
+    terrainSegment,
     surfaceCopy.label,
     vegetation ? vegetation.text : 'RESOLVING VEGETATION',
     `FIXED RELIEF ${relief}×`,
   ];
   return Object.freeze({
-    title: hasExactTerrain ? 'CUSTOMS TRUTH' : 'THREE POC',
+    title: hasExactTerrain ? 'CUSTOMS TRUTH' : releasePublicData ? 'CUSTOMS PUBLIC DATA' : 'THREE POC',
     detail: segments.join(' · '),
     segments: Object.freeze(segments),
     state: worstTruthState(
-      hasExactTerrain ? 'exact' : 'degraded',
+      hasExactTerrain ? 'exact' : releasePublicData ? 'requested' : 'degraded',
       surfaceCopy.state,
       vegetationTruthState(vegetation),
     ),
@@ -1086,17 +1126,33 @@ export function createAuthoredAssetStreamer({
 }
 
 export async function createView3d(container, mapData, src) {
-  assertLocalThree({
+  // Question (a): may this renderer run? Customs, on an explicit request, in any environment.
+  // One read of the query string feeds both halves, so the assertion and the published gate can
+  // never disagree about what was asked for.
+  const rendererRequest = new URLSearchParams(location.search).get('renderer');
+  const rendererGate = describeRendererGate({
     dev: import.meta.env?.DEV === true,
     hostname: location.hostname,
     mapKey: mapData.key,
-    rendererRequest: new URLSearchParams(location.search).get('renderer'),
+    rendererRequest,
   });
+  assertThreeRenderer({
+    mapKey: mapData.key,
+    rendererRequest,
+  });
+  // Question (b): may it load local game-derived enhancements? Dev + loopback ONLY — unchanged.
+  // In a release build the answer is no, so the request is never made: `loadCustomsLocalTerrainPackage`
+  // would refuse the origin anyway (and the dev-only Vite route does not exist in `vite preview` or
+  // on Vercel), but not asking is what lets the frame say "release build" instead of presenting an
+  // unfetched package as a failure. This is layer 1 of four — see src/renderer-gate.js.
+  const localEnhancementsAllowed = rendererGate.localEnhancements;
   const bootAt = performance.now();
   const localTerrainAbort = new AbortController();
-  const localTerrainRequest = loadCustomsLocalTerrainPackage({ signal: localTerrainAbort.signal })
-    .then((value) => ({ value, error: null }))
-    .catch((error) => ({ value: null, error }));
+  const localTerrainRequest = localEnhancementsAllowed
+    ? loadCustomsLocalTerrainPackage({ signal: localTerrainAbort.signal })
+      .then((value) => ({ value, error: null }))
+      .catch((error) => ({ value: null, error }))
+    : Promise.resolve({ value: null, error: null });
   const response = await fetch('/data/customs-3d.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`Customs 3D data HTTP ${response.status}`);
   const data = await response.json();
@@ -1171,7 +1227,10 @@ export async function createView3d(container, mapData, src) {
     proofChipTitle.textContent = copy.title;
     proofChipDetail.textContent = copy.detail;
   };
-  paintTruthStrip(customsTruthStripCopy({ hasExactTerrain: Boolean(exactTerrainMesh) }));
+  paintTruthStrip(customsTruthStripCopy({
+    hasExactTerrain: Boolean(exactTerrainMesh),
+    localEnhancements: localEnhancementsAllowed,
+  }));
   overlay.append(proofChip);
   const hoverChip = document.createElement('div');
   hoverChip.className = 'tz-three-hover';
@@ -1476,6 +1535,14 @@ export async function createView3d(container, mapData, src) {
   let seatedBuildings = [];
   let surfaceRenderStats = { floors: 0, roofs: 0, underground: 0, stableIds: [] };
   let treeGroup = null, rockGroup = null, propGroup = null, understoryGroup = null, understoryTuftGroup = null;
+  /**
+   * Public tree positions (`customs-3d.json`'s `trees`) currently seated by `addTreesAndRocks()`.
+   *
+   * This is the procedural half's placement count on the RELEASE path, where there is no exact
+   * local vegetation plan to read `renderedCount` off. Measured at seat time from the array that
+   * was actually walked, so it cannot drift from what is drawn.
+   */
+  let publicTreePlacements = 0;
   let wallStructureGroup = null;
   // Which half of the exact vegetation plan the PROCEDURAL proxies draw. It starts as the whole
   // plan and is narrowed to the router's procedural complement the moment the authored pack
@@ -1511,6 +1578,12 @@ export async function createView3d(container, mapData, src) {
     look,
     detail: fx.detail,
   });
+  /**
+   * Which ground material the PUBLIC heightfield is wearing. Measured from the bake that actually
+   * built (`groundCanvas`), not from the intent to build one — the same rule the exact-terrain
+   * surface status follows, for the same reason.
+   */
+  const publicSurfaceKind = () => (groundCanvas ? 'semantic-ground-atlas' : 'tileable-fallback');
   // `updateTruthReadouts()` (defined far below, beside the chip it paints) reads `vegetationStatus`,
   // which does not exist until the authored-vegetation section. Everything that wants a repaint
   // before then — `applyLook()` on the initial world build — goes through this, and is a no-op
@@ -1551,9 +1624,17 @@ export async function createView3d(container, mapData, src) {
       surface: exactTerrainSurfaceStatus().active,
       surfaceError: exactSurfaceError ? String(exactSurfaceError?.message ?? exactSurfaceError) : null,
       pbrError: exactTerrainPbrError ? String(exactTerrainPbrError?.message ?? exactTerrainPbrError) : null,
-    } : {
+    } : localEnhancementsAllowed ? {
       mode: 'legacy-fallback',
       reason: exactTerrainError?.code ?? exactTerrainError?.name ?? 'missing-local-package',
+    } : {
+      // A release build never asked for the package, so there is no error to report and calling
+      // this a "fallback" would misname the intended configuration. The public heightfield in
+      // `public/data/customs-3d.json` is the source, and it ships.
+      mode: 'public-heightfield',
+      reason: 'release-build-local-enhancements-gated',
+      source: '/data/customs-3d.json',
+      surface: publicSurfaceKind(),
     },
     exactVegetation: exactVegetationPlan ? {
       mode: 'exact-placement-original-procedural-assets',
@@ -2401,6 +2482,9 @@ export async function createView3d(container, mapData, src) {
   function addTreesAndRocks() {
     treeGroup = new THREE.Group();
     treeGroup.name = proceduralVegetationPlan ? 'exact-local-vegetation' : 'trees';
+    // Reset on every world rebuild: this is a measurement of the group that exists right now, not
+    // a running total across rebuilds.
+    publicTreePlacements = 0;
     if (proceduralVegetationPlan) {
       treeGroup.userData = exactVegetationGroupUserData(proceduralVegetationPlan);
       addExactVegetationMeshes(proceduralVegetationPlan, treeGroup);
@@ -2427,7 +2511,15 @@ export async function createView3d(container, mapData, src) {
       trunks.instanceMatrix.needsUpdate = crowns.instanceMatrix.needsUpdate = true;
       trunks.castShadow = crowns.castShadow = true;
       trunks.receiveShadow = crowns.receiveShadow = true;
+      // Tagged so the observability collector can COUNT what is on screen. Untagged, these two
+      // meshes were invisible to `authoredVegetationRenderStats()`, which filters on
+      // `userData.kind`, and a production frame drawing 2,348 public trees reported
+      // `procedural.placements: 0` — the identical defect class this module exists to delete, one
+      // branch further along. A placement that is drawn is counted or it is not drawn.
+      trunks.userData = { kind: 'public-tree-proxy', part: 'trunk', source: 'customs-3d.trees' };
+      crowns.userData = { kind: 'public-tree-proxy', part: 'crown', source: 'customs-3d.trees' };
       treeGroup.add(trunks, crowns);
+      publicTreePlacements = trees.length;
     }
     worldRoot.add(treeGroup);
 
@@ -2867,7 +2959,9 @@ export async function createView3d(container, mapData, src) {
   const vegetationStatus = {
     mode: 'procedural',
     request: vegetationRequest,
-    reason: exactVegetationPlan ? 'pending' : 'no-exact-vegetation-plan',
+    reason: exactVegetationPlan
+      ? 'pending'
+      : localEnhancementsAllowed ? 'no-exact-vegetation-plan' : 'release-build-public-tree-positions',
     routes: {
       pack: CUSTOMS_AUTHORED_VEGETATION_ROUTE,
       arrays: CUSTOMS_VEGETATION_ARRAY_ROUTE,
@@ -3436,12 +3530,18 @@ export async function createView3d(container, mapData, src) {
       error: vegetationStatus.error,
       disposed: vegetationStatus.disposed,
       hasAuthoredPlan: Boolean(exactVegetationPlan),
+      // The authored packs are built FROM the local game-derived terrain package, so a release
+      // build has no plan by construction, not by failure. The collector needs to know which of
+      // those two it is looking at — see `authored-unavailable-in-release`.
+      localEnhancements: localEnhancementsAllowed,
       mount: vegetationStatus.mount,
       routing: vegetationStatus.totals,
       runtime,
       arrayTextures: vegetationStatus.arrayTextures,
       arrayTextureFailure: vegetationStatus.arrayTextureFailure,
-      proceduralPlacements: proceduralVegetationPlan?.renderedCount ?? 0,
+      // The exact plan's rendered count when there is one; otherwise the public tree positions
+      // actually seated. Never a bare 0 while trees are on screen.
+      proceduralPlacements: proceduralVegetationPlan?.renderedCount ?? publicTreePlacements,
       declaredInstances: exactVegetationPlan?.sourceCount ?? null,
       culledOutsideScope: exactVegetationPlan?.culledCount ?? null,
     };
@@ -3450,13 +3550,14 @@ export async function createView3d(container, mapData, src) {
   function authoredVegetationRenderStats() {
     const runtime = authoredVegetationRuntime?.active ? authoredVegetationRuntime.status : null;
     const observability = describeVegetationObservability(vegetationObservabilitySnapshot(runtime));
-    const proceduralBatches = treeGroup
-      ? treeGroup.children.filter((mesh) => mesh.userData?.kind === 'exact-local-vegetation').length
-      : 0;
+    // Both proxy kinds: the exact-placement proxies (local path) and the public tree proxies
+    // (release path). A filter that knew only the first reported 0 batches and 0 instances on a
+    // frame drawing 2,348 public trees.
+    const isProceduralProxy = (mesh) => mesh.userData?.kind === 'exact-local-vegetation'
+      || mesh.userData?.kind === 'public-tree-proxy';
+    const proceduralBatches = treeGroup ? treeGroup.children.filter(isProceduralProxy).length : 0;
     const proceduralInstances = treeGroup
-      ? treeGroup.children.reduce((sum, mesh) => (
-        mesh.userData?.kind === 'exact-local-vegetation' ? sum + (mesh.count ?? 0) : sum
-      ), 0)
+      ? treeGroup.children.reduce((sum, mesh) => (isProceduralProxy(mesh) ? sum + (mesh.count ?? 0) : sum), 0)
       : 0;
     return {
       mode: vegetationStatus.mode,
@@ -3499,7 +3600,10 @@ export async function createView3d(container, mapData, src) {
         // them. They are NOT the same number: a pine proxy is a trunk plus two crown cones, so
         // 8 batches carry ~1.6 instances per placement. Only `placements` belongs in the
         // conservation check below.
-        placements: proceduralVegetationPlan?.renderedCount ?? 0,
+        // The SAME expression the observability snapshot feeds its accounting, not a second read
+        // of the plan: this field said 0 on a release frame drawing 2,348 public trees while
+        // `accountedPlacements` beside it said 2,348.
+        placements: observability.accounting.parts.procedural,
         proxyInstances: proceduralInstances,
       },
       // The one number the whole hybrid rests on: nothing lost, nothing duplicated. Authored
@@ -3561,6 +3665,8 @@ export async function createView3d(container, mapData, src) {
       surface: exactTerrainSurfaceStatus(),
       vegetation: strip,
       relief,
+      localEnhancements: localEnhancementsAllowed,
+      publicSurface: publicSurfaceKind(),
     }));
     vegetationChip.hidden = false;
     vegetationChip.dataset.state = indicator.state;
@@ -3760,6 +3866,10 @@ export async function createView3d(container, mapData, src) {
     },
     renderStats: () => ({
       map: 'customs', renderer: 'three', backend: status.backend, scope: status.scope, look, relief, fx: { ...fx }, fps,
+      // Both halves of the renderer gate, as measured at boot. `gate.localEnhancements === false`
+      // is the single field that says "this frame is public data" — every degraded-looking
+      // vegetation/terrain field below has to be read against it.
+      gate: { ...rendererGate },
       // `info.render.calls` is CUMULATIVE `renderer.render()` invocations since page load on the
       // WebGPU renderer (Renderer.js), not per-frame draw calls; the per-frame counter is
       // `info.render.drawCalls` (Info.js). Reading `.calls` reported a frame counter, which made
@@ -3784,7 +3894,7 @@ export async function createView3d(container, mapData, src) {
       provisional: true,
     }),
     diagnostics: () => ({
-      scope: THREE_POC_SCOPE, backend: status.backend, authored: status.manifest,
+      scope: THREE_POC_SCOPE, backend: status.backend, gate: { ...rendererGate }, authored: status.manifest,
       groundAtlas: status.groundAtlas, exactTerrain: status.exactTerrain,
       exactVegetation: status.exactVegetation,
       vegetation: authoredVegetationRenderStats(),

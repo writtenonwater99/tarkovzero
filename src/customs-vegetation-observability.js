@@ -15,6 +15,8 @@
  *
  *   1. the view was disposed — the runtime and its textures are released;
  *   2. there is no exact local vegetation plan, so the authored pack was never routed;
+ *  2b. the same absent plan, but on a RELEASE build where local game-derived data is gated off by
+ *      design — the shipped configuration, reported as such rather than as a failed load;
  *   3. `?vegetation=procedural` suppressed the mount by request;
  *   4. the mount is still in flight — procedural proxies are on screen until it swaps;
  *   5. the mount failed or timed out ENTIRELY — the defect above;
@@ -41,6 +43,7 @@ export const VEGETATION_SHARED_MATERIAL_MODE = 'shared-array-texture';
 export const VEGETATION_DEGRADATION_CODES = Object.freeze([
   'runtime-disposed',
   'no-authored-plan',
+  'authored-unavailable-in-release',
   'authored-disabled-by-query',
   'mount-in-flight',
   'mount-failed',
@@ -140,6 +143,13 @@ export function vegetationDegradations({
   error = null,
   disposed = false,
   hasAuthoredPlan = true,
+  // Whether local game-derived data was ALLOWED to load at all (`canLoadLocalGameDerivedAssets()`).
+  // The authored vegetation pack's 8,805 placements are derived from the local terrain package, so
+  // a release build has no plan BY CONSTRUCTION. `no-authored-plan` and
+  // `authored-unavailable-in-release` describe the same absent plan with opposite meanings: one is
+  // a defect on a machine that should have had it, the other is the shipped configuration. Reading
+  // them as one state is what would have made the production strip call itself broken.
+  localEnhancements = true,
   mount = null,
   routing = null,
   runtime = null,
@@ -172,6 +182,14 @@ export function vegetationDegradations({
       + ' released, so nothing authored is drawn and the authored half of the'
       + ` ${routedAuthored ?? declared ?? 'declared'} placements can no longer be counted`
       + ' (accountedPlacements is null, not a short sum)',
+    );
+  } else if (!hasAuthoredPlan && localEnhancements === false) {
+    push(
+      'authored-unavailable-in-release',
+      'this is a release build: local game-derived data is gated to dev + loopback, so the authored'
+      + ` vegetation pack was never routed (${why ?? 'release-build'}). Every tree on screen stands`
+      + ` on a public tree position from /data/customs-3d.json — ${procedural} of them — drawn as a`
+      + ' procedural proxy. This is the shipped configuration, not a failed load',
     );
   } else if (!hasAuthoredPlan) {
     push(
@@ -289,6 +307,7 @@ export function vegetationDegradations({
 const PRIMARY_INDICATOR_CODES = new Set([
   'runtime-disposed',
   'no-authored-plan',
+  'authored-unavailable-in-release',
   'authored-disabled-by-query',
   'mount-in-flight',
   'mount-failed',
@@ -360,6 +379,15 @@ function vegetationIndicatorFromDegradations({ mount, degradations }) {
           state: 'procedural', healthy: false, code: primary.code,
           headline: 'Procedural forest — no authored plan for this map', detail: primary.message,
         });
+      case 'authored-unavailable-in-release':
+        // `healthy: false` stays false — no authored vegetation is on screen, and the chip's job is
+        // to say which forest this is, not whether the operator is happy about it. What changes is
+        // the WORDING and the strip's colour: naming the public source is a statement of fact a
+        // visitor can act on; "failed to mount" would be a lie about a request never made.
+        return Object.freeze({
+          state: 'procedural', healthy: false, code: primary.code,
+          headline: 'Procedural forest — public tree positions (release build)', detail: primary.message,
+        });
       case 'authored-disabled-by-query':
         return Object.freeze({
           state: 'procedural', healthy: false, code: primary.code,
@@ -419,6 +447,7 @@ function vegetationIndicatorFromDegradations({ mount, degradations }) {
 const STRIP_QUALIFIER = Object.freeze({
   'runtime-disposed': 'VIEW DISPOSED',
   'no-authored-plan': 'NO AUTHORED PLAN',
+  'authored-unavailable-in-release': 'PUBLIC TREE POSITIONS',
   'authored-disabled-by-query': 'PROCEDURAL BY REQUEST',
   'mount-in-flight': 'PACK LOADING',
   'mount-failed': 'PACK FAILED TO MOUNT',

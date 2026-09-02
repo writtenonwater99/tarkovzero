@@ -168,7 +168,19 @@ function violation(check, file, detail) {
   return { check, file, detail };
 }
 
-/** Depth-first list of every regular file under `dir`, as POSIX-ish relative paths. */
+/**
+ * Depth-first list of every regular file under `dir`, as POSIX-ish relative paths, plus every
+ * DIRECTORY, tagged `directory: true`.
+ *
+ * Directories are listed because an EMPTY one is a real finding this walk used to miss. A stale
+ * `public/local-game-derived/` — the pre-migration location of the local terrain package, left
+ * behind by the move documented in docs/LOCAL-THREE-POC.md — is copied into `dist/` by Vite like
+ * everything else under `public/`, and carries zero bytes, so a file-only walk reported `pass:
+ * true` on a build output that contained a directory named after the local root. Nothing leaked;
+ * the trap is that it is inside the ONE directory Vite copies wholesale, so the day anything lands
+ * in it, it ships. Naming the directory itself is what makes that a build failure instead of a
+ * near miss.
+ */
 async function listFiles(dir, prefix = '') {
   let entries;
   try {
@@ -182,6 +194,7 @@ async function listFiles(dir, prefix = '') {
     const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
     const absolutePath = join(dir, entry.name);
     if (entry.isDirectory()) {
+      files.push({ relativePath, absolutePath, symlink: false, directory: true });
       files.push(...(await listFiles(absolutePath, relativePath) ?? []));
       continue;
     }
@@ -211,7 +224,7 @@ export async function collectLocalPackageHashes(localRoot) {
   if (files === null) return { present: false, hashes: new Map() };
   const hashes = new Map();
   for (const file of files) {
-    if (file.symlink) continue;
+    if (file.symlink || file.directory) continue;
     let bytes;
     try {
       bytes = await readFile(file.absolutePath);
@@ -311,13 +324,15 @@ export async function verifyBuildBoundary({
     }
   }
 
-  const files = await listFiles(dist);
-  if (files === null) {
+  const entries = await listFiles(dist);
+  if (entries === null) {
     throw new BuildBoundaryError(
       'ERR_BUILD_BOUNDARY_NO_DIST',
       `build output directory does not exist: ${dist}`,
     );
   }
+  const files = entries.filter((entry) => !entry.directory);
+  const directories = entries.filter((entry) => entry.directory);
 
   const localResults = await Promise.all(locals.map(async (local) => ({
     root: local,
@@ -340,6 +355,20 @@ export async function verifyBuildBoundary({
 
   const violations = [];
   let scannedBytes = 0;
+
+  // Directories first: an EMPTY directory named after a local root carries no bytes and so is
+  // invisible to every file-based check, but it sits inside the tree Vite copies wholesale.
+  for (const directory of directories) {
+    const segments = directory.relativePath.split('/');
+    const name = segments[segments.length - 1].toLowerCase();
+    if (FORBIDDEN_PATH_SEGMENTS.some((forbidden) => name.includes(forbidden))) {
+      violations.push(violation(
+        'path',
+        `${directory.relativePath}/`,
+        `build output contains a directory named after a local root ("${segments[segments.length - 1]}")`,
+      ));
+    }
+  }
 
   for (const file of files) {
     violations.push(...pathViolations(file));
@@ -373,6 +402,7 @@ export async function verifyBuildBoundary({
     localPackagePresent,
     localPackageHashCount: hashes.size,
     fileCount: files.length,
+    directoryCount: directories.length,
     scannedBytes,
     violations,
   };

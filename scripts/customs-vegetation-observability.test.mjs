@@ -315,6 +315,15 @@ function degradedStatesTable() {
   return {
     'runtime-disposed': healthy({ disposed: true, runtime: null }),
     'no-authored-plan': totalMountFailure({ hasAuthoredPlan: false, reason: 'no-exact-vegetation-plan', mount: null }),
+    // The SAME absent plan on a release build, where local game-derived data is gated off by
+    // design. `localEnhancements` is the only field that separates the two, and it must, because
+    // one is a defect on a dev machine and the other is the shipped configuration.
+    'authored-unavailable-in-release': totalMountFailure({
+      hasAuthoredPlan: false,
+      localEnhancements: false,
+      reason: 'release-build-public-tree-positions',
+      mount: null,
+    }),
     'authored-disabled-by-query': totalMountFailure({ request: 'procedural', reason: 'disabled-by-query', mount: null }),
     'mount-in-flight': totalMountFailure({ mount: { phase: 'loading', loaded: 41, expected: 93, elapsedMs: 38_200, sinceProgressMs: 640, step: 'assets' } }),
     'mount-failed': totalMountFailure(),
@@ -370,6 +379,7 @@ test('THE CONTRACT: empty warnings means, and only means, the authored path is f
 const PRIMARY_STATE_OF = {
   'runtime-disposed': 'disposed',
   'no-authored-plan': 'procedural',
+  'authored-unavailable-in-release': 'procedural',
   'authored-disabled-by-query': 'procedural',
   'mount-in-flight': 'loading',
   'mount-failed': 'procedural',

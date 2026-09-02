@@ -129,6 +129,35 @@ test('a clean build passes and reports what it scanned', async (t) => {
   assert.ok(report.scannedBytes > 0);
 });
 
+test('THE MEASURED BLIND SPOT: an EMPTY directory named after a local root fails the build', async (t) => {
+  // Found by hand-inspecting a real `dist/` while shipping the production Three renderer: a stale,
+  // empty `public/local-game-derived/` from the pre-migration layout was copied into `dist/` by
+  // Vite, and the verifier reported `pass: true`. It carried zero bytes, so every file-based check
+  // — path segments, content literals, hashes — had nothing to look at. The hazard is that it sits
+  // inside the one tree Vite copies wholesale: the day anything lands in it, it ships.
+  const { root, distDir, localRoot } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  for (const name of ['local-game-derived', '.local-game-derived', 'vegetation-full-v2', '.local-candidates']) {
+    const empty = join(distDir, name);
+    await mkdir(empty, { recursive: true });
+    const report = await verifyBuildBoundary({ distDir, localRoot });
+    assert.equal(report.pass, false, `${name}: an empty local-root directory must fail`);
+    assert.equal(checks(report, 'path').length, 1, name);
+    assert.match(checks(report, 'path')[0].detail, /directory named after a local root/);
+    assert.equal(report.fileCount, 2, `${name}: a directory is not a file`);
+    assert.ok(report.directoryCount >= 1);
+    await rm(empty, { recursive: true, force: true });
+  }
+
+  // A nested one is caught just the same, and a lawful directory name is not.
+  await mkdir(join(distDir, 'assets', '3d', 'local-candidates'), { recursive: true });
+  assert.equal((await verifyBuildBoundary({ distDir, localRoot })).pass, false);
+  await rm(join(distDir, 'assets', '3d', 'local-candidates'), { recursive: true, force: true });
+  await mkdir(join(distDir, 'assets', '3d', 'customs', 'authored'), { recursive: true });
+  assert.equal((await verifyBuildBoundary({ distDir, localRoot })).pass, true, 'authored asset dirs still ship');
+});
+
 test('passes when no local package exists at all', async (t) => {
   const { root, distDir, localRoot } = await fixture({ localPackage: false });
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -149,8 +178,12 @@ test('rejects a copied local root, at any depth, by path segment', async (t) => 
   const report = await verifyBuildBoundary({ distDir, localRoot });
   assert.equal(report.pass, false);
   const paths = checks(report, 'path').map((entry) => entry.file).sort();
+  // The containing directories are reported alongside the files (trailing `/`) — see the
+  // empty-directory test above for why a directory is a finding in its own right.
   assert.deepEqual(paths, [
+    '.local-game-derived/',
     '.local-game-derived/copy.json',
+    'assets/local-game-derived/',
     'assets/local-game-derived/customs/notes.json',
   ]);
 });
@@ -385,9 +418,13 @@ test('rejects a copied vegetation root, at any depth, by path segment', async (t
   assert.equal(report.pass, false);
   const paths = checks(report, 'path').map((entry) => entry.file).sort();
   assert.deepEqual(paths, [
+    'assets/.local-candidates/',
     'assets/.local-candidates/copy.json',
+    'assets/@vegetation-authored/',
     'assets/@vegetation-authored/birch01-lod0.glb',
+    'assets/local-candidates/',
     'assets/local-candidates/copy.json',
+    'assets/vegetation-full-v2/',
     'assets/vegetation-full-v2/birch01-lod0.glb',
   ]);
 });
@@ -490,8 +527,11 @@ test('rejects a copied vegetation-arraytex root, at any depth, by path segment',
   assert.equal(report.pass, false);
   const paths = checks(report, 'path').map((entry) => entry.file).sort();
   assert.deepEqual(paths, [
+    'assets/@vegetation-arraytex/',
     'assets/@vegetation-arraytex/veg-l0-basecolor.bin',
+    'assets/vegetation-arraytex-v1/',
     'assets/vegetation-arraytex-v1/veg-l0-basecolor.bin',
+    'assets/vegetation-arraytex/',
     'assets/vegetation-arraytex/veg-l0-basecolor.bin',
   ]);
 });

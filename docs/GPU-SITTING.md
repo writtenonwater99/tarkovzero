@@ -108,5 +108,9 @@ yours. Also: exposed-brick damage patches sit 146 mm outboard of the plaster the
   frame you have not seen yet. Deferred until after this pass.
 - **Industrial rail stock** — no asset authored yet. Family identity is settled by your 65 photographs;
   count and placement are not, and nothing is being built against an unverified count.
-- **Anything on tarkovzero.com** — all of the above is `?renderer=three`, gated to dev + loopback +
-  Customs. Production is untouched and still the deck.gl renderer.
+- **Anything on tarkovzero.com** — everything above is judged on the LOCAL frame, which carries the
+  exact terrain package and the 8,805 authored vegetation placements. Since 2026-09-01 the same
+  renderer also runs in production on `?renderer=three` (Customs only, never the default), but that
+  frame draws the PUBLIC heightfield and the public tree positions instead: it is a different
+  picture, and a judgement made here does not transfer to it. Local enhancements are still gated to
+  dev + loopback. See `docs/LOCAL-THREE-POC.md`.
