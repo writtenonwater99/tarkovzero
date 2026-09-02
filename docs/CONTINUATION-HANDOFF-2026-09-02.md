@@ -1,5 +1,21 @@
 # Continuation handoff — 2026-09-02
 
+> **START HERE — branch state is not clean, and that is deliberate.**
+>
+> All of 2026-09-02's work is on **`handoff/2026-09-02`** (tip `076ac86`), pushed and complete. That branch
+> is the truth. `work/customs-industrial-truth-2026-09-01` is the same work minus the last two commits.
+>
+> **`origin/main` was force-pushed to a rewritten history while this session was running** —
+> `46263bd…` → `e69f57d…`, same commits by message, different hashes. Local `main` therefore diverges from
+> `origin/main` by 237 ours / 206 theirs, almost all of it the same content under different SHAs.
+>
+> This was NOT resolved, on purpose: rebasing 30 commits or force-pushing unattended, minutes before the
+> machine was shut down, is how work gets lost. Nothing is lost — everything is on the remote branch above.
+> **The founder should decide how to reconcile `main`.** Do not force-push it for him.
+>
+> Production is unaffected either way: `vercel --prod` deploys the working tree, not a git ref, and the
+> deploy verified green (see §3).
+
 You are picking up TarkovZero cold. Read this before touching anything; it supersedes
 `docs/CONTINUATION-HANDOFF-2026-08-31.md`, which is now historical and wrong in several places (noted below).
 
