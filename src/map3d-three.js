@@ -75,10 +75,11 @@ import { assertLocalThree } from './local-renderer-gate.js';
 import { createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight } from './surfaces.js';
 import { buildTerrain, gameToTerrainTextureUv } from './terrain.js';
 import { buildOpenFrameBuildingAsset, buildPropAsset } from './three-prop-assets.js';
-import { drapedPanelMeshData, planWallStructures } from './wall-runs.js';
+import { DRAPE, drapedPanelMeshData, miteredEdges, planWallStructures, resamplePath } from './wall-runs.js';
 import {
-  RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, buildUnderstoryTuftPlan, cameraPose, centroid,
-  createAsyncAttachGuard, disposeMaterialResources, drapedLinearSegmentMeshData, gameToWorld,
+  RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, alphaCoverageMipChain,
+  buildUnderstoryTuftPlan, cameraPose, centroid,
+  createAsyncAttachGuard, disposeMaterialResources, drapedPrismStripMeshData, gameToWorld,
   grassTuftMeshData, inRing, makeTerrainSampler,
   markerOverlaySpec, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView, seatOverlayAnchor,
   railwayTrackMeshData, terrainMeshData, updateThreeFx, visibleForFloor, withinScope,
@@ -309,6 +310,9 @@ function outlineFor(mesh, material) {
   mesh.add(line);
 }
 
+/** The coverage a chain-link fragment must reach to be drawn at all. Shared with the mip builder. */
+const CHAIN_LINK_ALPHA_TEST = 0.42;
+
 /**
  * The diamond mask that makes a chain-link panel read as chain-link.
  *
@@ -316,6 +320,25 @@ function outlineFor(mesh, material) {
  * blended translucent slab — is what lets the fence cast a fence-shaped shadow: `alphaTest` is
  * honoured by the depth pass, so the holes are holes to the shadow map too. Blending would give a
  * smoked-glass wall that shadows like a solid one.
+ *
+ * WHY THIS IS A HAND-MIPPED DataTexture AND NOT A CanvasTexture. Measured on the GPU's own mip
+ * chain (`textureLod` readback, Chromium/ANGLE, WebGL2), the fraction of texels that clear
+ * `alphaTest` on the shipped canvas texture ran 0.69 at LOD 0, 0.63 at LOD 1, 0.50 at LOD 2 and
+ * **0 from LOD 3 down** — every fragment of every panel discarded. Two things did that:
+ *
+ *   * a box-filtered alpha mask loses coverage at every level (see `rescaleLevelToCoverage` in
+ *     three-world.js, where the fix lives so it can be tested without a GPU), and
+ *   * the texture was uploaded as sRGB, and an sRGB texture is DECODED BEFORE it is filtered, so
+ *     the wire's 0.796 read as 0.60 and the tile mean landed at 0.4039 — just under the 0.42 test.
+ *     In linear the same mask means 0.5412 and would have gone solid instead of gone.
+ *
+ * That is not an extreme-distance case. Measured on one real run (`fence:50`) at the default
+ * browsing pose — zoom 5, rotationX 26 — its posts projected between 9 and 30 px per ground metre
+ * across the frame, so the 0.62 m mask tile covered 6 to 19 px and the run sampled LOD 1.8 to 3.5
+ * end to end. Everything past LOD 3 drew nothing at all, which is why the map showed rails and
+ * posts with grass visible between them. So the mask now carries its own levels, is uploaded with
+ * NO colour space (it is a coverage number, not a colour), and the wire's tint moved to
+ * `material.color`, where no filter can eat it.
  */
 function chainLinkAlphaTexture(size = 64) {
   if (typeof document === 'undefined') return null;
@@ -324,7 +347,7 @@ function chainLinkAlphaTexture(size = 64) {
   const context = canvas.getContext('2d');
   if (!context) return null;
   context.clearRect(0, 0, size, size);
-  context.strokeStyle = '#c8cbc4';
+  context.strokeStyle = '#ffffff';
   context.lineWidth = Math.max(1.5, size / 22);
   context.lineCap = 'square';
   // Two families of diagonals, wrapped, so the tile repeats without a visible seam.
@@ -336,10 +359,25 @@ function chainLinkAlphaTexture(size = 64) {
       context.stroke();
     }
   }
-  const texture = new THREE.CanvasTexture(canvas);
+
+  // Coverage is the canvas ALPHA — white strokes on a cleared ground, so a texel's alpha is
+  // exactly how much wire covers it, with no colour term to be decoded out from under it.
+  const source = context.getImageData(0, 0, size, size).data;
+  const alpha = new Float32Array(size * size);
+  for (let index = 0; index < alpha.length; index++) alpha[index] = source[index * 4 + 3] / 255;
+  const { mipmaps } = alphaCoverageMipChain(alpha, size, CHAIN_LINK_ALPHA_TEST);
+
+  const texture = new THREE.DataTexture(mipmaps[0].data, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
+  texture.mipmaps = mipmaps;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
+  // NOT sRGB: three reads `alphaMap.g`, and a colour-space decode on a coverage mask is what put
+  // its mean under `alphaTest` in the first place.
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.anisotropy = 8;
+  texture.needsUpdate = true;
   return texture;
 }
 
@@ -1343,15 +1381,26 @@ export async function createView3d(container, mapData, src) {
     // opaque where the wire is, invisible where it is not, and shadow-casting in exactly that
     // shape. `chainLinkTexture` is null only when there is no DOM (tests), and the material then
     // degrades to a thin solid panel rather than disappearing.
+    //
+    // The wire's tint is the material COLOUR, not a `map`. The old map sampled the same masked
+    // canvas, so every mip mixed the wire with the black of the holes and the fabric darkened
+    // toward nothing as it minified — on top of the alpha collapse the mask itself was suffering.
+    // The map carried exactly one colour where it drew at all, so nothing is lost by dropping it.
+    //
+    // Metalness is low on purpose. There is no environment map in this scene (three lights, no
+    // IBL), so a metal has nothing to reflect: at 0.42 the fabric's vertical faces returned almost
+    // no light and the little that survived the alpha test was black on dark grass.
     chainLink: new THREE.MeshStandardMaterial({
-      color: chainLinkTexture ? 0xffffff : 0x8a8d85,
-      map: chainLinkTexture, alphaMap: chainLinkTexture,
-      alphaTest: chainLinkTexture ? 0.42 : 0,
+      color: 0x9aa096,
+      alphaMap: chainLinkTexture,
+      alphaTest: chainLinkTexture ? CHAIN_LINK_ALPHA_TEST : 0,
       transparent: false, side: THREE.DoubleSide,
-      roughness: 0.62, metalness: 0.42,
+      roughness: 0.78, metalness: 0.22,
     }),
-    fenceSteel: new THREE.MeshStandardMaterial({ color: 0x7c8079, roughness: 0.58, metalness: 0.52 }),
-    gateSteel: new THREE.MeshStandardMaterial({ color: 0x6a6f68, roughness: 0.5, metalness: 0.62 }),
+    fenceSteel: new THREE.MeshStandardMaterial({ color: 0x7e837b, roughness: 0.62, metalness: 0.26 }),
+    // A shade lighter than the run it interrupts, so the two jambs and the swung leaves separate
+    // from the fabric either side of them instead of reading as more fence.
+    gateSteel: new THREE.MeshStandardMaterial({ color: 0x9ba196, roughness: 0.54, metalness: 0.3 }),
     rail: new THREE.LineBasicMaterial({ color: 0x686762, transparent: true, opacity: 0.9 }),
     railSteel: new THREE.MeshStandardMaterial({ color: 0x5d615f, roughness: 0.44, metalness: 0.72 }),
     sleeper: new THREE.MeshStandardMaterial({ color: 0x554638, roughness: 0.96, metalness: 0.03 }),
@@ -1826,14 +1875,25 @@ export async function createView3d(container, mapData, src) {
     ? geometry.index.count
     : geometry?.attributes?.position?.count ?? 0) / 3;
 
-  /** Draped closed prisms along a path — the shape a solid wall, a rail or a coping actually is. */
+  /**
+   * One draped closed prism along a whole path — the shape a solid wall, a rail or a coping is.
+   *
+   * Two things happen before the prism is built, and both are about the ground rather than the
+   * barrier. The path is RESAMPLED at `DRAPE.maxSegmentM`, because a prism only samples the terrain
+   * at its own corners: the five Fortress rows each ship as one 38–66 m segment, and measured
+   * against the exact Customs terrain at the fixed 2x relief the worst of them floated 6.10 m over
+   * the ground (the inner wall, over the trench at [205.2, -140.4]) and buried itself 2.77 m in it
+   * (the west wall at [217.8, -137.7]) — on a wall 3.5 m tall. At 1 m the worst gap anywhere in
+   * those five runs is 0.46 m. Then the corners are MITERED, so a bend does not leave a wedge of
+   * nothing on its outside.
+   *
+   * It returns an array because the merge below takes one, and because a path that cannot produce a
+   * strip must produce none rather than a degenerate one.
+   */
   function prismsAlongPath(path, widthM, heightM, offsetM = 0) {
-    const prisms = [];
-    for (let index = 1; index < path.length; index++) {
-      const prism = drapedLinearSegmentMeshData(path[index - 1], path[index], widthM, heightM, offsetM, H);
-      if (prism) prisms.push(prism);
-    }
-    return prisms;
+    const edges = miteredEdges(resamplePath(path, DRAPE.maxSegmentM), widthM / 2, DRAPE.miterLimit);
+    const strip = drapedPrismStripMeshData(edges, heightM, offsetM, H);
+    return strip ? [strip] : [];
   }
 
   function mergedPrismGeometry(prisms) {
@@ -1861,7 +1921,10 @@ export async function createView3d(container, mapData, src) {
   function mergedPanelGeometry(paths, spec, heightM = spec.heightM) {
     const positions = [], uvs = [], indices = [];
     let vertex = 0;
-    for (const path of paths) {
+    for (const source of paths) {
+      // Same drape resolution as the prisms: a panel samples the ground only at its two ends, so a
+      // long quad hangs over a dip exactly the way a long prism does.
+      const path = resamplePath(source, DRAPE.maxSegmentM);
       let u = 0;
       for (let index = 1; index < path.length; index++) {
         const quad = drapedPanelMeshData(path[index - 1], path[index], heightM, 0, H, spec.meshUvScaleM, u);
@@ -1964,12 +2027,24 @@ export async function createView3d(container, mapData, src) {
     if (gate.spec.fill === 'mesh') {
       triangles += addWallMesh(group, mergedPanelGeometry(leafPaths, gate.spec), materials.chainLink, 'leaves');
       const frame = [];
+      const stiles = [];
       for (const path of leafPaths) {
         for (const offsetM of gate.spec.railOffsetsM) {
           frame.push(...prismsAlongPath(path, gate.spec.gate.leafFrameThicknessM, gate.spec.gate.leafFrameThicknessM, offsetM));
         }
+        // The stile on the leaf's FREE edge. A swing leaf is a welded frame with fabric stretched
+        // inside it, and that closing edge is the one thing that says "this panel is a door" rather
+        // than "the fence carries on at an angle" — the hinge edge is already the jamb, so it is
+        // deliberately not doubled here.
+        stiles.push({
+          x: path[1][0], z: path[1][1],
+          widthM: gate.spec.gate.leafFrameThicknessM,
+          heightM: gate.spec.heightM,
+        });
       }
       triangles += addWallMesh(group, mergedPrismGeometry(frame), materials.gateSteel, 'leaf-frames');
+      const leafStiles = postInstancedMesh(stiles, materials.gateSteel, 'leaf-stiles');
+      if (leafStiles) { group.add(leafStiles); triangles += geometryTriangles(leafStiles.geometry) * stiles.length; }
     } else {
       const leaves = [];
       for (const path of leafPaths) {

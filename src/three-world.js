@@ -107,6 +107,149 @@ export function drapedLinearSegmentMeshData(a, b, width, height, verticalOffset 
   };
 }
 
+/** Average four texels into one. A coverage mask is a fraction, so a plain box filter is correct. */
+export function halveCoverageLevel(values, width) {
+  const half = width >> 1;
+  if (!(half >= 1) || values.length !== width * width) {
+    throw new TypeError('halveCoverageLevel needs a square level of even width');
+  }
+  const out = new Float32Array(half * half);
+  for (let row = 0; row < half; row++) {
+    for (let column = 0; column < half; column++) {
+      out[row * half + column] = (
+        Number(values[(row * 2) * width + column * 2])
+        + Number(values[(row * 2) * width + column * 2 + 1])
+        + Number(values[(row * 2 + 1) * width + column * 2])
+        + Number(values[(row * 2 + 1) * width + column * 2 + 1])
+      ) / 4;
+    }
+  }
+  return out;
+}
+
+/**
+ * Rescale one level so the same FRACTION of its texels still passes `alphaTest`.
+ *
+ * A box filter conserves a mask's MEAN; an alpha TEST reads its COVERAGE, and those are not the
+ * same number. Halving a thin line spreads it across neighbours that each land under the threshold,
+ * so the fraction that survives falls level after level until the surface is gone entirely. Scaling
+ * a level until the surviving fraction is back where level 0 put it is Castano's alpha-tested
+ * antialiasing, and it is the difference between a fence that thins with distance and one that
+ * vanishes at it.
+ *
+ * Coverage is monotonic in the scale, so a bisection finds it. `Math.min(1, …)` is applied to the
+ * stored value too, so the level stays a coverage field rather than an unbounded multiple of one.
+ */
+export function rescaleLevelToCoverage(values, targetCoverage, alphaTest) {
+  const coverage = (scale) => {
+    let passing = 0;
+    for (const value of values) if (Math.min(1, value * scale) >= alphaTest) passing++;
+    return passing / values.length;
+  };
+  if (!values.some((value) => value > 0)) return values;
+  let low = 0, high = 1024;
+  for (let step = 0; step < 32; step++) {
+    const mid = (low + high) / 2;
+    if (coverage(mid) < targetCoverage) low = mid; else high = mid;
+  }
+  for (let index = 0; index < values.length; index++) values[index] = Math.min(1, values[index] * high);
+  return values;
+}
+
+/**
+ * The whole mip chain of an alpha-TEST mask, every level carrying level 0's coverage.
+ *
+ * `alpha` is a square coverage field in 0..1. Each returned level is `{ data, width, height }` with
+ * the coverage written into all four bytes — three reads `alphaMap.g`, and a grey level is
+ * inspectable as an image. The last levels (2x2, 1x1) can only be 0 or 1 covered, so the search
+ * lands on 1 and the surface resolves into a solid haze: a chain-link fence a kilometre away is a
+ * grey line, not a hole, and that is the correct end state for this chain.
+ */
+export function alphaCoverageMipChain(alpha, width, alphaTest) {
+  if (!(width >= 1) || (width & (width - 1)) !== 0) throw new TypeError('mip chain needs a power-of-two width');
+  if (alpha.length !== width * width) throw new TypeError('mip chain needs a square level 0');
+  const toRgba = (values, size) => {
+    const data = new Uint8Array(size * size * 4);
+    for (let index = 0; index < values.length; index++) {
+      const byte = Math.round(Math.min(1, Math.max(0, Number(values[index]) || 0)) * 255);
+      data[index * 4] = data[index * 4 + 1] = data[index * 4 + 2] = data[index * 4 + 3] = byte;
+    }
+    return { data, width: size, height: size };
+  };
+  let level = Float32Array.from(alpha, (value) => Math.min(1, Math.max(0, Number(value) || 0)));
+  // Bisect against the smallest byte that still clears the test, not against the test itself: a
+  // level solved to exactly `alphaTest` rounds to byte 107, and 107/255 is 0.4196 — under 0.42.
+  // Every texel the search saves would then be quantised straight back out of the mask.
+  const threshold = Math.ceil(alphaTest * 255) / 255;
+  const target = level.reduce((total, value) => total + (value >= threshold ? 1 : 0), 0) / level.length;
+  const mipmaps = [];
+  for (let size = width; size >= 1; size >>= 1) {
+    mipmaps.push(toRgba(level, size));
+    if (size === 1) break;
+    level = rescaleLevelToCoverage(halveCoverageLevel(level, size), target, threshold);
+  }
+  return { mipmaps, targetCoverage: target };
+}
+
+/**
+ * One continuous draped prism along a whole path, welded at every bend.
+ *
+ * `drapedLinearSegmentMeshData` above builds ONE segment, offsetting both its ends by that
+ * segment's own perpendicular. Chain those and the outside of every corner is a wedge of nothing:
+ * the two rectangles are parallel to different lines and never meet. This takes the already-mitered
+ * two sides of the run (`miteredEdges` in wall-runs.js — kept there so both modules stay pure and
+ * neither imports the other) and emits a single closed prism whose corner vertices are SHARED, so
+ * there is no gap to leave.
+ *
+ * The face winding is vertex-for-vertex the single-segment builder's, so a straight two-point run
+ * comes out with exactly the geometry and normals it had before.
+ */
+export function drapedPrismStripMeshData(edges, height, verticalOffset = 0, surfaceYFor = () => 0) {
+  const ring = (Array.isArray(edges) ? edges : []).filter((edge) => [
+    edge?.left?.[0], edge?.left?.[1], edge?.right?.[0], edge?.right?.[1],
+  ].every((value) => Number.isFinite(Number(value))));
+  if (ring.length < 2) return null;
+  const safeHeight = Math.max(0.01, Number(height) || 0);
+  const offsetY = Number.isFinite(Number(verticalOffset)) ? Number(verticalOffset) : 0;
+  const footprint = [];
+  for (const edge of ring) footprint.push([Number(edge.left[0]), Number(edge.left[1])], [Number(edge.right[0]), Number(edge.right[1])]);
+  const bases = footprint.map(([x, z]) => {
+    const sampled = Number(surfaceYFor(x, z));
+    return Number.isFinite(sampled) ? sampled + offsetY : offsetY;
+  });
+  const positions = [];
+  for (let level = 0; level < 2; level++) {
+    footprint.forEach(([x, z], index) => {
+      positions.push(...gameToWorld(x, z, bases[index] + (level ? safeHeight : 0)));
+    });
+  }
+  const top = footprint.length;
+  const indices = [];
+  let length = 0;
+  for (let index = 1; index < ring.length; index++) {
+    const b0 = 2 * (index - 1), b1 = b0 + 1, b2 = 2 * index, b3 = b2 + 1;
+    const t0 = top + b0, t1 = top + b1, t2 = top + b2, t3 = top + b3;
+    indices.push(
+      b0, b2, b1, b1, b2, b3, // ground-facing bottom
+      t0, t1, t2, t1, t3, t2, // upward-facing top
+      b0, t0, b2, t0, t2, b2, // left side
+      b1, b3, t1, t1, b3, t3, // right side
+    );
+    if (index === 1) indices.push(b0, b1, t0, b1, t1, t0);            // start cap
+    if (index === ring.length - 1) indices.push(b2, t2, b3, t2, t3, b3); // end cap
+    const centre = (edge) => [(Number(edge.left[0]) + Number(edge.right[0])) / 2, (Number(edge.left[1]) + Number(edge.right[1])) / 2];
+    const [cx0, cz0] = centre(ring[index - 1]), [cx1, cz1] = centre(ring[index]);
+    length += Math.hypot(cx1 - cx0, cz1 - cz0);
+  }
+  return {
+    positions: new Float32Array(positions),
+    indices: new Uint32Array(indices),
+    footprint,
+    bases,
+    length,
+  };
+}
+
 /** Build the close-range steel rails and sleeper placement plan for reviewed track centre-lines. */
 export function railwayTrackMeshData(railways, surfaceYFor, scope = THREE_POC_SCOPE, options = {}) {
   const gaugeM = Number(options.gaugeM) || 1.52;

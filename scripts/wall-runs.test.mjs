@@ -15,13 +15,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
-  CLASS_INVENTORY, GATE_INFERENCE, MEASURED, PARTIALLY_MEASURED, PROVISIONAL,
+  CLASS_INVENTORY, DRAPE, GATE_INFERENCE, MEASURED, PARTIALLY_MEASURED, PROVISIONAL,
   PROVISIONAL_WALL_CLASSES, WALL_CLASSES,
   cleanPath, drapedPanelMeshData, expectedDimension, inferRoadCrossingGates, isWallPropRow,
-  planDimensionLedger, planGate, planWallRun, planWallStructures, pointAtDistance,
-  resolveWallClasses, runLengthM, slicePath, wallClassIdFor,
+  miteredEdges, planDimensionLedger, planGate, planWallRun, planWallStructures, pointAtDistance,
+  resamplePath, resolveWallClasses, runLengthM, slicePath, wallClassIdFor,
 } from '../src/wall-runs.js';
-import { drapedLinearSegmentMeshData, makeTerrainSampler } from '../src/three-world.js';
+import { drapedLinearSegmentMeshData, drapedPrismStripMeshData, makeTerrainSampler } from '../src/three-world.js';
 
 const customs3d = JSON.parse(await readFile(new URL('../public/data/customs-3d.json', import.meta.url), 'utf8'));
 const customsProps = JSON.parse(await readFile(new URL('../data/customs-props.json', import.meta.url), 'utf8')).props;
@@ -77,6 +77,109 @@ test('a solid wall prism drapes at every footprint corner', () => {
   assert.ok(prism);
   assert.equal(prism.bases.length, 4);
   for (const [index, [x, z]] of prism.footprint.entries()) close(prism.bases[index], H(x, z), 1e-9, 'corner drapes');
+});
+
+// ------------------------------------------------------------------------------------------- //
+// 1b. Drape RESOLUTION and mitred corners
+//
+// A prism samples the ground only at its own corners, so a long one is a chord over whatever the
+// terrain does between its ends, and a bent one leaves a wedge of nothing on the outside of the
+// bend. Both are properties of how the run is walked, not of the barrier, which is why the numbers
+// live in `DRAPE` and not in the class table.
+// ------------------------------------------------------------------------------------------- //
+
+test('resamplePath splits long segments and moves nothing', () => {
+  const path = [[0, 0], [10, 0], [10, 3]];
+  const dense = resamplePath(path, 1);
+  close(runLengthM(dense), runLengthM(path), 1e-9, 'length is preserved exactly');
+  assert.deepEqual(dense[0], [0, 0]);
+  assert.deepEqual(dense.at(-1), [10, 3]);
+  for (let index = 1; index < dense.length; index++) {
+    assert.ok(Math.hypot(dense[index][0] - dense[index - 1][0], dense[index][1] - dense[index - 1][1]) <= 1 + 1e-9);
+  }
+  // Every new point lies on the original polyline: x is 0..10 on z=0, or z is 0..3 on x=10.
+  for (const [x, z] of dense) assert.ok((z === 0 && x >= 0 && x <= 10) || (x === 10 && z >= 0 && z <= 3));
+  // Short segments are left alone rather than being resampled onto a grid.
+  assert.deepEqual(resamplePath([[0, 0], [0.4, 0]], 1), [[0, 0], [0.4, 0]]);
+  assert.deepEqual(resamplePath([[0, 0], [1, 0]], 0), [[0, 0], [1, 0]], 'a zero step is a no-op, not a hang');
+});
+
+test('the drape resolution is what stops a long run flying over a trench', () => {
+  // The shape measured under Customs' Fortress inner wall: flat at ~2 m, a trench bottoming out
+  // near -6 m, flat again. The shipped row is ONE 45.8 m segment, so its prism base is a straight
+  // chord from end to end and the trench passes underneath it untouched.
+  const ground = (x) => (x > 12 && x < 28 ? 2 - 4 * (1 - Math.cos((x - 12) / 16 * 2 * Math.PI)) : 2);
+  const path = [[0, 0], [45.8, 0]];
+  const spec = PROVISIONAL_WALL_CLASSES['concrete-perimeter-wall'];
+  const worstGap = (points) => {
+    let worst = 0;
+    for (let index = 1; index < points.length; index++) {
+      const [ax] = points[index - 1], [bx] = points[index];
+      const baseA = ground(ax), baseB = ground(bx);
+      for (let step = 0; step <= 60; step++) {
+        const t = step / 60, x = ax + (bx - ax) * t;
+        worst = Math.max(worst, Math.abs(baseA + (baseB - baseA) * t - ground(x)));
+      }
+    }
+    return worst;
+  };
+  assert.ok(worstGap(path) > 5, `one prism per source segment flies over the trench (${worstGap(path)} m)`);
+  const resampled = resamplePath(path, DRAPE.maxSegmentM);
+  assert.ok(worstGap(resampled) <= 0.5, `at the drape resolution it follows it (${worstGap(resampled)} m)`);
+  // And the wall still stands its own height above wherever the base landed.
+  const strip = drapedPrismStripMeshData(
+    miteredEdges(resampled, spec.thicknessM / 2), spec.heightM, 0, (x) => ground(x),
+  );
+  const positions = strip.positions;
+  const half = positions.length / 2;
+  for (let vertex = 0; vertex < half / 3; vertex++) {
+    close(positions[half + vertex * 3 + 2] - positions[vertex * 3 + 2], spec.heightM, 1e-6, 'height above the drape');
+  }
+});
+
+test('miteredEdges closes the outside of a bend instead of leaving a wedge', () => {
+  // A right-angle turn. Offsetting each leg by its own perpendicular leaves the two outer edges
+  // half a width apart at the corner; the miter puts the shared corner where the two offset lines
+  // actually cross, which for 90 degrees is halfWidth * sqrt(2) from the vertex.
+  const edges = miteredEdges([[0, 0], [10, 0], [10, 10]], 0.5);
+  assert.equal(edges.length, 3);
+  const corner = edges[1];
+  close(Math.hypot(corner.left[0] - 10, corner.left[1] - 0), 0.5 * Math.SQRT2, 1e-9, 'outer corner is mitred');
+  close(Math.hypot(corner.right[0] - 10, corner.right[1] - 0), 0.5 * Math.SQRT2, 1e-9, 'inner corner too');
+  close(corner.miterScale, Math.SQRT2, 1e-9);
+  // The corner vertex is SHARED, so the strip cannot leave a gap: both legs' offset edges pass
+  // through it. The left offset line of leg 1 is z = +0.5; of leg 2 it is x = 10 - 0.5.
+  close(corner.left[1], 0.5, 1e-9);
+  close(corner.left[0], 9.5, 1e-9);
+  // Ends keep their own segment's perpendicular, unmitred.
+  close(edges[0].miterScale, 1, 1e-9);
+  close(edges[2].miterScale, 1, 1e-9);
+});
+
+test('Customs’ sharpest real bend mitres inside the limit, and a hairpin is squared off', () => {
+  // fence:26 turns 113.95 degrees at [354.2, 95.5] — the sharpest of the 89 bends on the map.
+  const turn = 113.95406353772144;
+  const radians = turn * Math.PI / 180;
+  const edges = miteredEdges([[-10, 0], [0, 0], [Math.cos(radians) * 10, Math.sin(radians) * 10]], 0.5);
+  close(edges[1].miterScale, 1 / Math.cos((turn / 2) * Math.PI / 180), 1e-9, 'the real bend needs 1.83');
+  assert.ok(edges[1].miterScale < DRAPE.miterLimit, 'well inside the limit');
+  // A run that doubles back has no finite miter at all; the limit is what keeps it on the map.
+  const hairpin = miteredEdges([[-10, 0], [0, 0], [-10, 0.001]], 0.5);
+  close(hairpin[1].miterScale, DRAPE.miterLimit, 1e-9);
+});
+
+test('a straight two-point strip is vertex-for-vertex the single-segment prism it replaces', () => {
+  // The strip builder is only allowed to change what happens AT A BEND. On a straight run it has
+  // to produce the geometry and the winding the old per-segment builder produced, or every solid
+  // wall on the map silently changes shade.
+  const spec = PROVISIONAL_WALL_CLASSES['concrete-perimeter-wall'];
+  const a = [218, -158], b = [218, -92];
+  const prism = drapedLinearSegmentMeshData(a, b, spec.thicknessM, spec.heightM, 0, H);
+  const strip = drapedPrismStripMeshData(miteredEdges([a, b], spec.thicknessM / 2), spec.heightM, 0, H);
+  assert.deepEqual(Array.from(strip.positions), Array.from(prism.positions));
+  assert.deepEqual(Array.from(strip.indices), Array.from(prism.indices));
+  assert.deepEqual(strip.bases, prism.bases);
+  close(strip.length, prism.length, 1e-9);
 });
 
 // ------------------------------------------------------------------------------------------- //

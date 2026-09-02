@@ -234,6 +234,95 @@ export function runLengthM(path) {
   return cumulative.length ? cumulative[cumulative.length - 1] : 0;
 }
 
+/**
+ * How finely the renderer walks a run, and how far a corner may be pushed out to close a bend.
+ *
+ * These are NOT dimensions and they are deliberately not in `WALL_CLASSES`: nothing here describes
+ * the barrier, only how many samples the drape takes of the ground beneath it. They never appear in
+ * `planDimensionLedger`, and a mesh-bounds measurement can never change them.
+ *
+ * `maxSegmentM: 1` is measured, not guessed. Against the shipped exact Customs terrain at the fixed
+ * 2x relief, the worst gap between a run's prism base and the ground under it falls 6.06 m → 0.46 m
+ * as the drape step goes from "one prism per source segment" to 1 m (16 m: 5.37, 8 m: 4.04,
+ * 4 m: 2.09, 2 m: 1.27). Below 1 m it stops improving: what is left is a 0.5 m-thick wall crossing
+ * a cliff, where the two sides genuinely sit at different heights and no along-run sampling helps.
+ */
+export const DRAPE = Object.freeze({
+  maxSegmentM: 1,
+  // 4 lets a 151-degree turn close cleanly; Customs' sharpest bend is 113.95 degrees (fence:26 at
+  // [354.2, 95.5]), which needs 1.83. Past the limit the corner is squared off instead of shot to
+  // infinity, which is what an unclamped miter does to a hairpin.
+  miterLimit: 4,
+});
+
+/**
+ * Split every segment longer than `maxSegmentM`, exactly, inserting nothing else.
+ *
+ * Subdivision is length-preserving — the new points lie on the old segments — so a resampled run
+ * has the same length, the same corners and the same openings. Only the drape gets more samples.
+ */
+export function resamplePath(path, maxSegmentM = DRAPE.maxSegmentM) {
+  const points = cleanPath(path);
+  if (!(maxSegmentM > 0) || points.length < 2) return points;
+  const out = [points[0]];
+  for (let index = 1; index < points.length; index++) {
+    const [ax, az] = points[index - 1], [bx, bz] = points[index];
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / maxSegmentM - 1e-9));
+    for (let step = 1; step <= steps; step++) {
+      out.push([ax + (bx - ax) * step / steps, az + (bz - az) * step / steps]);
+    }
+  }
+  return out;
+}
+
+/**
+ * The two sides of a run, offset by half its width along the MITER at every bend.
+ *
+ * Offsetting each segment by its own local perpendicular leaves a wedge of empty space on the
+ * outside of every corner — the two rectangles simply do not meet. The miter normal is the
+ * normalised sum of the two adjacent segment normals, and dividing by its dot with either segment
+ * normal (`1 / cos(half the turn)`) pushes the corner out far enough that both sides close.
+ *
+ * `left` is the `+perpendicular` side, matching `drapedLinearSegmentMeshData`'s footprint order, so
+ * a one-segment strip is vertex-for-vertex what the old per-segment prism was.
+ */
+export function miteredEdges(path, halfWidthM, miterLimit = DRAPE.miterLimit) {
+  const points = cleanPath(path);
+  const half = Number(halfWidthM);
+  if (points.length < 2 || !(half > 0)) return [];
+  const limit = Number(miterLimit) > 1 ? Number(miterLimit) : 1;
+  const normals = [];
+  for (let index = 1; index < points.length; index++) {
+    const dx = points[index][0] - points[index - 1][0];
+    const dz = points[index][1] - points[index - 1][1];
+    const length = Math.hypot(dx, dz);
+    normals.push([-dz / length, dx / length]);
+  }
+  return points.map((point, index) => {
+    const before = normals[index - 1] ?? normals[0];
+    const after = normals[index] ?? normals[normals.length - 1];
+    let mx = before[0] + after[0], mz = before[1] + after[1];
+    const length = Math.hypot(mx, mz);
+    let scale = 1;
+    if (length > 1e-9) {
+      mx /= length; mz /= length;
+      // cos of half the turn. A doubling-back run (cos ~ 0) is what the limit exists for.
+      const cos = mx * after[0] + mz * after[1];
+      scale = cos > 1 / limit ? 1 / cos : limit;
+    } else {
+      // A 180-degree reversal has no miter at all; fall back to one side's own perpendicular.
+      [mx, mz] = after;
+    }
+    const ox = mx * half * scale, oz = mz * half * scale;
+    return {
+      point: [...point],
+      left: [point[0] + ox, point[1] + oz],
+      right: [point[0] - ox, point[1] - oz],
+      miterScale: scale,
+    };
+  });
+}
+
 /** The point at along-run distance `distance`, clamped to the run. */
 export function pointAtDistance(path, distance) {
   const { points, cumulative } = pathCumulative(path);
@@ -426,8 +515,8 @@ export const GATE_INFERENCE = Object.freeze({
   minSpanM: 3.5,
   maxSpanM: 14,
   // Two run ends that meet at a corner are not the two sides of one gate. |da·db| near 1 means the
-  // two runs are collinear, i.e. one line interrupted; near 0 means a corner, and 48 of Customs'
-  // 52 candidate gaps fail here or on the road test.
+  // two runs are collinear, i.e. one line interrupted; near 0 means a corner, and 46 of Customs'
+  // 56 candidate gaps fail here or on the road test.
   minCollinearity: 0.8,
   roadMarginM: 2.5,
   defaultRoadWidthM: 4,
@@ -473,10 +562,10 @@ const nearestRoad = (point, roads, defaultWidthM) => {
  * left to work with is the gaps in the shipped runs — which are a mixture of the build's road cuts,
  * the artist's pen-lifts, and plain corners, with no field telling them apart.
  *
- * On Customs today: 52 mutual-nearest end pairs, of which 13 sit on a road at all, and 4 also read
- * as one collinear line interrupted. Those 4 are what this returns. Every record is stamped
- * `inferred:road-crossing`; none of them is a measurement, and the other 48 gaps stay plain run
- * ends with an end post rather than being guessed into gates.
+ * On Customs today: 56 mutual-nearest end pairs, of which 16 sit on a road at all, and 10 also read
+ * as one collinear line interrupted and span between `minSpanM` and `maxSpanM`. Those 10 are what
+ * this returns. Every record is stamped `inferred:road-crossing`; none of them is a measurement,
+ * and the other 46 gaps stay plain run ends with an end post rather than being guessed into gates.
  */
 export function inferRoadCrossingGates(runs, roads, options = {}) {
   const settings = { ...GATE_INFERENCE, ...options };
@@ -660,10 +749,11 @@ export function expectedDimension(classes, classId, field) {
 /**
  * A terrain-draped vertical quad with UVs — the surface a chain-link texture is masked onto.
  *
- * `drapedLinearSegmentMeshData` in three-world.js builds the closed prism a solid wall needs; a
- * mesh fence is genuinely a surface, and giving it a prism's six faces both doubles its triangles
- * and hides the alpha mask behind an opaque edge. Both ends sample the ground independently, so
- * the panel follows a slope instead of floating over it.
+ * `drapedPrismStripMeshData` in three-world.js builds the closed prism a solid wall needs; a mesh
+ * fence is genuinely a surface, and giving it a prism's six faces both doubles its triangles and
+ * hides the alpha mask behind an opaque edge. Both ends sample the ground independently, so the
+ * panel follows a slope instead of floating over it — which is only as good as the sampling, so
+ * the renderer runs the path through `resamplePath` at `DRAPE.maxSegmentM` first.
  */
 export function drapedPanelMeshData(a, b, heightM, verticalOffsetM = 0, surfaceYFor = () => 0, uvScaleM = 1, uStartM = 0) {
   const ax = Number(a?.[0]), az = Number(a?.[1]), bx = Number(b?.[0]), bz = Number(b?.[1]);

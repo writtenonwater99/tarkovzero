@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import * as THREE from 'three/webgpu';
 import {
-  RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, buildUnderstoryTuftPlan, cameraPose, centroid,
-  createAsyncAttachGuard, disposeMaterialResources, drapedLinearSegmentMeshData, gameToWorld, grassTuftMeshData, inRing,
+  RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, alphaCoverageMipChain,
+  buildUnderstoryTuftPlan, cameraPose, centroid,
+  createAsyncAttachGuard, disposeMaterialResources, drapedLinearSegmentMeshData, gameToWorld, grassTuftMeshData,
+  halveCoverageLevel, inRing,
   makeTerrainSampler, markerOverlaySpec, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView,
   railwayTrackMeshData, seatOverlayAnchor, terrainMeshData, terrainRelativeDisplayY, updateThreeFx, viewStateFromPose, visibleForFloor,
   visibleInteractionData, withinScope, worldToGame,
@@ -803,6 +805,79 @@ test('linear prop segments drape every footprint corner without tilting vertical
     close(segment.positions[(corner + 4) * 3 + 2] - segment.positions[corner * 3 + 2], 3, 1e-6);
   }
   assert.equal(segment.indices.length, 36);
+});
+
+/**
+ * THE MEASURED DEFECT (chain-link fences were invisible at map-browsing distance).
+ *
+ * The fence's alpha MASK was mipped by the GPU's own box filter. Measured on the shipped texture
+ * with a `textureLod` readback in Chromium/ANGLE (WebGL2), the fraction of texels that cleared
+ * `alphaTest: 0.42` ran 0.69 at LOD 0, 0.63 at LOD 1, 0.50 at LOD 2 and **0 from LOD 3 down**. A
+ * real run at the default browsing pose samples LOD 1.8 to 3.5 across one frame, so most of every
+ * fence had every fragment discarded and only its posts and rails were left. A box filter conserves
+ * a mask's MEAN, and an alpha test reads its COVERAGE; those are different numbers, and the gap
+ * only widens as the wire goes sub-texel.
+ *
+ * This is that measurement as an offline test: the same box chain, the same threshold, the same
+ * collapse — and the coverage-preserving chain holding level 0's fraction all the way down.
+ */
+test('an alpha-tested mask keeps its coverage down the whole mip chain', () => {
+  const size = 64, alphaTest = 0.42;
+  const diagonalMask = (pitch, wire) => {
+    const level = new Float32Array(size * size);
+    for (let row = 0; row < size; row++) {
+      for (let column = 0; column < size; column++) {
+        const onWire = ((row + column) % pitch) < wire || ((row - column + size) % pitch) < wire;
+        level[row * size + column] = onWire ? 1 : 0;
+      }
+    }
+    return level;
+  };
+  const passFraction = (values) => values.reduce((total, value) => total + (value >= alphaTest ? 1 : 0), 0) / values.length;
+  const boxChain = (level0) => {
+    const fractions = [];
+    let level = level0;
+    for (let width = size; width > 1; width >>= 1) {
+      level = halveCoverageLevel(level, width);
+      fractions.push(passFraction(level));
+    }
+    return fractions;
+  };
+
+  // A box filter conserves a mask's MEAN, so wherever that mean falls relative to the threshold is
+  // where the coverage ends up — nowhere near where it started. Both failure directions are real:
+  // a thin wire dissolves to nothing (the shipped fence, once the sRGB decode had dropped its mean
+  // under 0.42), a dense one floods to solid.
+  const thin = diagonalMask(16, 2);
+  const dense = diagonalMask(8, 2);
+  assert.equal(boxChain(thin).at(-1), 0, 'a thin wire box-filters away to nothing');
+  assert.ok(boxChain(thin).some((fraction) => fraction === 0), 'and gets there before the last level');
+  assert.equal(boxChain(dense).at(-1), 1, 'a dense one box-filters up to a solid slab');
+
+  for (const [name, level0] of [['thin', thin], ['dense', dense]]) {
+    const target = passFraction(level0);
+    assert.ok(target > 0.1 && target < 0.9, `${name} is a real mask, not a solid one (${target})`);
+    const { mipmaps, targetCoverage } = alphaCoverageMipChain(level0, size, alphaTest);
+    close(targetCoverage, target, 1e-12);
+    assert.equal(mipmaps.length, Math.log2(size) + 1, 'every level down to 1x1');
+    for (const [index, mip] of mipmaps.entries()) {
+      assert.equal(mip.width, size >> index);
+      assert.equal(mip.data.length, mip.width * mip.height * 4);
+      // three reads `alphaMap.g`; the byte lands on all four channels so a level is inspectable.
+      for (let texel = 0; texel < mip.width * mip.height; texel++) {
+        assert.equal(mip.data[texel * 4], mip.data[texel * 4 + 1]);
+        assert.equal(mip.data[texel * 4 + 3], mip.data[texel * 4 + 1]);
+      }
+      const green = Array.from({ length: mip.width * mip.height }, (_, texel) => mip.data[texel * 4 + 1] / 255);
+      assert.ok(passFraction(green) >= target - 1 / green.length,
+        `${name} LOD ${index} still draws (${passFraction(green)} vs ${target})`);
+    }
+    // The last level cannot hold a fraction, so it resolves to a solid haze rather than to nothing:
+    // its one texel clears the test, and a fence at extreme range draws as a continuous line.
+    assert.ok(mipmaps.at(-1).data[1] / 255 >= alphaTest, `${name} 1x1 level still draws`);
+  }
+  assert.throws(() => alphaCoverageMipChain(thin, 63, alphaTest), /power-of-two/);
+  assert.throws(() => alphaCoverageMipChain(thin.slice(0, 10), size, alphaTest), /square/);
 });
 
 test('reviewed railway centre-lines produce two physical rails and metric sleepers inside scope', () => {
