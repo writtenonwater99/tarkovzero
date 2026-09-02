@@ -13,20 +13,39 @@ receipt metadata only and remains owned by TarkovZero's scene manifest.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
 from pathlib import Path
-import struct
 import sys
 from typing import Iterable, Sequence
 
 import bpy
 from mathutils import Vector
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.blender import noise as _noise  # noqa: E402
+from lib.blender.lod_grid import band_fraction, overlapping_band  # noqa: E402
+from lib.blender.materials import (  # noqa: E402
+    create_image as _create_image, gltf_occlusion_group, height_field_normals,
+)
+from lib.blender.primitives import (  # noqa: E402
+    apply_scale_transform, assign_metric_planar_uv as _assign_metric_planar_uv,
+    box_faces, box_vertices, export_gltf_binary, scene_metric_defaults,
+)
+from lib.gltf.read import (  # noqa: E402
+    glb_json, multiply4, node_matrix, require, sha256_file,
+)
+
 
 GENERATOR_NAME = "tarkovzero-crackhouse-building-factory"
+#: Which shared noise variants this factory is authored against. It shares
+#: `hash01`/`smoothstep` with the fortress factory but NOT the tile-noise
+#: interpolation form — see `tile_noise` below.
+HASH01_VARIANT = _noise.HASH01_MASKED_SUM
+SMOOTHSTEP_VARIANT = _noise.SMOOTHSTEP_UNCLAMPED
+#: Box face winding, shared with the fortress factory.
+BOX_FACE_VARIANT = "fortress-crackhouse-v1"
 GENERATOR_VERSION = "0.1.0"
 SUPPORTED_BLENDER = (4, 5)
 ASSET_ID = "crackhouse-shell"
@@ -50,6 +69,32 @@ WALL_THICKNESS_M = 0.28
 SLAB_THICKNESS_M = 0.20
 ROOF_OVERHANG_M = 0.38
 FRAME_REVEAL_INSET_M = 0.025
+#: Fraction of a cell length that adjacent courses lap over each other. The lap
+#: is clipped at the two ends of the band (`lib.blender.lod_grid`), so the roof's
+#: outline is the same at 12 rows and at 6 — see `add_roof`.
+ROOF_COURSE_OVERLAP = 0.08
+#: Same idea for stair treads: each tread laps its neighbour, the band still
+#: spans exactly `start_x .. end_x` at 15 steps and at 8.
+STAIR_TREAD_OVERLAP = 0.04
+
+# --- Facade datum registry (BUILDING-MASSING.md §5.2) ------------------------
+# Every facade-attached family used to re-derive its own offset from
+# `+/- width*.5 +/- <literal>`, and the literals disagreed: glass at
+# width/2 - 0.05, window boards at width/2 + 0.23, exposed brick at
+# width/2 + 0.146. Nothing asserted that a surface-attached part lay on the
+# surface it was attached to, so the brick floated a hand's width in front of
+# the plaster it was supposed to be showing *through*.
+#
+# The plane is now named once and every offset is stated as a clearance from it,
+# outward-positive. `tag_facade_datum()` writes the datum onto the object so the
+# validator can check the geometry against it instead of trusting the code.
+#: How far the exposed-brick patch stands proud of the plaster. Small enough to
+#: read as missing render rather than as a decal, large enough not to z-fight.
+BRICK_PATCH_PROUD_M = 0.004
+#: A board is nailed ON the outside of the facade, so its clearance is real.
+WINDOW_BOARD_PROUD_M = 0.23
+#: Tolerance a facade-attached family must sit within of its declared plane.
+FACADE_DATUM_TOLERANCE_M = 0.005
 
 HYPOTHESIS_IDS = (
     "HYP-FACADE-OPENINGS-01",
@@ -73,19 +118,6 @@ MATERIAL_SPECS = {
     "glass": {"base": (0.20, 0.29, 0.285), "roughness": 0.23, "metallic": 0.08, "seed": 8011, "tileM": 1.0, "alpha": 0.36},
     "plinth": {"base": (0.205, 0.19, 0.155), "roughness": 0.95, "metallic": 0.0, "seed": 9011, "tileM": 1.1},
 }
-
-
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(message)
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -191,6 +223,49 @@ def derive_transform(poly: Sequence[Sequence[float]]) -> dict:
 
 CANONICAL = derive_transform(SOURCE_FOOTPRINT_EFT_XZ)
 
+#: Outward normal of each long facade in the authoring frame (+Y is north).
+FACADE_OUTWARD_LOCAL_Y = {"S": -1.0, "N": 1.0}
+
+
+def facade_plane_local_y(facade: str) -> float:
+    """Local Y of a facade's exterior plaster face — the datum, named once.
+
+    `add_wall_cells()` centres each wall cell at `+/-(width/2 - WALL_THICKNESS/2)`
+    with `WALL_THICKNESS` of depth, so the exterior face lands exactly on
+    `+/- width/2`. That plane is what every facade-attached family is attached
+    *to*, and before this function existed each family re-derived it inline with
+    a different literal beside it.
+    """
+    require(facade in FACADE_OUTWARD_LOCAL_Y, f"unknown facade {facade!r}")
+    return FACADE_OUTWARD_LOCAL_Y[facade] * CANONICAL["widthM"] * 0.5
+
+
+def facade_offset_local_y(facade: str, clearance_m: float) -> float:
+    """Local Y for a part sitting ``clearance_m`` outboard of a facade plane."""
+    return facade_plane_local_y(facade) + FACADE_OUTWARD_LOCAL_Y[facade] * clearance_m
+
+
+def tag_facade_datum(obj: bpy.types.Object, facade: str, clearance_m: float) -> None:
+    """Record, on the object, which plane it claims to sit on and how far off it.
+
+    Written in the EXPORTED glTF frame (+Y up, gltf Z = -local Y) so the
+    validator can check the shipped geometry against the claim without knowing
+    anything about the authoring frame. A claim nothing checks is a comment;
+    `validate_crackhouse_outputs.validate_surface_datums` is what makes it a
+    contract.
+
+    The clearance is measured to the part's CENTRE on the datum axis, which is
+    the same thing as its face for a flat patch and is well defined for a part
+    with depth.
+    """
+    require(clearance_m >= 0.0, "a facade clearance is measured outward and cannot be negative")
+    obj["tz_surface_datum"] = f"facade-{facade}"
+    obj["tz_surface_datum_axis"] = 2
+    obj["tz_surface_datum_m"] = -facade_plane_local_y(facade)
+    obj["tz_surface_outward"] = -FACADE_OUTWARD_LOCAL_Y[facade]
+    obj["tz_surface_clearance_m"] = float(clearance_m)
+    obj["tz_surface_tolerance_m"] = FACADE_DATUM_TOLERANCE_M
+
 
 def reset_scene() -> None:
     bpy.ops.object.select_all(action="SELECT")
@@ -204,10 +279,7 @@ def reset_scene() -> None:
     for collection in list(bpy.data.collections):
         bpy.data.collections.remove(collection)
     scene = bpy.context.scene
-    scene.unit_settings.system = "METRIC"
-    scene.unit_settings.length_unit = "METERS"
-    scene.unit_settings.scale_length = 1.0
-    scene.render.engine = "BLENDER_EEVEE_NEXT"
+    scene_metric_defaults(scene)
     scene.world.color = (0.035, 0.038, 0.035)
     scene["tz_no_fog"] = True
     scene["tz_no_baked_lighting"] = True
@@ -229,27 +301,27 @@ def create_empty(name: str, collection: bpy.types.Collection) -> bpy.types.Objec
 
 
 def hash01(x: int, y: int, seed: int) -> float:
-    value = (x * 0x1F123BB5 + y * 0x5F356495 + seed * 0x6C8E9CF5) & 0xFFFFFFFF
-    value ^= value >> 16
-    value = (value * 0x7FEB352D) & 0xFFFFFFFF
-    value ^= value >> 15
-    value = (value * 0x846CA68B) & 0xFFFFFFFF
-    value ^= value >> 16
-    return value / 0xFFFFFFFF
+    """`lib.blender.noise.hash01`, masked-sum variant (shared with fortress)."""
+    return _noise.hash01(x, y, seed, variant=HASH01_VARIANT)
 
 
 def smoothstep(value: float) -> float:
-    return value * value * (3.0 - 2.0 * value)
+    """`lib.blender.noise.smoothstep`, unclamped variant (shared with fortress)."""
+    return _noise.smoothstep(value, variant=SMOOTHSTEP_VARIANT)
 
 
 def tile_noise(x: int, y: int, size: int, cell: int, seed: int) -> float:
-    grid = max(2, size // max(1, cell))
-    gx, gy = x / cell, y / cell
-    x0, y0 = math.floor(gx) % grid, math.floor(gy) % grid
-    tx, ty = smoothstep(gx - math.floor(gx)), smoothstep(gy - math.floor(gy))
-    a, b = hash01(x0, y0, seed), hash01((x0 + 1) % grid, y0, seed)
-    c, d = hash01(x0, (y0 + 1) % grid, seed), hash01((x0 + 1) % grid, (y0 + 1) % grid, seed)
-    return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty
+    """`lib.blender.noise.tile_noise_cell_pixels_mix`.
+
+    NOT the fortress factory's `tile_value_noise`, even though both take a cell
+    size in pixels and both mix the same corners: this one closes the bilinear
+    with `a*(1-t) + b*t` where fortress uses `a + (b-a)*t`. Algebraically equal,
+    different in IEEE-754, so the two produce different texture pixels.
+    """
+    return _noise.tile_noise_cell_pixels_mix(
+        x, y, size, cell, seed,
+        hash_variant=HASH01_VARIANT, smoothstep_variant=SMOOTHSTEP_VARIANT,
+    )
 
 
 def material_sample(kind: str, x: int, y: int, size: int) -> tuple[float, tuple[float, float, float], float, float, float, float]:
@@ -342,14 +414,8 @@ def material_sample(kind: str, x: int, y: int, size: int) -> tuple[float, tuple[
 
 
 def create_image(name: str, size: int, pixels: list[float], colorspace: str) -> bpy.types.Image:
-    image = bpy.data.images.new(name, width=size, height=size, alpha=True, float_buffer=False)
-    image.file_format = "PNG"
-    image.colorspace_settings.name = colorspace
-    image.pixels.foreach_set(pixels)
-    image.pack()
-    image["tz_original_procedural"] = True
-    image["tz_generator"] = GENERATOR_NAME
-    return image
+    """`lib.blender.materials.create_image`, stamped with this generator name."""
+    return _create_image(name, size, pixels, colorspace, generator=GENERATOR_NAME)
 
 
 def create_material(kind: str, lod: int) -> bpy.types.Material:
@@ -362,16 +428,8 @@ def create_material(kind: str, lod: int) -> bpy.types.Material:
     for _, color, occlusion, roughness, metallic, alpha in samples:
         base_pixels.extend((*color, alpha))
         orm_pixels.extend((occlusion, roughness, metallic, 1.0))
-    normal_pixels: list[float] = []
     strength = {"plaster": 2.0, "brick": 3.5, "timber": 2.1, "roof_tile": 3.0, "concrete": 2.0, "metal": 1.25, "interior": 1.1, "glass": 0.2, "plinth": 2.6}[kind]
-    for y in range(size):
-        for x in range(size):
-            left = heights[y * size + ((x - 1) % size)]
-            right = heights[y * size + ((x + 1) % size)]
-            down = heights[((y - 1) % size) * size + x]
-            up = heights[((y + 1) % size) * size + x]
-            normal = Vector((-(right - left) * strength, -(up - down) * strength, 1.0)).normalized()
-            normal_pixels.extend((normal.x * 0.5 + 0.5, normal.y * 0.5 + 0.5, normal.z * 0.5 + 0.5, 1.0))
+    normal_pixels = height_field_normals(heights, size, strength)
     prefix = f"TZ_Crackhouse_{kind}_L{lod}"
     base_image = create_image(f"{prefix}_BaseColor", size, base_pixels, "sRGB")
     normal_image = create_image(f"{prefix}_Normal", size, normal_pixels, "Non-Color")
@@ -424,10 +482,7 @@ def create_material(kind: str, lod: int) -> bpy.types.Material:
     links.new(orm_node.outputs["Color"], separate.inputs["Color"])
     links.new(separate.outputs["Green"], bsdf.inputs["Roughness"])
     links.new(separate.outputs["Blue"], bsdf.inputs["Metallic"])
-    group_tree = bpy.data.node_groups.get("glTF Material Output")
-    if group_tree is None:
-        group_tree = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
-        group_tree.interface.new_socket(name="Occlusion", in_out="INPUT", socket_type="NodeSocketFloat")
+    group_tree = gltf_occlusion_group()
     gltf_output = nodes.new("ShaderNodeGroup")
     gltf_output.node_tree = group_tree
     gltf_output.location = (110, -470)
@@ -451,22 +506,13 @@ def tag_object(obj: bpy.types.Object, lod: int, floor: str, family: str, hypothe
 
 
 def apply_scale(obj: bpy.types.Object) -> None:
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    obj.select_set(False)
+    """`lib.blender.primitives.apply_scale_transform` (`apply_identity` in fortress)."""
+    apply_scale_transform(obj)
 
 
 def assign_metric_uv(mesh: bpy.types.Mesh, tile_m: float) -> None:
-    require(tile_m > 0, "UV tile size must be positive")
-    uv_layer = mesh.uv_layers.new(name="UVMap")
-    for polygon in mesh.polygons:
-        normal = tuple(abs(value) for value in polygon.normal)
-        dominant = max(range(3), key=lambda axis: normal[axis])
-        axes = ((1, 2), (0, 2), (0, 1))[dominant]
-        for loop_index in polygon.loop_indices:
-            co = mesh.vertices[mesh.loops[loop_index].vertex_index].co
-            uv_layer.data[loop_index].uv = (co[axes[0]] / tile_m, co[axes[1]] / tile_m)
+    """`lib.blender.primitives.assign_metric_planar_uv`, fresh-layer variant."""
+    _assign_metric_planar_uv(mesh, tile_m)
 
 
 def create_box(
@@ -484,13 +530,8 @@ def create_box(
     rotation: tuple[float, float, float] | None = None,
 ) -> bpy.types.Object:
     require(min(dimensions) > 0, f"{name}: dimensions must be positive")
-    dx, dy, dz = dimensions
-    x, y, z = dx * 0.5, dy * 0.5, dz * 0.5
-    vertices = [
-        (-x, -y, -z), (x, -y, -z), (x, y, -z), (-x, y, -z),
-        (-x, -y, z), (x, -y, z), (x, y, z), (-x, y, z),
-    ]
-    faces = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (3, 7, 6, 2), (0, 4, 7, 3), (1, 2, 6, 5)]
+    vertices = box_vertices(dimensions)
+    faces = list(box_faces(BOX_FACE_VARIANT))
     mesh = bpy.data.meshes.new(f"{name}_Mesh")
     mesh.from_pydata(vertices, [], faces)
     mesh.materials.append(material)
@@ -907,14 +948,22 @@ def add_roof(materials: dict[str, bpy.types.Material], collection: bpy.types.Col
             slope = Vector((0, side * run / slope_length, -rise / slope_length))
             normal = Vector((0, side * rise / slope_length, run / slope_length))
             for row in range(rows):
-                t = (row + .5) / rows
+                # Courses are laid by their EDGES, not their centres. The 8 % lap
+                # is clipped at the ridge and at the eave, so the band of tiles
+                # spans exactly [ridge, eave] whether there are 12 rows or 6.
+                # Laying them on centres (t = (row + .5)/rows) with a fixed
+                # 1.08 x length let the outermost course escape the roof plane by
+                # 0.04 x slope_run / rows per side — an overhang that DOUBLED
+                # every time the row count halved, which is how LOD1 came out
+                # 26.34 mm wider than LOD0 (BUILDING-MASSING.md §5.1).
+                t, row_slope_fraction = band_fraction(row, rows, ROOF_COURSE_OVERLAP)
                 for column in range(columns):
                     x = -length*.5-ROOF_OVERHANG_M + (column+.5)*tile_x
                     centre = Vector((x, side*run*t, RIDGE_LOCAL_Z_M-rise*t-.095)) + normal * .020
                     wave = 1.0 + (hash01(column, row + (0 if side < 0 else 100), 1217) - .5) * .055
                     append_crowned_roof_tile(
                         tile_vertices, tile_faces, centre, Vector((1,0,0)), slope, normal,
-                        tile_x*.95, tile_slope*1.08, .024*wave,
+                        tile_x*.95, row_slope_fraction*slope_length, .024*wave,
                     )
         tile_mesh = bpy.data.meshes.new("RoofTiles_Mesh")
         tile_mesh.from_pydata(tile_vertices, [], tile_faces)
@@ -975,7 +1024,14 @@ def add_stairs(materials: dict[str, bpy.types.Material], collection: bpy.types.C
     run = (end_x - start_x) / steps
     for index in range(steps):
         height = UPPER_LOCAL_Z_M * (index + 1) / steps
-        create_box(f"StairStep_{index:02d}", (run*1.04, width, height), (start_x+(index+.5)*run, 0, height*.5), materials["timber"], collection, parent, lod=lod, floor="ground", family="timber", hypothesis="HYP-STAIR-01")
+        # Same defect class as the roof courses: `run*1.04` on a centre grid put
+        # the flight 0.02*run past `start_x`/`end_x` at each end, and `run`
+        # nearly doubles from LOD0 (15 steps) to LOD1 (8). The stairs sit deep
+        # inside the footprint so they never set the asset AABB — but they are
+        # the same mistake and would set it on a building with an external
+        # stair, so they are laid by edges too.
+        tread_x, tread_run = overlapping_band(index, steps, end_x - start_x, STAIR_TREAD_OVERLAP, start=start_x)
+        create_box(f"StairStep_{index:02d}", (tread_run, width, height), (tread_x, 0, height*.5), materials["timber"], collection, parent, lod=lod, floor="ground", family="timber", hypothesis="HYP-STAIR-01")
     if lod == 0:
         for side in (-1, 1):
             create_beam_between(f"StairRail_{side:+d}", (start_x, side*(width*.5+.06), .82), (end_x, side*(width*.5+.06), UPPER_LOCAL_Z_M+.78), .055, materials["metal"], collection, parent, lod=lod, floor="ground", family="metal", hypothesis="HYP-STAIR-01")
@@ -1003,16 +1059,22 @@ def add_interior(materials: dict[str, bpy.types.Material], collection: bpy.types
 def add_damage_and_boards(materials: dict[str, bpy.types.Material], collection: bpy.types.Collection, parent: bpy.types.Object, lod: int) -> tuple[int, int]:
     if lod == 2:
         return 0, 0
-    length, width = CANONICAL["lengthM"], CANONICAL["widthM"]
+    # Exposed brick shows *through* missing plaster, so it sits a few millimetres
+    # proud of the facade plane, not 146 mm outboard of it. The old literals
+    # (`.146`, and `.147` on the two LOD0-only extras) came from nowhere — near
+    # half of WALL_THICKNESS_M, which is the only plausible origin, and which
+    # would have put the patch on the INNER face — and they read on a GPU as a
+    # decal stuck on the wall. See BUILDING-MASSING.md §5.2.
     patch_specs = [
-        ("S", -6.1, -width*.5-.146, 2.75, 1.65, 1.05),
-        ("S", 6.8, -width*.5-.146, 3.05, 1.25, 1.50),
-        ("N", -1.9, width*.5+.146, 2.25, 2.15, 1.20),
-        ("N", 8.0, width*.5+.146, 5.32, 1.35, .62),
+        ("S", -6.1, 2.75, 1.65, 1.05),
+        ("S", 6.8, 3.05, 1.25, 1.50),
+        ("N", -1.9, 2.25, 2.15, 1.20),
+        ("N", 8.0, 5.32, 1.35, .62),
     ]
     if lod == 0:
-        patch_specs += [("S", 1.8, -width*.5-.147, 5.28, 1.05, .58), ("N", -8.5, width*.5+.147, 1.0, 1.05, .75)]
-    for index, (label, cx, y, cz, w, h) in enumerate(patch_specs):
+        patch_specs += [("S", 1.8, 5.28, 1.05, .58), ("N", -8.5, 1.0, 1.05, .75)]
+    for index, (label, cx, cz, w, h) in enumerate(patch_specs):
+        y = facade_offset_local_y(label, BRICK_PATCH_PROUD_M)
         jitter = (hash01(index, 1, 1321)-.5)*.18
         verts = ((cx-w*.5,y,cz-h*.42),(cx-w*.22,y,cz-h*.55+jitter),(cx+w*.48,y,cz-h*.32),(cx+w*.55,y,cz+h*.28),(cx+w*.08,y,cz+h*.55),(cx-w*.53,y,cz+h*.30))
         mesh = bpy.data.meshes.new(f"ExposedBrickPatch_{index:02d}_Mesh")
@@ -1024,10 +1086,13 @@ def add_damage_and_boards(materials: dict[str, bpy.types.Material], collection: 
         collection.objects.link(obj)
         obj.parent = parent
         tag_object(obj, lod, "ground" if cz < UPPER_LOCAL_Z_M else "floor-1", "brick", "HYP-FACADE-DAMAGE-01")
+        tag_facade_datum(obj, label, BRICK_PATCH_PROUD_M)
     boards = 0
     if lod == 0:
+        board_y = facade_offset_local_y("S", WINDOW_BOARD_PROUD_M)
         for index, (x, z, angle) in enumerate(((-4.65,1.66,.32),(4.35,1.68,-.28),(-3.6,4.48,.38))):
-            create_box(f"WindowBoard_{index:02d}", (1.72,.075,.18), (x,-width*.5-.23,z), materials["timber"], collection, parent, lod=lod, floor="ground" if z<UPPER_LOCAL_Z_M else "floor-1", family="timber", hypothesis="HYP-FACADE-DAMAGE-01", rotation=(0,angle,0))
+            board = create_box(f"WindowBoard_{index:02d}", (1.72,.075,.18), (x,board_y,z), materials["timber"], collection, parent, lod=lod, floor="ground" if z<UPPER_LOCAL_Z_M else "floor-1", family="timber", hypothesis="HYP-FACADE-DAMAGE-01", rotation=(0,angle,0))
+            tag_facade_datum(board, "S", WINDOW_BOARD_PROUD_M)
             boards += 1
     return len(patch_specs), boards
 
@@ -1191,54 +1256,14 @@ def blender_bounds() -> dict[str, list[float]]:
 def export_glb(output: Path) -> None:
     temporary = output.with_name(f".{output.stem}.exporting.glb")
     require(not temporary.exists(), f"refusing stale temporary export: {temporary}")
-    result = bpy.ops.export_scene.gltf(
-        filepath=str(temporary), check_existing=False, export_format="GLB",
-        export_copyright="Original TarkovZero procedural authoring; no game payloads",
-        export_yup=True, export_apply=True, export_texcoords=True, export_normals=True,
-        export_tangents=True, export_materials="EXPORT", export_image_format="AUTO",
-        export_cameras=False, export_lights=False, export_extras=True,
-        export_animations=False, export_skins=False, export_morph=False,
-        export_draco_mesh_compression_enable=False, export_unused_images=False,
-        export_unused_textures=False, use_selection=False, use_visible=True,
-        will_save_settings=False,
-    )
+    # Settings frozen in `lib.blender.primitives.GLTF_EXPORT_SETTINGS`; the
+    # no-clobber publication below is this factory's own contract.
+    result = export_gltf_binary(temporary)
     require(result == {"FINISHED"} and temporary.is_file(), f"glTF export failed: {result}")
     try:
         os.link(temporary, output)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def glb_json(path: Path) -> dict:
-    blob = path.read_bytes()
-    require(len(blob) >= 20, "truncated GLB")
-    magic, version, length = struct.unpack_from("<4sII", blob, 0)
-    require((magic, version, length) == (b"glTF", 2, len(blob)), "invalid GLB header")
-    offset, document = 12, None
-    while offset + 8 <= len(blob):
-        chunk_length, chunk_type = struct.unpack_from("<II", blob, offset)
-        offset += 8
-        end = offset + chunk_length
-        require(end <= len(blob), "invalid GLB chunk")
-        if chunk_type == 0x4E4F534A:
-            require(document is None, "multiple GLB JSON chunks")
-            document = json.loads(blob[offset:end].decode("utf-8"))
-        offset = end
-    require(offset == len(blob) and isinstance(document, dict), "missing GLB JSON")
-    return document
-
-
-def node_matrix(node: dict) -> list[list[float]]:
-    if "matrix" in node:
-        values = node["matrix"]
-        return [[float(values[c*4+r]) for c in range(4)] for r in range(4)]
-    x,y,z,w = map(float,node.get("rotation",[0,0,0,1])); sx,sy,sz=map(float,node.get("scale",[1,1,1])); tx,ty,tz=map(float,node.get("translation",[0,0,0]))
-    rotation=((1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w)),(2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)),(2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)))
-    return [[rotation[0][0]*sx,rotation[0][1]*sy,rotation[0][2]*sz,tx],[rotation[1][0]*sx,rotation[1][1]*sy,rotation[1][2]*sz,ty],[rotation[2][0]*sx,rotation[2][1]*sy,rotation[2][2]*sz,tz],[0,0,0,1]]
-
-
-def multiply4(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]]) -> list[list[float]]:
-    return [[sum(a[r][k]*b[k][c] for k in range(4)) for c in range(4)] for r in range(4)]
 
 
 def exported_stats(document: dict) -> dict:
@@ -1351,6 +1376,22 @@ def receipt_document(args: argparse.Namespace, facts: dict, authored: dict[str, 
             "meshCount": stats["meshes"],
             "textureResolution": TEXTURE_SIZE_BY_LOD[args.lod],
         },
+        #: Which plane each facade-attached family claims to sit on, in the
+        #: EXPORTED glTF frame, so the claim can be checked against the shipped
+        #: geometry rather than read back out of this file's own source.
+        #: BUILDING-MASSING.md §5.2.
+        "surfaceDatums": [
+            {
+                "family": "brick",
+                "objects": "ExposedBrickPatch_*",
+                "datum": f"facade-{facade}",
+                "axis": "gltf-z",
+                "planeM": -facade_plane_local_y(facade),
+                "clearanceM": BRICK_PATCH_PROUD_M,
+                "toleranceM": FACADE_DATUM_TOLERANCE_M,
+            }
+            for facade in ("S", "N")
+        ],
         "limitations": [
             "Only the public footprint, 6.5 m height, two-floor classification, gable label, and two measured slab elevations are truth anchors.",
             "Facade openings are real geometric voids, but their count, placement, frames, glazing, doors, and damage are authored hypotheses.",

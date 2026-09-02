@@ -384,6 +384,50 @@ Scaling this way to twelve buildings means roughly **15 000 lines with twelve di
 noise function**, and a texture that silently changes character depending on which file authored it.
 That is the argument for parameterisation, and it does not depend on any opinion about clean code.
 
+#### 4.1.1 Consolidated 2026-09-01 — and the count above was low
+
+Steps 1, 2 and most of 4 have landed in `scripts/lib/` (see `scripts/lib/README.md`). The pass
+rebuilt all 24 assets the three factories produce, before and after: **21 of 24 GLBs are
+byte-identical**, and the three that are not carry a *pre-existing* exporter nondeterminism
+(below), verified structurally instead. Zero regressions.
+
+Two corrections to the finding above:
+
+1. **There were four output-affecting divergences, not two.** Beyond `hash01` and `smoothstep`:
+   - the tiling value noise closes its bilinear as `a + (b-a)*t` in fortress and `a*(1-t) + b*t`
+     in crackhouse — algebraically equal, **not** equal in IEEE-754;
+   - `create_box` ships two different face tables — fortress and crackhouse agree, industrial
+     walks the side faces as a ring, emitting a different index order for the same box.
+
+   Also, `apply_identity` (fortress) and `apply_scale` (crackhouse) are the same function under
+   two names, which is why a name-matched scan misses it.
+
+2. **It is five factory families, not three.** `scripts/vegetation-asset-factory/` (13 files) and
+   `scripts/terrain-pbr-factory/` carry their own copies of `sha256_file`, `require`, `glb_json`,
+   `create_image`, `create_material` and `export_glb`. They are out of this pass's scope and
+   untouched; `terrain_pbr_factory.smoothstep` is a third, GLSL-style two-edge signature.
+
+None of the divergences was resolved. Each is a **named variant** with no default, so a new
+factory has to choose in the open. `scripts/lib/test_lib_core.py` pins each variant to a verbatim
+copy of its original body and also asserts the variants still *disagree*, so a later "tidy-up"
+that collapses them fails loudly instead of silently re-baselining an admitted asset.
+
+**Which `hash01` should win is still open** — see §4.5 step 2, which remains unstarted.
+
+#### 4.1.2 Three fortress outputs are not byte-reproducible (pre-existing)
+
+`fortress-shell-lod0`, `fortress-shell-lod1` and `zb013-basement-lod0` produce a different SHA-256
+on every build from unmodified code on the same machine. Byte length, triangle count, bounds, the
+entire JSON chunk and every embedded image are stable; only `TEXCOORD_0` (≤ 9.54e-07, ~1 ULP) and
+`TANGENT` (≤ 3.1e-03) move. Not fixed by `-t 1` or `PYTHONHASHSEED=0`.
+
+Consequence: the pinned `fortress-shell` lod0/lod1 digests in `scene-manifest.json` **cannot be
+reproduced by rebuilding.** The manifest still proves the shipped bytes are the admitted bytes, but
+"rebuild and confirm" is unavailable for those two LODs. `fortress-shell-lod2` rebuilds to its
+shipped digest exactly, as do all crackhouse and all industrial outputs.
+
+This blocks §5.1's measurement discipline more than it blocks authoring, and it needs its own lane.
+
 ### 4.2 The seven archetypes
 
 Twelve buildings are not twelve factories. Sorted by form:
@@ -470,16 +514,68 @@ Each step is independently shippable, and each has a green-test definition.
 | Step | Work | Gate |
 | ---: | --- | --- |
 | 0 | ✅ **`lod_silhouette.py`** — the cross-LOD invariant (§5.1) | Landed. 19 tests. Refuses the current candidate. |
-| 1 | Extract `scripts/lib/gltf/read.py` from the three validators; each validator imports it | All three validator suites green; receipts byte-identical |
-| 2 | Extract `scripts/lib/blender/noise.py` and **resolve the `hash01` divergence** — decide which of the two behaviours is correct, then re-derive both existing assets against it | Crackhouse GLBs byte-identical, or a deliberate re-baseline with new pinned hashes. **This is a re-baseline decision, not a refactor: it changes texture pixels in whichever factory loses.** |
+| 0b | ✅ **Gate wired + crackhouse/tanker fixed** (§5.1.0–5.1.3, §5.2) | **Landed 2026-09-01.** Rule moved to `lib/gltf/lod.py`; all three validators call it; `lib/blender/lod_grid.py` holds both fix patterns. Crackhouse and tanker measure 0.0000 mm growth; `fortress-shell` is pinned as a known defect awaiting the founder. `npm run test:building-lod-silhouette` in `npm test`; `test:factory-core` now 62 tests. |
+| 1 | ✅ Extract `scripts/lib/gltf/read.py` from the three validators; each validator imports it | **Landed 2026-09-01.** All three validator suites green; each validator's JSON output byte-identical to its pre-refactor self on the same receipts. |
+| 2 | ◐ Extract `scripts/lib/blender/noise.py` and **resolve the `hash01` divergence** — decide which of the two behaviours is correct, then re-derive both existing assets against it | **Extracted, NOT resolved.** Both behaviours ship as named variants with no default; nothing converged and no asset moved. Choosing a winner remains open — see the recommendation in §4.5.1. |
 | 3 | `massing.py::oriented_footprint()` — N-gon → oriented box via convex hull + rotating calipers. Must agree with `derive_transform()` on the Crackhouse quad to a stated tolerance; the Crackhouse keeps its pinned derivation | New unit tests; Crackhouse untouched |
-| 4 | Extract `primitives.py` / `materials.py` / `export.py`; Crackhouse becomes their first consumer | **Crackhouse byte-reproducible** — `verify_crackhouse_reproducibility.py` is the gate for the whole refactor |
+| 4 | ◐ Extract `primitives.py` / `materials.py` / `export.py`; Crackhouse becomes their first consumer | **Landed for `primitives.py` / `materials.py` and the frozen export settings** (`export.py`'s batching/receipt half is not extracted — those are per-factory contracts, see `scripts/lib/README.md`). Gate met: `verify_crackhouse_reproducibility.py` **PASS** on two post-refactor builds, and all three crackhouse GLBs are byte-identical to their pre-refactor digests. |
 | 5 | Parameterise the QA rig envelope from a massing record | Contact sheets regenerate identically for the Crackhouse |
 | 6 | Archetype **B** (industrial shed) + Warehouse 4 as the first instance | Full admission chain incl. §5.1 |
 | 7 | Archetype **C**, then D, E, F | — |
 
 Steps 1–5 author **zero** new buildings and are the whole cost of making twelve possible. That is the
 honest sequencing: the expensive part of the second building is the first building's assumptions.
+
+#### 4.5.1 What a new building factory writes, after steps 1/2/4
+
+**Inherited, already written and tested — a new factory writes none of this:**
+GLB parsing and scene traversal (`lib.gltf.read`); the hash / smoothstep / tiling-noise kernels in
+all their variants (`lib.blender.noise`); image packing, the height-field → tangent-normal kernel
+and the `glTF Material Output` occlusion group (`lib.blender.materials`); box vertices and both
+winding tables, metric planar UV projection, scale baking, the metre/EEVEE scene defaults, and the
+**24-keyword frozen glTF export block** (`lib.blender.primitives`). That last one matters most for
+twelve buildings: a stray `export_tangents=False` in one file would silently change one asset.
+
+**Still per-building, and this is the real cost:** the material family table and its sampler
+(`surface_sample` / `material_sample` — ~130 lines each today and genuinely different per
+archetype); `create_material`'s node graph; `tag_object`'s extras contract; the massing/geometry
+functions; the batching bands; `receipt_document`; the CLI; and one
+`<asset>_facts.json` + `<asset>_expectations.json` pair per §4.4.
+
+**Honest estimate:** consolidation removed ~370 lines of duplicated helper from the six files and
+replaced it with ~1 200 lines of tested shared core. A thirteenth building no longer inherits a
+copied noise function, but the *per-building* cost is dominated by the sampler, the node graph and
+the geometry — none of which this pass touched. The twelve-building plan should be costed on §4.3's
+hard blockers (step 3 and step 5), not on helper duplication, which is now largely paid off.
+
+#### 4.5.2 The `hash01` decision, for the founder
+
+Two behaviours, and one of them has to lose whenever step 2 is actually completed:
+
+| | `HASH01_MASKED_SUM` (fortress + crackhouse) | `HASH01_XOR_UNMASKED` (industrial) |
+| --- | --- | --- |
+| Mixing | `+`, masked to 32 bits before the avalanche | `^`, **unmasked** — the intermediate is an unbounded Python int |
+| Assets at stake | `fortress-shell` ×3 (**admitted, digests pinned in `scene-manifest.json`**), `zb013-basement` ×3, `crackhouse-shell` ×3 | 15 industrial prop GLBs (offline proof only, **not admitted**) |
+
+**Recommendation: keep `HASH01_MASKED_SUM` and re-derive the industrial props against it.**
+Three reasons. It is the intended implementation — the constants are a known 32-bit avalanche
+(`0x7FEB352D` / `0x846CA68B`), which only behaves as designed on a 32-bit input word; the unmasked
+variant feeds it a ~63-bit value, so its first `>> 16` folds bits the design assumes are gone. It
+is the majority, covering 9 of the 12 assets. And critically, the losing side is the side with
+**nothing admitted**: the industrial props are offline-proof-only by their own README, so they can
+be re-derived without a re-admission.
+
+**Cost of that choice:** rebuild the 15 industrial GLBs (~30 s), regenerate the proof root and its
+contact sheets, and have the founder re-run the fixed-camera visual review — the textures will
+shift in character, not just in bytes. `scene-manifest.json` is untouched, and the admitted
+fortress asset never moves. The reverse choice would re-baseline an admitted asset and cost a full
+GPU re-admission, which is strictly worse for the same benefit.
+
+The same argument decides `smoothstep` (clamping is the safer behaviour, and the industrial
+sampler is the only caller that can pass an out-of-range value) and the tile-noise lerp form.
+`create_box`'s winding is the one where the industrial table is arguably better authored, but it is
+also the one with the least reason to converge — no shared consumer reads it — so leaving both
+tables named is fine indefinitely.
 
 ---
 
@@ -488,7 +584,114 @@ honest sequencing: the expensive part of the second building is the first buildi
 Both were reported in `docs/GPU-SITTING.md`. Both are reproduced here from the shipped GLBs in
 `.local-candidates/crackhouse-fixedrig/`, and neither is a one-off.
 
-### 5.1 LOD1 is 26.34 mm wider than LOD0 — **systemic**
+### 5.1 LOD1 is 26.34 mm wider than LOD0 — **systemic, confirmed by measurement**
+
+#### 5.1.0 Landed 2026-09-01 — the scope was measured first, and "systemic" is right
+
+Every LOD chain the three factories produce was measured before anything was
+fixed. Worst growth per asset, in millimetres, against the rule
+`bounds(LOD n) ⊆ bounds(LOD n-1) ∩ bounds(LOD 0)`:
+
+| Asset | Worst growth | Where | Verdict |
+| --- | ---: | --- | --- |
+| **`fortress-shell`** (ADMITTED) | **40.000** | LOD1 +15.6681 `y.max`; LOD2 +40.0000 `x.max`, +15.5926 `y.max` (+31.2607 vs LOD0) | 🔴 FAIL — **founder decision, §5.1.3** |
+| `crackhouse-shell` | 13.183 | LOD1 +13.1551 `z.min`, +13.1826 `z.max` — the 26.34 mm | ✅ FIXED |
+| `tanker-wagon` | 15.000 | LOD1 +15.0000 on `z.min` *and* `z.max` | ✅ FIXED |
+| `zb013-basement` | 0.000 | — | PASS |
+| `diesel-shunter` | 0.000 | — | PASS |
+| `shipping-container` ×3 | 0.000 | — | PASS |
+
+Three of the four multi-part assets grew, in three factories, from three
+*different* authoring mistakes. §5.1's "systemic" claim survives contact.
+
+It is worse than three factories. The same sweep over the shipped
+`.local-candidates/vegetation-full/` set — the fifth factory family (§4.1.1), out
+of this lane's scope and untouched — found **29 of its 31** chains growing, up to
+**867.6 mm** (`pine02`, LOD2). Vegetation is billboard-heavy and a decimated
+crown may legitimately spill, so those numbers are not automatically defects; but
+nothing there has ever been asked the question either, and 29 of 31 is not a
+distribution you get by accident. That lane needs its own pass, and this gate is
+already importable from it.
+
+#### 5.1.1 The mechanism is two mechanisms, not one
+
+§5.1 traced the defect to roof-tile row placement. That is one of two.
+
+**(a) A per-LOD grid of overlapping parts, laid on cell centres.** The Crackhouse
+roof, described below. Also `add_stairs()`, whose treads are `run*1.04` on a
+centre grid at 15 steps and 8 — the same overhang, invisible only because the
+flight sits deep inside the footprint.
+
+**(b) A member that gets thicker at a coarser LOD, positioned by its
+centre-line.** Half of every thickness increase goes outward. This is what
+`tanker-wagon` has (tank-band tube 0.045 → 0.060 m, `industrial_prop_factory.py`;
+ladder stiles 0.028 → 0.038 m) and it is what `fortress-shell` has (girder chords
+0.20 → 0.28 m, `fortress_factory.py:1356`). Fortress adds a third variant of the
+same carelessness: its coarse roof panels shrink by 0.08 m at LOD1 and by nothing
+at LOD2, so LOD2's panels are 40 mm wider than LOD1's.
+
+Both mechanisms now have a named helper with no bpy dependency, in
+`scripts/lib/blender/lod_grid.py`:
+
+- `overlapping_band(index, count, span, overlap)` — lays a course band by its
+  **edges**, clipping the lap at the two ends, so the union of the parts spans
+  exactly the band whatever `count` is. `test_lod_gate.BandLayoutTests` pins that
+  property at 1, 2, 3, 6, 12, 24 and 37 parts, and reproduces the old
+  centre-based formula to show its overshoot doubling as the count halves.
+- `outer_anchored_center(outer, thickness)` — the centre-line for a member whose
+  **outer face** must not move.
+
+#### 5.1.2 The gate, and where it lives now
+
+The invariant moved into the shared core as **`scripts/lib/gltf/lod.py`** — the
+§4.4 location — because it is not one factory's problem.
+`scripts/building-asset-factory/lod_silhouette.py` keeps its CLI, its reader and
+all 19 of its tests, and now delegates the rule. All three validators call
+`assert_contained()`:
+
+| Validator | Wiring | Waiver |
+| --- | --- | --- |
+| `validate_crackhouse_outputs.validate_set` | on the three LOD `boundsM` it already measures | none |
+| `validate_industrial_props.validate_lod_progression` | per family/variant, on `boundsGltfM` | none |
+| `validate_fortress_outputs.validate_set` | on the three LOD `boundsM` | **pinned known defect, §5.1.3** |
+
+No second scene walk: the gate takes the bounds records the validators already
+compute. `npm run test:building-lod-silhouette` is wired into `npm test`.
+
+#### 5.1.3 🔴 `fortress-shell` — founder decision, with the cost
+
+**The fix is not applied and must not be applied by an agent.** `fortress-shell`
+is the one admitted asset in the repo; its three LOD digests are pinned in
+`public/assets/3d/customs/scene-manifest.json`. Changing that geometry breaks
+those digests and un-admits an asset the founder reviewed on a GPU.
+
+**Exact cost of taking the fix:** three new SHA-256 digests + byte counts +
+triangle counts in `scene-manifest.json`; a corrected `bounds` block (see below);
+a fresh fixed-camera GPU review. And it lands on the *one* asset whose LOD0/LOD1
+are **not byte-reproducible** (§4.1.2), so the new digests can be pinned but never
+re-derived — a rebuild will produce a third set. That makes this a
+"cut it once, review it, pin it" operation, not an iterative one.
+
+**What the defect already cost, silently.** The asset's declared bounds in
+`scene-manifest.json` are `max.y = 18.230173` — that is **LOD2's** grown top, not
+LOD0's `18.198912`. The manifest is sized to the union of the chain rather than
+to LOD0, so the picking box and the shadow proxy are already 31.26 mm taller than
+the asset's finest level. Nobody chose that; it is the defect being absorbed.
+
+Until the founder rules, the fortress validator carries an **exact, pinned**
+table of the five measured escapes. It is a tripwire, not a mute button: any
+growth not in the table fails, and any pinned growth that changes value — *or
+disappears because someone fixed it* — fails. Five tests in
+`test_validate_fortress_outputs.LodSilhouetteWaiver` hold that behaviour, and the
+validator prints `KNOWN DEFECT, PINNED:` on stderr on every run.
+
+Note that a plain rebuild of `fortress-shell` on this machine does **not**
+reproduce the shipped chain at all (61.646 m long vs the shipped 61.606, and no
+LOD2 `x.max` escape) because the shipped set was authored against a scalar
+census that is not reachable from this lane. The pin is against the *shipped
+bytes*, which is what the validator exists to check.
+
+---
 
 Measured, from the shipped candidate:
 
@@ -548,19 +751,22 @@ TZ_CRACKHOUSE_QA_GLBS="<lod0>,<lod1>,<lod2>" \
 The last of those asserts the gate **refuses the shipped candidate**. A gate that has never rejected
 the artefact it was written for has not been tested.
 
-**Deliberately not done:** the roof is not fixed. The fix changes authored geometry, which changes
-the GLB bytes, which breaks the pinned reproducibility hashes — and the founder has already said that
-call is his. The gate is therefore not yet wired into `validate_set` (§4.5 step 6 wires it, together
-with the roof fix, in one commit) and is not in `package.json`, which other agents are editing on this
-branch. The one-line addition when the branch settles:
+**Fixed 2026-09-01.** Tiles are laid by *edges*, not centres: `band_fraction(row, rows, 0.08)`
+returns a course band clipped at the ridge and at the eave, so the tiles span exactly
+`[0, slope_length]` at 12 rows and at 6. The absolute silhouette stopped being a function of `rows`,
+which is the property that was missing.
 
-```json
-"test:building-lod-silhouette": "python3 scripts/building-asset-factory/test_lod_silhouette.py"
+```
+                      LOD1 Z size    worst growth
+  before   17.115167 m   13.1826 mm
+  after    17.088829 m    0.0000 mm     (= LOD0 exactly)
 ```
 
-**Shape of the fix, when it is taken.** Lay tiles by *edges*, not centres: clamp the outermost course
-so the band spans exactly `[0, slope_length]` and let the 8 % overlap fall inward only. That makes the
-absolute silhouette independent of `rows`, which is the property that was missing.
+`crackhouse-shell-lod2.glb` is **byte-identical** to its pre-fix self — LOD2 has no roof tiles, no
+damage patches and a ramp instead of treads — so the change is confined to the two LODs that carried
+the defect. Two consecutive rebuilds are byte-identical to each other
+(`verify_crackhouse_reproducibility.py` PASS), and the Crackhouse is an offline candidate, so nothing
+needed re-admission.
 
 ### 5.2 Damage patches sit 146 mm outboard — **one-off literal, systemic cause**
 
@@ -591,15 +797,34 @@ disagree: glass at `width/2 − 0.05`, window boards at `width/2 + 0.23`, brick 
 Nothing asserts that a surface-attached family lies on the surface it is attached to. Twelve buildings
 × four facades × several decal families is where that becomes unmanageable.
 
-**Fix shape (one line for the symptom, one contract for the cause):** the symptom is
-`0.146 → 0.004`, so the brick sits marginally proud and cannot z-fight. The cause needs a datum
-registry in `massing.py` — `facade_plane(facade)`, `floor_plane(index)`, `roof_plane()` — plus a QA
-contract asserting that every object tagged as a surface-attached family lies within ±5 mm of its
-declared datum. That check is cheap, mechanical, and is the second gate the twelve-building lane needs
-after §5.1.
+**Fixed 2026-09-01 — the literal and, as far as one building can, the cause.**
 
-Both fixes change authored geometry and are held for the same reason: the founder owns the roof, and
-the Crackhouse candidate's byte hashes are a pinned baseline until he re-cuts it.
+The symptom: `0.146` (and the `0.147` on the two LOD0-only extras) → `BRICK_PATCH_PROUD_M = 0.004`.
+Measured on the rebuilt LOD0, the patches now sit at `z = ±8.118415` against a facade plane at
+`±8.114415` — 4.0 mm proud, down from 146.0 mm.
+
+The cause: the Crackhouse factory has a **named facade datum** instead of a plane every family
+re-derived inline. `facade_plane_local_y(facade)` returns the exterior plaster face (which is where
+`add_wall_cells()` actually puts it: cell centred at `±(width/2 − WALL_THICKNESS/2)` with
+`WALL_THICKNESS` of depth); `facade_offset_local_y(facade, clearance)` is the only way a part is
+positioned against it; and `tag_facade_datum()` records the claim on the object and in the receipt's
+new `surfaceDatums` block, in the **exported glTF frame**. The window boards keep their real 0.23 m
+clearance — a board is nailed *on* the wall — but state it as a named clearance rather than a bare
+literal, and their bytes are unchanged.
+
+The QA contract: `validate_crackhouse_outputs.validate_surface_datums()` re-derives the facade half-
+width from the public footprint (it does not read the receipt) and refuses a build whose brick family
+is more than 5 mm off the plane, or which carries damage at LOD2 where there should be none. It
+rejects the pre-fix build with `LOD0 exposed brick is 143.0 mm off its facade datum`, and
+`test_validate_crackhouse_outputs.test_exposed_brick_must_lie_on_its_facade_datum` pins both
+directions.
+
+**What is deliberately still open.** The general registry §5.2 asked for — `facade_plane(f)`,
+`floor_plane(i)`, `roof_plane()` for *every* surface-attached family — belongs in the `massing.py` of
+§4.4 and was not invented here on a building that has no massing record yet. What landed is one
+family, one datum, one check, plus the declaration channel (`surfaceDatums`) the general version will
+use. Glass at `width/2 − 0.05` is still a literal inside `add_frame_and_void()`; it is a reveal
+inset, it is inboard, and it does not touch the silhouette, so it was left for the registry.
 
 ---
 

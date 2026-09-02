@@ -125,11 +125,19 @@ class ValidatorContracts(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validator.validate_document_policy(document, "shipping-container", "red", 0, "synthetic")
 
-    def test_lod_policy_rejects_missing_or_non_decreasing_costs(self) -> None:
-        baseline = [
-            {"family": "shipping-container", "variant": "red", "lod": lod, "triangles": triangles, "bytes": byte_count}
+    @staticmethod
+    def lod_records(half_z: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> list[dict]:
+        return [
+            {
+                "family": "shipping-container", "variant": "red", "lod": lod,
+                "triangles": triangles, "bytes": byte_count,
+                "boundsGltfM": {"min": [-2.0, 0.0, -half_z[lod]], "max": [2.0, 2.0, half_z[lod]]},
+            }
             for lod, triangles, byte_count in ((0, 30, 300), (1, 20, 200), (2, 10, 100))
         ]
+
+    def test_lod_policy_rejects_missing_or_non_decreasing_costs(self) -> None:
+        baseline = self.lod_records()
         validator.validate_lod_progression(baseline)
         bad_triangles = copy.deepcopy(baseline)
         bad_triangles[1]["triangles"] = 30
@@ -141,6 +149,41 @@ class ValidatorContracts(unittest.TestCase):
             validator.validate_lod_progression(bad_bytes)
         with self.assertRaises(ValueError):
             validator.validate_lod_progression(baseline[:2])
+
+    def test_lod_policy_rejects_a_coarser_level_that_grows(self) -> None:
+        """Cheaper is not the same as smaller (BUILDING-MASSING.md §5.1).
+
+        The shipped `tanker-wagon` passed every cost check above while its LOD1
+        stood 15 mm proud of LOD0 on both sides of Z, because the tank bands used
+        a fatter tube at coarser LODs and were positioned by their centre-line.
+        These are the measured bounds of that build.
+        """
+        grown = [
+            {
+                "family": "tanker-wagon", "variant": "default", "lod": lod,
+                "triangles": triangles, "bytes": byte_count,
+                "boundsGltfM": {"min": [-7.42, 0.0, -half], "max": [7.42, top, half]},
+            }
+            for lod, triangles, byte_count, half, top in (
+                (0, 30, 300, 1.457, 4.677),
+                (1, 20, 200, 1.472, 4.677),
+                (2, 10, 100, 1.472, 4.235),
+            )
+        ]
+        with self.assertRaisesRegex(ValueError, r"\+15\.0000 mm"):
+            validator.validate_lod_progression(grown)
+        # And the same chain after the outer-face anchoring fix.
+        for record in grown:
+            record["boundsGltfM"]["min"][2] = -1.457
+            record["boundsGltfM"]["max"][2] = 1.457
+        validator.validate_lod_progression(grown)
+
+    def test_lod_policy_rejects_a_level_that_escapes_lod0_only(self) -> None:
+        # LOD2 shrinks against a grown LOD1 yet is still outside LOD0. Checking
+        # consecutive containment alone would let it through.
+        records = self.lod_records((1.0, 1.05, 1.02))
+        with self.assertRaises(ValueError):
+            validator.validate_lod_progression(records)
 
     @unittest.skipUnless(os.environ.get(RECEIPTS_ENV), f"set {RECEIPTS_ENV} to 15 comma-separated receipts (see the loud notice printed above)")
     def test_real_receipt_mutations_are_rejected(self) -> None:

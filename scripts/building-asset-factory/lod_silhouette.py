@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
-"""Cross-LOD silhouette containment for authored building GLBs.
+"""Cross-LOD silhouette containment for authored building GLBs — the CLI.
 
-WHY THIS EXISTS
----------------
+WHERE THE RULE LIVES
+--------------------
+The invariant itself moved to `scripts/lib/gltf/lod.py` when measuring every LOD
+chain in the repo showed the defect in all three factories rather than only in the
+Crackhouse (fortress-shell LOD1 +15.6681 mm, tanker-wagon LOD1 +15.0000 mm). All
+three validators import it from there. This file is the command-line front end and
+the GLB reader: it turns files into bounds records, then hands them to the shared
+`chain_report`. `containment`, `evaluate` and `SilhouetteError` keep working here
+under their original names.
+
+WHY IT EXISTS
+-------------
 `validate_crackhouse_outputs.py` asserts that bytes and triangles strictly fall across
 LOD0/1/2, and that each LOD's declared bounds match its own actual bounds. It never
 compares one LOD's bounds against another's. That gap is not theoretical: the shipped
@@ -62,20 +72,19 @@ import sys
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.gltf.lod import (  # noqa: E402
+    AXES, LodContainmentError, chain_report, containment, require,
+)
+
 GLB_MAGIC = b"glTF"
 JSON_CHUNK = 0x4E4F534A
 BIN_CHUNK = 0x004E4942
-AXES = ("x", "y", "z")
 MAX_GLB_BYTES = 64 * 1024 * 1024
 
-
-class SilhouetteError(RuntimeError):
-    """A refusal. Every guard in this module raises this rather than guessing."""
-
-
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise SilhouetteError(message)
+#: Kept as this module's public name for the shared refusal type, so existing
+#: callers and tests are unaffected by the move into `lib.gltf.lod`.
+SilhouetteError = LodContainmentError
 
 
 def read_glb_json(path: Path) -> dict:
@@ -201,79 +210,16 @@ def scene_bounds(document: dict, select: Callable[[dict], bool] | None = None) -
     }
 
 
-def containment(finer: dict, coarser: dict, tolerance_mm: float = 0.0) -> dict:
-    """How far `coarser` escapes `finer`, per axis and per side, in millimetres.
-
-    Positive numbers are growth. Zero means the coarser level is inside, which is the
-    only acceptable answer.
-    """
-    require(tolerance_mm >= 0.0, "tolerance must not be negative")
-    escapes = []
-    worst = 0.0
-    for axis in range(3):
-        low = (finer["min"][axis] - coarser["min"][axis]) * 1000.0
-        high = (coarser["max"][axis] - finer["max"][axis]) * 1000.0
-        for side, value in (("min", low), ("max", high)):
-            growth = max(0.0, value)
-            if growth > worst:
-                worst = growth
-            if growth > tolerance_mm:
-                escapes.append({"axis": AXES[axis], "side": side, "growthMm": round(growth, 4)})
-    return {
-        "contained": not escapes,
-        "worstGrowthMm": round(worst, 4),
-        "escapes": escapes,
-        "widthDeltaMm": [round((coarser["sizeM"][axis] - finer["sizeM"][axis]) * 1000.0, 4) for axis in range(3)],
-    }
-
-
 def evaluate(paths_by_lod: dict[int, Path], tolerance_mm: float = 0.0) -> dict:
-    """Measure a whole LOD chain. Consecutive containment is the rule; LOD0 is reported too."""
+    """Read a whole LOD chain off disk and measure it with the shared invariant."""
     levels = sorted(paths_by_lod)
+    # The chain-shape guards live in `chain_report`, but the files are read first
+    # in the CLI, so refuse a malformed chain before touching the disk.
     require(len(levels) >= 2, "a chain needs at least two LODs")
     require(levels == list(range(levels[0], levels[0] + len(levels))), "LOD levels must be consecutive")
     require(levels[0] == 0, "a chain must start at LOD0")
-
-    bounds = {}
-    for lod in levels:
-        document = read_glb_json(paths_by_lod[lod])
-        bounds[lod] = scene_bounds(document)
-
-    comparisons = []
-    for lod in levels[1:]:
-        step = containment(bounds[lod - 1], bounds[lod], tolerance_mm)
-        against_zero = containment(bounds[0], bounds[lod], tolerance_mm)
-        comparisons.append({
-            "lod": lod,
-            "againstLod": lod - 1,
-            "file": paths_by_lod[lod].name,
-            "step": step,
-            "againstLod0": {k: v for k, v in against_zero.items() if k != "widthDeltaMm"},
-        })
-    failing = [row for row in comparisons if not row["step"]["contained"] or not row["againstLod0"]["contained"]]
-    return {
-        "schemaVersion": 1,
-        "documentType": "tarkovzero-building-lod-silhouette",
-        "rule": "bounds(LOD n) must be contained in bounds(LOD n-1) and in bounds(LOD 0) on every axis",
-        "toleranceMm": tolerance_mm,
-        "status": "PASS" if not failing else "FAIL",
-        "levels": [
-            {
-                "lod": lod,
-                "file": paths_by_lod[lod].name,
-                "min": [round(v, 6) for v in bounds[lod]["min"]],
-                "max": [round(v, 6) for v in bounds[lod]["max"]],
-                "sizeM": [round(v, 6) for v in bounds[lod]["sizeM"]],
-                "primitives": bounds[lod]["primitives"],
-            }
-            for lod in levels
-        ],
-        "comparisons": comparisons,
-        "note": (
-            "An axis-aligned containment check is necessary, not sufficient. Passing it does not "
-            "mean the coarser level looks like the finer one from any camera."
-        ),
-    }
+    bounds = {lod: scene_bounds(read_glb_json(paths_by_lod[lod])) for lod in levels}
+    return chain_report(bounds, tolerance_mm, files={lod: paths_by_lod[lod].name for lod in levels})
 
 
 def parse_glb_arguments(values: Iterable[str]) -> dict[int, Path]:

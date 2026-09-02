@@ -33,8 +33,28 @@ from typing import Iterable, Sequence
 import bpy
 from mathutils import Vector
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.blender import noise as _noise  # noqa: E402
+from lib.blender.materials import (  # noqa: E402
+    create_image as _create_image, gltf_occlusion_group, height_field_normals,
+)
+from lib.blender.primitives import (  # noqa: E402
+    apply_scale_transform, assign_metric_planar_uv as _assign_metric_planar_uv,
+    box_faces, box_vertices, export_gltf_binary, scene_metric_defaults,
+)
+from lib.gltf.read import (  # noqa: E402
+    matrix_multiply, node_matrix, sha256_file,
+)
+
 
 GENERATOR_NAME = "tarkovzero-fortress-factory"
+#: Which shared noise variants this factory is authored against. Changing one
+#: changes every embedded texture and re-baselines the admitted fortress GLBs.
+HASH01_VARIANT = _noise.HASH01_MASKED_SUM
+SMOOTHSTEP_VARIANT = _noise.SMOOTHSTEP_UNCLAMPED
+#: Box face winding. The industrial factory walks its side faces as a ring,
+#: which emits a different index order for the same box.
+BOX_FACE_VARIANT = "fortress-crackhouse-v1"
 GENERATOR_VERSION = "0.1.0"
 SUPPORTED_BLENDER = (4, 5)
 ASSET_IDS = ("fortress-shell", "zb013-basement")
@@ -328,10 +348,7 @@ def reset_scene() -> None:
         bpy.data.collections.remove(collection)
 
     scene = bpy.context.scene
-    scene.unit_settings.system = "METRIC"
-    scene.unit_settings.length_unit = "METERS"
-    scene.unit_settings.scale_length = 1.0
-    scene.render.engine = "BLENDER_EEVEE_NEXT"
+    scene_metric_defaults(scene)
     scene.world.color = (0.05, 0.05, 0.05)
     scene["tz_no_baked_lighting"] = True
     scene["tz_no_fog"] = True
@@ -362,35 +379,32 @@ def create_empty(
 
 
 def hash01(x: int, y: int, seed: int) -> float:
-    """Small deterministic integer hash; stable across Python/Blender runs."""
-    value = (x * 0x1F123BB5 + y * 0x5F356495 + seed * 0x6C8E9CF5) & 0xFFFFFFFF
-    value ^= value >> 16
-    value = (value * 0x7FEB352D) & 0xFFFFFFFF
-    value ^= value >> 15
-    value = (value * 0x846CA68B) & 0xFFFFFFFF
-    value ^= value >> 16
-    return value / 0xFFFFFFFF
+    """Small deterministic integer hash; stable across Python/Blender runs.
+
+    Thin binding of `lib.blender.noise.hash01` to this factory's variant. The
+    industrial factory uses a genuinely different one (`^` and no 32-bit mask);
+    unifying them would change texture pixels here or there, which is a
+    re-baseline decision, not a refactor. See `HASH01_VARIANT` above.
+    """
+    return _noise.hash01(x, y, seed, variant=HASH01_VARIANT)
 
 
 def smoothstep(value: float) -> float:
-    return value * value * (3.0 - 2.0 * value)
+    """`lib.blender.noise.smoothstep`, unclamped variant (see `SMOOTHSTEP_VARIANT`)."""
+    return _noise.smoothstep(value, variant=SMOOTHSTEP_VARIANT)
 
 
 def tile_value_noise(x: int, y: int, size: int, cell: int, seed: int) -> float:
-    grid = max(2, size // cell)
-    gx = x / cell
-    gy = y / cell
-    x0 = math.floor(gx) % grid
-    y0 = math.floor(gy) % grid
-    tx = smoothstep(gx - math.floor(gx))
-    ty = smoothstep(gy - math.floor(gy))
-    a = hash01(x0, y0, seed)
-    b = hash01((x0 + 1) % grid, y0, seed)
-    c = hash01(x0, (y0 + 1) % grid, seed)
-    d = hash01((x0 + 1) % grid, (y0 + 1) % grid, seed)
-    top = a + (b - a) * tx
-    bottom = c + (d - c) * tx
-    return top + (bottom - top) * ty
+    """`lib.blender.noise.tile_noise_cell_pixels_lerp`.
+
+    `cell` is a cell size in pixels, and the bilinear close is the `lerp` form.
+    The crackhouse factory's `tile_noise` uses the `mix` form, which rounds
+    differently; both are preserved as separate functions in the shared module.
+    """
+    return _noise.tile_noise_cell_pixels_lerp(
+        x, y, size, cell, seed,
+        hash_variant=HASH01_VARIANT, smoothstep_variant=SMOOTHSTEP_VARIANT,
+    )
 
 
 def surface_sample(kind: str, x: int, y: int, size: int, spec: dict) -> tuple[float, tuple[float, float, float], float, float, float]:
@@ -484,14 +498,8 @@ def surface_sample(kind: str, x: int, y: int, size: int, spec: dict) -> tuple[fl
 
 
 def create_image(name: str, size: int, pixels: list[float], colorspace: str) -> bpy.types.Image:
-    image = bpy.data.images.new(name, width=size, height=size, alpha=True, float_buffer=False)
-    image.file_format = "PNG"
-    image.colorspace_settings.name = colorspace
-    image.pixels.foreach_set(pixels)
-    image.pack()
-    image["tz_original_procedural"] = True
-    image["tz_generator"] = GENERATOR_NAME
-    return image
+    """`lib.blender.materials.create_image`, stamped with this generator name."""
+    return _create_image(name, size, pixels, colorspace, generator=GENERATOR_NAME)
 
 
 def create_material(kind: str, lod: int) -> bpy.types.Material:
@@ -508,7 +516,6 @@ def create_material(kind: str, lod: int) -> bpy.types.Material:
         base_pixels.extend((*color, 1.0))
         orm_pixels.extend((occlusion, roughness, metallic, 1.0))
 
-    normal_pixels: list[float] = []
     strength = {
         "concrete": 1.8,
         "brick": 3.4,
@@ -518,14 +525,7 @@ def create_material(kind: str, lod: int) -> bpy.types.Material:
         "roof_offwhite": 1.25,
         "roof_oxidized": 1.45,
     }[kind]
-    for y in range(size):
-        for x in range(size):
-            left = heights[y * size + ((x - 1) % size)]
-            right = heights[y * size + ((x + 1) % size)]
-            down = heights[((y - 1) % size) * size + x]
-            up = heights[((y + 1) % size) * size + x]
-            normal = Vector((-(right - left) * strength, -(up - down) * strength, 1.0)).normalized()
-            normal_pixels.extend((normal.x * 0.5 + 0.5, normal.y * 0.5 + 0.5, normal.z * 0.5 + 0.5, 1.0))
+    normal_pixels = height_field_normals(heights, size, strength)
 
     prefix = f"TZ_{kind}_L{lod}"
     base_image = create_image(f"{prefix}_BaseColor", size, base_pixels, "sRGB")
@@ -591,12 +591,7 @@ def create_material(kind: str, lod: int) -> bpy.types.Material:
     links.new(separate.outputs["Green"], bsdf.inputs["Roughness"])
     links.new(separate.outputs["Blue"], bsdf.inputs["Metallic"])
 
-    # Blender's glTF exporter recognizes this named group and writes the R channel
-    # as an occlusionTexture while reusing the same embedded ORM image.
-    group_tree = bpy.data.node_groups.get("glTF Material Output")
-    if group_tree is None:
-        group_tree = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
-        group_tree.interface.new_socket(name="Occlusion", in_out="INPUT", socket_type="NodeSocketFloat")
+    group_tree = gltf_occlusion_group()
     gltf_output = nodes.new("ShaderNodeGroup")
     gltf_output.node_tree = group_tree
     gltf_output.label = "glTF occlusion channel"
@@ -630,10 +625,8 @@ def offset_uv_phase(obj: bpy.types.Object, u: float, v: float) -> None:
 
 
 def apply_identity(obj: bpy.types.Object) -> None:
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    obj.select_set(False)
+    """`lib.blender.primitives.apply_scale_transform` (`apply_scale` in crackhouse)."""
+    apply_scale_transform(obj)
 
 
 def tag_object(obj: bpy.types.Object, asset_id: str, lod: int, floor: str, family: str) -> None:
@@ -645,17 +638,8 @@ def tag_object(obj: bpy.types.Object, asset_id: str, lod: int, floor: str, famil
 
 
 def assign_metric_planar_uv(mesh: bpy.types.Mesh, tile_m: float) -> None:
-    """Project each polygon on its dominant plane at one consistent metre scale."""
-    if tile_m <= 0.0:
-        raise ValueError("UV tile size must be positive")
-    uv_layer = mesh.uv_layers.new(name="UVMap")
-    for polygon in mesh.polygons:
-        normal = tuple(abs(value) for value in polygon.normal)
-        dominant = max(range(3), key=lambda axis: normal[axis])
-        axes = ((1, 2), (0, 2), (0, 1))[dominant]
-        for loop_index in polygon.loop_indices:
-            vertex = mesh.vertices[mesh.loops[loop_index].vertex_index].co
-            uv_layer.data[loop_index].uv = (vertex[axes[0]] / tile_m, vertex[axes[1]] / tile_m)
+    """`lib.blender.primitives.assign_metric_planar_uv`, fresh-layer variant."""
+    _assign_metric_planar_uv(mesh, tile_m)
 
 
 def create_prism(
@@ -763,21 +747,8 @@ def create_box(
     dx, dy, dz = dimensions
     if min(dx, dy, dz) <= 0:
         raise ValueError(f"{name}: box dimensions must be positive")
-    x = dx * 0.5
-    y = dy * 0.5
-    z = dz * 0.5
-    vertices = [
-        (-x, -y, -z), (x, -y, -z), (x, y, -z), (-x, y, -z),
-        (-x, -y, z), (x, -y, z), (x, y, z), (-x, y, z),
-    ]
-    faces = [
-        (0, 3, 2, 1),
-        (4, 5, 6, 7),
-        (0, 1, 5, 4),
-        (3, 7, 6, 2),
-        (0, 4, 7, 3),
-        (1, 2, 6, 5),
-    ]
+    vertices = box_vertices(dimensions)
+    faces = list(box_faces(BOX_FACE_VARIANT))
     mesh = bpy.data.meshes.new(f"{name}_Mesh")
     mesh.from_pydata(vertices, [], faces)
     mesh.materials.append(material)
@@ -1913,40 +1884,6 @@ def gltf_bounds_from_blender(bounds: dict[str, list[float]]) -> dict[str, list[f
     }
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def matrix_multiply(left: Sequence[Sequence[float]], right: Sequence[Sequence[float]]) -> list[list[float]]:
-    return [[sum(left[row][k] * right[k][column] for k in range(4)) for column in range(4)] for row in range(4)]
-
-
-def node_matrix(node: dict) -> list[list[float]]:
-    if "matrix" in node:
-        values = node["matrix"]
-        if not isinstance(values, list) or len(values) != 16:
-            raise ValueError("glTF node matrix must have 16 values")
-        return [[float(values[column * 4 + row]) for column in range(4)] for row in range(4)]
-    x, y, z, w = (float(value) for value in node.get("rotation", [0.0, 0.0, 0.0, 1.0]))
-    sx, sy, sz = (float(value) for value in node.get("scale", [1.0, 1.0, 1.0]))
-    tx, ty, tz = (float(value) for value in node.get("translation", [0.0, 0.0, 0.0]))
-    rotation = [
-        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-    ]
-    return [
-        [rotation[0][0] * sx, rotation[0][1] * sy, rotation[0][2] * sz, tx],
-        [rotation[1][0] * sx, rotation[1][1] * sy, rotation[1][2] * sz, ty],
-        [rotation[2][0] * sx, rotation[2][1] * sy, rotation[2][2] * sz, tz],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-
-
 def exported_glb_stats(path: Path) -> dict:
     blob = path.read_bytes()
     if len(blob) < 20 or blob[:4] != b"glTF":
@@ -2019,31 +1956,10 @@ def export_glb(output: Path) -> None:
     temporary = output.with_name(f".{output.stem}.exporting.glb")
     if temporary.exists():
         temporary.unlink()
-    result = bpy.ops.export_scene.gltf(
-        filepath=str(temporary),
-        check_existing=False,
-        export_format="GLB",
-        export_copyright="Original TarkovZero procedural authoring; no game payloads",
-        export_yup=True,
-        export_apply=True,
-        export_texcoords=True,
-        export_normals=True,
-        export_tangents=True,
-        export_materials="EXPORT",
-        export_image_format="AUTO",
-        export_cameras=False,
-        export_lights=False,
-        export_extras=True,
-        export_animations=False,
-        export_skins=False,
-        export_morph=False,
-        export_draco_mesh_compression_enable=False,
-        export_unused_images=False,
-        export_unused_textures=False,
-        use_selection=False,
-        use_visible=True,
-        will_save_settings=False,
-    )
+    # Export settings are frozen in `lib.blender.primitives.GLTF_EXPORT_SETTINGS`.
+    # Publication policy is this factory's own: it replaces its output, where
+    # the crackhouse and industrial factories refuse to clobber one.
+    result = export_gltf_binary(temporary)
     if result != {"FINISHED"} or not temporary.is_file():
         raise RuntimeError(f"glTF export failed: {result}")
     os.replace(temporary, output)

@@ -2,11 +2,63 @@
 """Validate actual GLB geometry and receipts for one three-LOD Fortress set."""
 from __future__ import annotations
 
-import argparse, hashlib, json, math, re, struct, sys
+import argparse, json, math, re, struct, sys
 from pathlib import Path
 from typing import Callable, Sequence
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.gltf.read import (  # noqa: E402
+    expand_bounds, glb_json, named, position_bounds, primitive_triangles,
+    require, sha256_file,
+)
+from lib.gltf import read as _gltf  # noqa: E402
+from lib.gltf.lod import assert_contained  # noqa: E402
+
 ASSETS = ("fortress-shell", "zb013-basement")
+
+# --- Cross-LOD silhouette (BUILDING-MASSING.md §5.1) -------------------------
+# A coarser LOD may lose material; it may never gain silhouette. `zb013-basement`
+# obeys that. `fortress-shell` does NOT, and it is the one asset in this repo
+# that is admitted: its three LOD digests are pinned in
+# `public/assets/3d/customs/scene-manifest.json`, so correcting the geometry
+# re-cuts an asset the founder has already reviewed on a GPU.
+#
+# What is wrong, measured off the shipped GLBs:
+#   LOD1  +15.6681 mm on y.max  — the girder chords go from 0.20 m to 0.28 m
+#                                 thick at coarser LODs and are centred on the
+#                                 truss profile, so half the extra sticks up
+#                                 through the ridge (fortress_factory.py:1356).
+#   LOD2  +40.0000 mm on x.max  — the coarse roof panels shrink by 0.08 m at
+#                                 LOD1 and by nothing at LOD2 (:1294).
+#   LOD2  +15.5926 mm on y.max  — the same girder chord, one step thicker again.
+# Net effect: LOD2's box is 31.2607 mm taller than LOD0's, and
+# `scene-manifest.json` already absorbed it — the asset's declared
+# `bounds.max.y` is LOD2's 18.230173, not LOD0's 18.198912, so the picking and
+# shadow proxies are sized to the defect.
+#
+# The table below is a TRIPWIRE, not a mute button. Every entry must still be
+# produced, at exactly this value, and any growth not listed here fails. So the
+# gate goes red the moment the geometry moves — including when it is fixed,
+# which is the point: fixing it is a founder decision with a stated cost (three
+# new digests, a manifest update, and a fresh GPU review), and it must not
+# happen as a side effect of an unrelated edit.
+FORTRESS_SHELL_KNOWN_GROWTH_MM = {
+    (1, "step", "y", "max"): 15.6681,
+    (1, "againstLod0", "y", "max"): 15.6681,
+    (2, "step", "x", "max"): 40.0,
+    (2, "step", "y", "max"): 15.5926,
+    (2, "againstLod0", "y", "max"): 31.2607,
+}
+FORTRESS_SHELL_KNOWN_GROWTH_NOTE = (
+    "fortress-shell is ADMITTED: its LOD digests are pinned in scene-manifest.json. "
+    "Changing this geometry un-admits a reviewed asset and costs new digests, a manifest "
+    "update, and a fresh GPU review. That is the founder's call — see BUILDING-MASSING.md §5.1."
+)
+KNOWN_LOD_GROWTH_MM = {"fortress-shell": FORTRESS_SHELL_KNOWN_GROWTH_MM, "zb013-basement": {}}
+#: This validator's own comparison tolerance. The crackhouse validator uses 1e-5
+#: and the industrial one 0.002; the shared helpers take it explicitly so a
+#: single default cannot silently loosen or tighten one of the three.
+TOLERANCE = 1e-4
 SHELL_PIVOT = (202.898880005, 1.729503632, -127.68775177)
 SHELL_YAW = -10.342808
 SHELL_ROOT_Y = 2.447 - SHELL_PIVOT[1]
@@ -16,24 +68,12 @@ BASEMENT_PIVOT = (206.0, -1.7874, -147.5)
 FORBIDDEN = (".local-game-derived", "Construction_factory", "UnityFS", "CAB-", "StreamingAssets", "/mnt/c/", "C:\\")
 
 
-def require(condition: bool, message: str) -> None:
-    if not condition: raise ValueError(message)
+def close(actual: object, expected: float, tolerance: float = TOLERANCE) -> bool:
+    return _gltf.close(actual, expected, tolerance)
 
 
-def close(actual: object, expected: float, tolerance: float = 1e-4) -> bool:
-    try: return math.isfinite(float(actual)) and abs(float(actual) - expected) <= tolerance
-    except (TypeError, ValueError): return False
-
-
-def vector_close(actual: object, expected: Sequence[float], tolerance: float = 1e-4) -> bool:
-    return isinstance(actual, list) and len(actual) == len(expected) and all(close(a, e, tolerance) for a, e in zip(actual, expected))
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""): digest.update(chunk)
-    return digest.hexdigest()
+def vector_close(actual: object, expected: Sequence[float], tolerance: float = TOLERANCE) -> bool:
+    return _gltf.vector_close(actual, expected, tolerance)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -52,69 +92,25 @@ def read_receipt(path: Path) -> dict:
     return document
 
 
-def glb_json(path: Path) -> dict:
-    blob = path.read_bytes()
-    require(len(blob) >= 20, f"truncated GLB: {path}")
-    magic, version, length = struct.unpack_from("<4sII", blob, 0)
-    require((magic, version, length) == (b"glTF", 2, len(blob)), f"invalid GLB header: {path}")
-    offset, document = 12, None
-    while offset + 8 <= len(blob):
-        chunk_length, chunk_type = struct.unpack_from("<II", blob, offset); offset += 8
-        end = offset + chunk_length; require(end <= len(blob), f"invalid GLB chunk: {path}")
-        if chunk_type == 0x4E4F534A:
-            require(document is None, f"multiple GLB JSON chunks: {path}")
-            document = json.loads(blob[offset:end].decode("utf-8"))
-        offset = end
-    require(offset == len(blob) and isinstance(document, dict), f"invalid GLB chunks: {path}")
-    return document
-
-
-def matrix_multiply(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]]) -> list[list[float]]:
-    return [[sum(a[r][k] * b[k][c] for k in range(4)) for c in range(4)] for r in range(4)]
-
-
-def node_matrix(node: dict) -> list[list[float]]:
-    if "matrix" in node:
-        values = node["matrix"]; require(isinstance(values, list) and len(values) == 16, "invalid node matrix")
-        return [[float(values[c * 4 + r]) for c in range(4)] for r in range(4)]
-    x, y, z, w = map(float, node.get("rotation", [0, 0, 0, 1])); sx, sy, sz = map(float, node.get("scale", [1, 1, 1])); tx, ty, tz = map(float, node.get("translation", [0, 0, 0]))
-    rotation = ((1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)), (2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w)), (2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)))
-    return [[rotation[0][0]*sx, rotation[0][1]*sy, rotation[0][2]*sz, tx], [rotation[1][0]*sx, rotation[1][1]*sy, rotation[1][2]*sz, ty], [rotation[2][0]*sx, rotation[2][1]*sy, rotation[2][2]*sz, tz], [0, 0, 0, 1]]
-
-
 def geometry_stats(document: dict, select: Callable[[dict], bool] | None = None) -> dict:
-    accessors, meshes, nodes = document.get("accessors", []), document.get("meshes", []), document.get("nodes", [])
-    identity = [[float(r == c) for c in range(4)] for r in range(4)]
+    """Triangles and transformed scene bounds over the selected nodes.
+
+    The traversal is `lib.gltf.read.iter_mesh_primitives`; this validator's own
+    contract — which nodes count, which statistics are reported, and that a
+    POSITION bound must be finite — stays here.
+    """
     low_all, high_all, triangles, selected = [math.inf]*3, [-math.inf]*3, 0, 0
-    def visit(index: int, parent: Sequence[Sequence[float]]) -> None:
-        nonlocal triangles, selected
-        node = nodes[index]; world = matrix_multiply(parent, node_matrix(node))
-        if (select is None or select(node)) and "mesh" in node:
-            selected += 1
-            for primitive in meshes[node["mesh"]].get("primitives", []):
-                position_index = primitive.get("attributes", {}).get("POSITION")
-                require(isinstance(position_index, int), f"{node.get('name')} lacks POSITION")
-                accessor = accessors[position_index]; low, high = accessor.get("min"), accessor.get("max")
-                require(isinstance(low, list) and isinstance(high, list) and len(low) == len(high) == 3 and all(math.isfinite(float(v)) for v in low+high), "invalid POSITION bounds")
-                count = int(accessors[primitive.get("indices", position_index)]["count"]); mode = int(primitive.get("mode", 4))
-                require(mode in (4, 5, 6), f"unsupported primitive mode {mode}")
-                triangles += count//3 if mode == 4 else max(0, count-2)
-                for px in (low[0], high[0]):
-                    for py in (low[1], high[1]):
-                        for pz in (low[2], high[2]):
-                            vector = (float(px), float(py), float(pz), 1.0)
-                            point = [sum(world[r][c]*vector[c] for c in range(4)) for r in range(3)]
-                            for axis in range(3): low_all[axis] = min(low_all[axis], point[axis]); high_all[axis] = max(high_all[axis], point[axis])
-        for child in node.get("children", []): visit(int(child), world)
-    scenes = document.get("scenes", []); scene = int(document.get("scene", 0)); require(0 <= scene < len(scenes), "invalid default scene")
-    for root in scenes[scene].get("nodes", []): visit(int(root), identity)
+    seen_nodes = set()
+    for entry in _gltf.iter_mesh_primitives(document, select):
+        if entry.node_index not in seen_nodes:
+            seen_nodes.add(entry.node_index); selected += 1
+        position_index = entry.primitive.get("attributes", {}).get("POSITION")
+        require(isinstance(position_index, int), f"{entry.node.get('name')} lacks POSITION")
+        low, high = position_bounds(document, position_index, require_finite=True)
+        triangles += primitive_triangles(document, entry.primitive, position_index)
+        expand_bounds(low_all, high_all, entry.world, low, high)
     require(selected > 0, "selected geometry absent")
     return {"triangles": triangles, "boundsM": {"min": low_all, "max": high_all, "sizeM": [high_all[i]-low_all[i] for i in range(3)], "centerM": [(high_all[i]+low_all[i])/2 for i in range(3)]}}
-
-
-def named(document: dict, name: str) -> dict:
-    found = [node for node in document.get("nodes", []) if node.get("name") == name]
-    require(len(found) == 1, f"expected one node named {name}"); return found[0]
 
 
 def validate_spatial(document: dict, receipt: dict, asset: str, lod: int) -> None:
@@ -176,11 +172,19 @@ def validate_set(args: argparse.Namespace) -> dict:
         actual_bytes = output.stat().st_size; require(asset.get("bytes") == actual_bytes and asset.get("sha256") == f"sha256:{sha256_file(output)}", f"LOD{lod} file receipt mismatch")
         texture = receipt.get("generated",{}).get("textureResolution"); require(isinstance(texture,int) and texture > 0, f"LOD{lod} texture resolution invalid")
         script_hash = receipt.get("generator",{}).get("scriptSha256"); require(isinstance(script_hash,str) and script_hash.startswith("sha256:"), f"LOD{lod} factory hash absent"); hashes.add(script_hash)
-        stats = validate_glb(output, glb_json(output), receipt, args.asset, lod); costs.append((stats["triangles"],actual_bytes,texture)); details.append({"lod":lod,"bytes":actual_bytes,**stats})
+        stats = validate_glb(output, glb_json(output, label=output), receipt, args.asset, lod); costs.append((stats["triangles"],actual_bytes,texture)); details.append({"lod":lod,"bytes":actual_bytes,**stats})
     require(len(hashes) == 1, "factory source hashes differ")
     for lod in (1,2):
         require(all(costs[lod][axis] < costs[lod-1][axis] for axis in range(3)), f"LOD{lod} costs do not strictly fall")
-    return {"asset":args.asset,"scriptSha256":next(iter(hashes)),"lods":details}
+    silhouette = assert_contained(
+        {row["lod"]: row["boundsM"] for row in details},
+        args.asset,
+        known_growth=KNOWN_LOD_GROWTH_MM[args.asset],
+        known_growth_note=FORTRESS_SHELL_KNOWN_GROWTH_NOTE if args.asset == "fortress-shell" else "",
+    )
+    if silhouette["status"] != "PASS":
+        print(f"KNOWN DEFECT, PINNED: {args.asset} {silhouette['status']} — {silhouette['knownGrowthNote']}", file=sys.stderr)
+    return {"asset":args.asset,"scriptSha256":next(iter(hashes)),"lodSilhouette":silhouette,"lods":details}
 
 
 if __name__ == "__main__":

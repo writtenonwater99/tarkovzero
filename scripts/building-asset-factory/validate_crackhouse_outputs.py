@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -12,8 +11,19 @@ import struct
 import sys
 from typing import Callable, Sequence
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.gltf.read import (  # noqa: E402
+    expand_bounds, glb_json, named, position_bounds, primitive_triangles,
+    require, sha256_file,
+)
+from lib.gltf import read as _gltf  # noqa: E402
+from lib.gltf.lod import assert_contained  # noqa: E402
+
 
 ASSET_ID = "crackhouse-shell"
+#: This validator's own comparison tolerance; see the note in
+#: `scripts/asset-factory/validate_fortress_outputs.py`.
+TOLERANCE = 1e-5
 SOURCE_KEY = "svg:Ground_Level/Buildings/Big_Buildings-2:element-197:subpath-0"
 SOURCE_FOOTPRINT = ((94.3,-166.5),(89.5,-142.6),(73.6,-145.9),(78.4,-169.7))
 GROUND_WORLD_Y = 1.983
@@ -27,30 +37,27 @@ EXPECTED_ROOF_TILES = {0: 576, 1: 144, 2: 0}
 EXPECTED_STAIR_STEPS = {0: 15, 1: 8, 2: 1}
 EXPECTED_TEXTURE = {0: 128, 1: 64, 2: 32}
 FORBIDDEN = (".local-game-derived", "UnityFS", "CAB-", "StreamingAssets", "/mnt/c/", "C:\\", "Escape from Tarkov")
+#: BUILDING-MASSING.md §5.2. Exposed brick shows *through* missing plaster, so it
+#: sits a few millimetres proud of the facade plane. It used to sit 146 mm
+#: outboard of it — a hand's width in front of the wall it was showing through —
+#: because every facade-attached family re-derived its own offset from
+#: `+/- width*.5 +/- <literal>` and nothing asserted the result landed on the
+#: surface. The factory now names the plane once; this is the check that makes
+#: the naming binding. The width is re-derived here from the public footprint,
+#: not read from the receipt, so the two derivations have to agree.
+BRICK_PATCH_PROUD_M = 0.004
+FACADE_DATUM_TOLERANCE_M = 0.005
+#: The exposed-brick patches are the only user of the brick material, so the
+#: brick batches ARE the damage family; LOD2 carries no damage at all.
+BRICK_FAMILY_LODS = (0, 1)
 
 
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(message)
+def close(actual: object, expected: float, tolerance: float = TOLERANCE) -> bool:
+    return _gltf.close(actual, expected, tolerance)
 
 
-def close(actual: object, expected: float, tolerance: float = 1e-5) -> bool:
-    try:
-        return math.isfinite(float(actual)) and abs(float(actual)-expected) <= tolerance
-    except (TypeError, ValueError):
-        return False
-
-
-def vector_close(actual: object, expected: Sequence[float], tolerance: float = 1e-5) -> bool:
-    return isinstance(actual, list) and len(actual) == len(expected) and all(close(a,e,tolerance) for a,e in zip(actual,expected))
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024*1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def vector_close(actual: object, expected: Sequence[float], tolerance: float = TOLERANCE) -> bool:
+    return _gltf.vector_close(actual, expected, tolerance)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -68,67 +75,24 @@ def read_receipt(path: Path) -> dict:
     return document
 
 
-def glb_json(path: Path) -> dict:
-    blob = path.read_bytes()
-    require(len(blob) >= 20, f"truncated GLB: {path}")
-    magic, version, length = struct.unpack_from("<4sII", blob, 0)
-    require((magic,version,length)==(b"glTF",2,len(blob)), f"invalid GLB header: {path}")
-    offset, document = 12, None
-    while offset + 8 <= len(blob):
-        chunk_length, chunk_type = struct.unpack_from("<II",blob,offset); offset += 8
-        end=offset+chunk_length; require(end<=len(blob), f"invalid GLB chunk: {path}")
-        if chunk_type == 0x4E4F534A:
-            require(document is None, f"multiple GLB JSON chunks: {path}")
-            document=json.loads(blob[offset:end].decode("utf-8"))
-        offset=end
-    require(offset==len(blob) and isinstance(document,dict), f"missing GLB JSON: {path}")
-    return document
-
-
-def multiply4(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]]) -> list[list[float]]:
-    return [[sum(a[r][k]*b[k][c] for k in range(4)) for c in range(4)] for r in range(4)]
-
-
-def node_matrix(node: dict) -> list[list[float]]:
-    if "matrix" in node:
-        values=node["matrix"]
-        require(isinstance(values,list) and len(values)==16,"invalid node matrix")
-        return [[float(values[c*4+r]) for c in range(4)] for r in range(4)]
-    x,y,z,w=map(float,node.get("rotation",[0,0,0,1])); sx,sy,sz=map(float,node.get("scale",[1,1,1])); tx,ty,tz=map(float,node.get("translation",[0,0,0]))
-    rotation=((1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w)),(2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)),(2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)))
-    return [[rotation[0][0]*sx,rotation[0][1]*sy,rotation[0][2]*sz,tx],[rotation[1][0]*sx,rotation[1][1]*sy,rotation[1][2]*sz,ty],[rotation[2][0]*sx,rotation[2][1]*sy,rotation[2][2]*sz,tz],[0,0,0,1]]
-
-
 def geometry_stats(document: dict, select: Callable[[dict], bool] | None = None) -> dict:
-    accessors,meshes,nodes=document.get("accessors",[]),document.get("meshes",[]),document.get("nodes",[])
-    identity=[[float(r==c) for c in range(4)] for r in range(4)]
+    """Triangles and transformed scene bounds over the selected nodes.
+
+    Traversal is `lib.gltf.read.iter_mesh_primitives`; the contract stays here.
+    Unlike the fortress validator this one does not demand finite POSITION
+    bounds — a deliberately looser check that is preserved, not unified.
+    """
     minimum,maximum=[math.inf]*3,[-math.inf]*3
     triangles=selected=0
-    def visit(index: int, parent: Sequence[Sequence[float]]) -> None:
-        nonlocal triangles,selected
-        node=nodes[index]; world=multiply4(parent,node_matrix(node))
-        if (select is None or select(node)) and "mesh" in node:
-            selected += 1
-            for primitive in meshes[node["mesh"]].get("primitives",[]):
-                position_index=primitive.get("attributes",{}).get("POSITION")
-                require(isinstance(position_index,int),f"{node.get('name')} has no POSITION")
-                accessor=accessors[position_index]; low,high=accessor.get("min"),accessor.get("max")
-                require(isinstance(low,list) and isinstance(high,list) and len(low)==len(high)==3,"invalid POSITION bounds")
-                index_accessor=primitive.get("indices")
-                count=int(accessors[index_accessor]["count"] if isinstance(index_accessor,int) else accessor["count"])
-                mode=int(primitive.get("mode",4)); require(mode in (4,5,6),f"unsupported primitive mode {mode}")
-                triangles += count//3 if mode==4 else max(0,count-2)
-                for px in (low[0],high[0]):
-                    for py in (low[1],high[1]):
-                        for pz in (low[2],high[2]):
-                            source=(float(px),float(py),float(pz),1.0)
-                            point=[sum(world[r][c]*source[c] for c in range(4)) for r in range(3)]
-                            for axis in range(3):
-                                minimum[axis]=min(minimum[axis],point[axis]);maximum[axis]=max(maximum[axis],point[axis])
-        for child in node.get("children",[]): visit(int(child),world)
-    scene_index=int(document.get("scene",0)); scenes=document.get("scenes",[])
-    require(0<=scene_index<len(scenes),"invalid default scene")
-    for root in scenes[scene_index].get("nodes",[]): visit(int(root),identity)
+    seen_nodes=set()
+    for entry in _gltf.iter_mesh_primitives(document, select):
+        if entry.node_index not in seen_nodes:
+            seen_nodes.add(entry.node_index); selected += 1
+        position_index=entry.primitive.get("attributes",{}).get("POSITION")
+        require(isinstance(position_index,int),f"{entry.node.get('name')} has no POSITION")
+        low,high=position_bounds(document, position_index)
+        triangles += primitive_triangles(document, entry.primitive, position_index)
+        expand_bounds(minimum, maximum, entry.world, low, high)
     require(selected>0,"selected geometry absent")
     return {"triangles":triangles,"boundsM":{"min":minimum,"max":maximum,"sizeM":[maximum[i]-minimum[i] for i in range(3)],"centerM":[(maximum[i]+minimum[i])*.5 for i in range(3)]}}
 
@@ -148,12 +112,6 @@ def derived_transform() -> dict:
     return {"pivot":pivot,"yaw":math.degrees(math.atan2(long[0],long[1])),"length":length,"width":span,"local":local}
 
 
-def named(document: dict, name: str) -> dict:
-    found=[node for node in document.get("nodes",[]) if node.get("name")==name]
-    require(len(found)==1,f"expected one node named {name}")
-    return found[0]
-
-
 def validate_materials(document: dict, lod: int) -> None:
     materials=document.get("materials",[])
     require(materials,f"LOD{lod} exports no materials")
@@ -168,19 +126,56 @@ def validate_materials(document: dict, lod: int) -> None:
         require("glass" in blend[0].lower(),f"LOD{lod} only glass may blend")
 
 
+def brick_family_selector(node: dict) -> bool:
+    return "brick" in str(node.get("name", ""))
+
+
+def validate_surface_datums(document: dict, lod: int) -> None:
+    """Exposed brick must lie on the facade plane it shows through (§5.2).
+
+    Checked against the shipped geometry in the exported glTF frame, where
+    `z = -local y`, so the south facade's exterior plaster face is at `+width/2`
+    and the north facade's at `-width/2`. A patch that floats in front of the
+    plaster reads as a decal stuck on the wall rather than as missing render,
+    and there is no other check in this file that would notice.
+
+    This is deliberately narrow — one family, one datum. The general contract
+    (`facade_plane(f)`, `floor_plane(i)`, `roof_plane()` for every
+    surface-attached family) belongs in the `massing.py` of §4.4 and is not
+    invented here on a building that has no massing record yet.
+    """
+    if lod not in BRICK_FAMILY_LODS:
+        require(
+            not any(brick_family_selector(node) for node in document.get("nodes", [])),
+            f"LOD{lod} carries exposed-brick damage, which only LOD0/LOD1 do",
+        )
+        return
+    half_width = derived_transform()["width"] * 0.5
+    expected = half_width + BRICK_PATCH_PROUD_M
+    bounds = geometry_stats(document, brick_family_selector)["boundsM"]
+    for side, actual, sign in (("max", bounds["max"][2], 1.0), ("min", bounds["min"][2], -1.0)):
+        require(
+            close(actual, sign * expected, FACADE_DATUM_TOLERANCE_M),
+            f"LOD{lod} exposed brick is {abs(actual - sign * expected) * 1000:.1f} mm off its facade datum: "
+            f"z.{side} is {actual:.6f}, the facade plane is {sign * half_width:.6f} and the declared "
+            f"clearance is {BRICK_PATCH_PROUD_M * 1000:.0f} mm",
+        )
+
+
 def validate_one(receipt: dict, lod: int) -> dict:
     require(receipt.get("schemaVersion")==1,f"LOD{lod} receipt schema changed")
     asset=receipt.get("asset",{}); require(asset.get("id")==ASSET_ID and asset.get("lod")==lod,f"LOD{lod} asset identity changed")
     output_name=asset.get("outputFile");require(isinstance(output_name,str) and Path(output_name).name==output_name,f"LOD{lod} unsafe output name")
     output=receipt["_receiptPath"].parent/output_name;require(output.is_file(),f"LOD{lod} GLB missing")
     require(asset.get("bytes")==output.stat().st_size and asset.get("sha256")==f"sha256:{sha256_file(output)}",f"LOD{lod} file receipt mismatch")
-    document=glb_json(output)
+    document=glb_json(output, label=output)
     require(not document.get("cameras") and not document.get("animations") and not document.get("skins"),f"LOD{lod} contains non-static payload")
     require("KHR_lights_punctual" not in document.get("extensions",{}),f"LOD{lod} contains lights")
     for kind in ("buffers","images"):
         require(all("uri" not in entry for entry in document.get(kind,[])),f"LOD{lod} contains external {kind}")
     text=json.dumps(document,separators=(",",":"));require(all(marker not in text for marker in FORBIDDEN),f"LOD{lod} leaks a forbidden source marker")
     validate_materials(document,lod)
+    validate_surface_datums(document,lod)
     root=named(document,f"TZ_CrackhouseShell_LOD{lod}_ROOT")
     extras=root.get("extras",{})
     require(extras.get("tz_original_authored") is True,f"LOD{lod} original-authored flag missing")
@@ -227,7 +222,13 @@ def validate_set(args: argparse.Namespace) -> dict:
     for lod in (1,2):
         require(details[lod]["bytes"]<details[lod-1]["bytes"],f"LOD{lod} bytes do not fall")
         require(details[lod]["triangles"]<details[lod-1]["triangles"],f"LOD{lod} triangles do not fall")
-    return {"status":"PASS","asset":ASSET_ID,"scriptSha256":details[0]["scriptSha256"],"lods":[{key:value for key,value in row.items() if key not in ("scriptSha256",)} for row in details]}
+    # Costs falling is not enough. Until this landed, nothing in this file
+    # compared one LOD's bounds against another's, and the shipped candidate's
+    # LOD1 was 26.34 mm wider than LOD0 with every check above green
+    # (BUILDING-MASSING.md §5.1). No waiver: the Crackhouse is an offline
+    # candidate, so there is nothing here to re-admit.
+    silhouette=assert_contained({row["lod"]:row["boundsM"] for row in details},ASSET_ID)
+    return {"status":"PASS","asset":ASSET_ID,"scriptSha256":details[0]["scriptSha256"],"lodSilhouette":silhouette,"lods":[{key:value for key,value in row.items() if key not in ("scriptSha256",)} for row in details]}
 
 
 if __name__ == "__main__":

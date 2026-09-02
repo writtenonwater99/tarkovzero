@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -14,6 +13,13 @@ import struct
 import sys
 import tempfile
 from typing import Sequence
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.gltf.read import (  # noqa: E402
+    expand_bounds, position_bounds, primitive_triangles, require, sha256_file,
+)
+from lib.gltf import read as _gltf  # noqa: E402
+from lib.gltf.lod import assert_contained  # noqa: E402
 
 
 HERE = Path(__file__).resolve().parent
@@ -33,19 +39,6 @@ REQUIRED_COMPONENTS = {
     "diesel-shunter": {"cab", "cab-window", "engine-hood", "bogie-frame", "wheel", "coupler", "handrail", "vent"},
     "tanker-wagon": {"vessel", "bogie-frame", "wheel", "coupler", "tank-band", "hatch", "ladder", "hatch-rail"},
 }
-
-
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(message)
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -71,6 +64,14 @@ def read_regular_json(path: Path) -> dict:
 
 
 def glb_json(path: Path) -> dict:
+    """Deliberately NOT `lib.gltf.read.glb_json`.
+
+    This proof adds three guards the shared reader does not have and must not
+    lose: the file must be a regular non-symlink, it must sit inside an 8 KiB –
+    8 MiB byte envelope, and it must carry exactly one JSON chunk **and exactly
+    one BIN chunk**. Folding this into the shared reader would either weaken
+    this contract or impose it on the other two factories, so it stays here.
+    """
     info = path.lstat()
     require(stat.S_ISREG(info.st_mode) and not path.is_symlink(), f"GLB must be a regular non-symlink: {path}")
     require(8 * 1024 <= info.st_size <= 8 * 1024 * 1024, f"GLB byte envelope failed: {path}")
@@ -96,77 +97,35 @@ def glb_json(path: Path) -> dict:
     return document
 
 
-def matrix_multiply(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]]) -> list[list[float]]:
-    return [[sum(a[row][inner] * b[inner][column] for inner in range(4)) for column in range(4)] for row in range(4)]
-
-
-def node_matrix(node: dict) -> list[list[float]]:
-    if "matrix" in node:
-        values = node["matrix"]
-        require(isinstance(values, list) and len(values) == 16, "node matrix invalid")
-        return [[float(values[column * 4 + row]) for column in range(4)] for row in range(4)]
-    x, y, z, w = map(float, node.get("rotation", [0, 0, 0, 1]))
-    sx, sy, sz = map(float, node.get("scale", [1, 1, 1]))
-    tx, ty, tz = map(float, node.get("translation", [0, 0, 0]))
-    rotation = (
-        (1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),
-        (2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)),
-        (2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)),
-    )
-    return [
-        [rotation[0][0] * sx, rotation[0][1] * sy, rotation[0][2] * sz, tx],
-        [rotation[1][0] * sx, rotation[1][1] * sy, rotation[1][2] * sz, ty],
-        [rotation[2][0] * sx, rotation[2][1] * sy, rotation[2][2] * sz, tz],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-
-
 def geometry_stats(document: dict) -> dict:
     accessors = document.get("accessors", [])
     meshes = document.get("meshes", [])
     nodes = document.get("nodes", [])
-    identity = [[float(row == column) for column in range(4)] for row in range(4)]
     minimum = [math.inf, math.inf, math.inf]
     maximum = [-math.inf, -math.inf, -math.inf]
     triangles = vertices = draw_calls = 0
     visited_meshes: set[int] = set()
 
-    def visit(index: int, parent: Sequence[Sequence[float]]) -> None:
-        nonlocal triangles, vertices, draw_calls
-        node = nodes[index]
-        world = matrix_multiply(parent, node_matrix(node))
-        if "mesh" in node:
-            mesh_index = int(node["mesh"])
-            require(mesh_index not in visited_meshes, "instanced mesh is outside this proof contract")
-            visited_meshes.add(mesh_index)
-            for primitive in meshes[mesh_index].get("primitives", []):
-                draw_calls += 1
-                position_index = primitive.get("attributes", {}).get("POSITION")
-                require(isinstance(position_index, int), "primitive lacks POSITION")
-                position = accessors[position_index]
-                vertices += int(position["count"])
-                count = int(accessors[primitive["indices"]]["count"]) if "indices" in primitive else int(position["count"])
-                mode = int(primitive.get("mode", 4))
-                require(mode in (4, 5, 6), f"unsupported primitive mode: {mode}")
-                triangles += count // 3 if mode == 4 else max(0, count - 2)
-                low, high = position.get("min"), position.get("max")
-                require(isinstance(low, list) and isinstance(high, list) and len(low) == len(high) == 3, "POSITION bounds absent")
-                for px in (low[0], high[0]):
-                    for py in (low[1], high[1]):
-                        for pz in (low[2], high[2]):
-                            vector = (float(px), float(py), float(pz), 1.0)
-                            point = [sum(world[row][column] * vector[column] for column in range(4)) for row in range(3)]
-                            for axis in range(3):
-                                minimum[axis] = min(minimum[axis], point[axis])
-                                maximum[axis] = max(maximum[axis], point[axis])
-        for child in node.get("children", []):
-            visit(int(child), world)
-
-    scenes = document.get("scenes", [])
-    scene_index = int(document.get("scene", 0))
-    require(0 <= scene_index < len(scenes), "default scene invalid")
-    for root in scenes[scene_index].get("nodes", []):
-        visit(int(root), identity)
+    # Traversal is `lib.gltf.read.iter_mesh_primitives`. Everything below is
+    # this proof's own contract and stays here: the no-instancing rule, the
+    # vertex and draw-call tallies, and the `bounds` key (the other two
+    # validators report `boundsM`).
+    visited_nodes: set[int] = set()
+    for entry in _gltf.iter_mesh_primitives(document):
+        if entry.node_index not in visited_nodes:
+            # Once per node, not once per primitive: a mesh reached from two
+            # different nodes is instancing; a mesh with two primitives is not.
+            require(entry.mesh_index not in visited_meshes,
+                    "instanced mesh is outside this proof contract")
+            visited_meshes.add(entry.mesh_index)
+            visited_nodes.add(entry.node_index)
+        draw_calls += 1
+        position_index = entry.primitive.get("attributes", {}).get("POSITION")
+        require(isinstance(position_index, int), "primitive lacks POSITION")
+        vertices += int(accessors[position_index]["count"])
+        triangles += primitive_triangles(document, entry.primitive, position_index)
+        low, high = position_bounds(document, position_index)
+        expand_bounds(minimum, maximum, entry.world, low, high)
     require(draw_calls > 0 and all(math.isfinite(value) for value in minimum + maximum), "GLB has no bounded geometry")
     return {
         "triangles": triangles,
@@ -307,6 +266,16 @@ def validate_lod_progression(records: Sequence[dict]) -> None:
         require([record["lod"] for record in lods] == [0, 1, 2], f"LOD sequence incomplete: {family}/{variant}")
         require(lods[0]["triangles"] > lods[1]["triangles"] > lods[2]["triangles"], f"triangle costs do not strictly fall: {family}/{variant}")
         require(lods[0]["bytes"] > lods[1]["bytes"] > lods[2]["bytes"], f"byte costs do not strictly fall: {family}/{variant}")
+        # A cheaper LOD is not automatically a smaller one. `tanker-wagon` passed
+        # every check above while its LOD1 stood 15 mm proud of LOD0 on both
+        # sides of Z: the tank bands used a fatter tube at coarser LODs and were
+        # positioned by their centre-line instead of their outer face
+        # (BUILDING-MASSING.md §5.1). No waiver here — these props are
+        # offline-proof-only, so nothing is admitted that a fix would re-cut.
+        assert_contained(
+            {record["lod"]: record["boundsGltfM"] for record in lods},
+            f"{family}/{variant}",
+        )
 
 
 def write_exclusive(path: Path, document: dict) -> None:

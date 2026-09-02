@@ -14,12 +14,10 @@ uses exclusive hard-link creation, so an existing output is never replaced.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
 from pathlib import Path
-import struct
 import sys
 import tempfile
 from typing import Iterable, Sequence
@@ -27,8 +25,28 @@ from typing import Iterable, Sequence
 import bpy
 from mathutils import Vector
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.blender import noise as _noise  # noqa: E402
+from lib.blender.lod_grid import outer_anchored_center  # noqa: E402
+from lib.blender.materials import (  # noqa: E402
+    create_image as _create_image, gltf_occlusion_group, height_field_normals,
+)
+from lib.blender.primitives import (  # noqa: E402
+    assign_metric_planar_uv as _assign_metric_planar_uv, box_faces, box_vertices,
+    export_gltf_binary, scene_metric_defaults,
+)
+from lib.gltf.read import glb_json, require, sha256_file  # noqa: E402
+
 
 GENERATOR_NAME = "tarkovzero-customs-industrial-prop-factory"
+#: Which shared noise variants this factory is authored against. All three
+#: differ from the fortress/crackhouse pair: `^` with no 32-bit mask, a clamped
+#: smoothstep, and a cell-COUNT tile noise. Aligning any of them re-baselines
+#: every industrial prop texture.
+HASH01_VARIANT = _noise.HASH01_XOR_UNMASKED
+SMOOTHSTEP_VARIANT = _noise.SMOOTHSTEP_CLAMPED
+#: Box face winding: side faces walked as a ring, unlike the other two.
+BOX_FACE_VARIANT = "industrial-v1"
 GENERATOR_VERSION = "1.0.0"
 GLB_MAGIC = b"glTF"
 GLB_JSON_CHUNK = 0x4E4F534A
@@ -82,53 +100,30 @@ def script_args() -> list[str]:
     return sys.argv[index + 1 :]
 
 
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(message)
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def hash01(x: int, y: int, seed: int) -> float:
-    value = (x * 0x1F123BB5) ^ (y * 0x5F356495) ^ (seed * 0x6C8E9CF5)
-    value ^= value >> 16
-    value = (value * 0x7FEB352D) & 0xFFFFFFFF
-    value ^= value >> 15
-    value = (value * 0x846CA68B) & 0xFFFFFFFF
-    value ^= value >> 16
-    return value / 0xFFFFFFFF
+    """`lib.blender.noise.hash01`, xor-unmasked variant.
+
+    NOT the fortress/crackhouse `hash01`: it mixes with `^` and applies no
+    32-bit mask, so it is a different function seeding different pixels.
+    """
+    return _noise.hash01(x, y, seed, variant=HASH01_VARIANT)
 
 
 def smoothstep(value: float) -> float:
-    value = max(0.0, min(1.0, value))
-    return value * value * (3.0 - 2.0 * value)
+    """`lib.blender.noise.smoothstep`, clamped variant (the other two do not clamp)."""
+    return _noise.smoothstep(value, variant=SMOOTHSTEP_VARIANT)
 
 
 def periodic_noise(x: int, y: int, size: int, cells: int, seed: int) -> float:
-    scale = size / cells
-    gx = x / scale
-    gy = y / scale
-    x0 = math.floor(gx)
-    y0 = math.floor(gy)
-    tx = smoothstep(gx - x0)
-    ty = smoothstep(gy - y0)
-    x1 = (x0 + 1) % cells
-    y1 = (y0 + 1) % cells
-    x0 %= cells
-    y0 %= cells
-    a = hash01(x0, y0, seed)
-    b = hash01(x1, y0, seed)
-    c = hash01(x0, y1, seed)
-    d = hash01(x1, y1, seed)
-    top = a + (b - a) * tx
-    bottom = c + (d - c) * tx
-    return top + (bottom - top) * ty
+    """`lib.blender.noise.tile_noise_cell_count_lerp`.
+
+    `cells` is a cell COUNT here; the other two factories pass a cell size in
+    pixels to their own tile-noise functions.
+    """
+    return _noise.tile_noise_cell_count_lerp(
+        x, y, size, cells, seed,
+        hash_variant=HASH01_VARIANT, smoothstep_variant=SMOOTHSTEP_VARIANT,
+    )
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -167,22 +162,13 @@ def reset_scene() -> None:
         for block in list(blocks):
             blocks.remove(block)
     scene = bpy.context.scene
-    scene.unit_settings.system = "METRIC"
-    scene.unit_settings.scale_length = 1.0
-    scene.unit_settings.length_unit = "METERS"
-    scene.render.engine = "BLENDER_EEVEE_NEXT"
+    scene_metric_defaults(scene)
     scene.world.color = (0.045, 0.048, 0.045)
 
 
 def create_image(name: str, size: int, pixels: list[float], colorspace: str) -> bpy.types.Image:
-    image = bpy.data.images.new(name, width=size, height=size, alpha=True, float_buffer=False)
-    image.file_format = "PNG"
-    image.colorspace_settings.name = colorspace
-    image.pixels.foreach_set(pixels)
-    image.pack()
-    image["tz_original_procedural"] = True
-    image["tz_generator"] = GENERATOR_NAME
-    return image
+    """`lib.blender.materials.create_image`, stamped with this generator name."""
+    return _create_image(name, size, pixels, colorspace, generator=GENERATOR_NAME)
 
 
 def surface_sample(kind: str, x: int, y: int, size: int, seed: int) -> tuple[float, tuple[float, float, float], float, float, float]:
@@ -246,19 +232,11 @@ def create_material(kind: str, lod: int, seed: int) -> bpy.types.Material:
     heights = [sample[0] for sample in samples]
     base_pixels: list[float] = []
     orm_pixels: list[float] = []
-    normal_pixels: list[float] = []
     for _, color, occlusion, roughness, metallic in samples:
         base_pixels.extend((*color, 1.0))
         orm_pixels.extend((occlusion, roughness, metallic, 1.0))
     normal_strength = 2.2 if lod == 0 else 1.6 if lod == 1 else 1.15
-    for y in range(size):
-        for x in range(size):
-            left = heights[y * size + ((x - 1) % size)]
-            right = heights[y * size + ((x + 1) % size)]
-            down = heights[((y - 1) % size) * size + x]
-            up = heights[((y + 1) % size) * size + x]
-            normal = Vector((-(right - left) * normal_strength, -(up - down) * normal_strength, 1.0)).normalized()
-            normal_pixels.extend((normal.x * 0.5 + 0.5, normal.y * 0.5 + 0.5, normal.z * 0.5 + 0.5, 1.0))
+    normal_pixels = height_field_normals(heights, size, normal_strength)
 
     prefix = f"TZ_{kind}_L{lod}"
     base_image = create_image(f"{prefix}_BaseColor", size, base_pixels, "sRGB")
@@ -312,10 +290,7 @@ def create_material(kind: str, lod: int, seed: int) -> bpy.types.Material:
     links.new(orm_node.outputs["Color"], separate.inputs["Color"])
     links.new(separate.outputs["Green"], bsdf.inputs["Roughness"])
     links.new(separate.outputs["Blue"], bsdf.inputs["Metallic"])
-    group_tree = bpy.data.node_groups.get("glTF Material Output")
-    if group_tree is None:
-        group_tree = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
-        group_tree.interface.new_socket(name="Occlusion", in_out="INPUT", socket_type="NodeSocketFloat")
+    group_tree = gltf_occlusion_group()
     gltf_output = nodes.new("ShaderNodeGroup")
     gltf_output.node_tree = group_tree
     gltf_output.location = (120, -480)
@@ -336,15 +311,13 @@ def material_set(asset: str, variant: str, lod: int, seed: int) -> dict[str, bpy
 
 
 def assign_metric_planar_uv(mesh: bpy.types.Mesh, tile_m: float = 1.25) -> None:
-    mesh.update()
-    uv_layer = mesh.uv_layers.get("UVMap") or mesh.uv_layers.new(name="UVMap")
-    for polygon in mesh.polygons:
-        normal = tuple(abs(value) for value in polygon.normal)
-        dominant = max(range(3), key=lambda axis: normal[axis])
-        axes = ((1, 2), (0, 2), (0, 1))[dominant]
-        for loop_index in polygon.loop_indices:
-            vertex = mesh.vertices[mesh.loops[loop_index].vertex_index].co
-            uv_layer.data[loop_index].uv = (vertex[axes[0]] / tile_m, vertex[axes[1]] / tile_m)
+    """`lib.blender.primitives.assign_metric_planar_uv`, reuse-layer variant.
+
+    This factory re-projects after applying a bevel modifier, so it must reuse
+    the existing `UVMap` rather than add a second one, and must refresh polygon
+    normals first. The other two factories always create a fresh layer.
+    """
+    _assign_metric_planar_uv(mesh, tile_m, reuse_existing=True, update_first=True)
 
 
 def tag_object(obj: bpy.types.Object, root: bpy.types.Object, family: str, component: str, lod: int) -> None:
@@ -368,14 +341,9 @@ def create_box(
     bevel: float = 0.0,
     segments: int = 1,
 ) -> bpy.types.Object:
-    sx, sy, sz = size
-    cx, cy, cz = center
     require(min(size) > 0.0, f"{name}: box size must be positive")
-    vertices = [
-        (cx + dx * sx * 0.5, cy + dy * sy * 0.5, cz + dz * sz * 0.5)
-        for dx, dy, dz in ((-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1), (-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1))
-    ]
-    faces = ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7))
+    vertices = box_vertices(size, center)
+    faces = box_faces(BOX_FACE_VARIANT)
     mesh = bpy.data.meshes.new(f"{name}_Mesh")
     mesh.from_pydata(vertices, [], faces)
     mesh.materials.append(material)
@@ -766,9 +734,16 @@ def build_tanker_wagon(root: bpy.types.Object, mats: dict[str, bpy.types.Materia
     tank_radius = 1.40
     create_lathed_tank("TankerVessel", tank_center_z, 5.72, tank_radius, tank, root, lod, segments=(32, 20, 12)[lod], profile_steps=(5, 3, 2)[lod])
     band_count = 5 if lod == 0 else 3 if lod == 1 else 2
+    # The bands are the widest thing on this wagon, so their OUTER radius is the
+    # silhouette. A coarser LOD uses a fatter tube (fewer, chunkier bands read
+    # better at distance), and pinning the tube's centre-line instead of its
+    # outer face pushed LOD1/LOD2 15 mm outboard of LOD0 on both sides — a
+    # coarser LOD that grows (BUILDING-MASSING.md §5.1, second mechanism).
+    band_outer_radius = tank_radius + 0.057
+    band_tube_radius = 0.045 if lod == 0 else 0.06
     for index in range(band_count):
         x = -4.35 + index * (8.70 / max(1, band_count - 1))
-        create_torus(f"TankBand_{index:02d}", tank_radius + 0.012, 0.045 if lod == 0 else 0.06, (x, 0.0, tank_center_z), steel, root, "structural-steel", "tank-band", lod, major_segments=(32, 20, 12)[lod], minor_segments=(8, 6, 4)[lod], axis="X")
+        create_torus(f"TankBand_{index:02d}", outer_anchored_center(band_outer_radius, band_tube_radius), band_tube_radius, (x, 0.0, tank_center_z), steel, root, "structural-steel", "tank-band", lod, major_segments=(32, 20, 12)[lod], minor_segments=(8, 6, 4)[lod], axis="X")
     # Cradles seat the vessel visibly on the chassis.
     for x in (-3.85, 3.85):
         create_box(f"TankCradle_{x:+.2f}", (0.34, 2.38, 0.55), (x, 0.0, 1.55), steel, root, "structural-steel", "tank-cradle", lod, bevel=0.06 if lod == 0 else 0.02)
@@ -776,10 +751,16 @@ def build_tanker_wagon(root: bpy.types.Object, mats: dict[str, bpy.types.Materia
     create_cylinder("TopHatchLid", 0.39, 0.11, (0.0, 0.0, 4.18), warning, root, "warning-paint", "hatch", lod, axis="Z", vertices=(20, 14, 10)[lod])
     create_box("TopWalkway", (2.65 if lod == 0 else 1.55, 0.62, 0.08), (0.0, 0.0, 4.08), galvanized, root, "galvanized", "top-walkway", lod)
     if lod <= 1:
-        # Side ladder: two vertical stiles with horizontal rungs.
-        ladder_y = -1.425
+        # Side ladder: two vertical stiles with horizontal rungs. The stiles are
+        # the outboard-most galvanized part, and their tube gets fatter at LOD1,
+        # so the ladder is anchored by its OUTER face rather than its centre-line
+        # — the same mechanism as the tank bands above. The rungs share the
+        # stiles' centre-line, as they physically must.
+        ladder_outer_y = -1.453
+        stile_radius = 0.028 if lod == 0 else 0.038
+        ladder_y = -outer_anchored_center(-ladder_outer_y, stile_radius)
         for x in (-0.30, 0.30):
-            create_tube_between(f"LadderStile_{x:+.2f}", (x, ladder_y, 1.24), (x, ladder_y, 4.03), 0.028 if lod == 0 else 0.038, galvanized, root, "galvanized", "ladder", lod, vertices=8)
+            create_tube_between(f"LadderStile_{x:+.2f}", (x, ladder_y, 1.24), (x, ladder_y, 4.03), stile_radius, galvanized, root, "galvanized", "ladder", lod, vertices=8)
         rung_count = 10 if lod == 0 else 6
         for index in range(rung_count):
             z = 1.37 + index * (2.48 / max(1, rung_count - 1))
@@ -909,26 +890,6 @@ def rounded_bounds(bounds: dict[str, list[float]]) -> dict[str, list[float]]:
     }
 
 
-def glb_json(path: Path) -> dict:
-    blob = path.read_bytes()
-    require(len(blob) >= 20, "exported GLB is truncated")
-    magic, version, declared_length = struct.unpack_from("<4sII", blob, 0)
-    require(magic == GLB_MAGIC and version == 2 and declared_length == len(blob), "invalid GLB header")
-    offset = 12
-    document = None
-    while offset + 8 <= len(blob):
-        length, kind = struct.unpack_from("<II", blob, offset)
-        offset += 8
-        end = offset + length
-        require(end <= len(blob), "GLB chunk exceeds file")
-        if kind == GLB_JSON_CHUNK:
-            require(document is None, "duplicate GLB JSON chunk")
-            document = json.loads(blob[offset:end].decode("utf-8"))
-        offset = end
-    require(offset == len(blob) and isinstance(document, dict), "invalid GLB chunk layout")
-    return document
-
-
 def exported_stats(document: dict) -> dict:
     accessors = document.get("accessors", [])
     triangles = 0
@@ -971,31 +932,9 @@ def export_glb_exclusive(output: Path) -> None:
     os.unlink(temporary_name)
     temporary = Path(temporary_name)
     try:
-        result = bpy.ops.export_scene.gltf(
-            filepath=str(temporary),
-            check_existing=False,
-            export_format="GLB",
-            export_copyright="Original TarkovZero procedural authoring; no game payloads",
-            export_yup=True,
-            export_apply=True,
-            export_texcoords=True,
-            export_normals=True,
-            export_tangents=True,
-            export_materials="EXPORT",
-            export_image_format="AUTO",
-            export_cameras=False,
-            export_lights=False,
-            export_extras=True,
-            export_animations=False,
-            export_skins=False,
-            export_morph=False,
-            export_draco_mesh_compression_enable=False,
-            export_unused_images=False,
-            export_unused_textures=False,
-            use_selection=False,
-            use_visible=True,
-            will_save_settings=False,
-        )
+        # Settings frozen in `lib.blender.primitives.GLTF_EXPORT_SETTINGS`; the
+        # exclusive-link publication around it is this factory's own contract.
+        result = export_gltf_binary(temporary)
         require(result == {"FINISHED"} and temporary.is_file(), f"glTF export failed: {result}")
         os.link(temporary, output)
     finally:

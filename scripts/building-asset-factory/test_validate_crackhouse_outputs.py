@@ -32,6 +32,50 @@ class ValidatorContracts(unittest.TestCase):
         self.assertAlmostEqual(derived["pivot"][2],-156.175,places=8)
         self.assertAlmostEqual(derived["yaw"],-11.379260726349447,places=8)
 
+    def test_cross_lod_containment_refuses_the_pre_fix_roof(self) -> None:
+        """The gate this validator was missing (BUILDING-MASSING.md §5.1).
+
+        Bounds measured off `.local-candidates/crackhouse-fixedrig/*.glb`, the
+        candidate whose LOD1 is 26.34 mm wider in Z than LOD0 while every other
+        check in this file passes it.
+        """
+        before={
+            0:{"min":[-12.544113,-0.18,-8.544414],"max":[12.544113,6.5,8.544415]},
+            1:{"min":[-12.544113,-0.18,-8.557570],"max":[12.544113,6.5,8.557597]},
+            2:{"min":[-12.544113,-0.18,-8.502484],"max":[12.544113,6.5,8.502484]},
+        }
+        with self.assertRaisesRegex(ValueError,r"z\.max"):
+            validator.assert_contained(before,validator.ASSET_ID)
+        after=dict(before)
+        after[1]={"min":[-12.544113,-0.18,-8.544414],"max":[12.544113,6.5,8.544415]}
+        self.assertEqual(validator.assert_contained(after,validator.ASSET_ID)["status"],"PASS")
+
+    def test_exposed_brick_must_lie_on_its_facade_datum(self) -> None:
+        """§5.2. The patches used to float 146 mm outboard of the plaster."""
+        half=validator.derived_transform()["width"]*0.5
+
+        def document(offset: float) -> dict:
+            return {
+                "scene":0,"scenes":[{"nodes":[0,1]}],
+                "nodes":[
+                    {"name":"Batch_ground_brick","mesh":0},
+                    {"name":"Batch_ground_plaster","mesh":1},
+                ],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]},{"primitives":[{"attributes":{"POSITION":1}}]}],
+                "accessors":[
+                    {"count":6,"min":[-1.0,0.0,-(half+offset)],"max":[1.0,2.0,half+offset]},
+                    {"count":8,"min":[-1.0,0.0,-half],"max":[1.0,2.0,half]},
+                ],
+            }
+
+        validator.validate_surface_datums(document(validator.BRICK_PATCH_PROUD_M),0)
+        with self.assertRaisesRegex(ValueError,"off its facade datum"):
+            validator.validate_surface_datums(document(0.146),0)
+        # LOD2 carries no damage at all, and must not quietly grow some.
+        validator.validate_surface_datums({"nodes":[{"name":"Batch_ground_plaster"}]},2)
+        with self.assertRaisesRegex(ValueError,"only LOD0/LOD1"):
+            validator.validate_surface_datums(document(validator.BRICK_PATCH_PROUD_M),2)
+
     @unittest.skipUnless(os.environ.get("TZ_CRACKHOUSE_QA_RECEIPTS"),"set TZ_CRACKHOUSE_QA_RECEIPTS to three receipts")
     def test_receipt_mutations_are_rejected(self) -> None:
         sources=[Path(value).resolve() for value in os.environ["TZ_CRACKHOUSE_QA_RECEIPTS"].split(",")]

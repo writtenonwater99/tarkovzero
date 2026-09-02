@@ -31,6 +31,53 @@ class ValidatorContracts(unittest.TestCase):
         self.assertEqual(stats["boundsM"]["min"], [10.0, 0.0, -6.0])
         self.assertEqual(stats["boundsM"]["max"], [12.0, 4.0, 0.0])
 
+
+class LodSilhouetteWaiver(unittest.TestCase):
+    """The pinned fortress-shell growth is a tripwire, not an exemption.
+
+    Bounds measured off the shipped, admitted GLBs in
+    `public/assets/3d/customs/authored/fortress/` on 2026-09-01. These tests use
+    the validator's own waiver table, so a hand-widened waiver fails them.
+    """
+
+    SHIPPED = {
+        0: {"min": [-30.967751, 0.417496, -16.686657], "max": [30.638618, 18.198912, 16.564327]},
+        1: {"min": [-30.967751, 0.417496, -16.686657], "max": [30.598619, 18.214580, 16.564327]},
+        2: {"min": [-30.967751, 0.417496, -16.686657], "max": [30.638618, 18.230173, 16.564327]},
+    }
+
+    def test_the_shipped_admitted_chain_matches_the_pinned_defect(self) -> None:
+        report = validator.assert_contained(
+            self.SHIPPED, "fortress-shell",
+            known_growth=validator.FORTRESS_SHELL_KNOWN_GROWTH_MM,
+            known_growth_note=validator.FORTRESS_SHELL_KNOWN_GROWTH_NOTE,
+        )
+        self.assertEqual(report["status"], "PASS-WITH-PINNED-KNOWN-DEFECT")
+
+    def test_without_the_waiver_the_admitted_chain_is_refused(self) -> None:
+        # i.e. the defect is real and the gate sees it; the waiver is the only
+        # reason this asset validates at all.
+        with self.assertRaises(ValueError):
+            validator.assert_contained(self.SHIPPED, "fortress-shell")
+
+    def test_a_new_growth_on_an_unpinned_axis_still_fails(self) -> None:
+        worse = dict(self.SHIPPED)
+        worse[2] = {"min": [-31.0, 0.417496, -16.686657], "max": [30.638618, 18.230173, 16.564327]}
+        with self.assertRaisesRegex(ValueError, r"x\.min"):
+            validator.assert_contained(worse, "fortress-shell", known_growth=validator.FORTRESS_SHELL_KNOWN_GROWTH_MM)
+
+    def test_fixing_the_defect_fails_the_pin_rather_than_passing_silently(self) -> None:
+        fixed = {lod: dict(value) for lod, value in self.SHIPPED.items()}
+        fixed[1]["max"] = [30.598619, 18.198912, 16.564327]
+        fixed[2]["max"] = [30.638618, 18.198912, 16.564327]
+        with self.assertRaisesRegex(ValueError, "no longer matches"):
+            validator.assert_contained(fixed, "fortress-shell", known_growth=validator.FORTRESS_SHELL_KNOWN_GROWTH_MM)
+
+    def test_the_basement_carries_no_waiver(self) -> None:
+        self.assertEqual(validator.KNOWN_LOD_GROWTH_MM["zb013-basement"], {})
+
+
+class ValidatorRealOutputs(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("TZ_FORTRESS_QA_RECEIPTS"), "set TZ_FORTRESS_QA_RECEIPTS to three comma-separated receipts")
     def test_receipt_mutations_are_rejected(self) -> None:
         source_receipts = [Path(value).resolve() for value in os.environ["TZ_FORTRESS_QA_RECEIPTS"].split(",")]
