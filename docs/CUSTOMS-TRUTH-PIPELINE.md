@@ -221,3 +221,219 @@ across Customs.
 
 Tests use only synthetic in-memory fake objects — `npm run test:customs-census`
 never needs, and must never be pointed at, real game files.
+
+## Opt-in mesh local-bounds reader
+
+`scripts/extract-customs-bounds.py` is the separately audited streaming reader
+the census note above defers to. It returns the one Mesh-derived fact the census
+refuses to compute — `m_LocalAABB` — and nothing else. Walls need measured
+heights and buildings need measured footprints; both are this reader's output.
+
+Its contract is `docs/plans/BOUNDS-SPIKE-FINDINGS.md`. Read that before changing
+anything here.
+
+### How it avoids the payload
+
+It never calls `parse_as_dict()` on a Mesh. It walks the **pinned typetree with a
+logical cursor**: skipping a field is pointer arithmetic, so `m_IndexBuffer`,
+`m_VertexData.m_DataSize`, the ten `PackedBitVector`s of `m_CompressedMesh` and
+both baked collision meshes are stepped over with no seek, no read, and no
+allocation, whatever their size. The only physical reads are 4-byte array/string
+counts, the 24-byte `m_LocalAABB`, and one 24-byte `SubMesh.localAABB` per
+submesh. On the self-test's 12.8 MiB synthetic object that is **34 reads / 216
+bytes — 0.0016%**.
+
+Four bounds enforce that structurally, all inside the stream wrapper rather than
+in the walk's good intentions:
+
+| Bound | Value | What it stops |
+| --- | --- | --- |
+| `MAX_SINGLE_READ_BYTES` | 64 | one bulk read of an array |
+| `MAX_TOTAL_READ_BYTES` | 8192 per object | a reader that walks instead of skipping |
+| `ALLOWED_READ_WIDTHS` | `{4, 24}` | any read the design does not describe |
+| `ALLOWED_READ_KINDS` | `count`, `aabb`, `submesh-aabb` | an untagged read; untagged bytes are counted as `payloadBytesRead` and refuse |
+
+A vertex buffer does not fit in that budget, by construction. The self-test's
+negative control replaces the skip primitive with one that reads: the reader does
+not produce a slow correct answer, it **refuses**.
+
+### The three non-negotiable guards
+
+1. **The read budget**, above.
+2. **`assert_end_offset`** — the walk must traverse the whole object and land
+   exactly on its declared last byte. Catches every *length-changing* schema
+   divergence.
+3. **`assert_submesh_agreement`** — `m_LocalAABB` must equal the union of the
+   per-`SubMesh` `localAABB`s (2 cm + 2% tolerance), which are stored before every
+   payload array. This is the **only** guard that survives a *length-preserving*
+   layout shift. Spike §4 reproduces one: `m_MeshUsageFlags` (4 bytes) moved
+   across the AABB satisfies the checksum and emits extents `(0.0, 7.05, 2.15)`
+   against a truth of `(7.05, 2.15, 1.52)` — finite, non-negative, plausible, and
+   wrong. `test_mutation_removing_the_cross_check_lets_the_wrong_answer_through`
+   pins exactly that. A reader with the checksum alone is not safe, it is lucky.
+
+A mesh whose `m_LocalAABB` was authored by hand and legitimately differs from the
+submesh union is **refused**. That is the conservative direction, but it means
+the refusal ledger is a **coverage gap**, never evidence that no such mesh exists.
+
+Do not tune the plausibility gates (`MAX_ABS_EXTENT_METRES`, the non-finite and
+negative-extent checks) against fixtures whose filler is noise: spike §4 shows a
+zeroed neighbour — which is what real meshes ship — makes a shift decode into
+plausible numbers that every cheap gate passes.
+
+### Abort, never skip
+
+**The schema is per-version, not per-object.** One structural divergence means
+the pin is wrong for the whole file. Every refusal except the six in
+`SKIP_REASONS` **aborts the run and writes nothing** — a per-object skip would
+quietly turn a systematic schema error into a partial roster that looks fine.
+`--allow-partial` does not override an abort.
+
+The six ledgered skips are genuinely per-object acquisition facts, and each is
+raised either *before* the walk starts (missing declared size, missing object
+offset, unavailable typetree, object outside the file, non-positive size) or
+*after* all three structural guards have passed. That last case is
+`external-stream-reference`: a `.resS` reference is **deferred** rather than
+refused where it is detected, because under a wrong schema the four bytes at the
+stream-path offset are garbage and non-zero with near-certainty, and refusing
+there would let a systematic schema error present itself as a mass of benign
+per-object skips. The path bytes are stepped over and never read either way.
+`test_skip_reasons_cannot_mask_a_schema_error` pins the ordering.
+
+### Layout assumptions, and how a wrong one is detected
+
+| # | Assumption | Detected by | Residual |
+| --- | --- | --- | --- |
+| 1 | Little-endian | explicit refusal in `assert_pins` | none |
+| 2 | Exact Unity version | `--pin-unity-version`, compared to the string read off the serialized file | none |
+| 3 | Exact `Mesh` field order | end-offset checksum (length-changing) + submesh cross-check (length-preserving) | a shift that preserves length **and** the AABB↔submesh relationship |
+| 4 | Typetree provenance | `--pin-typetree-sha256` over the rebuilt node tree; the artifact reports `file-embedded` vs `library-generated` | a stripped-typetree build takes its schema from UnityPy's generated database — a third-party schema for a third-party-selected file (see below) |
+| 5 | One typetree for the whole file | the per-object pin comparison, which refuses a second distinct hash as `unpinned-typetree`; `typetree-divergence` is a second layer *behind* it, reachable only if the pin check is removed | none |
+| 6 | Align = 4 bytes, base = object start | `--align-base {object,file}`; a wrong base surfaces as an end-offset or count refusal, never a guess | the fixture cannot settle which base UnityPy actually uses — the operator run does |
+| 7 | `SubMesh.localAABB` exists (Unity 2017.3+) | `assert_typetree_shape` refuses `no-submesh-crosscheck` before any read | a build without it has **no** length-preserving-shift defence and must not be read |
+| 8 | `m_StreamData.path` exists | `typetree-missing-required-node` | a build without it has no `.resS` defence |
+| 9 | The declared serialized byte size is trustworthy | `object-outside-file`, `field-overruns-object` | a size that is wrong but self-consistent |
+
+**Row 4 deserves saying out loud in the run's evidence.** If EFT's files ship with
+typetrees stripped, the schema does not come from the file — it comes from
+UnityPy's version-keyed database, and the same library that selects the files
+would also supply the schema for reading them. The mitigation is that schema is
+not identity: the *numbers* still come from the file's own bytes, and the submesh
+cross-check validates the schema against the file's own internal redundancy
+rather than against the library's say-so. The artifact records which provenance
+was used. Do not let it pass silently.
+
+**Flipping `--align-base` is a diagnostic, not a fix.** A run that needed it must
+say so in its evidence.
+
+### Reader bounds that can abort a legitimate file
+
+Three refusals are limits of *this reader*, not evidence that the pinned schema is
+wrong. All three abort the run (they are not in `SKIP_REASONS`), so an operator who
+reads them as "the pin is bad" will chase the wrong thing. In rough order of how
+likely they are to fire on real Customs meshes:
+
+| Reason | Bound | When a legitimate mesh trips it |
+| --- | --- | --- |
+| `submesh-count-implausible` | `MAX_SUBMESH_CROSSCHECK` = 64 | Unity permits far more than 64 submeshes. A legitimately multi-material mesh aborts the run. |
+| `variable-element-budget-exceeded` | `MAX_VARIABLE_ELEMENTS` = 512 | variable-length array elements must be iterated, not bulk-skipped; a mesh with hundreds of blend-shape channels reaches this. |
+| `implausible-bounds-magnitude` | `MAX_ABS_EXTENT_METRES` = 4096 | a mesh authored in centimetre units, or a genuine skybox-scale shell. |
+
+The conservative direction is deliberate — the reader refuses a layout it cannot
+police rather than guessing — but the diagnosis differs from a schema error. If
+one of these fires, the fix is a reviewed, tested bound change, never a pin
+change, and never a demotion of the refusal into `SKIP_REASONS`: raising a bound
+widens what the cross-check must police, so it is a change to a guard and gets
+the same scrutiny as one.
+
+### Output
+
+`{pathId, localAabb: {center: {x,y,z}, extents: {x,y,z}}}` plus source-file
+identity and per-object instrumentation. Every record key is **already** in the
+census's `ALLOWED_OUTPUT_KEYS` — no widening of that guard
+(`test_record_keys_are_already_in_the_census_allowlist` proves the containment);
+spell it `center`, US spelling, because `centre` is not allowlisted. The envelope
+adds a small reviewed set of pin, instrumentation and refusal-ledger keys, and
+the whole artifact is walked by the same fail-closed allowlist guard before any
+write. Publication is a fully-written temporary file plus an atomic no-clobber
+hard link, outside both the game tree and this repo, with no `--force`.
+
+### Running it — the two commands
+
+Stage 1 opens no serialized file, imports no UnityPy, and writes nothing. It
+validates the paths and the pins and runs every synthetic guard case **in the
+same process at the same commit** — a reader whose guards are not exercised in
+the run has not demonstrated them.
+
+```bash
+python scripts/extract-customs-bounds.py \
+  --source /path/to/local/game-data \
+  --output /path/outside/game-and-repo/customs-mesh-bounds.json \
+  --acknowledge-local-game-files \
+  --pin-unity-version <exact version string> \
+  --pin-typetree-sha256 <64 hex chars of the reviewed Mesh node tree> \
+  --self-test \
+  --dry-run
+```
+
+Stage 2 is the same command with the environment's UnityPy Python, minus
+`--dry-run`. Add `--allow-partial` only if stage 2 reports ledgered skips you
+have read and accepted.
+
+```bash
+/path/to/tarkovzero-unitypy-venv/bin/python scripts/extract-customs-bounds.py \
+  --source /path/to/local/game-data \
+  --output /path/outside/game-and-repo/customs-mesh-bounds.json \
+  --acknowledge-local-game-files \
+  --pin-unity-version <exact version string> \
+  --pin-typetree-sha256 <64 hex chars of the reviewed Mesh node tree> \
+  --self-test
+```
+
+Getting the two pin values is part of the run, not a prerequisite: the version
+string comes from the catalog, and the typetree hash is what stage 2 reports when
+it refuses with `unpinned-typetree` — review the node tree that produced it
+before pinning it.
+
+**Evidence the run must produce, or it does not count:** the self-test block all
+green (including `f/checksum-alone-is-blind`, `f/crosscheck-catches-shift` and
+both negative controls); the exact Unity version string and its equality
+assertion; the typetree provenance and SHA-256; per object `pathId`, `center`,
+`extents` and `physicalReads` / `bytesRead` / `maxSingleRead` /
+`payloadBytesRead: 0`; the aggregate `bytesReadRatio` (expect < 0.0001 — a ratio
+in the percent range means the reader is walking something and the run is void);
+the refusal ledger with reason counts; and the before/after SHA-256 plus
+stat-identity binding on every file touched.
+
+### What a clean run does and does not establish
+
+**Does.** That these mesh *resources* have these local bounds. It kills the
+barrel-scored-as-wagon failure outright (0.9 m vs 14.1 m), turns "6 m container"
+from a name token into a measurement, and makes part-vs-placement a physical
+question rather than a lexical one.
+
+**Does not.** It does not establish **placement** — an AABB is a property of the
+mesh asset and does not prove a matching GameObject is placed, active and visible
+rather than a child, collider, LOD node or inactive placeholder. It does not give
+a **world footprint** directly: `m_LocalAABB` is local and pre-transform, so a
+world extent needs the census's composed world scale, must be labelled derived,
+and over-estimates under a rotated non-uniform scale — carry `worldExact`
+alongside it. It does not give **independence**: same acquisition layer, same
+selector, same library, so agreement with the second source is still not
+validation. Bounds are a **filter that removes size-impossible candidates**, never
+a promoter that creates confirmed objects. A measured 14.1 m object is a better
+candidate, not a confirmed wagon.
+
+Tests are synthetic fixtures written into a temp directory plus fake in-memory
+Unity objects — `npm run test:customs-bounds` never needs, and must never be
+pointed at, real game files. Every refusal reason the reader can raise has a test,
+and every guard is mutation-proved: the suite patches the guard away and asserts
+what the mutation actually costs. That cost is not the same for all of them, and
+the tests say which is which — removing the submesh cross-check lets a *wrong
+answer* through (`test_mutation_removing_the_cross_check_lets_the_wrong_answer_through`),
+while removing the non-finite submesh check only degrades the *reason code* from
+`non-finite-submesh-bounds` to `submesh-bounds-disagree`, because `min`/`max` drop
+a NaN and the partial union still disagrees. A guard that merely sharpens a
+diagnosis is still worth having — a structural reason code tells the operator the
+pin is wrong for the whole file — but the suite does not claim it prevents a wrong
+answer.
