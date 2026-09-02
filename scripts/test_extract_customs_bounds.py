@@ -26,6 +26,7 @@ import io
 import json
 import math
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -248,18 +249,52 @@ class ReaderCoreTests(unittest.TestCase):
         self.assertGreater(self.fixture.byte_size, 8 * 1024 * 1024)
 
     def test_zero_payload_bytes_are_physically_read(self):
-        _record, log = read_fixture(self.fixture, self.tree)
+        record, log = read_fixture(self.fixture, self.tree)
         # (1) measured against ranges the fixture writer emitted independently
         self.assertEqual(log.intersects(self.fixture.payload_ranges), [])
         # (2) every read is contained in a range the fixture declared readable
         self.assertEqual(
             bounds.reads_outside_allowed_set(log, self.fixture.allowed_read_ranges), []
         )
-        # (3) the reader's own tag-based accounting agrees
-        self.assertEqual(log.payload_bytes, 0)
+        # (3) the accounting the ARTIFACT reports agrees — reads intersected
+        #     against the ranges the walk itself advanced past
+        self.assertEqual(record.stepped_over_bytes_read, 0)
+        self.assertGreater(record.payload_bytes_stepped_over, 8 * 1024 * 1024)
         self.assertEqual(sorted(log.widths), [4, 24])
         self.assertLess(log.total_bytes, 1024)
         self.assertLessEqual(log.max_single_read, 24)
+
+    def test_the_walks_stepped_ranges_cover_the_object_it_did_not_read(self):
+        """The two accountings must add up to the whole object, or one is lying.
+
+        If the walk could advance a byte that is neither read nor recorded as
+        stepped over, `steppedOverBytesRead` would have a blind spot to hide in.
+        The SubMesh block is the one region both stepped over and read back into,
+        at exactly 24 bytes per SubMesh, so it is subtracted once.
+        """
+        record, log = read_fixture(self.fixture, self.tree)
+        self.assertEqual(
+            record.bytes_stepped_over
+            + log.total_bytes
+            - bounds.AABB_BYTES * record.submesh_count,
+            self.fixture.byte_size,
+        )
+
+    def test_a_walk_that_advances_unaccounted_bytes_is_refused(self):
+        """The mutation: a skip that moves the cursor without recording it."""
+        original_skip = bounds._Ctx.skip
+
+        def silent_skip(self_ctx, count, payload=False):
+            if count == 4:                 # one scalar field, silently swallowed
+                self_ctx.pos += count
+                return
+            original_skip(self_ctx, count, payload)
+
+        with mutate(bounds._Ctx, "skip", silent_skip):
+            self.assertEqual(
+                refusal_of(lambda: read_fixture(self.fixture, self.tree)),
+                "walk-accounting-incomplete",
+            )
 
     def test_the_giant_arrays_are_stepped_over_not_read(self):
         _record, log = read_fixture(self.fixture, self.tree)
@@ -379,7 +414,7 @@ class GuardMutationTests(unittest.TestCase):
     # -- GUARD 1: the read budget, inside the stream wrapper ----------------
 
     def test_guard_read_budget_stops_a_reader_that_walks_the_payload(self):
-        def greedy(self_ctx, count):
+        def greedy(self_ctx, count, payload=False):
             remaining = count
             while remaining >= 24:
                 self_ctx.stream.read_at(self_ctx.pos, 24, "submesh-aabb")
@@ -397,7 +432,7 @@ class GuardMutationTests(unittest.TestCase):
         """With the budget gone, the same reader materializes payload bytes."""
         captured = {}
 
-        def greedy(self_ctx, count):
+        def greedy(self_ctx, count, payload=False):
             remaining = count
             while remaining >= 24:
                 self_ctx.stream.read_at(self_ctx.pos, 24, "submesh-aabb")
@@ -405,9 +440,15 @@ class GuardMutationTests(unittest.TestCase):
                 remaining -= 24
             self_ctx.pos += remaining
 
+        # This greedy reader replaces `skip` outright, so it advances the cursor
+        # without recording a stepped range; the walk-accounting invariant is
+        # neutralized alongside the cross-check to isolate the BUDGET, which is
+        # what this test is about.
         with mutate(bounds, "MAX_TOTAL_READ_BYTES", 1 << 30), mutate(
             bounds._Ctx, "skip", greedy
-        ), mutate(bounds, "assert_submesh_agreement", lambda *_a, **_k: None):
+        ), mutate(bounds, "assert_submesh_agreement", lambda *_a, **_k: None), mutate(
+            bounds, "assert_walk_accounts_for_every_byte", lambda *_a, **_k: None
+        ):
             try:
                 _record, log = read_fixture(self.good, self.tree)
             except bounds.BoundsRefusal as error:  # pragma: no cover - diagnostic
@@ -493,19 +534,79 @@ class GuardMutationTests(unittest.TestCase):
             "no-submesh-crosscheck",
         )
 
-    def test_guard_submesh_count_bound(self):
+    def test_guard_submesh_count_bound_names_the_reader_limit_it_hit(self):
+        """A reader limit is not a schema error, and must not report as one.
+
+        Both of these used to raise `submesh-count-implausible`, which is not in
+        SKIP_REASONS, so the run aborted telling the operator the pinned schema
+        was wrong for the whole file.  Unity ships zero-SubMesh meshes (empty,
+        collider-only, procedurally cleared) and the schema is correct in both
+        cases: the reader simply cannot cross-check them.  The abort stays; the
+        diagnosis changes.
+        """
         with mutate(bounds, "MAX_SUBMESH_CROSSCHECK", 2):
-            self.assertEqual(
-                refusal_of(lambda: read_fixture(self.good, self.tree)),
-                "submesh-count-implausible",
-            )
+            over = refusal_of(lambda: read_fixture(self.good, self.tree))
+        self.assertEqual(over, "submesh-count-over-crosscheck-limit")
+
         zero_submesh = self.fixture(
             "zero-submesh.bin",
             count_for=lambda path: 0 if path == "m_SubMeshes/Array" else small_counts(path),
         )
+        zero = refusal_of(lambda: read_fixture(zero_submesh, self.tree))
+        self.assertEqual(zero, "zero-submesh-mesh")
+
+        for reason in (over, zero):
+            with self.subTest(reason):
+                refusal = bounds.BoundsRefusal(reason)
+                self.assertEqual(refusal.refusal_class, bounds.REFUSAL_CLASS_READER_LIMIT)
+                # still an abort — only the diagnosis moved
+                self.assertTrue(refusal.aborts_run)
+                self.assertNotIn(reason, bounds.SKIP_REASONS)
+
+        # the reason code that used to cover all of this no longer exists
+        self.assertNotIn(
+            "submesh-count-implausible", SCRIPT_PATH.read_text(encoding="utf-8")
+        )
+
+    def test_every_refusal_reason_raised_in_the_file_is_classified(self):
+        """An unclassified reason means nobody decided what the abort means."""
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        raised = set(re.findall(r'BoundsRefusal\(\s*"([a-z0-9-]+)"', source))
+        self.assertGreater(len(raised), 30, raised)
+        self.assertEqual(raised - set(bounds.REFUSAL_CLASSES), set())
+        # and every class the table uses has an operator-facing meaning
         self.assertEqual(
-            refusal_of(lambda: read_fixture(zero_submesh, self.tree)),
-            "submesh-count-implausible",
+            set(bounds.REFUSAL_CLASSES.values()) - set(bounds.REFUSAL_CLASS_MEANINGS),
+            set(),
+        )
+        # the acquisition class and the skip list are the same set, by design:
+        # only a per-object acquisition fact is a ledgered skip
+        acquisition = {
+            reason
+            for reason, klass in bounds.REFUSAL_CLASSES.items()
+            if klass == bounds.REFUSAL_CLASS_ACQUISITION
+        }
+        self.assertEqual(acquisition, set(bounds.SKIP_REASONS))
+
+    def test_a_reader_limit_abort_says_it_is_not_a_schema_error(self):
+        """The message an operator reads must name the class it belongs to."""
+        schema = bounds.REFUSAL_CLASS_MEANINGS[bounds.REFUSAL_CLASS_SCHEMA]
+        limit = bounds.REFUSAL_CLASS_MEANINGS[bounds.REFUSAL_CLASS_READER_LIMIT]
+        unverifiable = bounds.REFUSAL_CLASS_MEANINGS[bounds.REFUSAL_CLASS_UNVERIFIABLE]
+        self.assertIn("pinned schema does not describe this file", schema)
+        self.assertIn("NOT", limit)
+        self.assertIn("authored by hand", unverifiable)
+        self.assertEqual(
+            bounds.refusal_class("submesh-bounds-disagree"),
+            bounds.REFUSAL_CLASS_UNVERIFIABLE,
+        )
+        self.assertEqual(
+            bounds.refusal_class("end-offset-divergence"), bounds.REFUSAL_CLASS_SCHEMA
+        )
+        # an unknown reason fails toward the loudest diagnosis
+        self.assertEqual(
+            bounds.refusal_class("something-nobody-classified"),
+            bounds.REFUSAL_CLASS_SCHEMA,
         )
 
     # -- the AABB itself -----------------------------------------------------
@@ -671,13 +772,97 @@ class GuardMutationTests(unittest.TestCase):
             "read-outside-object",
         )
 
-    def test_guard_payload_accounting_refuses_an_untagged_read(self):
+    def test_the_old_tag_based_payload_metric_is_gone(self):
+        """`payloadBytesRead` summed reads whose kind was not allowed.
+
+        `InstrumentedStream.read_at` raises `unexpected-read-kind` BEFORE
+        appending to the log, so no read that reached the log could ever
+        contribute and the metric was identically zero by construction.  This
+        pins the removal: neither the property, the guard, nor the output key
+        may come back, because the number was quoted as proof.
+        """
+        self.assertFalse(hasattr(bounds.ReadLog(), "payload_bytes"))
+        self.assertFalse(hasattr(bounds, "assert_no_payload_read"))
+        self.assertNotIn("payloadBytesRead", bounds.BOUNDS_ENVELOPE_EXTRA_KEYS)
         log = bounds.ReadLog()
-        log.reads.append((0, 24, "vertex-buffer"))
-        self.assertEqual(log.payload_bytes, 24)
-        self.assertEqual(
-            refusal_of(lambda: bounds.assert_no_payload_read(log)), "payload-bytes-read"
+        with self.assertRaises(bounds.BoundsRefusal) as caught:
+            with open(self.good.path, "rb") as handle:
+                bounds.InstrumentedStream(handle, log).read_at(0, 24, "vertex-buffer")
+        self.assertEqual(caught.exception.reason, "unexpected-read-kind")
+        self.assertEqual(log.reads, [], "the refused read never reached the log")
+
+    def test_guard_stepped_over_accounting_measures_a_real_intersection(self):
+        """The replacement metric is falsifiable, at the unit level.
+
+        Two independent declarations: read offsets from `InstrumentedStream`,
+        stepped ranges from the walk's own `skip`.  Planting one read inside a
+        stepped range moves the number, so zero is a measurement.
+        """
+        record, log = read_fixture(self.good, self.tree)
+        self.assertEqual(record.stepped_over_bytes_read, 0)
+
+        ctx = SimpleNamespace(
+            stepped=[(1000, 2000, True), (3000, 4000, False)], crosscheck=[]
         )
+        clean = bounds.ReadLog()
+        clean.reads.append((2000, 24, "aabb"))          # abuts, does not overlap
+        self.assertEqual(bounds.stepped_over_bytes_read(clean, ctx), 0)
+        bounds.assert_no_stepped_over_read(clean, ctx)
+
+        dirty = bounds.ReadLog()
+        dirty.reads.append((1990, 24, "aabb"))          # 10 bytes inside payload
+        dirty.reads.append((3500, 4, "count"))          # 4 bytes inside a scalar skip
+        self.assertEqual(bounds.stepped_over_bytes_read(dirty, ctx), 14)
+        self.assertEqual(
+            bounds.stepped_over_bytes_read(dirty, ctx, payload_only=True), 10
+        )
+        self.assertEqual(
+            refusal_of(lambda: bounds.assert_no_stepped_over_read(dirty, ctx)),
+            "stepped-over-bytes-read",
+        )
+
+        # The SubMesh block is the one region the walk steps over and re-reads;
+        # exempting it must not exempt anything else.
+        exempt = SimpleNamespace(
+            stepped=[(1000, 2000, False)], crosscheck=[(1000, 1100)]
+        )
+        inside = bounds.ReadLog()
+        inside.reads.append((1040, 24, "submesh-aabb"))
+        self.assertEqual(bounds.stepped_over_bytes_read(inside, exempt), 0)
+        straddle = bounds.ReadLog()
+        straddle.reads.append((1090, 24, "submesh-aabb"))
+        self.assertEqual(bounds.stepped_over_bytes_read(straddle, exempt), 14)
+
+    def test_mutation_a_reader_that_reads_what_it_recorded_as_skipped_is_caught(self):
+        """The discriminating mutation for the NEW metric.
+
+        The greedy reader in the budget tests replaces `skip` outright, so it
+        records no stepped ranges and only the budget can stop it.  This one
+        keeps the real bookkeeping and reads the range afterwards — exactly the
+        case the old tag-based metric could not see, and the new one refuses.
+        """
+        original_skip = bounds._Ctx.skip
+
+        def skip_then_read(self_ctx, count, payload=False):
+            start = self_ctx.pos
+            original_skip(self_ctx, count, payload)
+            offset = start
+            while offset + 24 <= self_ctx.pos:
+                self_ctx.stream.read_at(offset, 24, "submesh-aabb")
+                offset += 24
+
+        with mutate(bounds, "MAX_TOTAL_READ_BYTES", 1 << 30), mutate(
+            bounds._Ctx, "skip", skip_then_read
+        ), mutate(bounds, "assert_submesh_agreement", lambda *_a, **_k: None):
+            self.assertEqual(
+                refusal_of(lambda: read_fixture(self.good, self.tree)),
+                "stepped-over-bytes-read",
+            )
+            # and with the guard mutated away, the same reader emits a record
+            with mutate(bounds, "assert_no_stepped_over_read", lambda *_a, **_k: None):
+                record, log = read_fixture(self.good, self.tree)
+            self.assertGreater(record.stepped_over_bytes_read, 0)
+            self.assertTrue(log.intersects(self.good.payload_ranges))
 
     # -- the .resS deferral --------------------------------------------------
 
@@ -1034,12 +1219,9 @@ class OutputContractTests(unittest.TestCase):
         record = bounds.BoundsRecord(
             path_id=7, center=TRUE_CENTER, extents=TRUE_EXTENT, submesh_count=3
         )
-        log = bounds.ReadLog()
-        log.reads.append((0, 24, "aabb"))
         emitted = bounds._bounds_record(
             record,
             selection={"file": SHARED_NAME, "role": "sharedassets", "sceneIndex": CUSTOMS_INDEX},
-            log=log,
         )
         bounds.assert_bounded_payload(emitted)
         keys = set()
@@ -1055,6 +1237,54 @@ class OutputContractTests(unittest.TestCase):
         self.assertEqual(emitted["localAabb"]["center"]["y"], 2.10)
         self.assertNotIn("name", emitted)
         self.assertNotIn("meshName", emitted)
+
+    def test_the_record_contract_is_exactly_what_the_doc_states(self):
+        """The emitted key set is pinned, so widening it is a visible change."""
+        record = bounds.BoundsRecord(
+            path_id=7, center=TRUE_CENTER, extents=TRUE_EXTENT, submesh_count=3
+        )
+        emitted = bounds._bounds_record(
+            record,
+            selection={"file": SHARED_NAME, "role": "sharedassets", "sceneIndex": CUSTOMS_INDEX},
+        )
+        self.assertEqual(
+            set(emitted),
+            {
+                "objectId",
+                "asset",
+                "sourceRole",
+                "sceneIndex",
+                "pathId",
+                "type",
+                "submeshCount",
+                "localAabb",
+            },
+        )
+        # `sourceFile` duplicated `asset` on every record; the per-record
+        # instrumentation block was six keys per mesh of aggregate or constant.
+        self.assertNotIn("sourceFile", emitted)
+        self.assertNotIn("instrumentation", emitted)
+        self.assertNotIn("sourceFile", bounds.BOUNDS_RECORD_KEYS)
+
+    def test_the_envelope_allowlist_carries_no_key_the_envelope_cannot_emit(self):
+        """Every extra key must be reachable, or the allowlist is stale.
+
+        `results` and `detail` sat in the allowlist for a self-test block
+        `main()` never actually writes; `payloadBytesRead`, `totalMeshBytes` and
+        `bytesReadRatio` are gone with the metrics they named.
+        """
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        emitted_somewhere = set(re.findall(r'"([A-Za-z][A-Za-z0-9]*)":', source))
+        unreachable = bounds.BOUNDS_ENVELOPE_EXTRA_KEYS - emitted_somewhere
+        self.assertEqual(unreachable, set(), unreachable)
+        for gone in (
+            "payloadBytesRead",
+            "totalMeshBytes",
+            "bytesReadRatio",
+            "results",
+            "detail",
+        ):
+            self.assertNotIn(gone, bounds.BOUNDS_ENVELOPE_EXTRA_KEYS, gone)
 
     def test_the_payload_guard_refuses_an_unreviewed_key_or_a_blob(self):
         for payload in (
@@ -1143,30 +1373,151 @@ class RunTests(unittest.TestCase):
         mesh = payload["meshes"][0]
         self.assertEqual(mesh["pathId"], 101)
         self.assertEqual(mesh["type"], "Mesh")
-        self.assertEqual(mesh["sourceFile"], SHARED_NAME)
+        self.assertEqual(mesh["asset"], SHARED_NAME)
         self.assertAlmostEqual(mesh["localAabb"]["extents"]["x"], 7.05, places=5)
         self.assertAlmostEqual(mesh["localAabb"]["center"]["y"], 2.10, places=5)
-        self.assertEqual(mesh["instrumentation"]["payloadBytesRead"], 0)
-        self.assertEqual(mesh["instrumentation"]["readWidths"], [4, 24])
-        self.assertLessEqual(mesh["instrumentation"]["maxSingleRead"], 24)
-        self.assertEqual(payload["instrumentation"]["payloadBytesRead"], 0)
+
+        walk = payload["instrumentation"]["boundsWalk"]
+        self.assertEqual(walk["readWidths"], [4, 24])
+        self.assertLessEqual(walk["maxSingleRead"], 24)
+        self.assertEqual(walk["steppedOverBytesRead"], 0)
+        submesh_reads = bounds.AABB_BYTES * sum(
+            item["submeshCount"] for item in payload["meshes"]
+        )
+        self.assertEqual(
+            walk["bytesSteppedOver"] + walk["bytesRead"] - submesh_reads,
+            walk["meshBytesDeclared"],
+        )
         # This fixture's arrays are capped so the suite stays fast, so the ratio
         # is dominated by the fixed ~216 bytes of counts. On the self-test's full
         # 12.8 MiB object the same reader measures 0.0016%; the contract's "a
         # ratio in the percent range means the run is void" bar is what this pins.
-        self.assertLess(payload["instrumentation"]["bytesReadRatio"], 0.01)
+        self.assertLess(walk["walkBytesPerMeshByte"], 0.01)
         self.assertEqual(payload["pins"], {
             "unityVersion": UNITY_VERSION,
             "typetreeSha256": self.pin,
             "typetreeProvenance": ["file-embedded"],
             "alignBase": "object",
         })
-        self.assertIn("payloadBytesRead=0", out)
+        self.assertIn("steppedOverBytesRead=0", out)
+        self.assertIn("no payload was PARSED or EMITTED", out)
         # every touched file carries a before/after SHA-256 + stat identity
         for fact in payload["source"]["sceneFiles"]:
             self.assertTrue(fact["bindingVerified"], fact)
             self.assertEqual(len(fact["sha256"]), 64)
         self.assertEqual(fake.load_calls, ["globalgamemanagers", LEVEL_NAME, SHARED_NAME])
+
+    def test_the_report_states_the_bytes_the_process_actually_read(self):
+        """F2. The artifact used to report 216 bytes for a run that read 26.8 MB.
+
+        `_capture_file_binding` streams every selected file through SHA-256 twice
+        — that is how file identity is proven, and nothing payload-bearing is
+        parsed or emitted by it — but the artifact reported only the bounds
+        walk's own reads and the operator read that as "the run barely touched
+        the game files".  The tally below is taken by wrapping the census helper
+        from OUTSIDE the reader, so it is independent of what the reader claims.
+        """
+        # a full-size fixture, so the walk's reads and the file's size are orders
+        # of magnitude apart, exactly as on a real run
+        big = bounds.write_fixture(str(self.source / SHARED_NAME), self.tree)
+        fake = FakeUnityPy(
+            self.mesh_readers(
+                FakeMeshReader(101, big.object_offset, big.byte_size, self.tree)
+            )
+        )
+        tally = {"bytes": 0, "passes": 0}
+        original = census._capture_file_binding
+
+        def counting(path):
+            result = original(path)
+            tally["passes"] += 1
+            tally["bytes"] += int(result[0].get("byteSize") or 0)
+            return result
+
+        with mutate(census, "_capture_file_binding", counting), mutate(
+            bounds, "_capture_file_binding", counting
+        ):
+            code, out, err = self.run_main(self.base_args(), fake)
+        self.assertEqual(code, 0, err)
+        payload = json.loads((self.out / "bounds.json").read_text(encoding="utf-8"))
+        walk = payload["instrumentation"]["boundsWalk"]
+        proc = payload["instrumentation"]["process"]
+
+        # the hash volume is reported, and it is the number the outside tally saw
+        self.assertEqual(proc["identityHashBytes"], tally["bytes"])
+        self.assertEqual(proc["identityHashPasses"], tally["passes"])
+        self.assertTrue(proc["digestComplete"])
+        self.assertGreater(proc["identityHashBytes"], 20 * 1024 * 1024)
+
+        # the process total is the honest one: hashes + loader + walk
+        self.assertEqual(
+            proc["bytesRead"],
+            proc["identityHashBytes"] + proc["unityLoaderBytes"] + walk["bytesRead"],
+        )
+        self.assertGreater(proc["bytesRead"], 1000 * walk["bytesRead"])
+
+        # and the terminal says both numbers, in that order
+        self.assertIn(f"process read {proc['bytesRead']} bytes", out)
+        self.assertIn(f"bounds walk read {walk['bytesRead']} bytes", out)
+        self.assertIn("NOT a claim: that little was read", out)
+        self.assertNotIn("payloadBytesRead", out)
+
+    def test_the_counting_stream_counts_every_read_path(self):
+        """The process figure is only honest if no read path bypasses the counter."""
+        target = self.source / LEVEL_NAME
+        size = target.stat().st_size
+        stream = bounds._CountingStream(target, "level")
+        try:
+            self.assertEqual(len(stream.read()), size)
+            self.assertEqual(stream.bytes_read, size)
+            stream.seek(0)
+            buffer = bytearray(4)
+            stream.readinto(buffer)
+            self.assertEqual(stream.bytes_read, size + 4)
+            stream.seek(0)
+            stream.readline()
+            self.assertGreater(stream.bytes_read, size + 4)
+            # the inherited fast paths refuse rather than reading uncounted
+            stream.seek(0)
+            with self.assertRaises(io.UnsupportedOperation):
+                stream.read1(4)
+            with self.assertRaises(io.UnsupportedOperation):
+                stream.readinto1(bytearray(4))
+        finally:
+            stream.close()
+
+    def test_the_counted_opener_refuses_a_changed_identity(self):
+        """It duplicates census's check, so it must fail the same way."""
+        target = self.source / LEVEL_NAME
+        binding = census._capture_file_binding(target)
+        self.assertIsNotNone(binding[1])
+        stream = bounds._open_counted_unity_stream(target, LEVEL_NAME, binding[1])
+        self.assertEqual(stream.bytes_read, 0)
+        stream.close()
+        with self.assertRaises(census.CensusError):
+            bounds._open_counted_unity_stream(target, LEVEL_NAME, None)
+        wrong = (binding[1][0], binding[1][1], ("not", "this", "file"))
+        with self.assertRaises(census.CensusError):
+            bounds._open_counted_unity_stream(target, LEVEL_NAME, wrong)
+
+    def test_a_read_around_the_instrumentation_is_caught_by_the_handle_tally(self):
+        """Two tallies of the same reads, so neither can be the only witness."""
+        original = bounds.read_mesh_local_aabb_from_handle
+
+        def sneaky(handle, **kwargs):
+            result = original(handle, **kwargs)
+            handle.seek(0)
+            handle.read(4096)          # a read the ReadLog never hears about
+            return result
+
+        with mutate(bounds, "read_mesh_local_aabb_from_handle", sneaky):
+            code, _out, err = self.run_main(
+                self.base_args(), FakeUnityPy(self.mesh_readers(self.good_reader()))
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("bounds handle moved", err)
+        self.assertIn("Nothing was written", err)
+        self.assertFalse((self.out / "bounds.json").exists())
 
     def test_the_artifact_never_carries_a_name_a_path_or_a_stream_reference(self):
         fake = FakeUnityPy(self.mesh_readers(self.good_reader()))
@@ -1285,7 +1636,13 @@ class RunTests(unittest.TestCase):
         self.assertEqual(payload["meshes"], [])
         self.assertEqual(
             payload["diagnostics"]["refusalCounts"],
-            [{"reason": "external-stream-reference", "count": 1}],
+            [
+                {
+                    "reason": "external-stream-reference",
+                    "count": 1,
+                    "refusalClass": bounds.REFUSAL_CLASS_ACQUISITION,
+                }
+            ],
         )
         self.assertNotIn(".resS", json.dumps(payload))
 
@@ -1300,7 +1657,13 @@ class RunTests(unittest.TestCase):
         payload = json.loads((self.out / "bounds.json").read_text(encoding="utf-8"))
         self.assertEqual(
             payload["diagnostics"]["refusalCounts"],
-            [{"reason": "serialized-object-size-unavailable", "count": 1}],
+            [
+                {
+                    "reason": "serialized-object-size-unavailable",
+                    "count": 1,
+                    "refusalClass": bounds.REFUSAL_CLASS_ACQUISITION,
+                }
+            ],
         )
 
     def test_a_mesh_without_an_offset_is_skipped_not_guessed(self):
@@ -1312,7 +1675,13 @@ class RunTests(unittest.TestCase):
         payload = json.loads((self.out / "bounds.json").read_text(encoding="utf-8"))
         self.assertEqual(
             payload["diagnostics"]["refusalCounts"],
-            [{"reason": "object-offset-unavailable", "count": 1}],
+            [
+                {
+                    "reason": "object-offset-unavailable",
+                    "count": 1,
+                    "refusalClass": bounds.REFUSAL_CLASS_ACQUISITION,
+                }
+            ],
         )
 
     # -- selector reuse, dependency blockers, boundaries --------------------
@@ -1437,6 +1806,91 @@ class RunTests(unittest.TestCase):
         finally:
             if target.exists():
                 target.unlink()
+
+    def test_output_must_sit_outside_the_game_installation(self):
+        """F3. `--source` names a Unity data root, not the install around it.
+
+        The census guard only excludes the directory passed as `--source`, so
+        `--source <install>/EscapeFromTarkov_Data --output <install>/x.json`
+        exited 0 and wrote a game-derived artifact into the game tree.
+        """
+        install = self.tmp / "Escape from Tarkov"
+        install.mkdir()
+        (install / "EscapeFromTarkov.exe").write_bytes(b"MZ")
+        data = install / "EscapeFromTarkov_Data"
+        data.mkdir()
+        (data / "globalgamemanagers").write_bytes(b"UnityFS\x00synthetic-only")
+        (data / LEVEL_NAME).write_bytes(b"UnityFS\x00synthetic-only")
+        fixture = bounds.write_fixture(
+            str(data / SHARED_NAME), self.tree, count_for=small_counts
+        )
+        readers = self.mesh_readers(
+            FakeMeshReader(101, fixture.object_offset, fixture.byte_size, self.tree)
+        )
+
+        def run(output):
+            return self.run_main(
+                [
+                    "--source", str(data),
+                    "--output", str(output),
+                    "--acknowledge-local-game-files",
+                    "--pin-unity-version", UNITY_VERSION,
+                    "--pin-typetree-sha256", self.pin,
+                ],
+                FakeUnityPy(readers),
+            )
+
+        # the reviewer's exact command: beside the data root, inside the install
+        target = install / "customs-bounds.json"
+        code, _out, err = run(target)
+        self.assertEqual(code, 2)
+        self.assertIn("outside the game installation", err)
+        self.assertFalse(target.exists())
+
+        # and deeper inside it, under a name the deterministic rule alone misses
+        nested = install / "BattlEye"
+        nested.mkdir()
+        code, _out, err = run(nested / "customs-bounds.json")
+        self.assertEqual(code, 2)
+        self.assertIn("outside the game installation", err)
+        self.assertFalse((nested / "customs-bounds.json").exists())
+
+        # the mutation: with only the census + repo rules, the write goes through
+        with mutate(bounds, "_assert_output_outside_game_install", lambda *_a: None):
+            code, _out, err = run(target)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(target.exists())
+        target.unlink()
+
+        # a path outside the install still works, so the guard is not a blanket
+        code, _out, err = run(self.out / "outside.json")
+        self.assertEqual(code, 0, err)
+        self.assertTrue((self.out / "outside.json").exists())
+
+    def test_the_install_detector_knows_a_game_tree_from_an_ordinary_directory(self):
+        plain = self.tmp / "ordinary"
+        plain.mkdir()
+        self.assertFalse(bounds._looks_like_game_install(plain))
+
+        by_name = self.tmp / "steamapps"
+        by_name.mkdir()
+        self.assertTrue(bounds._looks_like_game_install(by_name))
+
+        by_marker = self.tmp / "some-game"
+        by_marker.mkdir()
+        (by_marker / "UnityPlayer.dll").write_bytes(b"MZ")
+        self.assertTrue(bounds._looks_like_game_install(by_marker))
+
+        # a generic Unity player: `<name>_Data/globalgamemanagers`, no known name
+        generic = self.tmp / "another-game"
+        (generic / "Whatever_Data").mkdir(parents=True)
+        (generic / "Whatever_Data" / "globalgamemanagers").write_bytes(b"UnityFS")
+        self.assertTrue(bounds._looks_like_game_install(generic))
+
+        # a `_Data` directory with no catalog inside is not an install
+        decoy = self.tmp / "not-a-game"
+        (decoy / "Notes_Data").mkdir(parents=True)
+        self.assertFalse(bounds._looks_like_game_install(decoy))
 
     def test_output_must_sit_outside_the_game_tree_and_never_clobber(self):
         fake = FakeUnityPy(self.mesh_readers(self.good_reader()))

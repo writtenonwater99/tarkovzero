@@ -267,21 +267,23 @@ python scripts/read-mesh-bounds.py \
 2. The Unity version string as read from the catalog, and an explicit equality assertion against the
    pin. Not "looks like 2019.4" — the exact string.
 3. The typetree source (file-embedded vs library-generated) and its SHA-256, matching the pin.
-4. Per object: `pathId`, `localAabb.center`, `localAabb.extents`, and the reader's own instrumentation
-   — `physicalReads`, `bytesRead`, `maxSingleRead`, and `payloadBytesRead: 0`.
-5. Aggregate `bytesRead / totalMeshBytes`. Expect < 0.01%. A ratio in the percent range means the reader
-   is walking something and the run is void.
-6. A refusal ledger with reason-code counts. Any `end-offset-divergence` or `submesh-bounds-disagree`
-   aborts the run (§5).
-7. The census's existing before/after SHA-256 + stat-identity binding on every file touched.
+4. Per object: `pathId`, `localAabb.center`, `localAabb.extents`, `submeshCount`.
+5. **Both** read tallies — `instrumentation.process.bytesRead` and
+   `instrumentation.boundsWalk.bytesRead`. The walk's `walkBytesPerMeshByte` should be < 0.01%; a ratio
+   in the percent range means the reader is walking something and the run is void. The process figure
+   will be **tens of megabytes** and that is correct and expected — see §10.2. A run reporting only the
+   small number is not evidence, it is a misreading waiting to happen.
+6. `instrumentation.boundsWalk.steppedOverBytesRead: 0`, which is a measured intersection and can be
+   non-zero — see §10.1. `payloadBytesRead` no longer exists; if you see it, you are reading an old
+   artifact whose zero meant nothing.
+7. A refusal ledger with reason-code counts **and each row's `refusalClass`**. Every class except
+   `acquisition` aborts the run (§5, §10.3); the class tells you whether to re-pin the schema
+   (`schema-wrong`), look at one unusual object (`reader-limit`), or decide by hand which of the two you
+   have (`unverifiable`).
+8. The census's existing before/after SHA-256 + stat-identity binding on every file touched.
 
-**Output contract.** Emit `{pathId, localAabb: {center: {x,y,z}, extents: {x,y,z}}}`. Every one of those
-keys is **already** in `census-customs-assets.py`'s `ALLOWED_OUTPUT_KEYS`, and the audit report's family
-key already specifies rounded bounds extents (`_rounded_extents`, currently always absent). So the
-existing payload guard admits this output with **no allowlist widening** — spell it `center`, US
-spelling, to match; the spike used `centre` internally and that would trip
-`assert_bounded_payload`. `vertexCount` and `submeshCount` are also already allowlisted and are readable
-by the same mechanism at no extra risk, but this spike did not evaluate them and makes no claim there.
+**Output contract.** Superseded — see §10.4. The spike's `{pathId, localAabb}` is narrower than what the
+production reader emits, and the difference was found by review, not declared.
 
 ---
 
@@ -306,3 +308,119 @@ Disposable, outside the repo, in this session's scratchpad:
 (`schema.py`, `fixture.py`, `reader.py`, `spike.py`, `run.txt`). It is not in the repo, not in
 `package.json`, and is expected to vanish with the session. Everything needed to rebuild it is in this
 document; nothing downstream should import it.
+
+---
+
+## 10. What the production reader actually claims (2026-09-01 review pass)
+
+`scripts/extract-customs-bounds.py` was reviewed against its own evidence before being cleared to run.
+Four of its claims did not survive. This section is the corrected contract; where it disagrees with
+§1–§8 above, this section wins — those sections are a record of the spike, not of the shipped reader.
+
+### 10.1 `payloadBytesRead` was a metric that could not fail
+
+`InstrumentedStream.read_at` raises `unexpected-read-kind` **before** appending a read to the log, and
+`ReadLog.payload_bytes` summed exactly those reads whose kind was not allowed. No read that reached the
+log could contribute, so the number was identically zero however the reader behaved — and the artifact
+offered it as proof. A diverged walk was demonstrated placing a physical 4-byte read inside a
+compressed-mesh payload range while the reader reported `payloadBytesRead=0`.
+
+It is **deleted**, and the ground-truth intersection that used to run only under `--self-test` now has a
+counterpart that runs on every real read:
+
+* `_Ctx.skip` records every byte range the walk advances past, tagged as array/string content or not.
+* `stepped_over_bytes_read()` intersects those ranges against the read offsets `InstrumentedStream`
+  recorded, and `assert_no_stepped_over_read` refuses on any overlap.
+* `assert_walk_accounts_for_every_byte` requires `bytes_taken + bytes_stepped_over` to equal the
+  distance the cursor travelled, so there is no unrecorded byte for a read to hide on.
+* The two inputs are declared by different mechanisms, so the number is falsifiable: a reader that
+  keeps the bookkeeping and reads the ranges anyway drives it non-zero and is refused
+  (`test_mutation_a_reader_that_reads_what_it_recorded_as_skipped_is_caught`).
+
+**What it proves:** the walk did not read the bytes it stepped over. **What it does not prove:** that
+the walk's idea of where payload lives is correct — under a wrong schema the reads and the skips move
+together. Guards 2 and 3 are what establish that, and they run first, so a diverged walk aborts and
+never reaches an emitted record. The ground-truth form, against payload ranges declared by an
+independent fixture writer, still runs in `--self-test`.
+
+### 10.2 The process reads every byte; the report said otherwise
+
+`_capture_file_binding` streams each selected file end to end through SHA-256, before and after, in both
+the catalog phase and the bounds phase, and UnityPy reads the header and object table to enumerate
+objects at all. A run that printed `216 bytes read ... 0.001609%, payloadBytesRead=0` had physically
+pulled **26,865,928 bytes** off the game files: a **124,379x** understatement inside the operator's own
+evidence.
+
+Nothing about the reads changed — hashing is how file identity is proven and nothing payload-bearing is
+parsed or emitted by it. What changed is the reporting:
+
+| Field | Means |
+| --- | --- |
+| `instrumentation.process.bytesRead` | every byte this run pulled off the selected files |
+| `…process.identityHashBytes` / `identityHashPasses` / `digestComplete` | the whole-file SHA-256 identity passes, and whether every pass reported its size |
+| `…process.unityLoaderBytes` | what UnityPy pulled through the counted stream |
+| `instrumentation.boundsWalk.bytesRead` | the AABB walk alone |
+| `…boundsWalk.meshBytesDeclared` / `walkBytesPerMeshByte` | what it walked over, and the ratio (was `totalMeshBytes` / `bytesReadRatio`) |
+
+The claim these support is **"no payload was PARSED or EMITTED"**, never "almost nothing was read". The
+terminal summary prints the process figure first, then the walk's, then that sentence. The census
+helpers that do the reading are metered by wrapping them for the duration of a phase (`_ProcessMeter.
+meter_census`) rather than forking them, so no second copy of the file-binding rules exists. Two
+independent tallies of the walk's own reads — the read log and the counting handle — are compared per
+object, so a read issued around the instrumentation aborts the run instead of vanishing.
+
+### 10.3 An abort now says which kind of abort it is
+
+A zero-SubMesh Mesh is legal Unity data (empty, collider-only, procedurally cleared). It refused as
+`submesh-count-implausible`, which is not in `SKIP_REASONS`, so the run aborted telling the operator the
+pinned schema was wrong for the entire file — when the schema was correct and one object was unusual.
+
+The decision is unchanged: everything outside `SKIP_REASONS` still aborts, and none of these were
+demoted into it. The **diagnosis** is now classified (`REFUSAL_CLASSES`):
+
+| Class | Means | Examples |
+| --- | --- | --- |
+| `schema-wrong` | the pin does not describe this file; re-pin before reading anything | `end-offset-divergence`, `schema-divergence`, `field-overruns-object` |
+| `reader-limit` | legal data this reader cannot police; the pin is not implicated | `zero-submesh-mesh`, `submesh-count-over-crosscheck-limit`, `read-budget-exceeded` |
+| `unverifiable` | schema error **or** a hand-authored `m_LocalAABB`; this reader cannot tell which | `submesh-bounds-disagree` |
+| `pin-mismatch` | declared provenance is not the pinned one | `unpinned-typetree` |
+| `acquisition` | a per-object fact; the only class that skips instead of aborting | `external-stream-reference` |
+
+`submesh-count-implausible` is gone, split into `zero-submesh-mesh` and
+`submesh-count-over-crosscheck-limit`. Every refusal row in the artifact carries its `refusalClass`, the
+abort message states the class and what it means, and a test scans the source so no reason code can be
+added without being classified.
+
+### 10.4 The real output contract
+
+Wider than §7 claimed. Each key is justified; two were dropped as duplicates.
+
+**Per record** — `objectId` (census-compatible join key), `asset` (which authorized file), `sourceRole`
+(level vs sharedassets), `sceneIndex` (the Customs index that authorized the open), `pathId` (identity
+in the file), `type` (always `Mesh`; keeps a quoted row self-describing), `submeshCount` (guard 3's
+fan-out on this object — a 1-SubMesh cross-check is far weaker than a 12-SubMesh one, so it is the
+reader's own confidence about the row), `localAabb` (the measurement).
+
+**Dropped:** `sourceFile`, which was set to the same string as `asset` on every record, and the
+per-record `instrumentation` block — six keys per mesh that were constant, aggregated in the envelope
+anyway, or zero-by-refusal.
+
+**Envelope** — the pin block, the self-test summary, the two instrumentation blocks of §10.2, the
+refusal ledger with classes, the counts, and the caveat. `results` and `detail` were removed from the
+allowlist (they named a self-test block `main()` never writes), along with `payloadBytesRead`,
+`totalMeshBytes` and `bytesReadRatio`.
+
+The allowlist is **wider than before, not narrower**: honest read accounting costs keys. The
+justification for each is in `BOUNDS_ENVELOPE_EXTRA_KEYS`'s comment block, and
+`test_the_envelope_allowlist_carries_no_key_the_envelope_cannot_emit` fails if a key in the allowlist is
+not reachable in the emitter.
+
+### 10.5 The output may not land inside the game install
+
+`--source <install>/EscapeFromTarkov_Data --output <install>/customs-bounds.json` exited 0 and wrote a
+3,000-byte JSON file into the game tree: the census guard excludes only the directory named by
+`--source`, and the install is its parent. `_assert_output_outside_game_install` adds two rules — a
+Unity `*_Data` source means the install root is its parent and the output must be outside it, and every
+ancestor of the output is checked for install markers (`EscapeFromTarkov.exe`, `UnityPlayer.dll`,
+`steamapps`, a `*_Data` directory containing `globalgamemanagers`, and the obvious names). The error
+message names no path.

@@ -13,15 +13,40 @@ What it does NOT do, by construction:
   LOGICAL cursor: skipping a field is pointer arithmetic, so the vertex, index,
   compressed-mesh and baked-collision arrays are stepped over without a seek, a
   read, or an allocation, whatever their size.
-* It never physically reads a payload byte.  Every read is tagged with the field
-  kind that justified it (`count`, `aabb`, `submesh-aabb`), is capped at
-  `MAX_SINGLE_READ_BYTES`, must be one of `ALLOWED_READ_WIDTHS`, and the whole
-  object shares one `MAX_TOTAL_READ_BYTES` budget enforced *inside* the stream
-  wrapper.  A vertex buffer does not fit in that budget, by construction.
+* **The BOUNDS WALK** never physically reads a payload byte.  Every read it
+  issues is tagged with the field kind that justified it (`count`, `aabb`,
+  `submesh-aabb`), is capped at `MAX_SINGLE_READ_BYTES`, must be one of
+  `ALLOWED_READ_WIDTHS`, and the whole object shares one `MAX_TOTAL_READ_BYTES`
+  budget enforced *inside* the stream wrapper.  A vertex buffer does not fit in
+  that budget, by construction.
 * It never opens a `.resS`: a non-empty `m_StreamData.path` is refused after
   reading the 4-byte length and before reading one byte of the path itself.
 * It never emits a name, a stream path, an absolute installation path, or any
   serialized array.
+
+**What the PROCESS does read, because the artifact used to lie about it.**  The
+bounds walk is not the only thing that touches the selected files.  Proving file
+identity means hashing each selected file end to end, twice (a before and an
+after `_capture_file_binding`), and UnityPy must read the serialized header and
+object table to enumerate the Mesh objects at all.  A run therefore pulls tens of
+megabytes off disk while the walk itself reads a few hundred bytes.  Both numbers
+are now measured and reported separately (`instrumentation.process` vs
+`instrumentation.boundsWalk`), because the defensible claim is **"no payload was
+PARSED or EMITTED"**, never "almost nothing was read".  An earlier version of
+this file printed `216 bytes read ... 0.001609%` for a run that physically pulled
+26,865,928 bytes: a 124,379x understatement in the operator's own evidence.
+
+**The read accounting can fail.**  `steppedOverBytesRead` is the overlap between
+the read offsets recorded by `InstrumentedStream` and the byte ranges the walk
+itself advanced past without reading.  The two are declared by different
+mechanisms, so the number is not zero by construction and a reader that
+materialises what it claims to step over drives it non-zero.  It replaces
+`payloadBytesRead`, which summed reads whose kind was not in `ALLOWED_READ_KINDS`
+— a set the stream wrapper refuses *before* logging, making the old metric
+identically zero whatever the reader did.  Its limit is stated where it is
+implemented: it proves the walk did not read what it skipped, not that the walk's
+idea of where payload lives is correct.  Guards 2 and 3 establish that, and they
+run first.
 
 Three guards are non-negotiable and all three are present (spike §8):
 
@@ -42,6 +67,17 @@ quietly turn a systematic schema error into a partial roster that looks fine.
 Only genuinely per-object acquisition facts (a `.resS` reference, a missing
 declared size) are ledgered skips.
 
+**An abort says WHICH KIND of abort it is.**  Aborting is right for everything
+outside `SKIP_REASONS`, but "the pinned schema is wrong for this file" is the
+wrong diagnosis for half of them.  A mesh with zero SubMeshes is legal Unity data
+(empty, collider-only, procedurally cleared) that this reader cannot cross-check;
+an `m_LocalAABB` authored by hand may legitimately differ from the SubMesh union.
+`REFUSAL_CLASSES` sorts every reason into `schema-wrong` (the pin does not
+describe this file), `reader-limit` (the file is fine, this reader cannot police
+it), `unverifiable` (either, and this reader cannot tell which), `pin-mismatch`
+and `acquisition`, and the abort message tells the operator which one they have.
+The class changes the DIAGNOSIS, never the decision: only `acquisition` skips.
+
 **What a clean run establishes.**  That these mesh *resources* have these local
 bounds.  Bounds identify an asset resource, not a placed visible object; they
 are a filter that removes size-impossible candidates and a source of dimensions,
@@ -57,11 +93,14 @@ derived, and over-estimates under a rotated non-uniform scale.
 # test files do.  Real annotation objects keep the module loadable either way.
 
 import argparse
+import bisect
+import contextlib
 import hashlib
 import importlib.util
 import json
 import math
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -137,6 +176,10 @@ ALLOWED_READ_KINDS = frozenset(("count", "aabb", "submesh-aabb"))
 MAX_VARIABLE_ELEMENTS = 512
 MAX_NODE_DEPTH = 32
 MAX_TYPETREE_NODES = 8192
+# Every stepped-over byte range is recorded so the read accounting can be checked
+# against it.  Contiguous skips merge, so a real Mesh produces a few hundred; the
+# bound keeps a pathological typetree from turning the ledger into the payload.
+MAX_STEPPED_RANGES = 65536
 # The SubMesh union cross-check is mandatory; its cost is bounded.
 MAX_SUBMESH_CROSSCHECK = 64
 CROSSCHECK_ABS_TOLERANCE = 0.02      # metres
@@ -171,6 +214,111 @@ SKIP_REASONS = frozenset(
 )
 
 
+# --------------------------------------------------------------------------
+# Refusal CLASSES: what an abort actually tells the operator
+# --------------------------------------------------------------------------
+#
+# Aborting is right for every reason outside SKIP_REASONS.  The DIAGNOSIS is not
+# the same for all of them, and printing "the pinned schema is wrong for this
+# file" over a legal-but-unusual object sends the operator to re-pin a schema
+# that was correct.  Classes change the message, never the decision.
+REFUSAL_CLASS_SCHEMA = "schema-wrong"        # the pin does not describe this file
+REFUSAL_CLASS_READER_LIMIT = "reader-limit"  # legal data this reader cannot police
+REFUSAL_CLASS_UNVERIFIABLE = "unverifiable"  # schema error OR legal authoring; unknowable here
+REFUSAL_CLASS_PIN = "pin-mismatch"           # declared provenance is not the pinned one
+REFUSAL_CLASS_ACQUISITION = "acquisition"    # a per-object fact; the only class that skips
+
+REFUSAL_CLASS_MEANINGS = {
+    REFUSAL_CLASS_SCHEMA: (
+        "the pinned schema does not describe this file, so no object in it can "
+        "be trusted; re-pin against this build before reading anything"
+    ),
+    REFUSAL_CLASS_READER_LIMIT: (
+        "this object is legal Unity data that this reader cannot police, NOT "
+        "evidence that the pinned schema is wrong; the run still stops, because "
+        "a silent partial roster is worse than a stop"
+    ),
+    REFUSAL_CLASS_UNVERIFIABLE: (
+        "m_LocalAABB disagrees with the SubMesh union: either the pinned schema "
+        "is wrong for this file or this mesh's bounds were authored by hand and "
+        "legitimately differ; this reader cannot tell which, and refuses rather "
+        "than pick"
+    ),
+    REFUSAL_CLASS_PIN: (
+        "the layout provenance the file declares is not the one that was pinned "
+        "and reviewed"
+    ),
+    REFUSAL_CLASS_ACQUISITION: (
+        "a per-object acquisition fact; the schema is not implicated"
+    ),
+}
+
+REFUSAL_CLASSES = {
+    # -- acquisition: the ledgered skips ------------------------------------
+    "external-stream-reference": REFUSAL_CLASS_ACQUISITION,
+    "serialized-object-size-unavailable": REFUSAL_CLASS_ACQUISITION,
+    "object-offset-unavailable": REFUSAL_CLASS_ACQUISITION,
+    "typetree-unavailable": REFUSAL_CLASS_ACQUISITION,
+    "object-outside-file": REFUSAL_CLASS_ACQUISITION,
+    "invalid-object-size": REFUSAL_CLASS_ACQUISITION,
+    # -- the pin -------------------------------------------------------------
+    "unpinned-unity-version": REFUSAL_CLASS_PIN,
+    "unpinned-typetree": REFUSAL_CLASS_PIN,
+    "typetree-divergence": REFUSAL_CLASS_PIN,
+    "unsupported-endianness": REFUSAL_CLASS_PIN,
+    # -- the schema really is wrong for this file ----------------------------
+    "end-offset-divergence": REFUSAL_CLASS_SCHEMA,
+    "schema-divergence": REFUSAL_CLASS_SCHEMA,
+    "field-overruns-object": REFUSAL_CLASS_SCHEMA,
+    "negative-count": REFUSAL_CLASS_SCHEMA,
+    "negative-length": REFUSAL_CLASS_SCHEMA,
+    "negative-skip": REFUSAL_CLASS_SCHEMA,
+    "unknown-leaf-type": REFUSAL_CLASS_SCHEMA,
+    "wrong-object-type": REFUSAL_CLASS_SCHEMA,
+    "aabb-not-found-exactly-once": REFUSAL_CLASS_SCHEMA,
+    "no-submesh-crosscheck": REFUSAL_CLASS_SCHEMA,
+    "typetree-node-malformed": REFUSAL_CLASS_SCHEMA,
+    "typetree-missing-required-node": REFUSAL_CLASS_SCHEMA,
+    "short-read": REFUSAL_CLASS_SCHEMA,
+    "read-outside-object": REFUSAL_CLASS_SCHEMA,
+    "non-finite-bounds": REFUSAL_CLASS_SCHEMA,
+    "negative-extents": REFUSAL_CLASS_SCHEMA,
+    "non-finite-submesh-bounds": REFUSAL_CLASS_SCHEMA,
+    "negative-submesh-extent": REFUSAL_CLASS_SCHEMA,
+    "unexpected-read-width": REFUSAL_CLASS_SCHEMA,
+    "unexpected-read-kind": REFUSAL_CLASS_SCHEMA,
+    "stepped-over-bytes-read": REFUSAL_CLASS_SCHEMA,
+    "walk-accounting-incomplete": REFUSAL_CLASS_SCHEMA,
+    # -- legal data this reader will not read ---------------------------------
+    # A zero-SubMesh Mesh is shipped by Unity (empty, collider-only,
+    # procedurally cleared) and there is nothing wrong with the file; the
+    # cross-check simply has nothing to check against.  Same for a mesh with
+    # more SubMeshes than the cross-check budget, an object whose typetree is
+    # larger or deeper than the reader's bounds, and a plausibility ceiling.
+    "zero-submesh-mesh": REFUSAL_CLASS_READER_LIMIT,
+    "submesh-count-over-crosscheck-limit": REFUSAL_CLASS_READER_LIMIT,
+    "typetree-too-large": REFUSAL_CLASS_READER_LIMIT,
+    "typetree-too-deep": REFUSAL_CLASS_READER_LIMIT,
+    "variable-element-budget-exceeded": REFUSAL_CLASS_READER_LIMIT,
+    "stepped-range-budget-exceeded": REFUSAL_CLASS_READER_LIMIT,
+    "read-budget-exceeded": REFUSAL_CLASS_READER_LIMIT,
+    "implausible-bounds-magnitude": REFUSAL_CLASS_READER_LIMIT,
+    # -- genuinely ambiguous ---------------------------------------------------
+    "submesh-bounds-disagree": REFUSAL_CLASS_UNVERIFIABLE,
+}
+
+
+def refusal_class(reason: str) -> str:
+    """Class of a reason code, defaulting to the most alarming one.
+
+    An unclassified reason is a reason someone added without deciding what it
+    means, so it reports as `schema-wrong` — the diagnosis that makes an operator
+    stop and look.  `test_every_refusal_reason_is_classified` keeps the table
+    complete by scanning this file, so the default should never be reached.
+    """
+    return REFUSAL_CLASSES.get(reason, REFUSAL_CLASS_SCHEMA)
+
+
 class BoundsRefusal(Exception):
     """Fail-closed refusal carrying a bounded, name-free reason code."""
 
@@ -182,6 +330,10 @@ class BoundsRefusal(Exception):
     @property
     def aborts_run(self) -> bool:
         return self.reason not in SKIP_REASONS
+
+    @property
+    def refusal_class(self) -> str:
+        return refusal_class(self.reason)
 
 
 # ==========================================================================
@@ -439,18 +591,13 @@ class ReadLog:
     def widths(self) -> List[int]:
         return sorted({length for _, length, _ in self.reads})
 
-    @property
-    def payload_bytes(self) -> int:
-        """Bytes read that no allowed field kind justified.
-
-        This is the reader's own claim.  The self-test verifies the claim against
-        payload ranges emitted independently by the fixture writer, so a read
-        mis-tagged as a `count` that actually lands inside array contents is
-        caught there rather than trusted here.
-        """
-        return sum(
-            length for _, length, kind in self.reads if kind not in ALLOWED_READ_KINDS
-        )
+    # NOTE: there is deliberately no `payload_bytes` property here any more.
+    # It used to sum reads whose kind was not in ALLOWED_READ_KINDS, but
+    # `InstrumentedStream.read_at` refuses such a read BEFORE appending it to
+    # this log — so the sum was identically zero however the reader behaved, and
+    # the artifact quoted that zero as proof.  The replacement is
+    # `stepped_over_bytes_read()`, which intersects these recorded offsets
+    # against ranges the WALK declared, and can therefore be non-zero.
 
     def reads_absolute(self) -> List[Tuple[int, int]]:
         return [(offset, offset + length) for offset, length, _ in self.reads]
@@ -512,21 +659,67 @@ class _Ctx:
     submesh_min: Optional[List[float]] = None
     submesh_max: Optional[List[float]] = None
     submesh_count: int = 0
+    # (start, end, is_array_or_string_content) for every byte the walk advanced
+    # past without reading it.  Appended in increasing order and disjoint —
+    # `pos` only ever moves forward — which is what lets the accounting bisect.
+    stepped: List[Tuple[int, int, bool]] = field(default_factory=list)
+    # The ONE region the walk steps over and then deliberately reads back into:
+    # the SubMesh array, whose per-element `localAABB` is guard 3's input.
+    crosscheck: List[Tuple[int, int]] = field(default_factory=list)
+    # Bytes the cursor advanced by READING them at the cursor, as opposed to
+    # stepping over them. `bytes_taken + bytes_stepped_over` must equal the
+    # distance travelled — see `assert_walk_accounts_for_every_byte`.
+    bytes_taken: int = 0
 
-    def skip(self, count: int) -> None:
-        """Advance without touching the file. This is the whole trick."""
+    def skip(self, count: int, payload: bool = False) -> None:
+        """Advance without touching the file. This is the whole trick.
+
+        Every advanced byte is RECORDED, so `assert_no_stepped_over_read` can
+        afterwards prove that no physical read landed on one.  `payload` marks
+        array-element and string content — the ranges the operator-facing claim
+        is actually about — but scalar fields and alignment padding are recorded
+        too, because a read there would be just as unexplained.
+        """
         if count < 0:
             raise BoundsRefusal("negative-skip")
         target = self.pos + count
         if target > self.end:
             raise BoundsRefusal("field-overruns-object", f"{target} > {self.end}")
+        if count:
+            self._record_stepped(self.pos, target, payload)
         self.pos = target
+
+    def _record_stepped(self, start: int, end: int, payload: bool) -> None:
+        if self.stepped:
+            last_start, last_end, last_payload = self.stepped[-1]
+            if last_end == start and last_payload == payload:
+                self.stepped[-1] = (last_start, end, payload)
+                return
+        if len(self.stepped) >= MAX_STEPPED_RANGES:
+            raise BoundsRefusal("stepped-range-budget-exceeded", str(len(self.stepped)))
+        self.stepped.append((start, end, payload))
+
+    def cross_check_block(self, count: int) -> int:
+        """Step over the SubMesh array and mark it as the one re-read region."""
+        start = self.pos
+        self.skip(count)
+        self.crosscheck.append((start, self.pos))
+        return start
+
+    @property
+    def bytes_stepped_over(self) -> int:
+        return sum(end - start for start, end, _payload in self.stepped)
+
+    @property
+    def payload_bytes_stepped_over(self) -> int:
+        return sum(end - start for start, end, payload in self.stepped if payload)
 
     def take(self, count: int, kind: str) -> bytes:
         if self.pos + count > self.end:
             raise BoundsRefusal("field-overruns-object")
         data = self.stream.read_at(self.pos, count, kind)
         self.pos += count
+        self.bytes_taken += count
         return data
 
     def align(self) -> None:
@@ -564,10 +757,22 @@ def _read_submesh_union(node: Node, ctx: _Ctx, count: int) -> None:
     offset = _fixed_offset_of(element, "localAABB")
     if width is None or offset is None:
         raise BoundsRefusal("schema-divergence", "SubMesh is not fixed-width")
-    if count < 1 or count > MAX_SUBMESH_CROSSCHECK:
-        raise BoundsRefusal("submesh-count-implausible", str(count))
-    base = ctx.pos
-    ctx.skip(width * count)
+    # These two are READER LIMITS, not schema errors, and they used to share one
+    # reason code with each other.  A Mesh with no SubMeshes is legal Unity data
+    # — empty, collider-only, or procedurally cleared — and a mesh with more
+    # SubMeshes than the cross-check budget is a perfectly well-formed mesh this
+    # reader declines to police.  Neither says the pinned schema is wrong, and
+    # the abort message must not say it does.
+    if count == 0:
+        raise BoundsRefusal("zero-submesh-mesh", "0")
+    if count > MAX_SUBMESH_CROSSCHECK:
+        raise BoundsRefusal(
+            "submesh-count-over-crosscheck-limit",
+            f"{count} > {MAX_SUBMESH_CROSSCHECK}",
+        )
+    if count < 0:  # pragma: no cover - `check_count` refuses first
+        raise BoundsRefusal("negative-count", str(count))
+    base = ctx.cross_check_block(width * count)
     low = [float("inf")] * 3
     high = [float("-inf")] * 3
     for index in range(count):
@@ -608,7 +813,7 @@ def _walk(node: Node, ctx: _Ctx, path: List[str], depth: int) -> None:
         array = node.children[0]
         length = check_count(_int32(ctx.take(4, "count")), reason="negative-length")
         check_stream_path(ctx, here, length)
-        ctx.skip(length)
+        ctx.skip(length, payload=True)
         if array.align or node.align:
             ctx.align()
         return
@@ -630,8 +835,10 @@ def _walk(node: Node, ctx: _Ctx, path: List[str], depth: int) -> None:
         if width is not None:
             # Bulk skip: no read, no seek, no allocation, whatever the size.
             # `ctx.skip` is the bound — a hostile count overruns the object end
-            # and refuses instead of walking anything.
-            ctx.skip(width * count)
+            # and refuses instead of walking anything.  Tagged `payload=True`:
+            # this is the vertex/index/compressed-mesh/collision content whose
+            # untouched-ness is the whole claim.
+            ctx.skip(width * count, payload=True)
         else:
             ctx.variable_elements += count
             if ctx.variable_elements > MAX_VARIABLE_ELEMENTS:
@@ -683,6 +890,26 @@ def assert_end_offset(ctx: _Ctx, byte_size: int) -> None:
     if ctx.pos != ctx.end:
         raise BoundsRefusal(
             "end-offset-divergence", f"{ctx.pos - ctx.start} of {byte_size}"
+        )
+
+
+def assert_walk_accounts_for_every_byte(ctx: _Ctx) -> None:
+    """Every byte the cursor advanced was either TAKEN or RECORDED as stepped over.
+
+    Without this, `steppedOverBytesRead` has a blind spot to hide in: a byte the
+    cursor moved past without either a `take` or a recorded `skip` belongs to no
+    range, so a read landing on it intersects nothing.
+
+    Deliberately measured against the DISTANCE TRAVELLED (`pos - start`) rather
+    than the object's declared size, so that it tests one thing.  Whether the
+    walk travelled the right distance is guard 2's question, and duplicating it
+    here would make guard 2's mutation test pass for the wrong reason.
+    """
+    travelled = ctx.pos - ctx.start
+    accounted = ctx.bytes_taken + ctx.bytes_stepped_over
+    if accounted != travelled:
+        raise BoundsRefusal(
+            "walk-accounting-incomplete", f"{accounted} accounted of {travelled}"
         )
 
 
@@ -753,10 +980,71 @@ def assert_reads_inside_object(log: ReadLog, ctx: _Ctx) -> None:
             raise BoundsRefusal("read-outside-object")
 
 
-def assert_no_payload_read(log: ReadLog) -> None:
-    """Every physical read was justified by an allowed field kind."""
-    if log.payload_bytes:
-        raise BoundsRefusal("payload-bytes-read", str(log.payload_bytes))
+def _overlap(low_a: int, high_a: int, low_b: int, high_b: int) -> int:
+    low, high = max(low_a, low_b), min(high_a, high_b)
+    return high - low if high > low else 0
+
+
+def stepped_over_bytes_read(
+    log: ReadLog, ctx: _Ctx, *, payload_only: bool = False
+) -> int:
+    """Bytes physically read from a range the walk claims it STEPPED OVER.
+
+    The two inputs are produced by different mechanisms and neither can silence
+    the other: the read intervals come from `InstrumentedStream`, which records
+    every issued read, and the stepped ranges come from `_Ctx.skip`, the walk's
+    own pointer arithmetic.  A reader that materialises what it says it skips
+    drives this number up; nothing about the reader's own tagging can hide it.
+
+    The SubMesh array is subtracted, because guard 3 reads back into it on
+    purpose — that is the one region the walk steps over and then re-reads, and
+    the reads it makes there are capped at `MAX_SUBMESH_CROSSCHECK` × 24 bytes.
+    """
+    if not ctx.stepped:
+        return 0
+    starts = [start for start, _end, _payload in ctx.stepped]
+    total = 0
+    for offset, length, _kind in log.reads:
+        read_low, read_high = offset, offset + length
+        index = min(len(ctx.stepped) - 1, max(0, bisect.bisect_right(starts, read_high) - 1))
+        while index >= 0:
+            start, end, payload = ctx.stepped[index]
+            if end <= read_low:
+                break
+            index -= 1
+            if payload_only and not payload:
+                continue
+            low, high = max(read_low, start), min(read_high, end)
+            if low >= high:
+                continue
+            hit = high - low
+            for exempt_low, exempt_high in ctx.crosscheck:
+                hit -= _overlap(low, high, exempt_low, exempt_high)
+            if hit > 0:
+                total += hit
+    return total
+
+
+def assert_no_stepped_over_read(log: ReadLog, ctx: _Ctx) -> None:
+    """GUARD: no physical read landed on a byte the walk claims it stepped over.
+
+    This replaces `assert_no_payload_read`, which tested `log.payload_bytes` —
+    a sum over reads whose kind was NOT in `ALLOWED_READ_KINDS`, which
+    `InstrumentedStream.read_at` refuses before logging.  That made the old guard
+    unfalsifiable: it could not fire, whatever the reader did, and the artifact
+    reported its zero as evidence.
+
+    What this DOES prove: the walk did not read the bytes it stepped over.  What
+    it does NOT prove: that the walk's idea of where the payload lives is right —
+    under a wrong schema the reads and the skips shift together.  Guards 2 and 3
+    are what establish that the walk matches the file, and both run BEFORE this
+    one, so a diverged walk aborts and never reaches an emitted record.  The
+    ground-truth form of this check, against payload ranges declared by an
+    independent fixture writer, is what `--self-test` runs.
+    """
+    bytes_read = stepped_over_bytes_read(log, ctx)
+    if bytes_read:
+        raise BoundsRefusal("stepped-over-bytes-read", str(bytes_read))
 
 
 # ==========================================================================
@@ -770,6 +1058,11 @@ class BoundsRecord:
     center: Tuple[float, float, float]
     extents: Tuple[float, float, float]
     submesh_count: int
+    # Read accounting, carried out of the walk so the envelope can aggregate it.
+    # These are NOT emitted per record — see BOUNDS_RECORD_KEYS.
+    bytes_stepped_over: int = 0
+    payload_bytes_stepped_over: int = 0
+    stepped_over_bytes_read: int = 0
 
     def local_aabb(self) -> Dict[str, Any]:
         return {
@@ -819,6 +1112,7 @@ def read_mesh_local_aabb_from_handle(
     _walk(typetree, ctx, [], 0)
 
     assert_end_offset(ctx, byte_size)                       # GUARD 2
+    assert_walk_accounts_for_every_byte(ctx)
     assert_aabb_found(ctx)
     assert (ctx.aabb is not None)
     centre, extents = ctx.aabb
@@ -826,7 +1120,7 @@ def read_mesh_local_aabb_from_handle(
     if cross_check:
         assert_submesh_agreement(ctx, centre, extents)      # GUARD 3
     assert_reads_inside_object(log, ctx)
-    assert_no_payload_read(log)
+    assert_no_stepped_over_read(log, ctx)
     # Deferred on purpose: a `.resS` skip is only trustworthy once the three
     # structural guards above have confirmed the schema.
     assert_no_external_stream(ctx)
@@ -837,6 +1131,9 @@ def read_mesh_local_aabb_from_handle(
             center=(centre[0], centre[1], centre[2]),
             extents=(extents[0], extents[1], extents[2]),
             submesh_count=ctx.submesh_count,
+            bytes_stepped_over=ctx.bytes_stepped_over,
+            payload_bytes_stepped_over=ctx.payload_bytes_stepped_over,
+            stepped_over_bytes_read=stepped_over_bytes_read(log, ctx),
         ),
         log,
     )
@@ -1442,13 +1739,18 @@ def run_self_test() -> Dict[str, Any]:
             f"keys={sorted(record_out.local_aabb())}",
         )
 
+        # Ground truth: the fixture WRITER declared these payload ranges, with no
+        # help from the reader.  This is the strong form of the check, and it is
+        # only available here, where the byte layout is known independently.
         hits = log.intersects(good.payload_ranges)
         record(
             "b/no-payload-bytes-read",
-            not hits and log.payload_bytes == 0,
+            not hits and record_out.stepped_over_bytes_read == 0,
             f"{len(log.reads)} physical reads / {log.total_bytes} bytes; "
-            f"payload-range intersections={len(hits)}; "
-            f"reader-tagged payload bytes={log.payload_bytes}",
+            f"intersections with the FIXTURE's declared payload ranges="
+            f"{len(hits)}; bytes read from ranges the WALK stepped over="
+            f"{record_out.stepped_over_bytes_read} of "
+            f"{record_out.bytes_stepped_over} stepped over",
         )
         stray = reads_outside_allowed_set(log, good.allowed_read_ranges)
         record(
@@ -1530,9 +1832,41 @@ def run_self_test() -> Dict[str, Any]:
             f"{len(control_log.intersects(good.payload_ranges))} intersection(s)",
         )
 
+        # The metric the ARTIFACT reports must be able to fail too, or it is
+        # decoration.  Same walk, same stepped ranges, one extra read planted
+        # inside one of them: the count goes up and the guard refuses.
+        planted_log = ReadLog()
+        with open(good.path, "rb") as handle:
+            planted_ctx = _Ctx(
+                stream=InstrumentedStream(handle, planted_log),
+                pos=good.object_offset,
+                start=good.object_offset,
+                end=good.object_offset + good.byte_size,
+                align_base=good.object_offset,
+            )
+            _walk(tree, planted_ctx, [], 0)
+            clean_count = stepped_over_bytes_read(planted_log, planted_ctx)
+            widest = max(
+                (r for r in planted_ctx.stepped if r[2]), key=lambda r: r[1] - r[0]
+            )
+            planted_ctx.stream.read_at(widest[0] + 8, 24, "aabb")
+            planted_count = stepped_over_bytes_read(planted_log, planted_ctx)
+        record(
+            "g/stepped-over-metric-can-fail",
+            clean_count == 0 and planted_count == 24,
+            f"the walk's own accounting read {clean_count} stepped-over bytes; "
+            f"after planting ONE 24-byte read inside the widest stepped payload "
+            f"range it reads {planted_count}",
+        )
+        expect(
+            "g/stepped-over-guard-refuses-the-planted-read",
+            lambda: assert_no_stepped_over_read(planted_log, planted_ctx),
+            "stepped-over-bytes-read",
+        )
+
         original_skip = _Ctx.skip
 
-        def greedy_skip(self, count: int) -> None:
+        def greedy_skip(self, count: int, payload: bool = False) -> None:
             """A reader that MATERIALIZES what it should step over.
 
             Every read it issues is 24 bytes wide and tagged `submesh-aabb`, both
@@ -1794,6 +2128,49 @@ def run_self_test() -> Dict[str, Any]:
             "submesh-bounds-disagree",
         )
 
+        # ---- a reader limit is not a schema error --------------------------
+        # A zero-SubMesh Mesh is legal Unity data and the pinned schema is right;
+        # the run still stops, but the operator must not be sent to re-pin.
+        zero_submesh = write_fixture(
+            os.path.join(tmp, "zero-submesh.bin"),
+            tree,
+            count_for=lambda path: 0
+            if path == "m_SubMeshes/Array"
+            else default_count_for(path),
+        )
+        expect(
+            "d/zero-submesh-is-a-reader-limit",
+            lambda: read_mesh_local_aabb(
+                zero_submesh.path,
+                path_id=1,
+                object_offset=zero_submesh.object_offset,
+                byte_size=zero_submesh.byte_size,
+                typetree=tree,
+            ),
+            "zero-submesh-mesh",
+        )
+        record(
+            "d/reader-limits-are-classed-apart-from-schema-errors",
+            refusal_class("zero-submesh-mesh") == REFUSAL_CLASS_READER_LIMIT
+            and refusal_class("submesh-count-over-crosscheck-limit")
+            == REFUSAL_CLASS_READER_LIMIT
+            and refusal_class("submesh-bounds-disagree") == REFUSAL_CLASS_UNVERIFIABLE
+            and refusal_class("end-offset-divergence") == REFUSAL_CLASS_SCHEMA
+            and BoundsRefusal("zero-submesh-mesh").aborts_run,
+            "a zero-SubMesh mesh and an over-budget SubMesh count abort as "
+            "reader-limit, a union disagreement as unverifiable, a length "
+            "divergence as schema-wrong; all four still abort",
+        )
+        source_text = Path(__file__).read_text(encoding="utf-8")
+        raised = set(re.findall(r'BoundsRefusal\(\s*"([a-z0-9-]+)"', source_text))
+        record(
+            "d/every-refusal-reason-is-classified",
+            not (raised - set(REFUSAL_CLASSES))
+            and not (set(REFUSAL_CLASSES.values()) - set(REFUSAL_CLASS_MEANINGS)),
+            f"{len(raised)} reason codes raised in this file, "
+            f"{len(raised - set(REFUSAL_CLASSES))} unclassified",
+        )
+
         expect(
             "d/typetree-without-aabb",
             lambda: assert_typetree_shape(mesh_schema(drop_aabb=True)),
@@ -1865,19 +2242,37 @@ def run_self_test() -> Dict[str, Any]:
 # 10. Output allowlist
 # ==========================================================================
 
+# THE OUTPUT CONTRACT.  Widening an allowlist is a boundary change, so every key
+# below is justified individually here and in `docs/plans/BOUNDS-SPIKE-FINDINGS.md`
+# §10, which states the contract this file actually emits rather than the
+# narrower `{pathId, localAabb}` the spike described.
+#
 # Every key a bounds RECORD emits is already in the census's reviewed allowlist,
-# so the bounds output needs no widening of that guard.  `test_extract_customs_bounds`
+# so records need no widening of that guard.  `test_extract_customs_bounds`
 # asserts this containment directly rather than trusting the comment.
+#
+#   objectId     the census-compatible join key, `<asset>#Mesh#<pathId>`
+#   asset        which of the two authorized files the record came from
+#   sourceRole   level vs sharedassets — the half of the selection it came from
+#   sceneIndex   the Customs scene index that authorized opening that file
+#   pathId       the object's identity inside the file
+#   type         always "Mesh"; kept so a row quoted alone says what it describes
+#   submeshCount guard 3's fan-out on THIS object — a 1-SubMesh cross-check is a
+#                far weaker check than a 12-SubMesh one, so it is the reader's
+#                own confidence about the row
+#   localAabb    the measurement, with center/extents/x/y/z beneath it
+#
+# DROPPED in this revision: `sourceFile` (set to the same string as `asset` on
+# every record — a duplicate, not a fact) and the per-record `instrumentation`
+# block (six keys per mesh, constant or aggregated in the envelope already).
 BOUNDS_RECORD_KEYS = frozenset(
     (
         "objectId",
         "asset",
         "pathId",
         "type",
-        "sourceFile",
         "sourceRole",
         "sceneIndex",
-        "scenePath",
         "localAabb",
         "center",
         "extents",
@@ -1888,33 +2283,70 @@ BOUNDS_RECORD_KEYS = frozenset(
     )
 )
 
-# The envelope adds pin, instrumentation and refusal-ledger keys that the census
-# never emits.  They are enumerated here, reviewed as a set, and enforced before
-# any write by the same fail-closed walker the census uses.
+# The envelope adds pin, instrumentation and refusal-ledger keys the census never
+# emits.  Enumerated here, reviewed as a set, enforced before any write by the
+# same fail-closed walker the census uses.
+#
+#   pins/unityVersion/typetreeSha256/typetreeProvenance/alignBase
+#       the reviewed inputs the run refused to proceed without, echoed back so
+#       the artifact carries the schema it was read under
+#   selfTest/cases/failures/passed
+#       whether the guard suite ran green in THIS process at THIS commit
+#   instrumentation/boundsWalk/…
+#       physicalReads, bytesRead, maxSingleRead, readWidths, seeks: the walk's
+#       own read shape; meshBytesDeclared: what it walked over;
+#       bytesSteppedOver + payloadBytesSteppedOver: what it advanced past;
+#       steppedOverBytesRead: the falsifiable overlap of the two;
+#       walkBytesPerMeshByte: the ratio, named for what it divides
+#   instrumentation/process/…
+#       bytesRead, identityHashBytes, identityHashPasses, digestComplete,
+#       unityLoaderBytes: what the PROCESS pulled off the files, which the
+#       artifact used to omit entirely (`digestComplete` is reused from the
+#       census's vocabulary rather than adding a synonym)
+#   refusals/refusalCounts/count/refusalClass
+#       the ledger, each row saying which KIND of refusal it was
+#   meshCandidateCount/meshesRead/meshesRefused/caveat
+#       the roster's completeness and the standing caveats
+#
+# DROPPED in this revision: `results` and `detail` (self-test case detail that
+# `main()` never actually puts in the artifact), `payloadBytesRead` (the metric
+# that could not fail), `totalMeshBytes` and `bytesReadRatio` (renamed to
+# `meshBytesDeclared` and `walkBytesPerMeshByte`, which say what they measure).
 BOUNDS_ENVELOPE_EXTRA_KEYS = frozenset(
     (
+        # pins
         "unityVersion",
         "typetreeSha256",
         "typetreeProvenance",
         "pins",
         "alignBase",
+        # self-test
         "selfTest",
-        "results",
         "passed",
         "cases",
         "failures",
-        "detail",
+        # instrumentation — the bounds walk
         "instrumentation",
+        "boundsWalk",
         "physicalReads",
         "bytesRead",
         "maxSingleRead",
-        "payloadBytesRead",
         "readWidths",
         "seeks",
-        "totalMeshBytes",
-        "bytesReadRatio",
+        "meshBytesDeclared",
+        "bytesSteppedOver",
+        "payloadBytesSteppedOver",
+        "steppedOverBytesRead",
+        "walkBytesPerMeshByte",
+        # instrumentation — the process
+        "process",
+        "identityHashBytes",
+        "identityHashPasses",
+        "unityLoaderBytes",
+        # ledger
         "refusals",
         "refusalCounts",
+        "refusalClass",
         "count",
         "meshCandidateCount",
         "meshesRead",
@@ -2032,7 +2464,173 @@ def reader_typetree(reader: Any) -> Tuple[Node, str]:
 
 
 # ==========================================================================
-# 12. The run
+# 12. Process-level read accounting
+# ==========================================================================
+#
+# The bounds walk reads a few hundred bytes.  The PROCESS reads the whole of
+# every selected file, several times over, and the artifact used to report only
+# the first number.  Nothing here changes what is read — it changes what is
+# reported, so that `bytesRead` stops being quoted as "the run barely touched
+# the game files".
+
+
+class _CountingStream(census._SafeUnityStream):
+    """`census._SafeUnityStream` that counts every byte pulled through it.
+
+    The security-bearing behaviour stays in the base class: the `O_NOFOLLOW`
+    open, the host-path-free `name`, the empty `path`.  This subclass adds a
+    counter and nothing else.
+
+    `read`, `readinto` and `readline` are the complete read surface of a
+    `BufferedIOBase` that only overrides those three: the inherited `read1` and
+    `readinto1` raise `UnsupportedOperation` rather than falling back to an
+    uncounted path, so a caller cannot read bytes past this counter without
+    failing loudly.  `test_the_counting_stream_counts_every_read_path` pins it.
+    """
+
+    def __init__(self, path: Path, visible_name: str):
+        super().__init__(path, visible_name)
+        self.bytes_read = 0
+        self.read_calls = 0
+
+    def read(self, size: int = -1) -> bytes:
+        data = super().read(size)
+        self.bytes_read += len(data)
+        self.read_calls += 1
+        return data
+
+    def readinto(self, buffer: Any) -> int:
+        count = super().readinto(buffer) or 0
+        self.bytes_read += count
+        self.read_calls += 1
+        return count
+
+    def readline(self, size: int = -1) -> bytes:
+        data = super().readline(size)
+        self.bytes_read += len(data)
+        self.read_calls += 1
+        return data
+
+
+def _open_counted_unity_stream(
+    path: Path, relative_file: str, before_token: Optional[Tuple[Any, ...]]
+) -> _CountingStream:
+    """`census._open_bound_unity_stream` with a byte counter on the handle.
+
+    The identity check below is the same comparison the census helper makes,
+    against the same `census._stat_identity` token, and it is repeated here only
+    because the helper hard-codes the class it constructs.
+    `test_the_counted_opener_refuses_a_changed_identity` holds the two openers to
+    the same behaviour.
+    """
+    if before_token is None:
+        raise census.CensusError("source binding is unavailable before Unity load")
+    stream = _CountingStream(path, _safe_visible_name(relative_file))
+    try:
+        if _stat_identity(os.fstat(stream.fileno())) != before_token[2]:
+            raise census.CensusError("source identity changed before Unity load")
+        return stream
+    except Exception:
+        stream.close()
+        raise
+
+
+def _binding_bytes(
+    binding: Tuple[Mapping[str, Any], Optional[Tuple[Any, ...]]]
+) -> Tuple[int, bool]:
+    """Bytes one `_capture_file_binding` pass streamed through SHA-256.
+
+    A pass that could not complete reports no size; the caller marks the whole
+    process total incomplete rather than quietly counting it as zero, which is
+    the exact shape of the understatement this accounting exists to end.
+    """
+    size = binding[0].get("byteSize")
+    if isinstance(size, int) and not isinstance(size, bool) and size >= 0:
+        return size, True
+    return 0, False
+
+
+@dataclass
+class _ProcessMeter:
+    """Every byte this run pulls off the selected files, by purpose.
+
+    A run reads in three places and the artifact used to report only the third:
+
+    1. the identity hashes — `_capture_file_binding` streams each selected file
+       end to end through SHA-256, before and after, in both the catalog phase
+       and the bounds phase;
+    2. UnityPy's loader — it must read the serialized header and object table to
+       enumerate objects at all;
+    3. the bounds walk — a few hundred bytes per mesh.
+
+    Two of those happen inside the census module this reader reuses on purpose.
+    `meter_census()` wraps the two census entry points for the duration of a
+    phase so their reads land in the same tally: `_capture_file_binding` is
+    called through unchanged and its reported size added, and
+    `_open_bound_unity_stream` is swapped for `_open_counted_unity_stream`,
+    which is the same opener with a counter.  Neither wrapper changes an
+    argument, a check, or a result, and both are restored in a `finally`.  The
+    alternative — forking those helpers — would put a second, unaudited copy of
+    the file-binding rules in this file.
+    """
+
+    identity_hash_bytes: int = 0
+    identity_hash_passes: int = 0
+    identity_hash_complete: bool = True
+    unity_loader_bytes: int = 0
+    bounds_walk_bytes: int = 0
+
+    def add_binding(
+        self, binding: Tuple[Mapping[str, Any], Optional[Tuple[Any, ...]]]
+    ) -> Tuple[Mapping[str, Any], Optional[Tuple[Any, ...]]]:
+        size, complete = _binding_bytes(binding)
+        self.identity_hash_bytes += size
+        self.identity_hash_passes += 1
+        # A pass whose size is unknown makes the TOTAL an understatement, which
+        # is the exact failure this accounting exists to end, so it is reported
+        # rather than absorbed.
+        self.identity_hash_complete = self.identity_hash_complete and complete
+        return binding
+
+    def capture_binding(
+        self, path: Path
+    ) -> Tuple[Mapping[str, Any], Optional[Tuple[Any, ...]]]:
+        return self.add_binding(_capture_file_binding(path))
+
+    @contextlib.contextmanager
+    def meter_census(self):
+        """Count the reads census makes on this reader's behalf (catalog phase)."""
+        streams: List[_CountingStream] = []
+        original_capture = census._capture_file_binding
+        original_open = census._open_bound_unity_stream
+
+        def capture(path: Path):
+            return self.add_binding(original_capture(path))
+
+        def open_stream(path, relative_file, before_token):
+            stream = _open_counted_unity_stream(path, relative_file, before_token)
+            streams.append(stream)
+            return stream
+
+        census._capture_file_binding = capture
+        census._open_bound_unity_stream = open_stream
+        try:
+            yield self
+        finally:
+            census._capture_file_binding = original_capture
+            census._open_bound_unity_stream = original_open
+            for stream in streams:
+                self.unity_loader_bytes += stream.bytes_read
+
+    @property
+    def total(self) -> int:
+        return (
+            self.identity_hash_bytes + self.unity_loader_bytes + self.bounds_walk_bytes
+        )
+
+
+# ==========================================================================
+# 13. The run
 # ==========================================================================
 
 
@@ -2040,28 +2638,29 @@ def _bounds_record(
     record: BoundsRecord,
     *,
     selection: Mapping[str, Any],
-    log: ReadLog,
 ) -> Dict[str, Any]:
+    """One emitted record. Every key here is justified in the doc's contract table.
+
+    Two things that used to be here are gone.  `sourceFile` was set to the same
+    string as `asset` on every record — a duplicate, not a second fact.  The
+    per-record `instrumentation` block carried six keys per mesh whose content
+    was either constant (`readWidths`, `maxSingleRead`), aggregated in the
+    envelope anyway, or zero-by-refusal; N copies of that is bulk, not evidence.
+    `submeshCount` stays because it is the fan-out of guard 3 on THIS object: a
+    one-SubMesh cross-check is a far weaker check than a twelve-SubMesh one, and
+    the reader's own confidence is a fact about the record.
+    """
     asset = selection["file"]
     return _drop_none(
         {
             "objectId": _object_id(asset, "Mesh", record.path_id),
             "asset": asset,
-            "sourceFile": asset,
             "sourceRole": selection.get("role"),
             "sceneIndex": selection.get("sceneIndex"),
             "pathId": record.path_id,
             "type": "Mesh",
             "submeshCount": record.submesh_count,
             "localAabb": record.local_aabb(),
-            "instrumentation": {
-                "physicalReads": len(log.reads),
-                "bytesRead": log.total_bytes,
-                "maxSingleRead": log.max_single_read,
-                "payloadBytesRead": log.payload_bytes,
-                "readWidths": log.widths,
-                "seeks": log.seeks,
-            },
         }
     )
 
@@ -2074,8 +2673,14 @@ def build_bounds(
     pinned_unity_version: str,
     pinned_typetree_sha256: str,
     align_base_mode: str,
+    meter: Optional[_ProcessMeter] = None,
 ) -> Dict[str, Any]:
-    """Read `m_LocalAABB` for every Mesh in the authorized selection, or abort."""
+    """Read `m_LocalAABB` for every Mesh in the authorized selection, or abort.
+
+    `meter` carries the process-level read tally forward from the catalog phase,
+    so the artifact's `instrumentation.process` covers the whole run and not just
+    the part that happened after the scene selection was made.
+    """
     records: List[Dict[str, Any]] = []
     refusals: List[Dict[str, Any]] = []
     file_failures: List[Dict[str, Any]] = []
@@ -2085,14 +2690,24 @@ def build_bounds(
     total_mesh_bytes = 0
     total_bytes_read = 0
     total_reads = 0
+    total_seeks = 0
     max_single_read = 0
-    payload_bytes_read = 0
+    read_widths: set = set()
+    bytes_stepped_over = 0
+    payload_bytes_stepped_over = 0
+    stepped_over_read = 0
+    process = _ProcessMeter() if meter is None else meter
+    submesh_total = 0
     unity_versions: set = set()
     typetree_hashes: set = set()
     provenances: set = set()
 
+    # Each capture streams the whole file through SHA-256. That is how file
+    # identity is proven, and it is why a run reads tens of megabytes while the
+    # walk reads a few hundred bytes; going through the meter is what gets both
+    # numbers into the artifact instead of only the small one.
     before_bindings = {
-        selection["file"]: _capture_file_binding(selection["path"])
+        selection["file"]: process.capture_binding(selection["path"])
         for selection in scene_files
     }
 
@@ -2121,7 +2736,7 @@ def build_bounds(
         unity_stream = None
         bounds_handle = None
         try:
-            unity_stream = census._open_bound_unity_stream(
+            unity_stream = _open_counted_unity_stream(
                 candidate, selection["file"], before[1]
             )
             environment = unitypy_module.load(unity_stream)
@@ -2133,6 +2748,7 @@ def build_bounds(
             ]
         except Exception as error:
             if unity_stream is not None:
+                process.unity_loader_bytes += unity_stream.bytes_read
                 unity_stream.close()
             file_failures.append(
                 {
@@ -2142,7 +2758,7 @@ def build_bounds(
                     "errorType": _safe_error_type(error),
                 }
             )
-            after = _capture_file_binding(candidate)
+            after = process.capture_binding(candidate)
             fact, verified = _verified_file_fact(
                 file=selection["file"],
                 role=selection["role"],
@@ -2166,7 +2782,7 @@ def build_bounds(
         try:
             # The bounds reader owns its OWN handle and its own instrumentation.
             # It never reads a byte through UnityPy's stream.
-            bounds_handle = census._SafeUnityStream(
+            bounds_handle = _CountingStream(
                 candidate, _safe_visible_name(selection["file"])
             )
             bounds_handle.seek(0, os.SEEK_END)
@@ -2176,6 +2792,11 @@ def build_bounds(
                 candidate_count += 1
                 path_id = selector._reader_path_id(reader)
                 asset = selection["file"]
+                # The handle counts its own bytes; the read log counts the
+                # walk's.  Two independent tallies of the same reads, compared
+                # per object, so a read issued around the instrumentation shows
+                # up as a mismatch instead of vanishing.
+                handle_before = bounds_handle.bytes_read
                 try:
                     if path_id is None:
                         raise BoundsRefusal("object-offset-unavailable", "no path id")
@@ -2218,16 +2839,26 @@ def build_bounds(
                         align_base=None if align_base_mode == "object" else 0,
                     )
                 except BoundsRefusal as refusal:
+                    # A refused walk stopped part-way, so its reads are bounded
+                    # by the budget rather than equal to a log total.
+                    moved = bounds_handle.bytes_read - handle_before
+                    if moved > MAX_TOTAL_READ_BYTES:
+                        raise BoundsError(
+                            f"aborting: a refused object moved {moved} bytes "
+                            f"through the bounds handle, over the "
+                            f"{MAX_TOTAL_READ_BYTES}-byte per-object budget. "
+                            "Nothing was written."
+                        ) from refusal
                     entry = _drop_none(
                         {
                             "objectId": _object_id(asset, "Mesh", path_id),
                             "asset": asset,
-                            "sourceFile": asset,
                             "sceneIndex": selection.get("sceneIndex"),
                             "pathId": path_id,
                             "type": "Mesh",
                             "phase": "bounds",
                             "reason": refusal.reason,
+                            "refusalClass": refusal.refusal_class,
                         }
                     )
                     refusals.append(entry)
@@ -2235,11 +2866,15 @@ def build_bounds(
                         # Spike §5: one structural divergence means the pin is
                         # wrong for the WHOLE file.  A per-object skip would turn
                         # a systematic schema error into a partial roster that
-                        # looks fine.
+                        # looks fine.  The DECISION is the same for every class
+                        # here; the DIAGNOSIS is not, and telling an operator the
+                        # schema is wrong when a legal zero-SubMesh mesh stopped
+                        # the run sends them to re-pin a correct schema.
                         raise BoundsError(
-                            "aborting the run on a structural refusal "
-                            f"({refusal.reason}); the pinned schema is wrong for "
-                            "this file, not for this object. Nothing was written."
+                            f"aborting the run on a {refusal.refusal_class} "
+                            f"refusal ({refusal.reason}): "
+                            f"{REFUSAL_CLASS_MEANINGS[refusal.refusal_class]}. "
+                            "Nothing was written."
                         ) from refusal
                     continue
                 except BoundsError:
@@ -2253,20 +2888,33 @@ def build_bounds(
                         f"({_safe_error_type(error)}). Nothing was written."
                     ) from error
 
+                moved = bounds_handle.bytes_read - handle_before
+                if moved != log.total_bytes:
+                    raise BoundsError(
+                        f"aborting: the bounds handle moved {moved} bytes for "
+                        f"this object while its read log accounts for "
+                        f"{log.total_bytes}. Nothing was written."
+                    )
+
                 total_reads += len(log.reads)
                 total_bytes_read += log.total_bytes
-                payload_bytes_read += log.payload_bytes
+                total_seeks += log.seeks
+                bytes_stepped_over += emitted.bytes_stepped_over
+                payload_bytes_stepped_over += emitted.payload_bytes_stepped_over
+                stepped_over_read += emitted.stepped_over_bytes_read
+                submesh_total += emitted.submesh_count
                 max_single_read = max(max_single_read, log.max_single_read)
-                records.append(
-                    _bounds_record(emitted, selection=selection, log=log)
-                )
+                read_widths.update(log.widths)
+                records.append(_bounds_record(emitted, selection=selection))
         finally:
             if bounds_handle is not None:
+                process.bounds_walk_bytes += bounds_handle.bytes_read
                 bounds_handle.close()
             if unity_stream is not None:
+                process.unity_loader_bytes += unity_stream.bytes_read
                 unity_stream.close()
 
-        after = _capture_file_binding(candidate)
+        after = process.capture_binding(candidate)
         fact, verified = _verified_file_fact(
             file=selection["file"],
             role=selection["role"],
@@ -2315,20 +2963,49 @@ def build_bounds(
             "meshesRead": len(records),
             "meshesRefused": len(refusals),
         },
+        # Two tallies, never one, because they answer different questions and the
+        # earlier single `bytesRead` was read as an answer to both.
+        #   boundsWalk — what the AABB walk itself pulled off the mesh objects.
+        #   process    — what this process pulled off the selected files at all,
+        #                including the identity hashes and UnityPy's own reads.
         "instrumentation": {
-            "physicalReads": total_reads,
-            "bytesRead": total_bytes_read,
-            "maxSingleRead": max_single_read,
-            "payloadBytesRead": payload_bytes_read,
-            "totalMeshBytes": total_mesh_bytes,
-            "bytesReadRatio": round(ratio, 12),
+            "boundsWalk": {
+                "physicalReads": total_reads,
+                "bytesRead": total_bytes_read,
+                "maxSingleRead": max_single_read,
+                "readWidths": sorted(read_widths),
+                "seeks": total_seeks,
+                "meshBytesDeclared": total_mesh_bytes,
+                # bytesSteppedOver + bytesRead - 24 x (submesh reads) equals
+                # meshBytesDeclared exactly; `assert_walk_accounts_for_every_byte`
+                # enforces it per object, so the two numbers below have no gap
+                # between them for a read to hide in.
+                "bytesSteppedOver": bytes_stepped_over,
+                "payloadBytesSteppedOver": payload_bytes_stepped_over,
+                # The number that can now fail: bytes physically read from a
+                # range this same walk advanced past without reading. Zero here
+                # is a measurement, not an identity.
+                "steppedOverBytesRead": stepped_over_read,
+                "walkBytesPerMeshByte": round(ratio, 12),
+            },
+            "process": {
+                "bytesRead": process.total,
+                "identityHashBytes": process.identity_hash_bytes,
+                "identityHashPasses": process.identity_hash_passes,
+                "digestComplete": process.identity_hash_complete,
+                "unityLoaderBytes": process.unity_loader_bytes,
+            },
         },
         "meshes": sorted(records, key=lambda item: (item["asset"], item["pathId"])),
         "diagnostics": {
             "fileLoadFailures": file_failures,
             "refusals": refusals,
             "refusalCounts": [
-                {"reason": reason, "count": count}
+                {
+                    "reason": reason,
+                    "count": count,
+                    "refusalClass": refusal_class(reason),
+                }
                 for reason, count in sorted(refusal_counts.items())
             ],
         },
@@ -2338,7 +3015,16 @@ def build_bounds(
             "promote a candidate to a confirmed object. m_LocalAABB is local and "
             "pre-transform: any world extent is derived, needs the census's "
             "composed world scale, and over-estimates under rotated non-uniform "
-            "scale."
+            "scale. On reads: instrumentation.process.bytesRead is what this "
+            "process pulled off the selected files, dominated by the two "
+            "whole-file SHA-256 passes that prove file identity and by UnityPy's "
+            "own header and object-table reads; instrumentation.boundsWalk is "
+            "the AABB walk alone. The claim these numbers support is that no "
+            "payload was PARSED or EMITTED, never that little was read. "
+            "steppedOverBytesRead is the overlap between recorded read offsets "
+            "and ranges the walk advanced past without reading; it proves the "
+            "walk did not read what it skipped, and it is conditional on guards "
+            "2 and 3 having established that the walk matches the file."
         ),
     }
 
@@ -2348,17 +3034,108 @@ def build_bounds(
 # ==========================================================================
 
 
-def _validate_bounds_paths(source_value: str, output_value: str) -> Tuple[Path, Path]:
-    """Census path rules plus the pipeline's 'outside the repository' rule.
+# Entries that identify a directory as a game or Unity player installation.
+# Existence is all that is checked — none of these files is ever opened.
+GAME_INSTALL_MARKER_ENTRIES = (
+    "EscapeFromTarkov.exe",
+    "EscapeFromTarkov_BE.exe",
+    "EscapeFromTarkov_Data",
+    "BsgLauncher.exe",
+    "BattlEye",
+    "UnityPlayer.dll",
+    "UnityCrashHandler64.exe",
+    "MonoBleedingEdge",
+)
+# Directory names that are a game tree by name alone, whatever they contain.
+GAME_INSTALL_DIR_NAMES = frozenset(
+    ("steamapps", "escape from tarkov", "battlestate games", "eft live", "eft")
+)
+GAME_INSTALL_NAME_FRAGMENTS = ("escape from tarkov", "battlestate")
+# `_looks_like_game_install` scans a directory only far enough to find a Unity
+# `*_Data` sibling; it never walks a whole tree.
+MAX_INSTALL_SCAN_ENTRIES = 4096
+MAX_OUTPUT_ANCESTORS = 64
 
-    The census guard only keeps the artifact out of the GAME tree. The sibling
-    extractors add the second half — nothing derived from local game files is
-    written where it could be committed or, worse, swept into `dist/` by a build.
-    This reader is held to the same contract.
+
+def _looks_like_game_install(directory: Path) -> bool:
+    """True when this directory is, by name or by content, a game install root.
+
+    Deliberately generous: the cost of a false positive is that the operator
+    picks a different output path, and the cost of a false negative is a
+    game-derived artifact written into the game tree.
+    """
+    name = directory.name.lower()
+    if name in GAME_INSTALL_DIR_NAMES:
+        return True
+    if any(fragment in name for fragment in GAME_INSTALL_NAME_FRAGMENTS):
+        return True
+    try:
+        for marker in GAME_INSTALL_MARKER_ENTRIES:
+            if (directory / marker).exists():
+                return True
+        with os.scandir(directory) as entries:
+            for index, entry in enumerate(entries):
+                if index >= MAX_INSTALL_SCAN_ENTRIES:
+                    break
+                if not entry.name.endswith("_Data"):
+                    continue
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if os.path.exists(os.path.join(entry.path, "globalgamemanagers")):
+                    return True
+    except OSError:
+        return False
+    return False
+
+
+def _assert_output_outside_game_install(output_path: Path, source_root: Path) -> None:
+    """Refuse an output path anywhere inside a game installation.
+
+    The census guard only excludes `--source` itself, so pointing `--source` at
+    `<install>/EscapeFromTarkov_Data` and `--output` at
+    `<install>/customs-bounds.json` used to exit 0 and write a JSON file into the
+    game tree — the artifact was outside the directory it was told about and
+    inside the install it came from.
+
+    Two rules.  The first is deterministic: a Unity `*_Data` source means the
+    install root is its parent, so the output must be outside that parent.  The
+    second walks the output's ancestors and refuses any that looks like an
+    install by name or by content, which also covers a source that was narrowed
+    to a subdirectory.  Messages name no path, because this error reaches the
+    operator's terminal.
+    """
+    data_dir = source_root.name.lower().endswith("_data") or source_root.name == "Data"
+    if data_dir and selector._path_is_inside(output_path, source_root.parent):
+        raise BoundsError(
+            "output must be outside the game installation directory "
+            "(--source is a Unity data root, so its parent is the install)"
+        )
+    ancestor = output_path.parent
+    for _ in range(MAX_OUTPUT_ANCESTORS):
+        if _looks_like_game_install(ancestor):
+            raise BoundsError(
+                "output must be outside the game installation directory "
+                "(an ancestor of --output is a game or Unity install root)"
+            )
+        if ancestor.parent == ancestor:
+            return
+        ancestor = ancestor.parent
+
+
+def _validate_bounds_paths(source_value: str, output_value: str) -> Tuple[Path, Path]:
+    """Census path rules, the 'outside the repository' rule, and the install rule.
+
+    The census guard only keeps the artifact out of the directory passed as
+    `--source`. The sibling extractors add the second half — nothing derived from
+    local game files is written where it could be committed or swept into
+    `dist/` by a build. The third is this reader's: `--source` names a Unity data
+    root, not the install around it, and the install is exactly where a
+    game-derived artifact must never land.
     """
     source_root, output_path = census._validate_paths_noclobber(source_value, output_value)
     if selector._path_is_inside(output_path, REPO_ROOT):
         raise BoundsError("output must be outside this repository")
+    _assert_output_outside_game_install(output_path, source_root)
     return source_root, output_path
 
 
@@ -2513,9 +3290,14 @@ def main(
             if unitypy_module is not None
             else selector._import_unitypy()
         )
-        catalog = census.load_build_settings_catalog(
-            source_root, catalog_files, unitypy
-        )
+        # The catalog phase reads too — two whole-file hashes plus whatever
+        # UnityPy pulls to enumerate BuildSettings — and those bytes used to
+        # appear in no number at all.  The meter carries them into the artifact.
+        meter = _ProcessMeter()
+        with meter.meter_census():
+            catalog = census.load_build_settings_catalog(
+                source_root, catalog_files, unitypy
+            )
         if catalog["loadedFileCount"] == 0:
             raise BoundsError("UnityPy could not load globalgamemanagers")
         if not catalog["complete"]:
@@ -2531,6 +3313,7 @@ def main(
             pinned_unity_version=args.pin_unity_version,
             pinned_typetree_sha256=pinned_hash,
             align_base_mode=args.align_base,
+            meter=meter,
         )
         if bounds["source"]["loadedSceneFileCount"] == 0:
             raise BoundsError("UnityPy could not load the targeted Customs files")
@@ -2550,15 +3333,34 @@ def main(
         json.dumps(bounds, allow_nan=False, sort_keys=True)
         _publish_json_noclobber([(output_path, bounds)])
         counts = bounds["counts"]
-        instrumentation = bounds["instrumentation"]
+        walk = bounds["instrumentation"]["boundsWalk"]
+        proc = bounds["instrumentation"]["process"]
+        # Both numbers, in this order, because the small one alone was read as
+        # "the run barely touched the game files" and that was never true.
         print(
             f"wrote Customs mesh bounds: {output_path.name} "
             f"({counts['meshesRead']} of {counts['meshCandidateCount']} meshes read, "
-            f"{counts['meshesRefused']} refused, "
-            f"{instrumentation['bytesRead']} bytes read of "
-            f"{instrumentation['totalMeshBytes']} "
-            f"({100.0 * instrumentation['bytesReadRatio']:.6f}%), "
-            f"payloadBytesRead={instrumentation['payloadBytesRead']})",
+            f"{counts['meshesRefused']} refused)",
+            file=stdout,
+        )
+        print(
+            f"  process read {proc['bytesRead']} bytes off the selected files "
+            f"({proc['identityHashPasses']} whole-file SHA-256 identity passes = "
+            f"{proc['identityHashBytes']} bytes, UnityPy loader = "
+            f"{proc['unityLoaderBytes']} bytes)",
+            file=stdout,
+        )
+        print(
+            f"  bounds walk read {walk['bytesRead']} bytes of "
+            f"{walk['meshBytesDeclared']} declared mesh bytes "
+            f"({100.0 * walk['walkBytesPerMeshByte']:.6f}%), stepped over "
+            f"{walk['bytesSteppedOver']}, steppedOverBytesRead="
+            f"{walk['steppedOverBytesRead']}",
+            file=stdout,
+        )
+        print(
+            "  claim: no payload was PARSED or EMITTED. NOT a claim: that little "
+            "was read.",
             file=stdout,
         )
         return 0
