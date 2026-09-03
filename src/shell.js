@@ -2,13 +2,19 @@
  * TarkovZero — shell (floating HUD).
  *
  * The map is edge-to-edge; every control floats over it. This module owns the right icon toolbar,
- * the dock column of panels to its left, and the pin model that decides what stays open:
+ * TWO dock columns of panels, and the pin model that decides what stays open:
  *
- *   - **workspace** panels (Layers, Quests) can be pinned. A pinned panel stays open while you use
- *     anything else; two pinned panels stack vertically in the one dock column and scroll
+ *   - **workspace** panels (Layers, Quests, Ask) can be pinned. A pinned panel stays open while you
+ *     use anything else; two pinned panels stack vertically in one dock column and scroll
  *     internally. A manual pin always wins over the automatic one.
- *   - **transient** panels (View, Live, Ask) are lookups: only one is open at a time and it opens
- *     *alongside* the pinned workspaces. Esc closes the transient first and unpins nothing.
+ *   - **transient** panels (View, Live) are lookups: only one is open at a time *per column* and it
+ *     opens alongside the pinned workspaces. Esc closes the transient first and unpins nothing.
+ *
+ * **Two columns, one pin model** (2026-09-02, founder: "move the AI chat to there" — a box drawn in
+ * the upper-left of the map). `#dock` hangs off the right toolbar; `#dock-left` sits in the
+ * upper-left corner and holds the assistant. The eviction rule ("one transient at a time") is
+ * per-column, because a lookup on the right has no business closing the conversation on the left;
+ * everything else — pinning, painting, `seen`, Esc — is the same code for both.
  *
  * Every panel's DOM is mounted statically in index.html and only hidden/shown — nothing here builds
  * markup, so the ids the rest of the app binds to exist from the first frame (see
@@ -16,10 +22,11 @@
  */
 
 const KEY = 'shell';
-// 'ask' is deliberately absent: the assistant is the omnibox card, not a dock panel (step 2).
-// #panel-ask stays in the DOM, permanently hidden, because assistant.js binds ids inside it.
-export const PANELS = ['layers', 'quests', 'view', 'live'];
-const WORKSPACE = new Set(['layers', 'quests']);
+export const PANELS = ['layers', 'quests', 'view', 'live', 'ask'];
+const WORKSPACE = new Set(['layers', 'quests', 'ask']);
+/** Which dock column a panel hangs in. Eviction is per-column; the pin model is not. */
+export const COLUMN = Object.freeze({ layers: 'right', quests: 'right', view: 'right', live: 'right', ask: 'left' });
+const columnOf = (name) => COLUMN[name] ?? 'right';
 
 /**
  * @param {object} deps
@@ -28,7 +35,8 @@ const WORKSPACE = new Set(['layers', 'quests']);
  */
 export function createShell({ store, onLayout } = {}) {
   const stage = document.getElementById('stage');
-  const dock = document.getElementById('dock');
+  const docks = { right: document.getElementById('dock'), left: document.getElementById('dock-left') };
+  const dock = docks.right;
   const el = {};            // name -> { panel, btn, item, pin }
   for (const name of PANELS) {
     el[name] = {
@@ -54,7 +62,13 @@ export function createShell({ store, onLayout } = {}) {
   const save = () => store?.set(KEY, { pinned: [...manual], seen: [...seen] });
   const isOpen = (name) => open.has(name);
   const isPinned = (name) => pinned.has(name);
-  const transientOpen = () => [...open].find((n) => !pinned.has(n)) ?? null;
+  /**
+   * The one unpinned panel in a column, if any. Scoped to a column so opening View on the right
+   * cannot close the conversation on the left — they are not competing for the same strip of screen.
+   */
+  const transientOpen = (col = null) =>
+    [...open].find((n) => !pinned.has(n) && (col === null || columnOf(n) === col)) ?? null;
+  const openIn = (col) => [...open].some((n) => columnOf(n) === col);
 
   /* ------------------------------------------------------------------ paint -- */
   function paint() {
@@ -84,7 +98,7 @@ export function createShell({ store, onLayout } = {}) {
         e.pin.title = on ? 'Unpin this panel' : 'Keep this panel open';
       }
     }
-    dock.classList.toggle('has-open', open.size > 0);
+    for (const [col, node] of Object.entries(docks)) node?.classList.toggle('has-open', openIn(col));
     document.body.classList.toggle('dock-open', open.size > 0);
     onLayout?.();
   }
@@ -94,7 +108,7 @@ export function createShell({ store, onLayout } = {}) {
     if (!PANELS.includes(name) || !el[name].panel) return;
     if (on) {
       if (!pinned.has(name)) {
-        const t = transientOpen();
+        const t = transientOpen(columnOf(name));
         if (t && t !== name) open.delete(t);
       }
       open.add(name);
@@ -119,8 +133,8 @@ export function createShell({ store, onLayout } = {}) {
       // Unpin means unpin, even while `auto` still holds the panel — see `unpinned` above.
       if (auto.has(name)) unpinned.add(name);
       pinned.delete(name);
-      if (open.has(name) && !pinned.has(name)) {          // it is now the one transient slot
-        for (const t of [...open]) if (t !== name && !pinned.has(t)) open.delete(t);
+      if (open.has(name) && !pinned.has(name)) {          // it is now its column's one transient slot
+        for (const t of [...open]) if (t !== name && !pinned.has(t) && columnOf(t) === columnOf(name)) open.delete(t);
       }
     }
     save();
@@ -141,15 +155,19 @@ export function createShell({ store, onLayout } = {}) {
       unpinned.delete(name);
       if (!manual.has(name)) pinned.delete(name);
       if (open.has(name) && !pinned.has(name)) {
-        for (const t of [...open]) if (t !== name && !pinned.has(t)) open.delete(t);
+        for (const t of [...open]) if (t !== name && !pinned.has(t) && columnOf(t) === columnOf(name)) open.delete(t);
       }
     }
     paint();
   }
 
-  /** Esc: close the transient panel first; pinned workspaces stay. Returns true if it closed one. */
+  /**
+   * Esc: close the transient panel first; pinned workspaces stay. Returns true if it closed one.
+   * The right column peels before the left: the toolbar's lookups are what a player just opened,
+   * the conversation on the left is the thing they were reading. One Esc, one panel.
+   */
   function closeTransient() {
-    const t = transientOpen();
+    const t = transientOpen('right') ?? transientOpen('left');
     if (!t) return false;
     setOpen(t, false);
     return true;
@@ -211,7 +229,12 @@ export function createShell({ store, onLayout } = {}) {
       const b = boxOf(btn, s);
       if (b) rect.right = Math.min(rect.right, b.left - GAP);
     }
-    if (open.size) { const b = boxOf(dock, s); if (b) rect.right = Math.min(rect.right, b.left - GAP); }
+    if (openIn('right')) { const b = boxOf(docks.right, s); if (b) rect.right = Math.min(rect.right, b.left - GAP); }
+    // The left column is the assistant. It floats over the upper-left of the map exactly as the
+    // right dock floats over the right, so it owes the reader the same inset: without this line a
+    // place label, a quest card or a fly-to target lands *behind* the conversation and the map
+    // still believes it is visible (QA H4's whole point, mirrored).
+    if (openIn('left')) { const b = boxOf(docks.left, s); if (b) rect.left = Math.max(rect.left, b.right + GAP); }
     return sane(rect, s);
   }
 

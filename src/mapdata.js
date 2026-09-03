@@ -21,7 +21,6 @@ export const MAPS = {
     bounds: [[698, -307], [-372, 237]],
     svgPath: `${ASSETS}/maps/svg/Customs.svg`, svgLayer: 'Ground_Level',
     tilePath: `${ASSETS}/maps/customs_0.16/main/{z}/{x}/{y}.png`,
-    floors: ['all', 0, 1, 2, 3, 'U'],
   },
   reserve: {
     key: 'reserve', name: 'Reserve', raid: { minutes: 40, pmc: '9–11' },
@@ -31,7 +30,6 @@ export const MAPS = {
     svgBounds: [[289, -274], [-303, 272]],
     svgPath: `${ASSETS}/maps/svg/Reserve.svg`, svgLayer: 'Ground_Level',
     tilePath: `${ASSETS}/maps/reserve/main/{z}/{x}/{y}.png`,
-    floors: ['all', 0, 1, 2, 3, 4, 'U'],
   },
   woods: {
     key: 'woods', name: 'Woods', raid: { minutes: 35, pmc: '10–14' },
@@ -40,7 +38,6 @@ export const MAPS = {
     bounds: [[646, -914], [-761, 442]],
     svgPath: `${ASSETS}/maps/svg/Woods.svg`, svgLayer: 'Ground_Level',
     tilePath: `${ASSETS}/maps/woods/main_0.16/{z}/{x}/{y}.png`,
-    floors: ['all', 0],
   },
 };
 

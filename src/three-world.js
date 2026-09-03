@@ -28,7 +28,7 @@ export const worldToGame = (wx, wy, wz = 0) => ({ x: -Number(wx), z: -Number(wy)
 
 /**
  * Preserve an object's canonical height above its local ground while terrain alone
- * receives visual relief. This keeps floors, players and quest points from being
+ * receives visual relief. This keeps floor slabs, players and quest points from being
  * stretched vertically when the terrain is displayed at 2x.
  */
 export function terrainRelativeDisplayY({ canonicalY, canonicalGroundY, displayGroundY }) {
@@ -660,12 +660,6 @@ export function withinScope(point, scope = THREE_POC_SCOPE) {
   const z = Array.isArray(point) ? point[1] : point?.z;
   return Math.abs(Number(x) - scope.center.x) <= scope.widthM / 2
     && Math.abs(Number(z) - scope.center.z) <= scope.depthM / 2;
-}
-
-export function visibleForFloor(level, floor) {
-  if (level === 'both') return true;
-  const underground = level === 'underground' || level === 'U';
-  return floor === 'U' ? underground : !underground;
 }
 
 const THREE_FX_KEYS = ['fog', 'grade', 'detail'];

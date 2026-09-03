@@ -23,6 +23,10 @@ const GLYPH = {
   gi_flagobjective: A('flagobjective'), gi_checklist: A('checklist'),
   gi_lockedchest: A('lockedchest'), gi_ammobox: A('ammobox'), gi_cargocrate: A('cargocrate'), gi_strongbox: A('strongbox'),
   gi_medicalpack: A('medicalpack'), gi_lootkey: A('lootkey'), gi_deathskull: A('deathskull'), gi_twocoins: A('twocoins'),
+  // gi_ammobox / gi_strongbox / gi_lootkey / gi_deathskull are not bound by any KIND since the
+  // 2026-09-02 loot collapse (three families, see KINDS below). They stay: they are the credited
+  // game-icons.net art set, ~200 bytes each, and they are what a per-item tier would draw if the
+  // families ever split again. Removing them would also orphan their paths in icon-art.js.
   // toy-soldier silhouettes (one colour, no badge). 24x24, feet at y=23.
   armyman: `<path d='M12 1.5a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8zM9.2 6.6h5.6l1.4 1.2 3.9-1.6.7 1.6-4 2.3-.8 5.4h-1.1l.3 7.5h-2.2l-.6-6h-.8l-.6 6H9.8l.3-7.5H9l-.8-5.2-3.3-1 .4-1.7 3.2.6z'/><path d='M4 23h16v.8H4z' opacity='.9'/>`,
   hoodman: `<path d='M12 1.2c-2.2 0-3.3 1.8-3.3 3.6v1.7h6.6V4.8c0-1.8-1.1-3.6-3.3-3.6zM9.3 7.1h5.4l1.1 1 3.5 3.6-1.2 1.2-2.4-2.1-.3 5h-1l.4 7.5h-2.1l-.5-6h-.8l-.5 6H9.1l.4-7.5h-1l-.3-5-2.4 2.1-1.2-1.2 3.5-3.6z'/><path d='M4 23h16v.8H4z' opacity='.9'/>`,
@@ -44,6 +48,36 @@ const GLYPH = {
 // Palette (TRACK C accents): greens = your way out, blues/ambers = people, reds = danger,
 // neutrals = utilities. The four extract hues are re-used by the 3D name chips' borders and by
 // the sidebar rows, so toggling 'Scav extracts' visibly removes exactly the orange-bordered chips.
+//
+// LOOT: THREE FAMILIES, NOT SEVEN MUDS (2026-09-02)
+// ------------------------------------------------
+// Loot used to be seven `ci` kinds in seven greys — weapon boxes #707875, crates & bags #81735E,
+// safes & cash #7D7062, med & ammo #64786E, key spawns #80785C, dead bodies #706866, loose loot
+// #706F65 (their kind ids are gone; the only place they still appear is LEGACY_KIND, and
+// `scripts/icons-test.mjs` fails on any other mention, comments included — including this one).
+// Measured on that set: the closest pair (crate vs key) was **5.5 apart in RGB distance** and the
+// Rec.709 luma spread across all seven was **14.1 of 255**. A third of the icon vocabulary was one
+// grey dot, and the engraved glyph that was supposed to tell them apart does not survive 12 px —
+// the only size the map draws them at once you are zoomed out far enough to plan a route.
+//
+// The collapse is keyed on the DECISION a player makes, not on what the item is:
+//
+//   loot-consumables  what you burn in the raid   meds, ammo, grenades, rations
+//   loot-valuables    what you pocket for money   loose loot, drawers, jackets, toolboxes,
+//                                                 safes, tills, PCs, key spawns
+//   loot-gear         big kit and bodies          weapon boxes, duffles, crates, dead PMCs/scavs
+//
+// Hues are muted enough for a dark realistic map and far enough apart to survive the DOT tier,
+// where colour is the only channel left (`desaturate()` below pulls each 55% toward its own luma,
+// so the dot tier is the number that actually matters):
+//
+//   badge tier  min RGB distance 103.8 · luma spread 72.9   (was 5.5 / 14.1)
+//   dot tier    min RGB distance  56.9 · luma spread 64.5   (was 3.0 / 12.2)
+//
+// `scripts/icons-test.mjs` asserts both floors; the OLD seven fail them by an order of magnitude.
+// The per-item distinction is NOT lost — it moves off the map face into the data: the marker keeps
+// its own name ("Duffle bag", "Medbag SMU06"), the hover label and the popup print it, and the
+// `terms` array below keeps "safe", "keys", "bodies" and friends findable in the omnibox.
 export const KINDS = {
   'extract-pmc':     { label: 'PMC extracts',       glyph: 'gi_exit',      color: '#2DBE6C', shape: 'sq'  },
   'extract-scav':    { label: 'Scav extracts',      glyph: 'gi_exit',  color: '#E0872B', shape: 'sq'  },
@@ -54,13 +88,12 @@ export const KINDS = {
   'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'gi_crosshair',     color: '#e2793f', shape: 'sh' },
   'spawn-boss':      { label: 'Boss spawns',        glyph: 'gi_crownskull',   color: '#d24a4a', shape: 'sh' },
   'stash':           { label: 'Stashes',            glyph: 'gi_lockedchest', color: '#77845A', shape: 'sq' },
-  'loot-weapon':     { label: 'Weapon boxes',       glyph: 'gi_ammobox',     color: '#707875', shape: 'ci' },
-  'loot-crate':      { label: 'Crates & bags',      glyph: 'gi_cargocrate',  color: '#81735E', shape: 'ci' },
-  'loot-cash':       { label: 'Safes & cash',       glyph: 'gi_strongbox',   color: '#7D7062', shape: 'ci' },
-  'loot-med':        { label: 'Med & ammo',         glyph: 'gi_medicalpack', color: '#64786E', shape: 'ci' },
-  'loot-key':        { label: 'Key spawns',         glyph: 'gi_lootkey',     color: '#80785C', shape: 'ci' },
-  'loot-dead':       { label: 'Dead bodies',        glyph: 'gi_deathskull',  color: '#706866', shape: 'ci' },
-  'loot-loose':      { label: 'Loose loot (dense)', glyph: 'gi_twocoins',    color: '#706F65', shape: 'ci' },
+  'loot-consumables': { label: 'Meds & ammo',       glyph: 'gi_medicalpack', color: '#3C8D80', shape: 'ci',
+    terms: ['med', 'meds', 'medical', 'medcase', 'medbag', 'ammo', 'grenade', 'ration', 'food', 'consumable'] },
+  'loot-valuables':  { label: 'Valuables & keys',   glyph: 'gi_twocoins',    color: '#CBA33C', shape: 'ci',
+    terms: ['loose', 'loose loot', 'cash', 'money', 'safe', 'safes', 'till', 'register', 'drawer', 'jacket', 'toolbox', 'tool', 'pc', 'key', 'keys', 'valuable'] },
+  'loot-gear':       { label: 'Gear & bodies',      glyph: 'gi_cargocrate',  color: '#8E4F3E', shape: 'ci',
+    terms: ['weapon', 'weapon box', 'gun', 'crate', 'crates', 'bag', 'bags', 'duffle', 'body', 'bodies', 'dead', 'corpse', 'gear'] },
   'hazard':          { label: 'Hazards',            glyph: 'gi_radioactive',   color: '#8258A6', shape: 'dia' },
   'weapon':          { label: 'Stationary weapons', glyph: 'gi_sentry',    color: '#6E6860', shape: 'dia' },
   'switch':          { label: 'Switches / levers',  glyph: 'gi_lever',     color: '#D6B236', shape: 'dia' },
@@ -69,6 +102,90 @@ export const KINDS = {
   // as an extract or a loot chip. Colour is overridden per selected quest (see `tint`).
   'quest-objective': { label: 'Quest objectives',   glyph: 'gi_flagobjective', color: '#D8A32B', shape: 'hex' },
 };
+/**
+ * Container type -> marker kind. Lives here, next to KINDS, because it IS the vocabulary: main.js
+ * only consumes it, and a DOM-free module is what lets `scripts/icons-test.mjs` assert it against
+ * the real `public/data/*.json`.
+ *
+ * Two type vocabularies feed this table and BOTH are live:
+ *   - `scripts/build-community-data.mjs` exact path: `container_${lookup.normalizedName}` straight
+ *     off tarkov.dev — `container_weapon_box`, `container_duffle_bag`, `container_toolbox`,
+ *     `container_pmc_body`, `container_medbag_smu06`, ...
+ *   - its EFT-Wiki path: the shorter hand-written `WIKI_CONTAINER_TYPES` set (`container_weapon`,
+ *     `container_crate`, `container_tool`, `container_dead`, ...), plus `loot_spt` from the SPT
+ *     loose-loot samples.
+ *
+ * The table only ever carried the WIKI names, and `classify()` silently `continue`s on a type it
+ * does not know — so **1,480 of the 3,627 containers in the three shipped maps (40.8%) were dropped
+ * before they reached a layer**, with nothing anywhere reporting it (§6's failure mode exactly: a
+ * filter that cannot say what it discarded). Both vocabularies are mapped now and the coverage is
+ * asserted against the shipped data, so the next new type fails a test instead of vanishing.
+ *
+ * The `loot-*` split is by what the player DECIDES, not by what the item is. Judgement calls worth
+ * knowing: a toolbox is barter money, so it is a VALUABLE (it used to sit under "Med & ammo"); a
+ * ration crate is something you consume; a technical supply crate is a crate, so it is gear.
+ */
+export const CONTAINER_KIND = {
+  // Hidden stashes keep their OWN kind (square, olive) — they are not loot you walk past.
+  container_stash: 'stash', container_buried_barrel_cache: 'stash', container_ground_cache: 'stash',
+  container_shturmans_stash: 'stash',
+  // Consumables: what you burn in the raid.
+  container_medcase: 'loot-consumables', container_medical: 'loot-consumables',
+  container_medbag_smu06: 'loot-consumables', container_medical_supply_crate: 'loot-consumables',
+  container_ammo: 'loot-consumables', container_wooden_ammo_box: 'loot-consumables',
+  container_grenade_box: 'loot-consumables', container_grenade: 'loot-consumables',
+  container_ration_supply_crate: 'loot-consumables',
+  // Valuables: what you pocket for money.
+  loot_loose: 'loot-valuables', loot_spt: 'loot-valuables', loot_key: 'loot-valuables',
+  container_drawer: 'loot-valuables', container_jacket: 'loot-valuables',
+  container_toolbox: 'loot-valuables', container_tool: 'loot-valuables',
+  container_safe: 'loot-valuables', container_cash_register: 'loot-valuables', container_cash: 'loot-valuables',
+  container_pc: 'loot-valuables', container_pc_block: 'loot-valuables',
+  // Gear: big kit containers and bodies.
+  container_weapon_box: 'loot-gear', container_weapon: 'loot-gear',
+  container_duffle_bag: 'loot-gear', container_duffle: 'loot-gear',
+  container_wooden_crate: 'loot-gear', container_crate: 'loot-gear', container_greencrate: 'loot-gear',
+  container_supply: 'loot-gear', container_technical_supply_crate: 'loot-gear',
+  container_pmc_body: 'loot-gear', container_dead_scav: 'loot-gear', container_civilian_body: 'loot-gear',
+  container_dead: 'loot-gear',
+};
+/**
+ * The per-item name the map face no longer draws. The badge says "valuables"; the hover label and
+ * the popup still say "Medbag SMU06" — the data does not lose the distinction, only the 12 px icon
+ * does. `c.name` from the API wins where it exists; this is the fallback and the popup's second
+ * line, so it has to cover every type above.
+ */
+export const CONTAINER_TYPE = {
+  container_stash: 'Hidden stash', container_buried_barrel_cache: 'Buried barrel cache',
+  container_ground_cache: 'Ground cache', container_shturmans_stash: "Shturman's stash",
+  container_medcase: 'Medcase', container_medical: 'Medical bag', container_medbag_smu06: 'Medbag SMU06',
+  container_medical_supply_crate: 'Medical supply crate', container_ammo: 'Ammo box',
+  container_wooden_ammo_box: 'Wooden ammo box', container_grenade_box: 'Grenade box',
+  container_grenade: 'Grenade box', container_ration_supply_crate: 'Ration supply crate',
+  loot_loose: 'Marked loose loot', loot_spt: 'SPT loose-loot point', loot_key: 'Key spawn',
+  container_drawer: 'Drawer', container_jacket: 'Jacket', container_toolbox: 'Toolbox',
+  container_tool: 'Tool container', container_safe: 'Safe', container_cash_register: 'Cash register',
+  container_cash: 'Cash register', container_pc: 'PC', container_pc_block: 'PC block',
+  container_weapon_box: 'Weapon box', container_weapon: 'Weapon box', container_duffle_bag: 'Duffle bag',
+  container_duffle: 'Sports bag', container_wooden_crate: 'Wooden crate', container_crate: 'Supply crate',
+  container_greencrate: 'Wooden crate', container_supply: 'Supply container',
+  container_technical_supply_crate: 'Technical supply crate', container_pmc_body: 'PMC body',
+  container_dead_scav: 'Dead scav', container_civilian_body: 'Civilian body', container_dead: 'Dead body',
+};
+/**
+ * A returning visitor's saved layer set (`tz:kinds`) still names the seven pre-collapse loot kinds.
+ * Fold them onto their family so "I had safes on" stays true across the update; main.js drops
+ * anything this build no longer knows, so an unknown string cannot live in storage forever.
+ *
+ * This is the ONE place the dead kind strings may appear — `scripts/icons-test.mjs` scans src/ and
+ * scripts/ for them and excludes exactly this table.
+ */
+export const LEGACY_KIND = {
+  'loot-med': 'loot-consumables',
+  'loot-cash': 'loot-valuables', 'loot-key': 'loot-valuables', 'loot-loose': 'loot-valuables',
+  'loot-weapon': 'loot-gear', 'loot-crate': 'loot-gear', 'loot-dead': 'loot-gear',
+};
+
 // Letter codes for extracts (re3mr-style badges); null -> draw the glyph
 export const EXTRACT_LETTER = { 'Dorms V-Ex': 'D', 'Crossroads': 'C', 'Trailer Park': 'TP', 'Old Gas Station': 'OG', 'RUAF Roadblock': 'R', "Smugglers' Boat": 'SB', 'ZB-1011': '11', 'Smugglers\' Bunker (ZB-1012)': '12', 'ZB-013': '13', 'Railroad to Tarkov': 'R2', 'Railroad to Port': 'R1', 'Railroad to Military Base': 'R3', 'Sniper Roadblock': 'N', 'Old Road Gate': 'O', 'Passage Between Rocks': 'P', 'Military Base CP': 'M', 'Scav Checkpoint': 'S', 'Administration Gate': 'A', 'Factory Far Corner': 'F', 'Warehouse 4': '4', 'Factory Shacks': 'Y', 'Old Gas Station Gate': 'L', 'Warehouse 17': '17', "Trailer Park Workers' Shack": 'I', 'Boiler Room Basement (Co-op)': 'Z', 'Railroad Passage (Flare)': 'W', 'Transit to Factory': 'H', 'Transit to Reserve': 'V', 'Transit to Interchange': 'G', 'Transit to Shoreline': 'E' };
 export const extractLetter = (name) => EXTRACT_LETTER[(name || '').trim()] ?? null;
@@ -112,12 +229,22 @@ const SHIELD = 'M12 1.7 21.2 5v7.4c0 4.7-4.3 7.9-9.2 9.9-4.9-2-9.2-5.2-9.2-9.9V5
  * corner chips against the opposite one, and the dashed underground outline drew over the letter.
  * Two causes, both about assuming a face we do not have:
  *
- *   - The letter was set at a font size tuned for Barlow Condensed with no width constraint. The
+ *   - The letter was set at a font size tuned for the display face with no width constraint. The
  *     3D atlas rasterises these through an `<img>`, and an SVG loaded as an image cannot see the
  *     PAGE's webfonts — it falls back to a much wider face, and "OG" / "SB" measured 15.9 of the
  *     18.9 units the plate has inside its keyline, running into both edges. `textLength` pins the
  *     ink instead, which also makes 2D and 3D draw the badge identically for the first time (the
- *     document path DOES have Barlow Condensed, so the two used to be different widths).
+ *     document path DOES see the webfont, so the two used to be different widths).
+ *
+ *     2026-09-02: the display face moved Barlow Condensed -> IBM Plex Sans Condensed, so the
+ *     `font-family` on this <text> moved with it. That is a NAME change only — the pinning is what
+ *     makes it safe. `textLength` + `lengthAdjust='spacingAndGlyphs'` forces any face, webfont or
+ *     `<img>` fallback, to the same 12.6 / 15.6 units for 2- and 3-character letters, so 2D/3D
+ *     parity is a property of the pin and not of which font happens to resolve. The unpinned case
+ *     (len 0) is single letters only, which have never been near the plate edge at size 13.
+ *     Verified headless: same SVG drawn inline (webfont visible) and via an `<img>` data URL
+ *     (webfont invisible) rasterises to the SAME letter ink bounding box for "OG"/"SB"/"17" —
+ *     see the run recorded in the loot-collapse handoff.
  *   - The corner chips were an 8.2-unit square placed at 14.1..22.3, i.e. across the plate's
  *     rounded corner and 0.1 past its bottom edge. They are 7.2 units inside the plate now, in
  *     their own band under the letter, which is why the letter's baseline lifts when a badge
@@ -173,7 +300,7 @@ function badgeSvg(k0, letter, level = 'surface', tint = null, req = null) {
   const hasChip = isUnder || !!REQ_MARK[req];
   const lb = letter ? letterBox(letter, hasChip) : null;
   const inner = letter
-    ? `<text x='12' y='${lb.base}' text-anchor='middle'${lb.len ? ` textLength='${lb.len}' lengthAdjust='spacingAndGlyphs'` : ''} font-family='Barlow Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${lb.size}' fill='${STENCIL}'>${letter}</text>`
+    ? `<text x='12' y='${lb.base}' text-anchor='middle'${lb.len ? ` textLength='${lb.len}' lengthAdjust='spacingAndGlyphs'` : ''} font-family='IBM Plex Sans Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${lb.size}' fill='${STENCIL}'>${letter}</text>`
     : `<g fill='${STENCIL}' transform='${GLYPH_FIT[k.shape] ?? GLYPH_FIT.sq}'>${GLYPH[k.glyph]}</g>`;
   // An underground badge must remain recognisable even when its colour is muted by
   // the marker-opacity setting: dashed extract outline + a universal down/stairs cue. The outline

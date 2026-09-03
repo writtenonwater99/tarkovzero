@@ -7,8 +7,8 @@
  *                Enter acts on the highlighted row (the first result, or an exact name match).
  *                The last row is always an unselected "Ask AI: …" — arrow down to it to send the
  *                text to the assistant. Free text NEVER routes to the AI on its own.
- *   `>`          commands: `> layers scav`, `> 3d`, `> floor 2`, `> fit`… Command names are
- *                matched by prefix and then by subsequence (`> lyr`, `> flr 2`), and the row
+ *   `>`          commands: `> layers scav`, `> 3d`, `> relief 3`, `> fit`… Command names are
+ *                matched by prefix and then by subsequence (`> lyr`, `> rlf 3`), and the row
  *                echoes the argument so you can see what will run before you press Enter.
  *   `?`          the assistant, explicitly.
  *
@@ -28,7 +28,6 @@ export const COMMANDS = [
   { name: '3d', hint: 'switch to the 3D view' },
   { name: '2d', hint: 'switch to the 2D view' },
   { name: 'map', arg: 'customs | reserve | woods', hint: 'load another map' },
-  { name: 'floor', arg: 'all · 0–4 · U', hint: 'pick a floor (3D)' },
   { name: 'relief', arg: '1 | 2 | 3', hint: 'terrain exaggeration (3D)' },
   { name: 'trees', arg: 'on | off', hint: 'tree cover' },
   { name: 'rocks', arg: 'on | off', hint: 'rocks' },
@@ -83,11 +82,6 @@ export function runCommand(cmd, rawArg, actions = {}) {
       if (!key) return `No map called “${arg}”`;
       a.goMap?.(key); return `Loading ${key}…`;
     }
-    case 'floor': {
-      const f = q === 'u' ? 'U' : q === 'all' || !q ? 'all' : String(Number(q));
-      if (!a.setFloor?.(f)) return `No floor “${arg}”`;
-      return `Floor ${f}`;
-    }
     case 'relief': {
       const requested = Number(q) || 3;
       const applied = a.setRelief?.(requested);
@@ -110,10 +104,10 @@ export function runCommand(cmd, rawArg, actions = {}) {
 /** Every command name `runCommand` actually handles — the test asserts this covers COMMANDS. */
 export const HANDLED = [
   '3d', '2d', 'fit', 'north', 'live', 'quests', 'my quests', 'help', 'clear trails',
-  'pin', 'map', 'floor', 'relief', 'trees', 'rocks', 'labels', 'layers', 'show', 'hide',
+  'pin', 'map', 'relief', 'trees', 'rocks', 'labels', 'layers', 'show', 'hide',
 ];
 
-/** Is `needle` a subsequence of `hay`? ("flr" -> "floor") */
+/** Is `needle` a subsequence of `hay`? ("rlf" -> "relief") */
 export function subsequence(needle, hay) {
   if (!needle) return false;
   let i = 0;
@@ -213,9 +207,9 @@ const KIND_RANK = { extract: 0, place: 1, marker: 2, lock: 2, quest: 3, layer: 4
  * @param {string} deps.mapKey
  * @param {(x:number,z:number)=>void} deps.flyTo
  * @param {object} deps.actions              command implementations (see runCommand)
- * @param {object} deps.assistant            src/assistant.js — { ask, preview, getHistory, switchMap }
- * @param {{get():any,set(s:any):void}} deps.camera  snapshot/restore for the Restore chip
- * @param {()=>void} [deps.onLayout]         the results list and the card change the safe rect
+ * @param {object} deps.assistant            src/assistant.js — { ask, preview, setOpen, isOpen, armUndo }
+ * @param {{get():any,set(s:any):void}} deps.camera  snapshot/restore for the Restore button
+ * @param {()=>void} [deps.onLayout]         the results list changes the safe rect
  * @param {(msg:string)=>void} [deps.toast]
  */
 export function createOmnibox(deps = {}) {
@@ -224,18 +218,13 @@ export function createOmnibox(deps = {}) {
     input: document.getElementById('find'),
     results: document.getElementById('find-results'),
     kbd: document.getElementById('find-kbd'),
-    card: document.getElementById('ask-card'),
-    log: document.getElementById('ask-log'),
-    acts: document.getElementById('ask-acts'),
-    history: document.getElementById('ask-history'),
-    close: document.getElementById('ask-card-x'),
   };
   if (!el.input) return { focus() {}, refresh() {}, escape: () => false, isOpen: () => false };
 
   let state = route('');
   let hintAt = 0, hintTimer = 0;
   let undo = null;                      // camera + quest selection from before the last answer
-  let openedForText = null;             // input value at the moment the card opened — see render()
+  let openedForText = null;             // input value at the moment the panel opened — see render()
 
   /* ------------------------------------------------------------- lookup --- */
   function questIndex() {
@@ -297,10 +286,10 @@ export function createOmnibox(deps = {}) {
       `${chipFor(row)}<span class="rn">${esc(row.label)}</span><span class="rk">${esc(row.sub ?? '')}</span>${enterKey(on)}</div>`;
   }
   function render() {
-    // The card, once open, answers the query it was opened for — the row list beneath it (the
-    // "Ask AI: …" row, or leftover lookup hits) is redundant until the input text actually changes.
-    const staleBehindCard = isCardOpen() && el.input.value === openedForText;
-    const show = state.rows.length > 0 && !staleBehindCard;
+    // The panel, once answering, answers the query it was opened for — the row list above the box
+    // (the "Ask AI: …" row, or leftover lookup hits) is redundant until the input text changes.
+    const staleBehindAnswer = isAskOpen() && el.input.value === openedForText;
+    const show = state.rows.length > 0 && !staleBehindAnswer;
     el.results.hidden = !show;
     el.results.innerHTML = show ? state.rows.map(rowHtml).join('') : '';
     el.box.classList.toggle('has-results', show);
@@ -354,44 +343,35 @@ export function createOmnibox(deps = {}) {
   }
 
   /* ----------------------------------------------------------- assistant -- */
-  function setCardOpen(on) {
-    el.card.hidden = !on;
-    if (!on) { el.card.classList.remove('show-history'); openedForText = null; }
-    else openedForText = el.input.value;
+  /*
+   * The assistant is the docked panel in the upper-left (src/assistant-panel.js), not a card over
+   * this box. The omnibox keeps exactly two jobs here: it is the `?` ROUTE into that panel, and it
+   * takes the camera/selection snapshot the panel's "Restore view" button puts back. Everything
+   * drawn from an answer — buttons, photos, sources — belongs to the panel, built from the
+   * envelope's structured actions.
+   */
+  function setAskOpen(on) {
+    deps.assistant?.setOpen?.(!!on);
+    openedForText = on ? el.input.value : null;
     render();
   }
-  const isCardOpen = () => !el.card.hidden;
+  const isAskOpen = () => !!deps.assistant?.isOpen?.();
 
   function sendToAssistant(text) {
     if (!text) return;
     undo = { camera: deps.camera?.get?.() ?? null, quests: deps.quests?.selectedSlugs?.() ?? [] };
-    el.acts.innerHTML = '';
-    setCardOpen(true);
+    deps.assistant?.armUndo?.(restore);
+    setAskOpen(true);
     el.box.classList.add('busy');
     Promise.resolve(deps.assistant?.ask?.(text)).finally(() => el.box.classList.remove('busy'));
   }
 
-  /** Chips for what the answer did — and the one thing it is not allowed to do on its own. */
-  function renderActions({ actions = [] } = {}) {
-    const chips = [];
-    const quest = actions.find((x) => x.type === 'selectQuest' && x.slug);
-    const fly = actions.find((x) => x.type === 'flyTo' && x.objectiveId);
-    const jump = actions.find((x) => x.type === 'switchMap' && x.map && x.map !== deps.mapKey);
-    if (quest) chips.push({ k: 'quest', label: 'Select quest', run: () => { deps.quests?.select?.(quest.slug); deps.actions?.panel?.('quests', true); } });
-    if (fly) chips.push({ k: 'fly', label: 'Fly to', run: () => deps.quests?.flyToObjective?.(fly.objectiveId) });
-    // A map switch reloads the page and drops everything on screen: it only ever happens on a click.
-    if (jump) chips.push({ k: 'map', label: `Switch map → ${jump.map}`, run: () => deps.assistant?.switchMap?.(jump.map, fly?.objectiveId ?? null) });
-    if (undo) chips.push({ k: 'undo', label: 'Restore', run: restore });
-    el.acts.innerHTML = chips.map((c, i) => `<button type="button" class="ask-act ask-act-${c.k}" data-act="${i}">${esc(c.label)}</button>`).join('');
-    for (const b of el.acts.querySelectorAll('[data-act]')) b.onclick = () => chips[Number(b.dataset.act)].run();
-  }
   /** Undo the answer: put the camera back and drop the quests the answer added. Never dims anything. */
   function restore() {
     if (!undo) return;
     const now = deps.quests?.selectedSlugs?.() ?? [];
     for (const slug of now) if (!undo.quests.includes(slug)) deps.quests?.deselect?.(slug);
     if (undo.camera) deps.camera?.set?.(undo.camera);
-    el.acts.innerHTML = '';
     undo = null;
   }
 
@@ -415,12 +395,6 @@ export function createOmnibox(deps = {}) {
   document.addEventListener('mousedown', (e) => {
     if (!el.box.contains(e.target) && state.rows.length) clear();
   });
-  el.close?.addEventListener('click', () => setCardOpen(false));
-  el.history?.addEventListener('click', () => {
-    const on = el.card.classList.toggle('show-history');
-    el.history.setAttribute('aria-pressed', String(on));
-    el.log.scrollTop = el.log.scrollHeight;
-  });
   if (!/Mac|iPhone|iPad/.test(navigator.platform ?? '')) el.kbd.textContent = 'Ctrl K';
 
   function cycleHints() {
@@ -442,7 +416,7 @@ export function createOmnibox(deps = {}) {
     el.input.value = q;
     update();
     if (state.mode === 'ai' && state.query) {
-      setCardOpen(true);
+      setAskOpen(true);
       deps.assistant?.preview?.(state.query);
     }
     setTimeout(() => el.input.focus(), 0);
@@ -453,14 +427,17 @@ export function createOmnibox(deps = {}) {
     /** `A` — the assistant, one keystroke away, with the prefix already typed. */
     focusAsk: () => { if (!el.input.value.startsWith('?')) el.input.value = '?'; el.input.focus(); update(); },
     refresh: () => { if (state.rows.length) update(); },
-    /** Esc from the document: peel the omnibox first. Returns true when it consumed the key. */
+    /**
+     * Esc from the document: peel the omnibox first. Returns true when it consumed the key.
+     * The assistant panel is NOT peeled here any more — it is a dock panel, so the shell's
+     * `closeTransient()` closes it in turn, and a PINNED conversation survives Esc like any other
+     * pinned workspace. Peeling it from here would have ignored the pin.
+     */
     escape: () => {
       if (state.rows.length) { clear({ blur: true }); return true; }
-      if (isCardOpen()) { setCardOpen(false); return true; }
       return false;
     },
-    setCardOpen, isCardOpen,
-    onAnswer: renderActions,
+    setAskOpen, isAskOpen,
     ask: sendToAssistant,
     applyQaQuery,
     route: (text) => route(text, { lookup }),

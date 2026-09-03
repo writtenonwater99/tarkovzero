@@ -3,7 +3,7 @@
     "api/assistant.js": {
       "memory": 512,
       "maxDuration": 15,
-      "includeFiles": "public/data/quests.json"
+      "includeFiles": "public/data/quest*.json"
     }
   },
   "rewrites": [

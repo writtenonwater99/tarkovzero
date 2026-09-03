@@ -5,9 +5,13 @@ import { loadMapData } from './api.js';
 import { roadmapLayer } from './roadmap.js';
 import { placeLabelsLayer } from './placeLabels.js';
 import { LABELS } from './labels.js';
-import { KINDS, iconHtml, extractLetter, extractReq, dotHtml, clusterHtml, EXTRACT_SUB } from './icons.js';
+import { KINDS, CONTAINER_KIND, CONTAINER_TYPE, LEGACY_KIND, iconHtml, extractLetter, extractReq, dotHtml, clusterHtml, EXTRACT_SUB } from './icons.js';
 // One LOD rule for both views: tiers cut on metres per pixel, with hysteresis. See src/lod.js.
 import { updateTier, currentTier, cellFor, clusterPoints } from './lod.js';
+// The PLACE-LABEL tier contract — a different ladder from the marker LOD above, on the same unit.
+// Aliased on import because src/lod.js exports a `TIERS` and a `tierOf` of its own and the two
+// vocabularies must never be confused for each other.
+import { TIERS as LABEL_TIERS, tierOf as labelTierOf, tiersAtMpp } from './label-tier.js';
 import { createLive, esc } from './live.js';
 import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
@@ -29,7 +33,7 @@ const num = (n, p = 1) => n.toFixed(p).replace('-', '−');
 function is3d() { return document.body.classList.contains('view-3d'); }
 // Declared up here: rail helpers below run during module init and poke at both.
 let view3d = null;
-let assistant = null;   // the AI card; created once window.tz exists (bottom of this file)
+let assistant = null;   // the AI panel; created once window.tz exists (bottom of this file)
 let omni = null;        // the omnibox controller; created last — it drives everything above
 // The zoom limits mirror src/map3d.js's own — deck applies its copy, so a wider pair here would
 // only ever be a lie about what a zoom key can reach.
@@ -539,6 +543,10 @@ function updateHud() {
   const w = Math.round(m / mpp) + 'px';
   scaleBar.style.width = w; scaleBar.parentElement.style.width = w;
   compass.style.setProperty('--rot', `${-(v3.rotationOrbit ?? 0)}deg`);
+  // Place labels thin on metres per pixel, and updateHud() is the one hook BOTH views raise on
+  // every camera change — 2D `move`/`zoom` and the 3D onViewChange. Checking here (rather than in
+  // applyLod, which only fires on 2D zoomend) is what keeps the ladder live in the 3D diorama.
+  syncLabelTiers();
   labelClip?.();
 }
 
@@ -546,20 +554,9 @@ function updateHud() {
 const icons = {};
 const safeLevel = (level) => ['surface', 'underground', 'rooftop', 'upper'].includes(level) ? level : 'surface';
 const levelSuffix = (level) => safeLevel(level) === 'surface' ? '' : ` · ${safeLevel(level).toUpperCase()}`;
-const CONTAINER_KIND = {
-  container_stash: 'stash',
-  container_weapon: 'loot-weapon',
-  container_crate: 'loot-crate', container_greencrate: 'loot-crate', container_duffle: 'loot-crate', container_jacket: 'loot-crate', container_supply: 'loot-crate',
-  container_safe: 'loot-cash', container_cash: 'loot-cash', container_pc: 'loot-cash', container_drawer: 'loot-cash',
-  container_medcase: 'loot-med', container_medical: 'loot-med', container_ammo: 'loot-med', container_grenade: 'loot-med', container_tool: 'loot-med',
-  loot_key: 'loot-key', container_dead: 'loot-dead', loot_loose: 'loot-loose', loot_spt: 'loot-loose',
-};
-const CONTAINER_TYPE = {
-  container_stash: 'Hidden stash', container_weapon: 'Weapon box', container_crate: 'Supply crate', container_greencrate: 'Wooden crate',
-  container_duffle: 'Bag', container_jacket: 'Jacket', container_supply: 'Supply container', container_safe: 'Safe', container_cash: 'Cash register',
-  container_pc: 'PC', container_drawer: 'Drawer', container_tool: 'Tool container', container_medcase: 'Medcase', container_medical: 'Medical bag',
-  container_ammo: 'Ammo box', container_grenade: 'Grenade box', container_dead: 'Dead body', loot_key: 'Key spawn', loot_loose: 'Marked loose loot', loot_spt: 'SPT loose-loot point',
-};
+// CONTAINER_KIND / CONTAINER_TYPE / LEGACY_KIND live in icons.js next to KINDS — they are the
+// vocabulary, not the view, and keeping them in a DOM-free module is what lets scripts/icons-test.mjs
+// import and assert them against the real public/data/*.json.
 const iconFor = (kind, letter = null, level = 'surface', req = null) => {
   const key = `${kind}:${letter ?? ''}:${safeLevel(level)}:${req ?? ''}`;
   return (icons[key] ??= L.divIcon({ className: '', html: iconHtml(kind, kind.startsWith('extract') ? 26 : 22, letter, safeLevel(level), null, req), iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }));
@@ -688,20 +685,18 @@ function applyLod(force = false) {
   const t = updateTier(mpp);
   const cell = cellFor(mpp);
   const tierChanged = t !== lodState.tier;
+  // Place labels run on their OWN ladder (src/label-tier.js), which does not share a boundary with
+  // the marker tiers — so it is checked before the marker early-return, never behind it.
+  syncLabelTiers();
   // Reclustering on a small zoom change inside one tier keeps the counts honest without redrawing
   // on every wheel notch.
   if (!force && !tierChanged && Math.abs(cell - lodState.cell) < lodState.cell * 0.15) return;
   lodState = { tier: t, cell };
   if (!is3d()) rebuildMarkerLayers();
-  if (tierChanged) { applyLabels(); for (const f of tierHooks) f(t); }
+  if (tierChanged) for (const f of tierHooks) f(t);
 }
 
 /* ------------------------------------------------------------- labels ---- */
-// Two panes so major/minor place names can be styled apart in 2D, and the same
-// split feeds the 3D TextLayer through src.labels().
-const SURFACE_LABELS = mapLabels.filter((l) => l.floor !== 'U');
-const MAJOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) >= 100);
-const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
 /*
  * An extract OWNS its own name.
  *
@@ -713,6 +708,10 @@ const MINOR = SURFACE_LABELS.filter((l) => (l.size ?? 100) < 100);
  * Bridge V-Ex / Railway Bridge to Tarkov; reserve Bunker Hermetic Door / Depot Hermetic Door /
  * D-2), and the extract list is fetched data that can grow a new collision at any time. So the
  * rule lives here and reads the live marker set, rather than being edited out of labels.js.
+ *
+ * The count is TEN in the currently shipped data, not the eleven this comment used to claim: the
+ * eleventh was Reserve's D-2 and it went out with the floor selector on 2026-09-02. The exact set
+ * is pinned in scripts/label-tier.test.mjs so the number stops being folklore.
  */
 const extractNames = new Set();
 const labelKey = (t) => String(t ?? '').trim().toLowerCase();
@@ -737,42 +736,77 @@ function labelObstacles() {
   } catch {}
   return out;
 }
-const labelLayers = {
-  major: placeLabelsLayer(map, MAJOR, { safeRect: avoidRect, obstacles: labelObstacles, hidden: ownedByExtract }),
-  minor: placeLabelsLayer(map, MINOR, { pane: 'labelsMinor', safeRect: avoidRect, obstacles: labelObstacles, hidden: ownedByExtract }),
-};
-// The chrome can move without the map moving at all (a dock panel opens), so the label clip has to
-// be re-run from the layout hook too — see updateHud().
-labelClip = () => { labelLayers.major.reclip(); labelLayers.minor.reclip(); };
-// Density "Auto" is the default (step 4): Key at fit zoom — where the map should read as extracts
-// and place names — and All from one tier in, where there is room for the minor names. Off/Key/All
-// stay as explicit overrides, and an explicit choice always wins.
+/*
+ * ONE LAYER, ONE COLLISION PASS, FOUR TIERS.
+ *
+ * There used to be two Leaflet panes so "major" and "minor" could be styled apart. The style now
+ * comes from the tier contract (src/label-tier.js) via custom properties, and paint order comes
+ * from a per-tier z-index, so a second pane bought nothing and cost the thing that matters: two
+ * layers cannot de-conflict with each other, and a leader line only earns its keep if a name can
+ * see the neighbour it has to grow past.
+ */
+// Declared before the layer that reads them: `tierVisible` closes over both, and a `let` read
+// before its declaration is a ReferenceError, not a default.
 let density = store.get('density', 'auto');
 let labelsShown = store.get('labels', true);
-const effectiveDensity = () => (density !== 'auto' ? density : currentTier() === 'dot' ? 'key' : 'all');
-function labelSet() {
-  const d = effectiveDensity();
-  if (!labelsShown || d === 'off') return [];
-  const rows = mapLabels.filter((l) => !ownedByExtract(l));
-  return d === 'key' ? rows.filter((l) => (l.size ?? 100) >= 100) : rows;
+const labelLayer = placeLabelsLayer(map, mapLabels, {
+  safeRect: avoidRect, obstacles: labelObstacles, hidden: ownedByExtract,
+  tierVisible: (l) => activeTiers().has(labelTierOf(l)),
+});
+// The chrome can move without the map moving at all (a dock panel opens), so the label clip has to
+// be re-run from the layout hook too — see updateHud().
+labelClip = () => labelLayer.reclip();
+/*
+ * THINNING, IN METRES PER PIXEL — the one implementation, read by all three renderers.
+ *
+ * `src/label-tier.js` declares the scale at which each tier STARTS drawing, in m/px rather than in
+ * zoom integers, because Customs, Reserve and Woods have three different CRS scales (offsets
+ * 2.065 / 1.340 / 2.431) and one zoom number is therefore three different real-world scales.
+ * `metresPerPixel()` above already answers for whichever view is on screen, so this ladder is the
+ * same number in 2D, in the deck diorama and in the Three renderer.
+ *
+ * The Density control is an OVERRIDE on top of it, never a second ladder:
+ *   auto  the contract's ladder, exactly
+ *   key   the ladder's top tier only — landmarks, because their threshold is the widest
+ *   all   every tier, whatever the scale (an explicit choice always wins)
+ *   off   nothing
+ */
+function activeTiers() {
+  if (!labelsShown || density === 'off') return new Set();
+  if (density === 'all') return new Set(LABEL_TIERS);
+  const ladder = tiersAtMpp(metresPerPixel());
+  return new Set(density === 'key' ? ladder.slice(0, 1) : ladder);
 }
+/** Which of Off/Key/All "Auto" is currently leaning to, for the control's own read-out. */
+function leaning(tiers) { return tiers.size === 0 ? 'off' : tiers.size >= LABEL_TIERS.length ? 'all' : 'key'; }
+/** The rows the 3D views draw. Same gate as 2D — the tier ladder is not re-derived over there. */
+function labelSet() {
+  const tiers = activeTiers();
+  if (!tiers.size) return [];
+  return mapLabels.filter((l) => !ownedByExtract(l) && tiers.has(labelTierOf(l)));
+}
+/** The tier set the layers were last drawn for, so a scale change can be noticed in updateHud(). */
+let labelTierKey = null;
 function applyLabels() {
-  const d = effectiveDensity();
-  const wantMajor = labelsShown && d !== 'off';
-  const wantMinor = labelsShown && d === 'all';
-  wantMajor ? labelLayers.major.addTo(map) : map.removeLayer(labelLayers.major);
-  wantMinor ? labelLayers.minor.addTo(map) : map.removeLayer(labelLayers.minor);
+  const tiers = activeTiers();
+  labelTierKey = [...tiers].join(',');
+  tiers.size ? labelLayer.addTo(map) : map.removeLayer(labelLayer);
   // Adding a layer to a Leaflet map raises no map-level event, so nothing else re-runs the safe-rect
   // clip: the labels Key→All brings in were drawn with no clip pass at all and stayed truncated
   // under the toolbar/dock/omnibox until the user happened to pan (measured on Customs: 13 labels
   // with 3 hidden → 32 labels with 3 hidden, the 19 new minors never measured). This is that pass.
   labelClip?.();
+  const lean = leaning(tiers);
   $$('#label-density .seg-cell').forEach((b) => {
     b.classList.toggle('on', b.dataset.density === density);
     // Auto shows which way it is currently leaning, so the control is never a black box.
-    b.classList.toggle('auto-on', density === 'auto' && b.dataset.density === d);
+    b.classList.toggle('auto-on', density === 'auto' && b.dataset.density === lean);
   });
   view3d?.refresh();
+}
+/** Re-draw the labels when the SCALE has crossed a tier threshold. Cheap: a four-element compare. */
+function syncLabelTiers() {
+  if ([...activeTiers()].join(',') !== labelTierKey) applyLabels();
 }
 $$('#label-density .seg-cell').forEach((b) => (b.onclick = () => { density = b.dataset.density; store.set('density', density); applyLabels(); }));
 
@@ -780,12 +814,12 @@ $$('#label-density .seg-cell').forEach((b) => (b.onclick = () => { density = b.d
 const GROUPS = [
   { id: 'extracts', title: 'Extracts', cat: 'extract', kinds: ['extract-pmc', 'extract-scav', 'extract-shared', 'extract-transit'] },
   { id: 'contacts', title: 'Contacts', cat: 'contact', kinds: ['spawn-pmc', 'spawn-scav', 'spawn-sniper', 'spawn-boss'] },
-  { id: 'objects', title: 'Objects', cat: 'object', always: true, kinds: ['stash', 'loot-weapon', 'loot-crate', 'loot-cash', 'loot-med', 'loot-key', 'loot-dead', 'loot-loose', 'weapon', 'switch', 'lock', 'hazard'] },
+  { id: 'objects', title: 'Objects', cat: 'object', always: true, kinds: ['stash', 'loot-consumables', 'loot-valuables', 'loot-gear', 'weapon', 'switch', 'lock', 'hazard'] },
 ];
 const MARKER_KINDS = GROUPS.flatMap((g) => g.kinds).filter((k) => KINDS[k]);
 const CAT_OF = Object.fromEntries(GROUPS.flatMap((g) => g.kinds.map((k) => [k, g.cat])));
 const defaultOn = ['extract-pmc', 'spawn-pmc', 'stash'];
-let onKinds = new Set(store.get('kinds', defaultOn));
+let onKinds = new Set((store.get('kinds', defaultOn) ?? []).map((k) => LEGACY_KIND[k] ?? k).filter((k) => KINDS[k]));
 const layersEl = $('#layers');
 
 function rowEl({ kind, cat, label, count, on, icon }) {
@@ -1024,13 +1058,22 @@ function buildSearchIndex() {
 }
 buildSearchIndex();
 
-/** `> show scav` / `> hide loot` — every layer whose group, kind or label matches. */
+/**
+ * `> show scav` / `> hide loot` — every layer whose group, kind, label or search TERM matches.
+ *
+ * `terms` is what the loot collapse gave back: the map face no longer has a "Safes & cash" row to
+ * type at, so `KINDS['loot-valuables'].terms` still answers "safe", "cash", "keys", "toolbox".
+ * Without it the collapse would have quietly deleted a third of the searchable layer vocabulary.
+ */
 function matchLayers(query) {
   const s = query.trim().toLowerCase();
   if (!s) return [];
   const hit = new Set();
   for (const g of GROUPS) if (g.id.startsWith(s) || g.title.toLowerCase().includes(s)) for (const k of g.kinds) hit.add(k);
-  for (const k of MARKER_KINDS) if (k.includes(s) || KINDS[k].label.toLowerCase().includes(s)) hit.add(k);
+  for (const k of MARKER_KINDS) {
+    if (k.includes(s) || KINDS[k].label.toLowerCase().includes(s)) { hit.add(k); continue; }
+    if ((KINDS[k].terms ?? []).some((t) => t.includes(s))) hit.add(k);
+  }
   return [...hit].filter((k) => layerOf.has(k));
 }
 
@@ -1346,7 +1389,6 @@ async function setView(mode) {
           updateHud();
         },
       });
-      view3d.setFloor(floor === 'all' || floor === 'U' ? floor : Number(floor));
       view3d.setNature({ trees: treesShown, rocks: rocksShown });
       try { view3d.deck?.setProps({ onHover: (i) => { const c = i?.coordinate; Array.isArray(c) ? showCoords(-c[0], -c[1]) : idleCoords(); } }); } catch {}
     }
@@ -1376,21 +1418,6 @@ async function setView(mode) {
   updateHud();
 }
 viewBtns.forEach((b) => (b.onclick = () => setView(b.dataset.view)));
-
-// Floors
-const allowedFloors = new Set(mapData.floors.map(String));
-$$('#floors .seg-cell').forEach((b) => { b.hidden = !allowedFloors.has(b.dataset.floor); });
-let floor = String(new URLSearchParams(location.search).get('floor') ?? store.get('floor', 'all'));
-if (!allowedFloors.has(floor)) floor = 'all';
-const floorBtns = $$('#floors .seg-cell:not([hidden])');
-function setFloor(f) {
-  floor = f; store.set('floor', f);
-  floorBtns.forEach((b) => b.classList.toggle('on', b.dataset.floor === String(f)));
-  view3d?.setFloor(f === 'all' || f === 'U' ? f : Number(f));
-}
-floorBtns.forEach((b) => (b.onclick = () => setFloor(b.dataset.floor)));
-setFloor(floor);
-const stepFloor = (d) => { const i = floorBtns.findIndex((b) => b.classList.contains('on')); setFloor(floorBtns[Math.max(0, Math.min(floorBtns.length - 1, i + d))].dataset.floor); };
 
 // (view3d refresh lives inside tickLivePanel() now — both ui.render and ui.tick end up there, see above.)
 
@@ -1490,8 +1517,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'l' || e.key === 'L') { setLabels(!labelsShown); return; }
   if (e.key === 'f' || e.key === 'F') { $('#hud-fit').click(); return; }
   if (e.key === 'n' || e.key === 'N') { if (is3d()) $('#hud-north').click(); return; }
-  if (e.key === '[') { if (is3d()) stepFloor(-1); return; }
-  if (e.key === ']') { if (is3d()) stepFloor(1); return; }
   if (e.key === '+' || e.key === '=') { zoomBy(0.5); return; }
   if (e.key === '-') { zoomBy(-0.5); return; }
   // Bare 1–6 used to toggle whatever the first six filter rows happened to be — a shortcut whose
@@ -1511,7 +1536,7 @@ window.tz = {
   /**
    * The 3D render style (docs/plans/RENDER-REALISM.md): 'realistic' | 'vector'.
    * Called with no argument it reports the current one; with one it flips and persists it.
-   * The flip is material-only — geometry, feature ids, picking, floors and the camera do not move.
+   * The flip is material-only — geometry, feature ids, picking and the camera do not move.
    */
   renderStyle: (mode) => (mode === undefined ? look : setLook(mode)),
   /**
@@ -1585,22 +1610,19 @@ window.tz = {
 };
 
 /* --------------------------------------------------------- ask (AI) ------ */
-// Grounded quest Q&A: src/assistant.js posts to /api/assistant and replays the actions it gets
-// back through window.tz (select a quest, fly to an objective). It answers into the omnibox card;
-// a map switch is offered as a chip and never performed on its own. See api/assistant.js.
+// Grounded quest Q&A: src/assistant.js posts to /api/assistant, hands the envelope to the panel in
+// the UPPER-LEFT dock (src/assistant-panel.js) and replays the actions the panel drew buttons from
+// (select a quest, fly to an objective). A map switch is offered as a button and never performed on
+// its own — it reloads the page. See api/assistant.js and src/assistant-contract.js.
 assistant = createAssistant({
   mapKey: mapData.key,
   tz: window.tz,
-  store,
-  // The card IS the omnibox's card: it can only be shown by something that exists, which is why
-  // init() is called below the omnibox and not here. `ask` routes the card's own starter chips back
-  // through the omnibox, so a chip-initiated answer captures the undo the Restore chip needs.
-  panel: {
-    setOpen: (on) => omni?.setCardOpen(on),
-    isOpen: () => !!omni?.isCardOpen(),
-    ask: (text) => omni?.ask(text),
-  },
-  onAnswer: (x) => omni?.onAnswer(x),
+  shell,
+  // The panel's composer and its starter chips route back through the omnibox, so a question asked
+  // from inside the panel still captures the snapshot behind "Restore view". `omni` does not exist
+  // yet — the arrow reads it at call time, and init() is called below the omnibox for the same
+  // reason: a `?ask=` question must have somewhere to be typed.
+  route: (text) => omni?.ask(text),
 });
 
 /* --------------------------------------------------------- omnibox ------- */
@@ -1637,7 +1659,6 @@ omni = createOmnibox({
       if (kinds.length) { store.set('kinds', [...onKinds]); syncGroupCounts(); view3d?.refresh(); }
       return kinds.length;
     },
-    setFloor: (f) => { if (!allowedFloors.has(String(f))) return false; setFloor(String(f)); return true; },
     setRelief: (n) => setRelief(n),
     setNature: (kind, on) => setNature(kind, on),
     setLabels: (d) => { density = d; store.set('density', density); if (d !== 'off' && !labelsShown) setLabels(true); else applyLabels(); },
@@ -1652,8 +1673,7 @@ omni = createOmnibox({
 });
 
 // Only now: everything init() does — ?ask=1, and replaying the transcript after an assistant map
-// switch — is written into the omnibox's card, and setOpen() on a card that does not exist yet is a
-// silent no-op that leaves the content in a permanently hidden element.
+// switch — can route a question through the omnibox, which has to exist before it is asked.
 assistant.init();
 
 booted = true;

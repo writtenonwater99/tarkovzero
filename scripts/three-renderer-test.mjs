@@ -8,16 +8,18 @@ import {
   createAsyncAttachGuard, disposeMaterialResources, drapedLinearSegmentMeshData, gameToWorld, grassTuftMeshData,
   halveCoverageLevel, inRing,
   makeTerrainSampler, markerOverlaySpec, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView,
-  railwayTrackMeshData, seatOverlayAnchor, terrainMeshData, terrainRelativeDisplayY, updateThreeFx, viewStateFromPose, visibleForFloor,
+  railwayTrackMeshData, seatOverlayAnchor, terrainMeshData, terrainRelativeDisplayY, updateThreeFx, viewStateFromPose,
   visibleInteractionData, withinScope, worldToGame,
 } from '../src/three-world.js';
 import { buildOpenFrameBuildingAsset, buildPropAsset, propAssetKind, propDimensions } from '../src/three-prop-assets.js';
+import { BRIDGE_STRUCTURE, bridgeApproachPlan, bridgeStructurePlan, bridgeStructureProfile } from '../src/bridge-structure.js';
 import {
   assertThreeRenderer, canLoadLocalGameDerivedAssets, canRunThreeRenderer, describeRendererGate,
   isLoopbackHostname, normalizeHostname, resolveRendererMode,
 } from '../src/renderer-gate.js';
 import { loadCustomsLocalTerrainPackage } from '../src/customs-local-terrain-loader.js';
-import { createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight } from '../src/surfaces.js';
+import { deckWaterClearance } from '../src/water-surface.js';
+import { buildingFloorLevels, createFloorSurfaceResolver, measuredSurfaceY } from '../src/surfaces.js';
 import { emptyCustomsAssetManifest, normalizeCustomsAssetManifest } from '../src/customs-asset-manifest.js';
 import {
   authoredCameraFromWorldTarget,
@@ -452,6 +454,386 @@ test('Main Bridge uses the measured Customs bridge-deck evidence, independently 
   assert.ok(fittedGround < bridge.surfaceY - 5, 'the riverbed must not pull the measured deck down');
 });
 
+// ------------------------------------------------------------------------------------ bridges
+// `main.js` pins the Three renderer to relief 2, and the renderer seats a bridge deck on its
+// measured surface when it has one and on a local lift above the ground when it does not. Both
+// halves are reproduced here so the structure is asserted against the deck the renderer actually
+// draws, not against a convenient flat plane.
+const THREE_RELIEF = 2;
+const bridgeSeating = (bridge) => {
+  const H = makeTerrainSampler(customs3d.terrain, THREE_RELIEF);
+  const surfaceY = measuredSurfaceY(bridge, THREE_RELIEF);
+  const lift = Math.max(0.1, Number(bridge.height) || 0.7);
+  // ONE sampler, as in the renderer. A measured deck is one flat altitude end to end; nothing
+  // bends it, and the gap that leaves at each bank is filled by `bridgeApproachPlan`'s structure.
+  return { H, deckYAt: surfaceY == null ? (x, z) => H(x, z) + lift : () => surfaceY + 0.08 };
+};
+/** Prism mesh data carries world positions `[-x, -z, y]`; read each vertex back in game space. */
+const meshVertices = (meshData) => Array.from(
+  { length: meshData.positions.length / 3 },
+  (_, index) => ({
+    x: -meshData.positions[index * 3],
+    z: -meshData.positions[index * 3 + 1],
+    y: meshData.positions[index * 3 + 2],
+  }),
+);
+
+test('a ford is a crossing, not a structure — no rails, no piers, no deck edge', () => {
+  const ford = customs3d.bridges.find((item) => item.name === 'River path');
+  assert.ok(ford, 'the Customs artifact must still carry the River path crossing');
+  assert.equal(ford.ford, true, 'this test discriminates on the ford flag; the fixture must have it');
+  const { H, deckYAt } = bridgeSeating(ford);
+  const plan = bridgeStructurePlan(ford, { deckYAt, groundYAt: H });
+
+  assert.equal(plan.ford, true);
+  assert.equal(plan.fascia, null, 'a ford has no deck edge to show');
+  assert.deepEqual(plan.rails, [], 'railings on a ford would claim a bridge the game does not have');
+  assert.deepEqual(plan.piers, [], 'nothing holds a ford up');
+
+  // The exclusion must be the FLAG, not an empty path or a degenerate width: the same geometry
+  // with the flag off has to produce a full structure, or this test proves nothing.
+  assert.ok(plan.lengthM > 60, `the ford path is real (${plan.lengthM.toFixed(1)} m), so zero structure is a decision`);
+  const asBridge = bridgeStructurePlan({ ...ford, ford: false }, { deckYAt, groundYAt: H });
+  assert.ok(asBridge.fascia, 'the same path DOES get a deck edge once it is not a ford');
+  assert.equal(asBridge.rails.length, 2, 'and railings on both sides');
+});
+
+test('the Junk Bridge gets structure scaled to its own 3 m deck, not the Main Bridge\'s', () => {
+  const foot = customs3d.bridges.find((item) => item.name === 'Junk Bridge');
+  const main = customs3d.bridges.find((item) => item.name === 'Main Bridge');
+  assert.equal(foot.foot, true);
+  assert.equal(foot.width, 3, 'the footbridge fixture is the narrow case this test exists for');
+  const { H, deckYAt } = bridgeSeating(foot);
+  const plan = bridgeStructurePlan(foot, { deckYAt, groundYAt: H });
+  const mainProfile = bridgeStructureProfile(main.width);
+
+  assert.ok(plan.fascia, 'a small bridge still needs a deck with thickness');
+  assert.equal(plan.rails.length, 2, 'a small bridge still needs both railings');
+  assert.ok(plan.piers.length >= 2, `a 22 m deck standing 2.5 m up needs supports (got ${plan.piers.length})`);
+
+  // Scaled to ITS OWN width. Every one of these is false if main-bridge dimensions are hardcoded.
+  assert.ok(plan.profile.pierWidthM < mainProfile.pierWidthM);
+  assert.ok(plan.profile.railBarWidthM < mainProfile.railBarWidthM);
+  assert.ok(plan.profile.deckThicknessM < mainProfile.deckThicknessM);
+  assert.ok(plan.profile.pierWidthM <= foot.width, 'a pier wider than the deck it carries is not a bridge');
+  assert.ok(plan.profile.railHalfSpanM < foot.width / 2, 'railings stand ON the deck, not beside it');
+  assert.ok(plan.profile.railHeightM >= 0.9, 'a parapet under ~0.9 m is invisible at map zoom');
+
+  for (const pier of plan.piers) {
+    close(pier.topY, deckYAt(pier.x, pier.z) - plan.profile.deckThicknessM, 1e-9, 'a pier meets the deck underside');
+    assert.ok(pier.bottomY < H(pier.x, pier.z), 'a pier foot is IN the ground, not floating above it');
+    assert.ok(pier.heightM > 2, `a 2.5 m clearance leaves a real support (got ${pier.heightM.toFixed(2)} m)`);
+  }
+  for (const rail of plan.rails) {
+    for (const vertex of meshVertices(rail)) {
+      const deck = deckYAt(vertex.x, vertex.z);
+      assert.ok(vertex.y >= deck - 1e-6, 'no railing vertex may drop below the deck it stands on');
+      assert.ok(vertex.y <= deck + plan.profile.railHeightM + 0.05, 'nor float above its own height');
+    }
+  }
+  for (const vertex of meshVertices(plan.fascia)) {
+    const deck = deckYAt(vertex.x, vertex.z);
+    assert.ok(vertex.y <= deck, 'the deck edge hangs BELOW the running surface');
+    assert.ok(vertex.y >= deck - plan.profile.deckThicknessM - 0.05, 'and only by its own thickness');
+  }
+});
+
+// `bridgeStructurePlan`'s own contract: whatever deck sampler it is handed, the fascia and rails
+// ride it and only the piers reach for the ground.
+test('bridge structure rides the measured deck; only the piers follow the ground', () => {
+  const main = customs3d.bridges.find((item) => item.name === 'Main Bridge');
+  const { H, deckYAt } = bridgeSeating(main);
+  assert.ok(measuredSurfaceY(main, THREE_RELIEF) != null, 'the Main Bridge is the measured case');
+  const seated = bridgeStructurePlan(main, { deckYAt, groundYAt: H });
+  assert.ok(seated.piers.length >= 1 && seated.rails.length === 2 && seated.fascia);
+
+  // Drop the riverbed 40 m. A deck with surveyed evidence may not follow it, and neither may
+  // anything the deck carries; the piers must simply reach further down.
+  const dropped = bridgeStructurePlan(main, { deckYAt, groundYAt: (x, z) => H(x, z) - 40 });
+  assert.deepEqual(round(dropped.fascia.positions, 6), round(seated.fascia.positions, 6),
+    'the deck edge is seated on the measured deck, not on interpolated ground');
+  assert.deepEqual(round(dropped.rails[0].positions, 6), round(seated.rails[0].positions, 6),
+    'railings are seated on the measured deck too');
+  assert.equal(dropped.piers.length, seated.piers.length);
+  for (const [index, pier] of dropped.piers.entries()) {
+    close(pier.topY, seated.piers[index].topY, 1e-9, 'a pier still meets the same deck underside');
+    close(pier.heightM - seated.piers[index].heightM, 40, 1e-6, 'and grows by exactly the drop');
+  }
+  // The gorge is deep enough at 2x relief that the midspan pier is a real column, not a kerb.
+  assert.ok(Math.max(...seated.piers.map((pier) => pier.heightM)) > 8);
+});
+
+/**
+ * The two end cross-sections of the deck ribbon, in game coordinates.
+ *
+ * `ribbonGeometry` is module-private to `map3d-three.js`, so its first and last quads are rebuilt
+ * here by the same rule: the centre-line vertex plus a half-width offset along the segment normal.
+ * These four points are literally the corners the founder is looking at.
+ */
+const deckEndCorners = (bridge) => {
+  const path = bridge.path;
+  const ends = [[path[0], path[1]], [path[path.length - 1], path[path.length - 2]]];
+  return ends.flatMap(([end, inner]) => {
+    const dx = inner[0] - end[0], dz = inner[1] - end[1];
+    const length = Math.hypot(dx, dz) || 1;
+    const nx = -dz / length, nz = dx / length;
+    const half = (Number(bridge.width) || 5) / 2;
+    return [-1, 1].map((side) => [end[0] + nx * half * side, end[1] + nz * half * side]);
+  });
+};
+
+test('the Main Bridge deck is FLAT — a bridge deck, not a folded ribbon', () => {
+  // The founder, at a low close angle, on the deck that eased its last 15 m down to grade at each
+  // end: "need a fix this aint a bridge no more". A deck is a level structure; the vertical
+  // difference between its ends is carried by ABUTMENTS and an approach EMBANKMENT, never by
+  // bending the running surface. This assertion is the one that fails the moment a deck is bent.
+  const main = customs3d.bridges.find((item) => item.name === 'Main Bridge');
+  const { deckYAt } = bridgeSeating(main);
+  const level = measuredSurfaceY(main, THREE_RELIEF) + 0.08;
+  assert.ok(Number.isFinite(level), 'the Main Bridge is the measured case this test is about');
+  // Path vertices AND the four corners the founder is looking at: a ribbon is bent at its edges
+  // too, and a centre-line-only check would pass a deck whose corners were dragged down.
+  for (const [x, z] of [...main.path, ...deckEndCorners(main)]) {
+    close(deckYAt(x, z), level, 1e-9,
+      `deck vertex at ${x.toFixed(1)}, ${z.toFixed(1)} sits at ${deckYAt(x, z).toFixed(3)}, not on the measured ${level.toFixed(3)}`);
+  }
+});
+
+/**
+ * How far a prism's base may miss the ground it is founded on, in metres.
+ *
+ * Mesh positions are stored as Float32Array, so a base computed in doubles at ~5 m comes back with
+ * about 5e-7 m of storage error; 1 mm is that, with room to spare, and is three orders of magnitude
+ * below the 0.35 m founding embed the assertion is actually about.
+ */
+const SEAT_TOLERANCE_M = 1e-3;
+
+/** The closed footprint ring of a prism whose vertices interleave left, right, left, right… */
+const prismRing = (meshData) => {
+  const lefts = meshData.footprint.filter((_, index) => index % 2 === 0);
+  const rights = meshData.footprint.filter((_, index) => index % 2 === 1);
+  return [...lefts, ...rights.reverse()];
+};
+
+test('each Main Bridge abutment is a solid mass founded on the bank under the deck end', () => {
+  const main = customs3d.bridges.find((item) => item.name === 'Main Bridge');
+  const { H, deckYAt } = bridgeSeating(main);
+  const approach = bridgeApproachPlan(main, { deckYAt, groundYAt: H });
+  const profile = approach.profile;
+
+  // The defect this exists for. If the fixture ever stops stranding its ends, everything below
+  // stops meaning anything, so the gap is asserted to be REAL before it is asserted to be filled.
+  const gaps = [main.path[0], main.path[main.path.length - 1]].map(([x, z]) => deckYAt(x, z) - H(x, z));
+  assert.ok(gaps.every((gap) => gap > 2),
+    `a flat measured deck ends above its banks (${gaps.map((gap) => gap.toFixed(2)).join(' / ')} m)`);
+  assert.equal(approach.ends.length, 2, 'both ends of the Main Bridge stand above grade');
+
+  const undersideY = deckYAt(...main.path[0]) - profile.deckThicknessM - BRIDGE_STRUCTURE.fasciaTopGapM;
+  for (const end of approach.ends) {
+    const abutment = end.abutment;
+    assert.ok(abutment, `${end.side}: an end standing ${end.gapM.toFixed(2)} m up needs an abutment`);
+
+    // 1. It covers the DECK UNDERSIDE. All four corners the founder is looking at stand over it,
+    //    and its top face is exactly the plane the fascia's base sits on — no seam, no gap.
+    const ring = prismRing(abutment);
+    const endCorners = deckEndCorners(main).filter(([x, z]) => Math.abs(
+      (x - end.x) * Math.cos(end.yaw) + (z - end.z) * Math.sin(end.yaw),
+    ) < 1e-6);
+    assert.equal(endCorners.length, 2, `${end.side}: this end contributes two deck corners`);
+    for (const corner of endCorners) {
+      assert.ok(inRing(corner, ring), `${end.side}: deck corner ${corner.map((v) => v.toFixed(1))} is not over the abutment`);
+    }
+    for (const y of abutment.tops) close(y, undersideY, 1e-9, `${end.side}: the abutment top IS the deck underside`);
+    for (const vertex of meshVertices(abutment).slice(abutment.footprint.length)) {
+      close(vertex.y, undersideY, SEAT_TOLERANCE_M, `${end.side}: an abutment top vertex left the deck underside`);
+    }
+
+    // 2. It touches the ground at EVERY corner — no floating, no burial past the founding embed.
+    for (const vertex of meshVertices(abutment).slice(0, abutment.footprint.length)) {
+      const groundY = H(vertex.x, vertex.z);
+      assert.ok(vertex.y <= groundY + SEAT_TOLERANCE_M,
+        `${end.side}: an abutment corner floats ${(vertex.y - groundY).toFixed(3)} m over the bank`);
+      assert.ok(vertex.y >= groundY - BRIDGE_STRUCTURE.abutmentFootEmbedM - SEAT_TOLERANCE_M,
+        `${end.side}: an abutment corner is buried ${(groundY - vertex.y).toFixed(3)} m, past the ${BRIDGE_STRUCTURE.abutmentFootEmbedM} m embed`);
+    }
+
+    // 3. It is a little wider than the deck and reaches back under it, so it reads as founded.
+    assert.ok(profile.abutmentHalfWidthM > main.width / 2, 'an abutment narrower than its deck is a stub');
+    assert.ok(profile.abutmentInsetM > 0, 'the deck end BEARS on the abutment, it does not abut a wall');
+    assert.ok(profile.abutmentDepthM >= 2.5, 'and the mass continues behind the deck end');
+  }
+});
+
+test('the approach embankment carries the road to the ground at a road grade, not a ramp grade', () => {
+  const main = customs3d.bridges.find((item) => item.name === 'Main Bridge');
+  const { H, deckYAt } = bridgeSeating(main);
+  const approach = bridgeApproachPlan(main, { deckYAt, groundYAt: H });
+  const deckLevel = deckYAt(...main.path[0]);
+
+  for (const end of approach.ends) {
+    assert.ok(end.embankment, `${end.side}: a ${end.gapM.toFixed(2)} m drop needs an embankment, not a cliff`);
+    // The grade the founder rejected was 102% locally. A road is not.
+    assert.ok(end.approachGradePct >= 8 && end.approachGradePct <= 12,
+      `${end.side}: the approach runs at ${end.approachGradePct.toFixed(1)}%, outside a plausible road grade`);
+    assert.ok(end.meetsGrade,
+      `${end.side}: the approach never reached the ground inside ${BRIDGE_STRUCTURE.approachMaxLengthM} m`);
+    assert.ok(Math.abs(end.residualGapM) <= BRIDGE_STRUCTURE.approachGradeLiftM + 0.05,
+      `${end.side}: the approach still finishes ${end.residualGapM.toFixed(3)} m off the ground`);
+    // The carriageway ON the embankment: level with the deck where they meet, and at the ground
+    // where it ends. `topYAt` is the fill's top; the road ribbon rides `approachSurfaceM` above it.
+    const road = (x, z) => end.topYAt(x, z) + BRIDGE_STRUCTURE.approachSurfaceM;
+    close(road(end.x, end.z), deckLevel, 1e-9, `${end.side}: the road leaves the deck at deck level`);
+    const [tailX, tailZ] = end.approachPath[end.approachPath.length - 1];
+    assert.ok(Math.abs(road(tailX, tailZ) - H(tailX, tailZ)) <= BRIDGE_STRUCTURE.approachGradeLiftM + 0.05,
+      `${end.side}: the far end of the approach must meet the road on the ground`);
+
+    // Every corner of the fill sits on the bank, exactly as the abutment's does.
+    for (const vertex of meshVertices(end.embankment).slice(0, end.embankment.footprint.length)) {
+      const groundY = H(vertex.x, vertex.z);
+      assert.ok(vertex.y <= groundY + SEAT_TOLERANCE_M,
+        `${end.side}: an embankment corner floats ${(vertex.y - groundY).toFixed(3)} m over the ground`);
+      assert.ok(vertex.y >= groundY - BRIDGE_STRUCTURE.abutmentFootEmbedM - SEAT_TOLERANCE_M,
+        `${end.side}: an embankment corner is buried past the founding embed`);
+    }
+    // Nowhere may the fill's own top break the grade it claims: measured between consecutive
+    // path stations, which is where a bump in the terrain would show up.
+    for (let index = 1; index < end.approachPath.length; index += 1) {
+      const [ax, az] = end.approachPath[index - 1], [bx, bz] = end.approachPath[index];
+      const run = Math.hypot(bx - ax, bz - az);
+      const rise = Math.abs(end.topYAt(bx, bz) - end.topYAt(ax, az));
+      assert.ok(rise / run <= BRIDGE_STRUCTURE.approachGrade + 1e-6,
+        `${end.side}: the approach breaks its own grade (${((rise / run) * 100).toFixed(1)}%) at ${ax.toFixed(1)}, ${az.toFixed(1)}`);
+    }
+  }
+});
+
+test('a ford and a non-measured deck get no abutment and no embankment', () => {
+  // The seating gate, from the planner's side. `customs-local-bridges.test.mjs` owns the renderer's
+  // half of it; what has to hold here is that a ford is excluded by its FLAG, not by its geometry.
+  const ford = customs3d.bridges.find((item) => item.name === 'River path');
+  const { H, deckYAt } = bridgeSeating(ford);
+  assert.deepEqual(bridgeApproachPlan(ford, { deckYAt, groundYAt: H }).ends, [],
+    'a ford is a crossing, not a structure');
+  const asBridge = bridgeApproachPlan({ ...ford, ford: false }, { deckYAt, groundYAt: H });
+  assert.ok(asBridge.ends.length > 0,
+    'the exclusion is the FLAG: the same geometry DOES plan approaches once it is not a ford');
+
+  // The Junk Bridge is the row that must never be pulled toward a sampled bed.
+  const foot = customs3d.bridges.find((item) => item.name === 'Junk Bridge');
+  const seat = bridgeSeating(foot);
+  assert.equal(measuredSurfaceY(foot, THREE_RELIEF), null, 'the Junk Bridge is NOT measured seating');
+  const gaps = foot.path.map(([x, z]) => seat.deckYAt(x, z) - seat.H(x, z));
+  assert.ok(gaps.every((gap) => Math.abs(gap - gaps[0]) < 1e-9),
+    'a terrain-lift deck already rides its own ground at a constant lift');
+});
+
+test('the flat deck and its abutments never put a deck back under the water', () => {
+  // The Junk Bridge clears the river surface by under half a metre once exact terrain is mounted,
+  // and a deck under the sheet is invisible with every applied counter green. The renderer's own
+  // over-water bookkeeping is reproduced here across all three public rows.
+  const plans = (customs3d.water || []).map((water) => ({
+    water,
+    plan: { displayY: (Number(water.level) || 0) * THREE_RELIEF + 0.08 },
+  }));
+  const submerged = [];
+  let crossings = 0;
+  for (const bridge of customs3d.bridges) {
+    const { deckYAt } = bridgeSeating(bridge);
+    const clearance = deckWaterClearance(bridge.path, deckYAt, plans);
+    crossings += clearance.crossings;
+    if (clearance.crossings > 0 && clearance.clearanceM <= 0 && bridge.ford !== true) submerged.push(bridge.name);
+  }
+  assert.ok(crossings > 0, 'these decks do cross water, so an empty `submerged` is not vacuous');
+  assert.deepEqual(submerged, [], 'no deck may be left under the water surface');
+
+  const main = customs3d.bridges.find((item) => item.name === 'Main Bridge');
+  const { deckYAt } = bridgeSeating(main);
+  const clearance = deckWaterClearance(main.path, deckYAt, plans);
+  assert.ok(clearance.crossings > 0, 'the Main Bridge does cross water, so this assertion can fail');
+  assert.ok(clearance.clearanceM > 5,
+    `the flat Main Bridge stands well clear of the river (${clearance.clearanceM.toFixed(2)} m)`);
+});
+
+test('the Three renderer builds the bridge structure it plans', async () => {
+  // A source assertion, not a render: the Three scene needs a GPU. What it CAN prove is that the
+  // one deck altitude reaches every part, that the ford short-circuit is in the renderer and not
+  // only in the planner, and that the deck's measured seating was not disturbed.
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  // ONE flat deck altitude. No wrapper, no ramp, no second sampler: this line IS the founder's fix.
+  assert.match(renderer, /const deckYAt = surfaceY == null \? \(x, z\) => H\(x, z\) \+ lift : \(\) => surfaceY \+ 0\.08;/);
+  assert.doesNotMatch(renderer, /bridgeDeckRamp/, 'nothing in the renderer may bend a deck to its bank');
+  assert.match(
+    renderer,
+    /const geometry = ribbonGeometry\(bridge\.path, Number\(bridge\.width\) \|\| 5, deckYAt, 0\);/,
+    'the deck ribbon is drawn from the same flat sampler the structure is planned with',
+  );
+  // Abutments are wired to MEASURED seating ONLY — a terrain-lift or canonical-game-Y deck must
+  // never be given a mass reaching down to a sampled bed, or the Junk Bridge goes under the river.
+  assert.match(
+    renderer,
+    /const approach = seating\.mode === BRIDGE_SEATING\.MEASURED\s*\n\s*\? bridgeApproachPlan\(bridge, \{ deckYAt, groundYAt: H \}\)\s*\n\s*: null;/,
+  );
+  assert.match(
+    renderer,
+    /\['bridge-abutments', abutments\], \['bridge-embankments', embankments\]/,
+    'both solids are merged and batched, the way the piers are',
+  );
+  assert.match(renderer, /const mesh = new THREE\.Mesh\(geometry, materials\.pier\);/,
+    'an abutment is concrete, in the same family as the piers');
+  assert.match(
+    renderer,
+    /ribbonGeometry\(end\.approachPath, Number\(bridge\.width\) \|\| 5, end\.topYAt, BRIDGE_STRUCTURE\.approachSurfaceM\)/,
+    'the approach carries the road material on top of its own fill',
+  );
+  assert.match(renderer, /abutments: abutments\.length, embankments: embankments\.length, approaches,/);
+  assert.match(renderer, /const plan = bridgeStructurePlan\(bridge, \{ deckYAt, groundYAt: H \}\);/);
+  assert.match(renderer, /if \(plan\.ford\) \{ fords\+\+; continue; \}/);
+  assert.match(renderer, /structureMesh\(plan\.fascia, materials\.bridgeEdge, `bridge-fascia:\$\{label\}`\)/);
+  assert.match(renderer, /structureMesh\(rail, materials\.bridgeRail, `bridge-rail:\$\{label\}:\$\{rail\.side\}`\)/);
+  assert.match(renderer, /pierMesh\.name = 'bridge-piers'/);
+  assert.match(renderer, /new THREE\.InstancedMesh\(new THREE\.BoxGeometry\(1, 1, 1\), materials\.pier, piers\.length\)/);
+  assert.match(renderer, /bridges: \{ \.\.\.bridgeRenderStats, local: localBridgeStatus \}/);
+  // A local row's deck altitude is a CANONICAL game Y and must reach `displayCanonicalObjectY`,
+  // never `measuredSurfaceY` — which multiplies by relief and would stretch a game altitude.
+  assert.match(renderer, /const seating = bridgeSeating\(bridge\);/);
+  // The anchor is chosen against the CANONICAL sampler — the deck is pinned to its highest bank.
+  assert.match(renderer, /\? bridgeDeckAnchor\(bridge, HCanonical\)/);
+  assert.match(
+    renderer,
+    /const surfaceY = anchor\s*\n\s*\? displayCanonicalObjectY\(seating\.canonicalYM, anchor\[0\], anchor\[1\]\)\s*\n\s*: measuredSurfaceY\(bridge, relief\);/,
+  );
+  // The public rows stay the renderer's default: the merged list falls back to `data.bridges`.
+  assert.match(renderer, /const bridgeRows = localBridgeMerge\?\.bridges \?\? data\.bridges \?\? \[\];/);
+  // The three colours are the deck renderer's, read from the shared palette rather than reinvented.
+  assert.match(renderer, /const BRIDGE_COLORS = paletteFor\('realistic'\);/);
+  for (const key of ['bridge', 'bridgeRail', 'pier']) {
+    assert.match(renderer, new RegExp(`rgb\\(BRIDGE_COLORS\\.${key}\\)`), `materials must draw C.${key}`);
+  }
+});
+
+test('the water sheet is seated by the plan, and only exact terrain may change where it sits', async () => {
+  // The renderer half of the underwater-bridge defect. `waterSurfacePlan` is unit-tested in
+  // `customs-local-bridges.test.mjs`; what has to hold HERE is that the renderer actually uses it,
+  // that the exact-terrain samplers are the only thing that can move the sheet, and that the
+  // clearance a deck keeps over the water is reported instead of assumed.
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  assert.match(renderer, /mesh\.position\.z = plan\.displayY;/, 'the sheet takes its altitude from the plan');
+  assert.doesNotMatch(
+    renderer,
+    /mesh\.position\.z = \(Number\(water\.level\) \|\| 0\) \* relief/,
+    'the raw fitted-level expression may not survive anywhere in the renderer',
+  );
+  // Null samplers are the release path, and `waterSurfacePlan` reproduces `level * relief + lift`
+  // exactly when they are null — so this ternary IS the production-unchanged guarantee.
+  assert.match(renderer, /canonicalGroundAt: exactTerrainMesh \? HCanonical : null,/);
+  assert.match(renderer, /displayGroundAt: exactTerrainMesh \? H : null,/);
+  assert.match(renderer, /water: \{ \.\.\.waterRenderStats \},/);
+  // The metric that can fail: a deck under the surface is named, not counted as applied.
+  assert.match(renderer, /const \{ clearanceM, crossings \} = deckWaterClearance\(bridge\.path, deckYAt, waterSurfacePlans\);/);
+  assert.match(renderer, /if \(clearanceM <= 0\) overWater\.submerged\.push/);
+  assert.match(renderer, /bridge decks are UNDER the water surface and cannot be seen/);
+});
+
 test('Customs floor, roof, and underground evidence resolves to render-ready absolute surfaces', () => {
   const resolver = createFloorSurfaceResolver(customs3d.floorSurfaces, 1);
   const stableIds = customs3d.floorSurfaces.map((row) => row.stableId);
@@ -463,9 +845,16 @@ test('Customs floor, roof, and underground evidence resolves to render-ready abs
   const dormsProfile = resolver.buildingProfile(dorms, { fallbackBase: 99, fallbackHeight: dorms.height });
   assert.deepEqual(dormsProfile.floorYs, [0.9, 3.886, 6.881]);
   assert.equal(dormsProfile.baseY, 0.9, 'floor zero must override terrain seating');
-  close(visibleBuildingHeight(dormsProfile, '0'), 2.586);
-  close(visibleBuildingHeight(dormsProfile, '1'), 5.581);
-  close(visibleBuildingHeight(dormsProfile, '2'), 9.5);
+  // The surveyed storey planes ARTICULATE the shell — storey separator lines and window bands —
+  // and survived the floor selector's removal on 2026-09-02 precisely because they were never the
+  // selector. `buildingFloorLevels` is the one function both renderers band against.
+  const dormsBands = buildingFloorLevels(dormsProfile);
+  assert.equal(dormsBands.length, 2, 'Dorms 3-Story must still articulate two storey lines');
+  close(dormsBands[0], 2.986);
+  close(dormsBands[1], 5.981);
+  close(buildingFloorLevels(dormsProfile, { inset: 1.35 })[0], 1.636, 1e-9,
+    'the window band must still drop below its slab line');
+  assert.equal(buildingFloorLevels(dormsProfile, { includeRoof: true }).length, 3);
   assert.deepEqual(dormsProfile.floorRows.map((row) => row.stableId), [
     'customs.surface.23e45b4ca4c30541d58d5cd6',
     'customs.surface.1cf6e4469d2d21c3f73b3b7c',
@@ -481,7 +870,8 @@ test('Customs floor, roof, and underground evidence resolves to render-ready abs
   close(dormsAt3.floorYs[2] - dormsAt3.floorYs[0], 6.881 - 0.9);
   close(dormsAt3.baseY - ground3, 0.9 - ground1,
     1e-9, 'relief should translate the building with terrain without stretching its rooms');
-  close(visibleBuildingHeight(dormsAt3, '0'), visibleBuildingHeight(dormsProfile, '0'));
+  close(buildingFloorLevels(dormsAt3)[0], dormsBands[0], 1e-9,
+    'relief must not move a storey line relative to its own base');
 
   const warehouse = customs3d.buildings.find((building) => building.sourceKey?.endsWith('element-188:subpath-0'));
   const roofProfile = resolver.buildingProfile(warehouse, { fallbackBase: -50, fallbackHeight: warehouse.height });
@@ -869,14 +1259,35 @@ test('grass tuft meshes stand along world Z and respect the near/medium triangle
   assert.equal(UNDERSTORY_TUFT_BUDGET.maxInstances * medium.indices.length / 3, 24_000);
 });
 
-test('the proof scope and floor filter preserve Customs surface semantics', () => {
+test('the proof scope is the only thing that filters an overlay, now the floor filter is gone', async () => {
   assert.equal(THREE_POC_SCOPE.id, 'customs-industrial-rail-yard');
   assert.equal(withinScope({ x: 230, z: -110 }), true);
   assert.equal(withinScope({ x: 600, z: -110 }), false);
-  assert.equal(visibleForFloor('surface', 'all'), true);
-  assert.equal(visibleForFloor('underground', 'all'), false);
-  assert.equal(visibleForFloor('U', 'U'), true);
-  assert.equal(visibleForFloor('both', 'U'), true);
+  // `visibleForFloor(level, floor)` hid every underground marker, label and quest zone unless the
+  // rail sat on "U" — which meant the UNDERGROUND badge could not be seen on the default view at
+  // all. The rail went out 2026-09-02; the level VOCABULARY stays (it is what icons.js draws the
+  // dashed outline and the corner chip from), but nothing filters on it any more.
+  const world = await import('../src/three-world.js');
+  assert.equal(world.visibleForFloor, undefined, 'the floor visibility predicate must be gone');
+  const runtime = await import('../src/customs-asset-runtime.js');
+  assert.equal(runtime.customsAssetVisibleForFloor, undefined,
+    'the authored floor-tag predicate must be gone');
+  const surfaces = await import('../src/surfaces.js');
+  assert.equal(surfaces.visibleBuildingHeight, undefined,
+    'the selector wall-height function must be gone');
+
+  // KEEP LIST. The marker vocabulary the selector used to filter on is ICON semantics and survives
+  // intact: an underground marker still draws the dashed extract outline, the bottom-right corner
+  // chip with its down/stairs arrow, and the level class the sidebar styles from. This is how a
+  // player knows a stash is in a basement now that nothing hides it.
+  const { iconHtml } = await import('../src/icons.js');
+  const underground = iconHtml('extract-pmc', 24, 'D', 'underground');
+  const surface = iconHtml('extract-pmc', 24, 'D', 'surface');
+  assert.match(underground, /class="mk sq level-underground"/);
+  assert.match(underground, /stroke-dasharray/, 'the dashed underground outline is gone');
+  assert.match(underground, /#FFD28A/, 'the underground corner chip is gone');
+  assert.doesNotMatch(surface, /stroke-dasharray/, 'a surface marker must not be dashed');
+  assert.doesNotMatch(surface, /#FFD28A/, 'a surface marker must not carry the underground chip');
 });
 
 test('point props preserve the canonical length axis and positive authored yaw', () => {
@@ -1264,7 +1675,11 @@ test('renderer integration consumes the shared contract without untracked outlin
   assert.match(renderer, /controls\.enableDamping = false/);
   assert.match(renderer, /const invalidateRender = \(frames = 0\)/);
   assert.match(renderer, /outline: new THREE\.LineBasicMaterial/);
-  assert.match(renderer, /outlineFor\(mesh, materials\.outline\)/);
+  // The `outlineFor()` helper went out with the underground view on 2026-09-02 — it was that
+  // builder's only caller. The rule it enforced did not: the ONE surviving outline, the building
+  // shell's, must still consume the tracked shared material rather than minting its own.
+  assert.match(renderer, /new THREE\.LineSegments\(new THREE\.EdgesGeometry\(extrusion, 28\), materials\.outline\)/);
+  assert.doesNotMatch(renderer, /function outlineFor\(/);
   assert.match(renderer, /createAsyncAttachGuard\(\(lateScene\) => disposeTree\(lateScene, \{ materials: true \}\)\)/);
   assert.match(renderer, /const seated = seatAuthoredInstance\(node, instance[\s\S]*const attached = guard\.attach\(seated/);
   // The exact handedness-changing affine transform comes from tested pure math; a quaternion
@@ -1277,17 +1692,20 @@ test('renderer integration consumes the shared contract without untracked outlin
   assert.match(renderer, /authoredLoaderHost\.dispose\(\)/);
   assert.match(renderer, /authoredAssetCache\.clear\(\)/);
   assert.match(renderer, /disposeMaterialResources\(node\.material, disposed\)/);
-  const outlineHelper = renderer.match(/function outlineFor\([^]*?\n\}/)?.[0] ?? '';
-  assert.doesNotMatch(outlineHelper, /new THREE\.LineBasicMaterial/, 'outline helper must consume the tracked shared material');
   assert.match(styles, /\.tz-three-marker-marker/);
   assert.match(styles, /body\.renderer-three #relief-row\{display:none\}/);
   assert.match(styles, /body\.renderer-three #fx-row \[data-fx="fog"\]\{display:none\}/);
   assert.match(deckRenderer, /measuredSurfaceY\(b, RELIEF\)/);
   assert.match(renderer, /createFloorSurfaceResolver\(data\.floorSurfaces, relief\)/);
-  assert.match(renderer, /visibleBuildingHeight\(mesh\.userData\.surfaceProfile, floor\)/);
-  assert.match(renderer, /floorResolver\.undergroundProfile\(item/);
   assert.match(renderer, /buildPropAsset\(prop/);
-  assert.match(renderer, /buildOpenFrameBuildingAsset\(/);
+  // Was `buildOpenFrameBuildingAsset(`. One building on the map was open — Skeleton — because of a
+  // `place === 'skeleton'` string compare, while Old Construction carried the identical
+  // `style: 'frame'` and three fuel canopies carried `style: 'canopy'` and all four were solid
+  // blocks. The open path is now keyed on the ROUTER (`archetype: 'open-structure'` and
+  // `'lattice-tower'` both replace their mass), so ten buildings are open instead of one and the
+  // literal is gone. Asserted in full by scripts/building-detail-assemble.test.mjs.
+  assert.match(renderer, /buildingDetail = planBuildingDetail\(seatedBuildings, \{/);
+  assert.doesNotMatch(renderer, /safeText\(building\.place\)\.toLowerCase\(\) === 'skeleton'/);
   assert.match(renderer, /railwayTrackMeshData\(data\.railway, railSurfaceY, THREE_POC_SCOPE\)/);
   assert.match(renderer, /rail-ballast:/);
   assert.match(renderer, /new THREE\.InstancedMesh\([\s\S]*new THREE\.BoxGeometry\(\.\.\.track\.sleeperSize\)/);
@@ -1318,9 +1736,33 @@ test('renderer integration consumes the shared contract without untracked outlin
   assert.match(renderer, /if \(container\.__tz3d === api\) delete container\.__tz3d/);
   assert.match(styles, /\.tz-three-marker-landmark/);
   assert.match(deckRenderer, /createFloorSurfaceResolver\(data\.floorSurfaces, relief\)/);
-  assert.match(deckRenderer, /visibleBuildingHeight\(b\._surfaceProfile, floor\)/);
   assert.match(deckRenderer, /id: 'measured-floor-surfaces'/);
-  assert.match(deckRenderer, /ringAt\(d\.poly, d\.surfaceY \+ 0\.04\)/);
+
+  /*
+   * THE FLOOR SELECTOR IS GONE (2026-09-02, founder: "remove the floor filter not needed, these
+   * maps are for viewing from above and its too much work to make the floors have usability.. so
+   * floor system fully out the project").
+   *
+   * Asserted as ABSENCE against the renderer SOURCE, both renderers, because "hidden" and "gone"
+   * look identical from the outside and only the second one is what was asked for. What must NOT
+   * come back: a `floor` state variable, a `setFloor` on either API, the `mesh.scale.z` squash that
+   * shortened a building to a shown floor, and any `visible:` / `.visible =` gated on a floor.
+   *
+   * What stays, and is asserted present a few lines up: the floorSurfaces evidence resolver, the
+   * measured floor slabs it renders, and `buildingFloorLevels`' storey lines and window bands.
+   */
+  for (const [name, source] of [['map3d-three.js', renderer], ['map3d.js', deckRenderer]]) {
+    assert.doesNotMatch(source, /visibleBuildingHeight/, `${name}: selector wall height`);
+    assert.doesNotMatch(source, /\bsetFloor\b/, `${name}: setFloor on the renderer API`);
+    assert.doesNotMatch(source, /\bapplyFloor\b|applyFloorVisibility/, `${name}: the selector pass`);
+    assert.doesNotMatch(source, /let floor = /, `${name}: the selector's state`);
+    assert.doesNotMatch(source, /mesh\.scale\.z = /, `${name}: the building squash`);
+    assert.doesNotMatch(source, /visibleForFloor|customsAssetVisibleForFloor/, `${name}: floor gates`);
+    assert.doesNotMatch(source, /floor !== 'U'|floor === 'U'|floor === 'all'/, `${name}: floor branches`);
+  }
+  // The squash's removal is only safe because the selector's own "ALL" scale was exactly 1 — the
+  // walls must still stand their full measured height, unconditionally.
+  assert.match(renderer, /realHeight: height,/);
   assert.doesNotMatch(renderer, /\(Number\(floor\) \+ 1\) \* 3\.3/);
 
   // The authored-asset seam is the v2 manifest contract, not the v1 `chunks` array: the
@@ -1338,9 +1780,8 @@ test('renderer integration consumes the shared contract without untracked outlin
   assert.match(renderer, /syncSuppression\?\.\(resolved\.suppressed\)/);
   assert.match(renderer, /customsAssetLedgerFailureMessages\(ledger\)/);
   assert.match(renderer, /applyProceduralSuppression\(\)/);
-  assert.match(renderer, /\[buildingGroup, propGroup, undergroundGroup\]/);
+  assert.match(renderer, /\[buildingGroup, propGroup\]/);
   assert.match(renderer, /restoreProceduralSuppression\(\);[\s\S]*suppressedProceduralFeatures\.clear\(\)/);
-  assert.match(renderer, /setFloor: \(next\) => \{[\s\S]*applyFloor\(\);[\s\S]*refreshDynamic\(\)/);
   assert.doesNotMatch(renderer, /loadAuthoredAssets/);
   assert.doesNotMatch(renderer, /loadAuthoredChunks/);
 

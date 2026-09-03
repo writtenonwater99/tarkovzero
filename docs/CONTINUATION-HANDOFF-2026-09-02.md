@@ -78,14 +78,16 @@ Vercel is distribution regardless of who can log in. `npm run verify:build-bound
 across three roots and fails loudly. Do not weaken it; do not move `.local-game-derived/` or
 `.local-candidates/` into `public/`.
 
-**The site is behind a password.** `middleware.js` does site-wide HTTP Basic auth against the
-`SITE_PASSWORD` env var in the Vercel project, matching `/(.*)` — every path, including assets and
-`/api/assistant`. It **fails closed**: unset or empty env var returns 503 rather than serving openly. See
-`docs/PASSWORD-PROTECTION.md`. Ask the founder for the credential; it is not in the repo and must never be.
+**The site is PUBLIC — there is no password.** A site-wide HTTP Basic auth gate (`middleware.js` +
+`SITE_PASSWORD`, matching `/(.*)`) shipped earlier on 2026-09-02 and was **removed the same day at the
+founder's explicit request**. `middleware.js`, `scripts/middleware-site-auth.test.mjs`, the
+`test:site-auth` npm script and `docs/PASSWORD-PROTECTION.md` are all gone; `SITE_PASSWORD` was deleted
+from the Vercel project after the un-gated deploy verified green. Do not reinstate it without being asked.
 
-Deployed and verified 2026-09-02: 401 without credentials on `/`, `/data/customs-3d.json`,
-`/assets/3d/customs/authored/fortress/fortress-shell-lod2.glb` and `/api/assistant`; 200 with; 401 on a
-wrong password; `WWW-Authenticate: Basic realm="tarkovzero"` present.
+This does **not** touch the game-data boundary above, which never depended on it: the password was never
+what kept `.local-game-derived/` off Vercel — `.vercelignore` and `verify:build-boundary` are, and both
+still stand. `/api/assistant` keeps its own guards (same-origin check + 20 req/min/IP, `api/assistant.js`),
+which are now the only thing in front of the DeepSeek key.
 
 **`.vercelignore` is load-bearing and must not be deleted.** The build-boundary verifier inspects `dist/`
 and structurally cannot see what the CLI *uploads*. Without that file `vercel --prod` uploads 1.23 GB —
@@ -93,10 +95,9 @@ including 456 MB of `.local-game-derived/` and 413 MB of `.local-candidates/` �
 before the build runs. The Vercel CLI does **not** read `.gitignore`. Watch the file count on every deploy;
 it should be in the hundreds, not thousands.
 
-**Known, unfixed, low severity:** `vercel.json` rewrites `/api/graphql` to `api.tarkov.dev`, and a Vercel
-external rewrite forwards request headers — so the browser's `Authorization: Basic …` is probably forwarded
-to that third party on graphql calls. Unverified. Rotating `SITE_PASSWORD` is trivial; stripping the header
-in the middleware before the rewrite is the real fix.
+**Closed by the gate removal:** the `/api/graphql` → `api.tarkov.dev` rewrite in `vercel.json` forwards
+request headers, so the browser's `Authorization: Basic …` was probably being handed to that third party on
+every graphql call. With Basic auth gone there is no credential on the wire to leak.
 
 ---
 

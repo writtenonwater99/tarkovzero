@@ -7,7 +7,8 @@
  * must always mean the model. Plain node, no deps — src/omnibox.js only imports src/icons.js and
  * neither touches the DOM at module scope.
  */
-import { route, matchCommand, runCommand, COMMANDS, HANDLED } from '../src/omnibox.js';
+import { route, matchCommand, runCommand, createOmnibox, COMMANDS, HANDLED } from '../src/omnibox.js';
+import { mountDocument } from './lib/fake-dom.mjs';
 
 /* ------------------------------------------------------------- fixtures -- */
 const INDEX = [
@@ -91,9 +92,9 @@ console.log('commands');
   eq('fuzzy keeps the argument', r.rows[0].arg, 'scav');
 }
 {
-  const r = route('> flr 2', ctx);
-  eq('fuzzy: >flr -> floor', r.rows[0].cmd.name, 'floor');
-  eq('argument', r.rows[0].arg, '2');
+  const r = route('> rlf 3', ctx);
+  eq('fuzzy: >rlf -> relief', r.rows[0].cmd.name, 'relief');
+  eq('argument', r.rows[0].arg, '3');
 }
 {
   const r = route('> 3d', ctx);
@@ -138,7 +139,7 @@ console.log('commands');
 }
 {
   eq('a command never falls through to lookup', route('> fit', ctx).mode, 'command');
-  check('matchCommand rejects an unrelated word', matchCommand(COMMANDS.find((c) => c.name === 'floor'), 'wxyz') === null);
+  check('matchCommand rejects an unrelated word', matchCommand(COMMANDS.find((c) => c.name === 'relief'), 'wxyz') === null);
 }
 
 /* ------------------------------------------------- `>` command execution */
@@ -154,7 +155,7 @@ function stubActions(over = {}) {
     setView: rec('setView'), fit: rec('fit'), north: rec('north'), panel: rec('panel'),
     myQuests: rec('myQuests'), help: rec('help'), clearTrails: rec('clearTrails'), pin: rec('pin'),
     goMap: rec('goMap'), mapKeys: () => ['customs', 'reserve', 'woods'],
-    setFloor: rec('setFloor'), setRelief: rec('setRelief'), setNature: rec('setNature'),
+    setRelief: rec('setRelief'), setNature: rec('setNature'),
     setLabels: rec('setLabels'), setLayers: (...a) => { calls.push(['setLayers', ...a]); return 2; },
     ...over,
   };
@@ -219,16 +220,19 @@ function enter(text, actions) {
   enter('> layers', c);
   check('a bare `> layers` opens the panel, it does not guess', c.calls[0]?.[0] === 'panel' && c.calls[0][1] === 'layers', JSON.stringify(c.calls));
 }
+// The floor selector went out on 2026-09-02 (founder: "floor system fully out the project"), so
+// `> floor` must be gone from the vocabulary AND unroutable — not merely unhandled. Deleting the
+// old `> floor 2` cases alone would have left a suite that stayed green if the command came back.
 {
+  check('`floor` is not in the command vocabulary', !COMMANDS.some((c) => c.name === 'floor'));
+  check('`floor` is not in HANDLED', !HANDLED.includes('floor'));
+  const r = route('> floor 2', ctx);
+  check('`> floor 2` does not route to a command', r.rows[0]?.cmd?.name !== 'floor', JSON.stringify(r.rows[0] ?? null));
+  eq('and highlights nothing', r.index, -1);
   const a = stubActions();
   enter('> floor 2', a);
-  eq('`> floor 2` asks for floor 2', a.calls[0]?.[1], '2');
-  const u = stubActions();
-  enter('> floor u', u);
-  eq('`> floor u` means underground', u.calls[0]?.[1], 'U');
-  const bare = stubActions();
-  enter('> floor', bare);
-  eq('a bare `> floor` means all — never a NaN floor', bare.calls[0]?.[1], 'all');
+  eq('so Enter on it calls nothing', a.calls.length, 0);
+  check('and no action surface offers setFloor', stubActions().setFloor === undefined);
 }
 // The generalisation: a command in the vocabulary with no case in the switch renders a selectable
 // row and then silently does nothing on Enter.
@@ -259,6 +263,68 @@ console.log('assistant');
 {
   const r = route('?', ctx);
   eq('a bare ? is not sendable', r.index, -1);
+}
+
+/* ------------------------------------------- `?` routes INTO the panel -- */
+// route() says which row Enter lands on; this says where that row's text GOES. The assistant used
+// to be a card this module owned and drew into; since 2026-09-02 it is the dock panel in the
+// upper-left (src/assistant-panel.js) and the omnibox is only its route. That is a wire, and a
+// wire that is only asserted in a browser is a wire nothing checks on `npm test`.
+console.log('assistant routing — the omnibox is the route, the panel is the destination');
+{
+  const doc = mountDocument([['div', 'omnibox'], ['input', 'find'], ['div', 'find-results'], ['kbd', 'find-kbd']]);
+  globalThis.document = doc;
+
+  const calls = [];
+  let open = false;
+  const assistant = {
+    ask: (t) => { calls.push(['ask', t]); return Promise.resolve(); },
+    setOpen: (on) => { calls.push(['setOpen', !!on]); open = !!on; },
+    isOpen: () => open,
+    armUndo: (fn) => calls.push(['armUndo', typeof fn]),
+  };
+  const omni = createOmnibox({
+    mapKey: 'customs',
+    index: () => INDEX,
+    quests: { quests: () => [], selectedSlugs: () => [], select: () => {}, points: () => [] },
+    assistant,
+    camera: { get: () => ({ mode: '2d' }), set: () => {} },
+    flyTo: () => {},
+    actions: stubActions(),
+  });
+  const input = doc.getElementById('find');
+  const type = (text, key = 'Enter') => {
+    input.value = text;
+    input.oninput();
+    input.onkeydown({ key, preventDefault() {} });
+  };
+
+  check('the omnibox no longer owns an assistant card', doc.getElementById('ask-card') === null);
+
+  type('?where is the cargo');
+  check('a `?` question opens the assistant panel', calls.some((c) => c[0] === 'setOpen' && c[1] === true), JSON.stringify(calls));
+  check('…and is asked into it, prefix stripped', calls.some((c) => c[0] === 'ask' && c[1] === 'where is the cargo'), JSON.stringify(calls));
+  check('…after the Restore snapshot is armed', calls.findIndex((c) => c[0] === 'armUndo') < calls.findIndex((c) => c[0] === 'ask'), JSON.stringify(calls));
+
+  const afterAsk = calls.length;
+  type('dorms');
+  check('plain text still never reaches the panel on its own', !calls.slice(afterAsk).some((c) => c[0] === 'ask'), JSON.stringify(calls.slice(afterAsk)));
+
+  const afterLookup = calls.length;
+  input.value = 'xyzzy nothing here';
+  input.oninput();
+  input.onkeydown({ key: 'ArrowDown', preventDefault() {} });
+  input.onkeydown({ key: 'Enter', preventDefault() {} });
+  check('…but arrowing down to the Ask row does', calls.slice(afterLookup).some((c) => c[0] === 'ask' && c[1] === 'xyzzy nothing here'), JSON.stringify(calls.slice(afterLookup)));
+
+  // Esc: the panel is a dock panel now, so the omnibox peels its own rows and then stands down —
+  // main.js hands the key to shell.closeTransient(), which respects a pinned conversation.
+  input.value = 'dorms';
+  input.oninput();
+  check('Esc consumes the key while rows are showing', omni.escape() === true);
+  check('…and hands it on once they are gone, even with the panel open', omni.escape() === false && omni.isAskOpen() === true);
+
+  input.onfocus();          // clears the placeholder-cycling interval so the process can exit
 }
 
 /* -------------------------------------------------------------- summary */

@@ -20,13 +20,14 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 export const CONTRACT = {
   'shell / stage': [
     '#app', '#stage', '#map', '#map3d', '#toast', '#quest-card',
-    '#toolbar', '#dock',
+    '#toolbar', '#dock', '#dock-left',
     '#panel-layers', '#panel-quests', '#panel-view', '#panel-live', '#panel-ask',
-    // Ask has no toolbar button in step 2 — the omnibox is its only entry point — but the panel
-    // itself stays mounted and hidden so assistant.js still finds #ask-block / #ask-toggle / #ask.
-    '[data-panel-btn=layers]', '[data-panel-btn=quests]', '[data-panel-btn=view]', '[data-panel-btn=live]',
-    '.tb-item[data-tb=layers]', '.tb-item[data-tb=quests]', '.tb-item[data-tb=view]', '.tb-item[data-tb=live]',
-    '[data-pin=layers]', '[data-pin=quests]',
+    // Two dock columns since 2026-09-02: the four lookups hang off the right toolbar in #dock, the
+    // assistant is #panel-ask in #dock-left (upper-left of the map). shell.js drives both from one
+    // PANELS list, so every panel owes this contract a button, a toolbar item and a close control.
+    '[data-panel-btn=layers]', '[data-panel-btn=quests]', '[data-panel-btn=view]', '[data-panel-btn=live]', '[data-panel-btn=ask]',
+    '.tb-item[data-tb=layers]', '.tb-item[data-tb=quests]', '.tb-item[data-tb=view]', '.tb-item[data-tb=live]', '.tb-item[data-tb=ask]',
+    '[data-pin=layers]', '[data-pin=quests]', '[data-pin=ask]',
     '[data-close=layers]', '[data-close=quests]', '[data-close=view]', '[data-close=live]', '[data-close=ask]',
   ],
   'map chip + status (main.js)': [
@@ -58,14 +59,6 @@ export const CONTRACT = {
     '#label-density .seg-cell[data-density=key]', '#label-density .seg-cell[data-density=all]',
     '#help-btn', '#hint3d',
   ],
-  // Every floor cell, not a sample: setFloor() hides the ones this map has no floors for, so a
-  // missing cell is invisible until someone opens the one map that needed it.
-  'floors (main.js — toolbar stack in 3D)': [
-    '#floors', '#floors .seg-cell[data-floor=all]', '#floors .seg-cell[data-floor=0]',
-    '#floors .seg-cell[data-floor=1]', '#floors .seg-cell[data-floor=2]',
-    '#floors .seg-cell[data-floor=3]', '#floors .seg-cell[data-floor=4]',
-    '#floors .seg-cell[data-floor=U]',
-  ],
   // #tb-live is the toolbar's GPS indicator. It is dereferenced with no null guard on the BOOT path
   // (main.js updateLiveToolbar -> tbLive.dataset), before window.tz exists, so losing it is not the
   // silent no-op this contract usually guards — it is a blank page. The [data-panel-btn=live] entry
@@ -74,12 +67,12 @@ export const CONTRACT = {
     '#live-block', '#live', '#live-toggle', '#live-sum', '#live-dot', '#tb-live',
     '.tb-item[data-tb=live] .tb-tip',
   ],
-  // #ask-log / #ask-chips / #ask-form / #ask-input MOVED out of #panel-ask into #ask-card in step 2:
-  // the assistant answers over the map now, and assistant.js binds them by id wherever they sit.
-  'ask panel — hidden mount (assistant.js)': ['#panel-ask', '#ask-block', '#ask-toggle', '#ask'],
-  'assistant card (omnibox.js + assistant.js)': [
-    '#ask-card', '#ask-log', '#ask-chips', '#ask-acts', '#ask-form', '#ask-input',
-    '#ask-history', '#ask-card-x',
+  // The assistant panel (2026-09-02): #ask-log / #ask-chips / #ask-form / #ask-input came back out
+  // of the omnibox card into #panel-ask, which is now a live dock panel in the LEFT column.
+  // src/assistant-panel.js binds every one of these by id; a missing one is a silent no-op.
+  'assistant panel (assistant-panel.js)': [
+    '#panel-ask', '#tb-ask', '#ask-log', '#ask-chips', '#ask-form', '#ask-input', '#ask-send',
+    '.tb-item[data-tb=ask] .tb-tip',
   ],
   'omnibox (omnibox.js)': ['#omnibox', '#find', '#find-kbd', '#find-results'],
   // `#hud-north svg` is the compass needle: main.js binds it at module scope and writes its --rot on
@@ -87,6 +80,33 @@ export const CONTRACT = {
   'hud (main.js)': [
     '#hud-zin', '#hud-zout', '#hud-north', '#hud-north svg', '#hud-fit',
     '#coords', '#scale', '#scale .scale-cap', '#scale .scale-line i',
+  ],
+};
+
+/**
+ * Selectors that must NOT exist — a retired feature's own markup.
+ *
+ * A deletion checked only by removing rows from CONTRACT is not checked at all: the suite would
+ * stay green if the markup came back, or if it had never left and only its CSS had been dropped
+ * (`display:none` on a control the keyboard can still reach is exactly the "hidden, not gone"
+ * failure this file is here to catch). So the floor selector is asserted ABSENT, cell by cell.
+ */
+export const RETIRED = {
+  // Removed 2026-09-02, founder: "remove the floor filter not needed, these maps are for viewing
+  // from above and its too much work to make the floors have usability.. so floor system fully out
+  // the project". The marker-level vocabulary (UNDERGROUND badge, dashed extract outline) is a
+  // different feature and stays — it lives in src/icons.js, not in this markup.
+  'floor selector (retired 2026-09-02)': [
+    '#floors', '.tb-floors', '.tb-floors-cap', '.seg-v', '[data-floor]',
+    '#floors .seg-cell[data-floor=all]', '#floors .seg-cell[data-floor=U]',
+  ],
+  // Retired 2026-09-02, founder: "move the AI chat to there" (a box in the upper-left of the map).
+  // The assistant card that floated over the omnibox is gone — not hidden — so there is exactly ONE
+  // conversation and one place answers live. Its old shell inside #panel-ask (a permanently hidden
+  // #ask-block / #ask-toggle) went with it: that panel is a real panel again.
+  'omnibox assistant card (retired 2026-09-02)': [
+    '#ask-card', '.askcard', '#ask-history', '#ask-card-x', '#ask-acts',
+    '#ask-block', '#ask-toggle', '#ask', '.ask-head', '.block-ask',
   ],
 };
 
@@ -178,12 +198,27 @@ function main() {
       if (!queryAll(tree, sel).length) missing.push(`${group}: ${sel}`);
     }
   }
-  if (missing.length) {
-    console.error(`✗ index.html is missing ${missing.length} of ${checked} contract selectors:`);
-    for (const m of missing) console.error(`   ${m}`);
+  const resurrected = [];
+  let retiredChecked = 0;
+  for (const [group, selectors] of Object.entries(RETIRED)) {
+    for (const sel of selectors) {
+      retiredChecked += 1;
+      const found = queryAll(tree, sel).length;
+      if (found) resurrected.push(`${group}: ${sel} (${found} node${found > 1 ? 's' : ''})`);
+    }
+  }
+  if (missing.length || resurrected.length) {
+    if (missing.length) {
+      console.error(`✗ index.html is missing ${missing.length} of ${checked} contract selectors:`);
+      for (const m of missing) console.error(`   ${m}`);
+    }
+    if (resurrected.length) {
+      console.error(`✗ index.html still carries ${resurrected.length} of ${retiredChecked} RETIRED selectors:`);
+      for (const m of resurrected) console.error(`   ${m}`);
+    }
     process.exit(1);
   }
-  console.log(`✓ DOM contract: ${checked} selectors present in index.html`);
+  console.log(`✓ DOM contract: ${checked} selectors present in index.html, ${retiredChecked} retired selectors absent`);
 }
 
 main();

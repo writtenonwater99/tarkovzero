@@ -156,26 +156,6 @@ export function customsAssetWorldPosition({ x, y, z }) {
   return [-x, -z, y];
 }
 
-const CUSTOMS_ASSET_FLOOR_RANK = Object.freeze({
-  terrain: 0,
-  ground: 0,
-  'floor-1': 1,
-  'floor-2': 2,
-  'floor-3': 3,
-  roof: 4,
-});
-
-/** Match authored floor-tag visibility to the renderer's all/0/1/2/3/U selector. */
-export function customsAssetVisibleForFloor(floorTag, selectedFloor) {
-  if (selectedFloor === 'U') return floorTag === 'underground';
-  if (floorTag === 'underground') return false;
-  if (selectedFloor === 'all') return true;
-  const selected = Number(selectedFloor);
-  if (!Number.isInteger(selected) || selected < 0) return true;
-  const rank = CUSTOMS_ASSET_FLOOR_RANK[floorTag];
-  return Number.isInteger(rank) && rank <= selected;
-}
-
 /**
  * Index a validated manifest. Everything downstream reads these maps rather than re-scanning
  * arrays, and `revision` gives the renderer a cheap invalidation key.

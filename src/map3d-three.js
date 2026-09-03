@@ -3,19 +3,41 @@
  *
  * This deliberately consumes the same canonical JSON and callback surface as map3d.js. It proves
  * that TarkovZero can replace only its 3D presentation layer without rewriting live tracking,
- * quests, filters, floors, coordinates, camera hand-off, or the 2D map. Current procedural meshes
+ * quests, filters, coordinates, camera hand-off, or the 2D map. Current procedural meshes
  * remain visibly labelled provisional; audited GLB/KTX2 chunks can replace them through the scene
  * manifest without moving their stable EFT-space anchors.
  */
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { paletteFor } from './atmosphere.js';
+import { BRIDGE_STRUCTURE, bridgeApproachPlan, bridgeStructurePlan } from './bridge-structure.js';
 import { CAM, clampCamera } from './camera.js';
-import { placeBuildings } from './buildings.js';
+import { placeBuildings, plinthColor } from './buildings.js';
+import { MATERIAL_SLOT_INDEX } from './building-detail/contract.js';
+import {
+  assembleBuildingGeometry,
+  buildingRenderStatsNow,
+  planBuildingDetail,
+  plinthMeshData,
+  visibleInstanceIndices,
+} from './building-detail/assemble.js';
 import {
   CUSTOMS_LOCAL_TERRAIN_SOURCE_FRAME,
   sampleCustomsTerrainElevation,
 } from './customs-local-terrain.js';
 import { loadCustomsLocalTerrainPackage } from './customs-local-terrain-loader.js';
+import {
+  BRIDGE_SEATING,
+  bridgeDeckAnchor,
+  bridgeSeating,
+  mergeCustomsLocalBridges,
+} from './customs-local-bridges.js';
+import { loadCustomsLocalBridgesPackage } from './customs-local-bridges-loader.js';
+import {
+  WATER_SURFACE_SEATING,
+  deckWaterClearance,
+  waterSurfacePlan,
+} from './water-surface.js';
 import { compileCustomsLocalTerrainMesh } from './customs-local-terrain-mesh.js';
 import { loadCustomsLocalVegetation } from './customs-local-vegetation.js';
 import { buildCustomsLocalVegetationRenderPlan } from './customs-local-vegetation-render.js';
@@ -66,15 +88,20 @@ import {
   createCustomsAssetAttachmentLedger,
   createCustomsAssetRegistry,
   customsAssetLinearMatrix,
-  customsAssetVisibleForFloor,
   diffCustomsAssetPlan,
   planCustomsAssetFrame,
   resolveProceduralSuppression,
 } from './customs-asset-runtime.js';
 import { assertThreeRenderer, describeRendererGate } from './renderer-gate.js';
-import { createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight } from './surfaces.js';
+import { createFloorSurfaceResolver, measuredSurfaceY } from './surfaces.js';
+// The PLACE-LABEL tier contract — the same one the 2D map and the deck diorama draw from. Aliased
+// on import so the four label tiers can never be confused with this file's own scene vocabulary.
+import { styleFor as labelStyleFor, tierOf as labelTierOf } from './label-tier.js';
+// …and the shared spelling of it. One definition of the leader's pieces and custom properties for
+// both DOM passes (this overlay and the 2D Leaflet layer) — see src/label-chrome.js.
+import { LEADER_PIECES, labelCssProps } from './label-chrome.js';
 import { buildTerrain, gameToTerrainTextureUv } from './terrain.js';
-import { buildOpenFrameBuildingAsset, buildPropAsset } from './three-prop-assets.js';
+import { buildPropAsset } from './three-prop-assets.js';
 import { DRAPE, drapedPanelMeshData, miteredEdges, planWallStructures, resamplePath } from './wall-runs.js';
 import {
   RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, alphaCoverageMipChain,
@@ -82,7 +109,7 @@ import {
   createAsyncAttachGuard, disposeMaterialResources, drapedPrismStripMeshData, gameToWorld,
   grassTuftMeshData, inRing, makeTerrainSampler,
   markerOverlaySpec, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView, seatOverlayAnchor,
-  railwayTrackMeshData, terrainMeshData, updateThreeFx, visibleForFloor, withinScope,
+  railwayTrackMeshData, terrainMeshData, updateThreeFx, withinScope,
   terrainRelativeDisplayY, visibleInteractionData,
 } from './three-world.js';
 
@@ -112,6 +139,14 @@ const TACTICAL_PROP_CALLOUTS = Object.freeze([
   Object.freeze({ featureId: 'customs.prop.industrial_rail_yard.red_container_stack', label: 'RED CONTAINER' }),
   Object.freeze({ featureId: 'customs.prop.industrial_rail_yard.locomotive_west', label: 'TRAIN' }),
 ]);
+/**
+ * Bridge structure colours, taken from the deck renderer's own table rather than reinvented here.
+ *
+ * `main.js` pins the Three renderer to the realistic look (`rendererMode === 'three' ? 'realistic'`)
+ * and there is no look control for it, so one table is read once — the same `C.bridge` /
+ * `C.bridgeRail` / `C.pier` that `src/map3d.js` draws its piers, edges and rails with.
+ */
+const BRIDGE_COLORS = paletteFor('realistic');
 const rgb = (value, fallback = [128, 128, 128]) => {
   const c = Array.isArray(value) ? value : fallback;
   return new THREE.Color().setRGB(
@@ -285,28 +320,6 @@ function shapeFromRing(ring) {
   return shape;
 }
 
-function dominantFootprintFrame(poly) {
-  if (!Array.isArray(poly) || poly.length < 3) return null;
-  let edge = null;
-  for (let index = 0; index < poly.length; index++) {
-    const a = poly[index], b = poly[(index + 1) % poly.length];
-    const dx = b[0] - a[0], dz = b[1] - a[1], length = Math.hypot(dx, dz);
-    if (!edge || length > edge.length) edge = { dx, dz, length };
-  }
-  if (!edge || !(edge.length > 0.1)) return null;
-  let twiceArea = 0;
-  for (let index = 0; index < poly.length; index++) {
-    const a = poly[index], b = poly[(index + 1) % poly.length];
-    twiceArea += a[0] * b[1] - b[0] * a[1];
-  }
-  return {
-    center: centroid(poly),
-    length: edge.length,
-    width: Math.max(1, Math.abs(twiceArea) / 2 / edge.length),
-    yaw: Math.atan2(edge.dz, edge.dx),
-  };
-}
-
 function ribbonGeometry(path, width, H, lift = 0.05) {
   const points = (path || []).filter((p, i, all) => Array.isArray(p) && p.length >= 2
     && (i === 0 || Math.hypot(p[0] - all[i - 1][0], p[1] - all[i - 1][1]) > 1e-4));
@@ -341,13 +354,6 @@ function lineGeometry(path, H, lift = 0.2) {
   const points = (path || []).filter((p) => Array.isArray(p) && p.length >= 2)
     .map(([x, z]) => new THREE.Vector3(...gameToWorld(x, z, H(x, z) + lift)));
   return points.length >= 2 ? new THREE.BufferGeometry().setFromPoints(points) : null;
-}
-
-function outlineFor(mesh, material) {
-  const edges = new THREE.EdgesGeometry(mesh.geometry, 28);
-  const line = new THREE.LineSegments(edges, material);
-  line.renderOrder = 2;
-  mesh.add(line);
 }
 
 /** The coverage a chain-link fragment must reach to be drawn at all. Shared with the mip builder. */
@@ -690,7 +696,7 @@ function exactVegetationInstancedMesh({
   return mesh;
 }
 
-/** Seat one authored instance in the runtime frame, then tag it for picking and floors. */
+/** Seat one authored instance in the runtime frame, then tag it for picking. */
 export function seatAuthoredInstance(scene, instance, { displayYFor }) {
   // A cached unique glTF scene can leave and re-enter the stream. Picking proxies are runtime
   // furniture, not authored nodes, so remove the previous seating's proxy before adding the
@@ -844,7 +850,6 @@ export function createAuthoredAssetStreamer({
   manifestUrl = POC_MANIFEST,
   fetchImpl = globalThis.fetch,
   loadAsset = null,
-  instanceVisible = () => true,
   onChanged = () => {},
 } = {}) {
   if (!root?.add || !root?.remove) throw new Error('authored streamer requires a scene root');
@@ -1039,7 +1044,6 @@ export function createAuthoredAssetStreamer({
             : gltf.scene;
           detachInstance(instance);
           const seated = seatAuthoredInstance(node, instance, { displayYFor });
-          seated.visible = instanceVisible(instance);
           try {
             const attached = guard.attach(seated, (resource) => root.add(resource));
             if (!attached) throw new Error('view torn down before attach');
@@ -1153,6 +1157,11 @@ export async function createView3d(container, mapData, src) {
       .then((value) => ({ value, error: null }))
       .catch((error) => ({ value: null, error }))
     : Promise.resolve({ value: null, error: null });
+  const localBridgeRequest = localEnhancementsAllowed
+    ? loadCustomsLocalBridgesPackage({ signal: localTerrainAbort.signal })
+      .then((value) => ({ value, error: null }))
+      .catch((error) => ({ value: null, error }))
+    : Promise.resolve({ value: null, error: null });
   const response = await fetch('/data/customs-3d.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`Customs 3D data HTTP ${response.status}`);
   const data = await response.json();
@@ -1193,6 +1202,44 @@ export async function createView3d(container, mapData, src) {
   if (exactTerrainError) {
     console.info('[three-poc] exact local Customs terrain unavailable; using complete legacy terrain', exactTerrainError);
   }
+
+  // -------------------------------------------------------------------------------------------
+  // Local-only bridge corrections.
+  //
+  // `scripts/build-3d.mjs` emits a bridge only where a road/rail path crosses a WATER polygon, and
+  // both Customs railway bridges span a ROAD — so that detector can never see them and they are
+  // absent from `public/data/customs-3d.json` by construction. The Junk Bridge is hardcoded there
+  // as a straight 22 m line that stops on a mid-river island. The corrections are game-derived, so
+  // they are LOCAL ONLY (handoff §9): production keeps exactly the bridges customs-3d.json ships.
+  //
+  // The merge additionally REQUIRES the exact terrain. A local record states its deck's canonical
+  // game Y, and a canonical Y is only meaningful against canonical ground: the public heightfield
+  // is fitted from spawn and loot points, never sits on a riverbed (it reads -7.07 where the junk
+  // bridge's own walkable planes sit at -12.97), and would seat these decks metres out. No exact
+  // terrain, no authored bridges — and the reason is reported rather than inferred from a count.
+  const localBridgeOutcome = await localBridgeRequest;
+  let localBridgeMerge = null;
+  let localBridgeReason = 'applied';
+  if (!localEnhancementsAllowed) localBridgeReason = rendererGate.localEnhancementReason;
+  else if (!exactTerrainMesh) localBridgeReason = 'requires-exact-terrain';
+  else if (!localBridgeOutcome.value) localBridgeReason = 'package-unavailable';
+  else localBridgeMerge = mergeCustomsLocalBridges(data.bridges, localBridgeOutcome.value);
+  if (localBridgeOutcome.error && localEnhancementsAllowed) {
+    console.info('[three-poc] local Customs bridge corrections unavailable; using public bridges', localBridgeOutcome.error);
+  }
+  if (localBridgeMerge?.unmatchedReplaceTargets.length) {
+    console.warn('[three-poc] local bridge records name public bridges that no longer exist', localBridgeMerge.unmatchedReplaceTargets);
+  }
+  const bridgeRows = localBridgeMerge?.bridges ?? data.bridges ?? [];
+  const localBridgeStatus = Object.freeze({
+    applied: Boolean(localBridgeMerge),
+    reason: localBridgeReason,
+    added: localBridgeMerge?.added ?? 0,
+    replaced: localBridgeMerge?.replaced ?? [],
+    unmatchedReplaceTargets: localBridgeMerge?.unmatchedReplaceTargets ?? [],
+    publicCount: data.bridges?.length ?? 0,
+    error: localBridgeOutcome.error ? String(localBridgeOutcome.error.message) : null,
+  });
 
   container.replaceChildren();
   container.classList.add('three-poc');
@@ -1435,6 +1482,11 @@ export async function createView3d(container, mapData, src) {
     grassBladeVector: new THREE.MeshStandardMaterial({ color: 0x78985c, roughness: 1, metalness: 0, side: THREE.DoubleSide }),
     road: new THREE.MeshStandardMaterial({ color: 0x575b55, roughness: 0.96, metalness: 0.01 }),
     dirt: new THREE.MeshStandardMaterial({ color: 0x756d5b, roughness: 1, metalness: 0 }),
+    // The bridge deck keeps `road`; these three dress the structure the deck renderer already
+    // draws (piers / edges / rails), in the deck renderer's own colours.
+    bridgeEdge: new THREE.MeshStandardMaterial({ color: rgb(BRIDGE_COLORS.bridge), roughness: 0.94, metalness: 0.02 }),
+    bridgeRail: new THREE.MeshStandardMaterial({ color: rgb(BRIDGE_COLORS.bridgeRail), roughness: 0.68, metalness: 0.24 }),
+    pier: new THREE.MeshStandardMaterial({ color: rgb(BRIDGE_COLORS.pier), roughness: 0.96, metalness: 0.02 }),
     water: new THREE.MeshPhysicalMaterial({ color: 0x4f7474, roughness: 0.2, metalness: 0.06, transmission: 0.08, transparent: true, opacity: 0.86, side: THREE.DoubleSide }),
     // A chain-link panel is a surface with holes, not a translucent slab: `alphaTest` keeps it
     // opaque where the wire is, invisible where it is not, and shadow-casting in exactly that
@@ -1475,23 +1527,54 @@ export async function createView3d(container, mapData, src) {
     questZone: new THREE.MeshBasicMaterial({ color: 0xe7b64b, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }),
     questZoneLine: new THREE.LineBasicMaterial({ color: 0xf3cf7b, transparent: true, opacity: 0.92 }),
     player: new THREE.MeshStandardMaterial({ color: 0x38d6c8, emissive: 0x083f3a, emissiveIntensity: 0.75, roughness: 0.4 }),
-    underground: new THREE.MeshStandardMaterial({ color: 0x9b7041, transparent: true, opacity: 0.58, roughness: 1, side: THREE.DoubleSide }),
     floorSurface: new THREE.MeshStandardMaterial({ color: 0x9a978d, transparent: true, opacity: 0.88, roughness: 1, side: THREE.DoubleSide }),
     outline: new THREE.LineBasicMaterial({ color: 0x232b27, transparent: true, opacity: 0.42 }),
+    // ---- the four MAP-WIDE building-detail slots (contract.js MATERIAL_SLOTS 2..5). `wall` and
+    // `roof` are per building and come from `materialForBuilding`; these four are shared by every
+    // building on the map, which is what keeps the detail lane's draw-call delta bounded — one
+    // extra call per building that uses one of them, never one per element.
+    detailTrim: new THREE.MeshStandardMaterial({ color: 0xa8a79b, roughness: 0.8, metalness: 0.03 }),
+    detailMetal: new THREE.MeshStandardMaterial({ color: 0x6f746f, roughness: 0.56, metalness: 0.55 }),
+    detailGlazing: new THREE.MeshStandardMaterial({ color: 0x2b3c42, roughness: 0.24, metalness: 0.12 }),
+    detailDark: new THREE.MeshStandardMaterial({ color: 0x1b1f1c, roughness: 0.94, metalness: 0.02 }),
+    // The skirt under a building on a cross-slope. UNLIT (`MeshBasic`) and near-black, exactly as
+    // the deck renderer draws it — `src/buildings.js` documents why a lit, wall-coloured plinth put
+    // 19.3 m of apparent building under a 9.5 m roof.
+    plinth: new THREE.MeshBasicMaterial({ color: rgb(plinthColor('realistic')) }),
   };
   const buildingMaterials = new Map();
   const propMaterials = new Map();
   const materialForBuilding = (building, roof = false) => {
     const place = safeText(building.place ?? building.name);
-    const key = `${place || building.kind}:${roof ? 'roof' : 'wall'}`;
+    // `building.roof` is an AUTHORED roof colour on 18 of the 71 Customs rows and this renderer
+    // threw it away (`grep '.roof' map3d-three.js` returned nothing before this lane): every roof
+    // was the wall colour scaled by a constant. Reading it is free differentiation — no extra
+    // draw call, no extra geometry — and it is what makes a roof-slot detail element read as roof.
+    const authoredRoof = roof && Array.isArray(building.roof) ? building.roof : null;
+    // The authored colour is part of the key: two rows can share a `place` and differ here, and a
+    // key that ignored it would hand the second row the first one's material.
+    const key = `${place || building.kind}:${roof ? 'roof' : 'wall'}:${authoredRoof ? authoredRoof.join(',') : ''}`;
     if (buildingMaterials.has(key)) return buildingMaterials.get(key);
-    const base = building.color ?? (place.includes('Dorms') ? [176, 151, 132] : [145, 145, 136]);
+    const base = authoredRoof ?? building.color ?? (place.includes('Dorms') ? [176, 151, 132] : [145, 145, 136]);
     const color = rgb(base);
-    if (roof) color.multiplyScalar(place.includes('Dorms') ? 0.7 : 0.82);
+    if (roof && !authoredRoof) color.multiplyScalar(place.includes('Dorms') ? 0.7 : 0.82);
     const material = new THREE.MeshStandardMaterial({ color, roughness: roof ? 0.84 : 0.78, metalness: building.kind?.includes('industrial') ? 0.12 : 0.02 });
     buildingMaterials.set(key, material);
     return material;
   };
+  /**
+   * The six-slot material array every building mesh carries, in `MATERIAL_SLOTS` order, so a
+   * group's `materialSlot` from a planner indexes it directly. Slots 0/1 are the building's own;
+   * slots 2-5 are the shared map-wide four.
+   */
+  const buildingSlotMaterials = (building) => [
+    materialForBuilding(building, false),
+    materialForBuilding(building, true),
+    materials.detailTrim,
+    materials.detailMetal,
+    materials.detailGlazing,
+    materials.detailDark,
+  ];
   const materialForProp = (prop, role = 'body') => {
     const color = Array.isArray(prop.color) ? prop.color : [105, 109, 105];
     const metallic = ['container', 'railcar', 'vehicle', 'tanker', 'tank'].includes(prop.type);
@@ -1511,7 +1594,6 @@ export async function createView3d(container, mapData, src) {
   // Deliberately independent of query/localStorage/callback input: this proof has one visual target.
   let relief = THREE_FIXED_RELIEF;
   let look = VALID_LOOK.has(src.look) ? src.look : 'realistic';
-  let floor = 'all';
   let nature = { trees: true, rocks: true };
   let fx = { ...parseThreeFx(src.fx), fog: false };
   let H = exactTerrainSampler(exactTerrainPackage, makeTerrainSampler(data.terrain, relief));
@@ -1533,7 +1615,7 @@ export async function createView3d(container, mapData, src) {
   });
   let floorResolver = createFloorSurfaceResolver(data.floorSurfaces, relief);
   let seatedBuildings = [];
-  let surfaceRenderStats = { floors: 0, roofs: 0, underground: 0, stableIds: [] };
+  let surfaceRenderStats = { floors: 0, roofs: 0, stableIds: [] };
   let treeGroup = null, rockGroup = null, propGroup = null, understoryGroup = null, understoryTuftGroup = null;
   /**
    * Public tree positions (`customs-3d.json`'s `trees`) currently seated by `addTreesAndRocks()`.
@@ -1550,17 +1632,50 @@ export async function createView3d(container, mapData, src) {
   let proceduralVegetationPlan = exactVegetationPlan;
   let authoredVegetationRuntime = null;
   let authoredVegetationArrays = null;
-  let undergroundGroup = null, buildingGroup = null, understoryLod = 'overview';
+  let buildingGroup = null, understoryLod = 'overview';
   let understoryRenderStats = {
     polygons: 0, vertices: 0, candidateTufts: 0, tuftInstances: 0, coveredRings: 0,
     maxInstances: UNDERSTORY_TUFT_BUDGET.maxInstances, lod: understoryLod,
   };
   let overlayItems = [];
   let railwayRenderStats = { railSegments: 0, ballastSegments: 0, sleepers: 0, triangles: 0 };
+  // `fords` is reported beside the structure counts on purpose: a ford drawing zero piers and zero
+  // rails is the correct outcome, and a reader who cannot see how many fords there were cannot
+  // tell that outcome apart from the structure pass having silently failed.
+  let bridgeRenderStats = {
+    decks: 0, fords: 0, fascias: 0, rails: 0, piers: 0, triangles: 0, overWater: null,
+  };
+  // Every water sheet drawn this rebuild, with the seating decision that put it there. `addBridges`
+  // reads it to report how much clearance each deck actually keeps over the water it crosses —
+  // `local.applied: true` could not tell an applied bridge from a submerged one, and that is the
+  // exact hole this defect fell through.
+  let waterSurfacePlans = [];
+  let waterRenderStats = { surfaces: 0, seating: null, exactShoreline: 0, surfaceDetail: [] };
   let wallRenderStats = {
     runs: 0, panels: 0, posts: 0, gates: 0, lengthM: 0, triangles: 0,
     byClass: {}, gateProvenance: [], dimensionStatus: {},
   };
+  /**
+   * The building-detail lane's state. `buildingDetail` is the whole routed, planned, validated
+   * result from `src/building-detail/assemble.js`; the three maps beside it are the lookups the
+   * authored-asset suppression walk needs to reach an INSTANCE, which is a separate object from
+   * the building that owns it and therefore does not ride its `visible` flag.
+   */
+  let buildingDetail = null;
+  let buildingIndexByFeatureId = new Map();
+  let buildingProfilesByIndex = new Map();
+  let detailInstanceMeshes = [];
+  let plinthMesh = null;
+  let plinthRenderStats = { buildings: 0, triangles: 0 };
+  let buildingRenderStats = null;
+  let plinthSuppressionKey = null;
+  /** `MATERIAL_SLOTS` index -> the shared map-wide material an instanced family draws with. */
+  const DETAIL_SLOT_MATERIAL = Object.freeze({
+    [MATERIAL_SLOT_INDEX.trim]: 'detailTrim',
+    [MATERIAL_SLOT_INDEX.metal]: 'detailMetal',
+    [MATERIAL_SLOT_INDEX.glazing]: 'detailGlazing',
+    [MATERIAL_SLOT_INDEX.dark]: 'detailDark',
+  });
   /**
    * One plan for every barrier on the map, built once and shared by the fence pass and the prop
    * pass. Heights and thicknesses come from `wall-runs.js`'s class table and nowhere else, so the
@@ -1816,6 +1931,15 @@ export async function createView3d(container, mapData, src) {
   }
 
   function addWater() {
+    // The shipped `level` is fitted from the public heightfield, which is interpolated from spawn
+    // and loot points and never sits on a riverbed. With the EXACT terrain mounted the bed drops to
+    // its real canonical depth while `level` does not, so that expression floats the sheet over
+    // anything seated against the exact ground — which is how both Junk Bridge spans ended up
+    // rendered underwater with every bridge counter green. `waterSurfacePlan` therefore takes this
+    // renderer's own canonical/display sampler pair and seats the sheet at the display height of
+    // the terrain along the polygon's own traced shoreline. Handing it null samplers is the release
+    // path and reproduces `level * relief + 0.08` exactly, so production does not move.
+    waterSurfacePlans = [];
     for (const water of data.water || []) {
       const shape = shapeFromRing(water.poly);
       if (!shape) continue;
@@ -1823,13 +1947,35 @@ export async function createView3d(container, mapData, src) {
         const h = shapeFromRing(hole);
         if (h) shape.holes.push(h);
       }
+      const plan = waterSurfacePlan(water, {
+        relief,
+        lift: 0.08,
+        canonicalGroundAt: exactTerrainMesh ? HCanonical : null,
+        displayGroundAt: exactTerrainMesh ? H : null,
+      });
       const geometry = new THREE.ShapeGeometry(shape, 12);
       const mesh = new THREE.Mesh(geometry, materials.water);
-      mesh.position.z = (Number(water.level) || 0) * relief + 0.08;
+      mesh.position.z = plan.displayY;
       mesh.name = `water:${water.kind ?? 'surface'}`;
       mesh.receiveShadow = true;
       worldRoot.add(mesh);
+      waterSurfacePlans.push({ water, plan });
     }
+    const modes = [...new Set(waterSurfacePlans.map((entry) => entry.plan.mode))];
+    waterRenderStats = {
+      surfaces: waterSurfacePlans.length,
+      seating: modes.length === 1 ? modes[0] : modes.sort().join('+') || null,
+      exactShoreline: waterSurfacePlans
+        .filter((entry) => entry.plan.mode === WATER_SURFACE_SEATING.EXACT_SHORELINE).length,
+      surfaceDetail: waterSurfacePlans.map(({ water, plan }) => ({
+        kind: water.kind ?? 'surface',
+        mode: plan.mode,
+        reason: plan.reason,
+        displayY: plan.displayY,
+        levelStatus: plan.level.status,
+        shoreline: plan.shoreline,
+      })),
+    };
   }
 
   function addRoadsAndLines() {
@@ -1858,22 +2004,7 @@ export async function createView3d(container, mapData, src) {
         worldRoot.add(mesh);
       }
     }
-    for (const bridge of data.bridges || []) {
-      const lift = Math.max(0.1, Number(bridge.height) || 0.7);
-      const surfaceY = measuredSurfaceY(bridge, relief);
-      const geometry = ribbonGeometry(
-        bridge.path,
-        Number(bridge.width) || 5,
-        surfaceY == null ? H : () => surfaceY,
-        surfaceY == null ? lift : 0.08,
-      );
-      if (!geometry) continue;
-      const mesh = new THREE.Mesh(geometry, materials.road);
-      mesh.name = `bridge:${bridge.name ?? 'bridge'}`;
-      mesh.userData = { surfaceY, evidence: bridge.evidence ?? null };
-      mesh.castShadow = mesh.receiveShadow = true;
-      worldRoot.add(mesh);
-    }
+    addBridges();
     addWallStructures();
     const railSurfaceY = exactTerrainMesh
       ? (x, z) => H(x, z) + RAILWAY_TRACK_PROFILE.trackBedLiftM
@@ -1941,6 +2072,177 @@ export async function createView3d(container, mapData, src) {
       ballastSegments,
       sleepers: track.sleepers.length,
       triangles: track.railIndices.length / 3 + track.sleepers.length * 12,
+    };
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Bridges
+  //
+  // The deck keeps its measured-surface contract: a bridge with surveyed evidence is seated on
+  // `measuredSurfaceY`, never re-seated on interpolated ground, and FLAT end to end — a deck is a
+  // level structure, and the attempt to close its end gaps by bending it down to grade produced a
+  // folded ribbon at a 102% local grade, not a bridge. The gap between a flat deck and its banks is
+  // filled by structure instead: `bridgeApproachPlan` puts an abutment under each deck end and an
+  // approach embankment behind it, carrying the road out to the ground at a 10% grade. Everything
+  // the deck stands on or carries is planned by `bridge-structure.js` from that same deck altitude,
+  // so the structure cannot drift off the surface it belongs to. Dimensions come from the bridge's
+  // own width — this file holds no bridge literals.
+  // -------------------------------------------------------------------------------------------
+
+  /** Wrap pure prism mesh data (world-space positions, already `gameToWorld`-ed) in a Mesh. */
+  function structureMesh(meshData, material, name) {
+    if (!meshData?.indices?.length) return null;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
+    geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+    geometry.computeVertexNormals();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.castShadow = mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  function addBridges() {
+    const group = new THREE.Group();
+    group.name = 'bridge-structures';
+    const piers = [];
+    // Abutments and embankments are collected across every bridge and merged into ONE mesh each,
+    // for the same reason the piers are one InstancedMesh: they are the same solid in the same
+    // material, and a draw call per end of every bridge buys nothing.
+    const abutments = [], embankments = [], approaches = [];
+    let decks = 0, fascias = 0, rails = 0, fords = 0, triangles = 0;
+    // A deck is only rendered if it is above the water it crosses. Counting applied records cannot
+    // see that; measuring the gap can, and a negative one names the bridge that vanished.
+    const overWater = {
+      decks: 0, minClearanceM: null, minClearanceDeck: null, submerged: [], fordsBelowSurface: 0,
+    };
+    for (const bridge of bridgeRows) {
+      const lift = Math.max(0.1, Number(bridge.height) || 0.7);
+      // A local record states its deck's CANONICAL game Y instead of a lift above interpolated
+      // terrain, and it is converted here by the same `displayCanonicalObjectY` every other
+      // canonical-Y object in this renderer goes through. It deliberately does NOT go through
+      // `measuredSurfaceY`, which multiplies by `relief` — correct for the public rows' fitted
+      // altitudes, wrong for a game altitude, which relief must never stretch. The deck stays flat
+      // at that one altitude, as a deck does; the fascia, rails and piers follow from it.
+      const seating = bridgeSeating(bridge);
+      const anchor = seating.mode === BRIDGE_SEATING.CANONICAL
+        ? bridgeDeckAnchor(bridge, HCanonical)
+        : null;
+      const surfaceY = anchor
+        ? displayCanonicalObjectY(seating.canonicalYM, anchor[0], anchor[1])
+        : measuredSurfaceY(bridge, relief);
+      // ONE deck altitude, shared by the ribbon and every structural part below. A measured deck is
+      // one flat absolute altitude everywhere — the ends included. Nothing here bends it.
+      const deckYAt = surfaceY == null ? (x, z) => H(x, z) + lift : () => surfaceY + 0.08;
+      const geometry = ribbonGeometry(bridge.path, Number(bridge.width) || 5, deckYAt, 0);
+      if (!geometry) continue;
+      const mesh = new THREE.Mesh(geometry, materials.road);
+      mesh.name = `bridge:${bridge.name ?? 'bridge'}`;
+      mesh.userData = { surfaceY, evidence: bridge.evidence ?? null };
+      mesh.castShadow = mesh.receiveShadow = true;
+      worldRoot.add(mesh);
+      decks++;
+      triangles += geometryTriangles(geometry);
+
+      const plan = bridgeStructurePlan(bridge, { deckYAt, groundYAt: H });
+      // A ford is a crossing THROUGH the water, so it is counted and never faulted for being under
+      // the surface; a deck that is under it is invisible and is named.
+      const { clearanceM, crossings } = deckWaterClearance(bridge.path, deckYAt, waterSurfacePlans);
+      if (crossings > 0 && clearanceM != null) {
+        if (plan.ford) {
+          if (clearanceM < 0) overWater.fordsBelowSurface += 1;
+        } else {
+          overWater.decks += 1;
+          if (overWater.minClearanceM == null || clearanceM < overWater.minClearanceM) {
+            overWater.minClearanceM = clearanceM;
+            overWater.minClearanceDeck = safeText(bridge.name) || 'bridge';
+          }
+          if (clearanceM <= 0) overWater.submerged.push(safeText(bridge.name) || 'bridge');
+        }
+      }
+      if (plan.ford) { fords++; continue; }
+      const label = safeText(bridge.name) || 'bridge';
+      const fascia = structureMesh(plan.fascia, materials.bridgeEdge, `bridge-fascia:${label}`);
+      if (fascia) { group.add(fascia); fascias++; triangles += geometryTriangles(fascia.geometry); }
+      for (const rail of plan.rails) {
+        const railMesh = structureMesh(rail, materials.bridgeRail, `bridge-rail:${label}:${rail.side}`);
+        if (railMesh) { group.add(railMesh); rails++; triangles += geometryTriangles(railMesh.geometry); }
+      }
+      piers.push(...plan.piers);
+
+      // WHERE THE DECK LANDS. Only a MEASURED deck gets abutments, and that is the guard, not an
+      // oversight — the same guard the abandoned deck ramp needed, for the same reason. A
+      // `terrain-lift` deck already tracks the ground at a constant lift, and a `canonical-game-y`
+      // deck is pinned to its HIGHEST bank by `bridgeDeckAnchor` so its ends are flush already;
+      // building an abutment down to a sampled bed under the Junk Bridge, which clears the river by
+      // 0.48 m, is how that deck goes back under the water and disappears.
+      const approach = seating.mode === BRIDGE_SEATING.MEASURED
+        ? bridgeApproachPlan(bridge, { deckYAt, groundYAt: H })
+        : null;
+      for (const end of approach?.ends ?? []) {
+        if (end.abutment) { abutments.push(end.abutment); triangles += end.abutment.indices.length / 3; }
+        if (end.embankment) { embankments.push(end.embankment); triangles += end.embankment.indices.length / 3; }
+        // The carriageway the embankment carries: the SAME road material the deck is drawn with, so
+        // the road reads as arriving at the bridge rather than as a concrete wedge behind it.
+        const ramp = end.embankment
+          ? ribbonGeometry(end.approachPath, Number(bridge.width) || 5, end.topYAt, BRIDGE_STRUCTURE.approachSurfaceM)
+          : null;
+        if (ramp) {
+          const rampMesh = new THREE.Mesh(ramp, materials.road);
+          rampMesh.name = `bridge-approach:${label}:${end.side}`;
+          rampMesh.castShadow = rampMesh.receiveShadow = true;
+          worldRoot.add(rampMesh);
+          triangles += geometryTriangles(ramp);
+        }
+        approaches.push({
+          bridge: label,
+          side: end.side,
+          gapM: end.gapM,
+          gradePct: end.approachGradePct,
+          lengthM: end.approachLengthM,
+          meetsGrade: end.meetsGrade,
+          residualGapM: end.residualGapM,
+        });
+      }
+    }
+    for (const [name, prisms] of [['bridge-abutments', abutments], ['bridge-embankments', embankments]]) {
+      const geometry = mergedPrismGeometry(prisms);
+      if (!geometry) continue;
+      const mesh = new THREE.Mesh(geometry, materials.pier);
+      mesh.name = name;
+      mesh.castShadow = mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    if (piers.length) {
+      const pierMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.pier, piers.length);
+      pierMesh.name = 'bridge-piers';
+      const dummy = new THREE.Object3D();
+      piers.forEach((pier, index) => {
+        dummy.position.set(...gameToWorld(pier.x, pier.z, (pier.topY + pier.bottomY) / 2));
+        // Same convention as the sleepers: the box is symmetric, so the reflected world basis's
+        // half-turn is immaterial and the game-space heading can be used directly.
+        dummy.rotation.set(0, 0, pier.yaw);
+        dummy.scale.set(pier.depthM, pier.widthM, pier.heightM);
+        dummy.updateMatrix();
+        pierMesh.setMatrixAt(index, dummy.matrix);
+      });
+      pierMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      pierMesh.instanceMatrix.needsUpdate = true;
+      pierMesh.castShadow = pierMesh.receiveShadow = true;
+      pierMesh.computeBoundingSphere();
+      group.add(pierMesh);
+      triangles += 12 * piers.length;
+    }
+    if (group.children.length) worldRoot.add(group);
+    if (overWater.submerged.length) {
+      console.warn('[three-poc] bridge decks are UNDER the water surface and cannot be seen',
+        overWater.submerged, overWater.minClearanceM);
+    }
+    // `approaches` carries the gap each deck end actually had and how far above the ground its
+    // approach still finishes, because `abutments: 2` cannot tell a landed deck from a floating one.
+    bridgeRenderStats = {
+      decks, fords, fascias, rails, piers: piers.length, triangles, overWater,
+      abutments: abutments.length, embankments: embankments.length, approaches,
     };
   }
 
@@ -2148,8 +2450,8 @@ export async function createView3d(container, mapData, src) {
     wallStructureGroup.name = 'wall-structures';
     let triangles = 0;
 
-    // Solid runs come from prop rows and are attached in addProps(), where floor visibility,
-    // hover labels and authored-asset suppression already work. Only the mesh-fill runs — every
+    // Solid runs come from prop rows and are attached in addProps(), where hover labels and
+    // authored-asset suppression already work. Only the mesh-fill runs — every
     // `data.fences` row — are drawn here, batched per class into three draw calls.
     const meshRuns = plan.runs.filter((run) => run.spec.fill === 'mesh');
     const byClass = new Map();
@@ -2196,79 +2498,291 @@ export async function createView3d(container, mapData, src) {
     };
   }
 
+  /**
+   * Buildings, dressed.
+   *
+   * ONE router (`classifyBuilding`) assigns exactly one archetype per building, ONE planner per
+   * archetype returns pure geometry data, and this function is the only place any of it meets
+   * THREE. Everything decided here is decided in `src/building-detail/assemble.js` so it can be
+   * tested without a GPU; what is left below is buffer plumbing.
+   *
+   * Two things that were true before this lane and must stay true: `userData.kind === 'building'`
+   * (the authored-asset suppression walk and the hover label both read it), and exactly
+   * ONE outline per building — built from the shell alone, never over the detail. `EdgesGeometry`
+   * across 8,828 detail triangles emits thousands of segments and reads as hatching; the shell IS
+   * the silhouette, and a roof rib's own edge is sub-pixel at the default view where one pixel is
+   * one metre.
+   */
   function addBuildings() {
     buildingGroup = new THREE.Group();
     buildingGroup.name = 'buildings';
     seatedBuildings = placeBuildings((data.buildings || []).map((building) => ({ ...building, poly: building.poly.map((p) => [...p]) })), H);
-    for (const building of seatedBuildings) {
-      const shape = shapeFromRing(building.poly);
-      if (!shape) continue;
-      const profile = floorResolver.buildingProfile(building, {
-        fallbackBase: building.base,
-        fallbackHeight: building.height,
-      });
-      building._surfaceProfile = profile;
-      const height = profile.height;
-      const openFrame = safeText(building.place).toLowerCase() === 'skeleton' && height >= 8;
-      let mesh;
-      if (openFrame) {
-        const frame = dominantFootprintFrame(building.poly);
-        if (!frame) continue;
-        mesh = buildOpenFrameBuildingAsset(
-          { length: frame.length, width: frame.width, height },
-          materialForBuilding(building, false),
-        );
-        mesh.position.set(...gameToWorld(frame.center[0], frame.center[1], profile.baseY));
-        mesh.rotation.z = frame.yaw;
-        mesh.traverse((node) => {
-          if (!node.isMesh) return;
-          node.castShadow = node.receiveShadow = true;
+    buildingDetail = planBuildingDetail(seatedBuildings, {
+      groundYAt: H,
+      profileFor: (building) => {
+        const profile = floorResolver.buildingProfile(building, {
+          fallbackBase: building.base,
+          fallbackHeight: building.height,
         });
-      } else {
-        const geometry = new THREE.ExtrudeGeometry(shape, {
-          depth: height,
+        building._surfaceProfile = profile;
+        return profile;
+      },
+    });
+    buildingIndexByFeatureId = new Map();
+    buildingProfilesByIndex = new Map();
+    let massTriangles = 0;
+    let detailTriangles = 0;
+    let outlines = 0;
+    let groups = 0;
+
+    for (const row of buildingDetail.rows) {
+      const { building, profile, plan } = row;
+      const height = profile.height;
+      buildingProfilesByIndex.set(row.index, profile);
+      const stableId = building.featureId ?? building.sourceKey ?? null;
+      if (stableId) buildingIndexByFeatureId.set(stableId, row.index);
+
+      // ---- the mass. A planner that REPLACES it (an open frame, a fuel canopy, a lattice pylon)
+      //      gets no extrusion at all: columns inside a solid block are invisible, and a canopy is
+      //      defined by the void under its deck. This is keyed on the ROUTER, which is what retires
+      //      the `place === 'skeleton'` literal that used to be the only way a building was open.
+      let mass = null;
+      let outline = null;
+      if (!row.replacesMass) {
+        const shape = shapeFromRing(building.poly);
+        if (!shape) continue;
+        // `row.massHeightM`, NOT `profile.height`. The planners build their roof forms upward from
+        // the plane they are handed, so the assembler fits the whole plan into the data height and
+        // hands back the eave the roof now lands on; extruding to `profile.height` here would put
+        // the ridge back above it. Standing decision 4 — see item 5 in assemble.js's header.
+        const extrusion = new THREE.ExtrudeGeometry(shape, {
+          depth: row.massHeightM,
           bevelEnabled: true,
           bevelSegments: 1,
           bevelSize: 0.08,
           bevelThickness: 0.08,
           curveSegments: 2,
         });
-        mesh = new THREE.Mesh(geometry, [materialForBuilding(building, true), materialForBuilding(building, false)]);
-        mesh.position.z = profile.baseY;
-        mesh.castShadow = mesh.receiveShadow = true;
-        outlineFor(mesh, materials.outline);
+        // `ExtrudeGeometry` is non-indexed and emits materialIndex 0 for the lids and 1 for the
+        // sides — which is why the pre-lane material array read `[roof, wall]`. Re-labelled here
+        // into the contract's slot numbering so a planner group and a mass group mean the same
+        // thing in one array.
+        mass = {
+          positions: extrusion.attributes.position.array,
+          normals: extrusion.attributes.normal?.array ?? null,
+          groups: extrusion.groups.map((group) => ({
+            start: group.start,
+            count: group.count,
+            materialSlot: group.materialIndex === 0 ? MATERIAL_SLOT_INDEX.roof : MATERIAL_SLOT_INDEX.wall,
+          })),
+        };
+        massTriangles += extrusion.attributes.position.count / 3;
+        outline = new THREE.LineSegments(new THREE.EdgesGeometry(extrusion, 28), materials.outline);
+        outline.renderOrder = 2;
+        outlines += 1;
+        extrusion.dispose();
       }
+
+      const assembled = assembleBuildingGeometry({ mass, detail: plan.mesh, originZ: profile.baseY });
+      if (!assembled.vertices) continue;
+      detailTriangles += row.detailTriangles;
+      groups += assembled.groups.length;
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(assembled.positions, 3));
+      if (assembled.normals) geometry.setAttribute('normal', new THREE.BufferAttribute(assembled.normals, 3));
+      else geometry.computeVertexNormals();
+      for (const group of assembled.groups) geometry.addGroup(group.start, group.count, group.materialSlot);
+      geometry.computeBoundingSphere();
+
+      const mesh = new THREE.Mesh(geometry, buildingSlotMaterials(building));
+      mesh.position.z = profile.baseY;
+      mesh.castShadow = mesh.receiveShadow = true;
+      if (outline) mesh.add(outline);
       mesh.name = safeText(building.place ?? building.name ?? building.kind) || 'building';
       mesh.userData = {
-        kind: 'building', label: mesh.name, stableId: building.featureId ?? building.sourceKey ?? null,
+        kind: 'building', label: mesh.name, stableId,
         floors: profile.floorCount, realHeight: height, surfaceProfile: profile,
-        surfaceStableIds: profile.rows.map((row) => row.stableId).filter(Boolean),
+        surfaceStableIds: profile.rows.map((row2) => row2.stableId).filter(Boolean),
         provisional: !building.featureId,
+        buildingIndex: row.index,
+        archetype: row.classification.archetype,
+        roofForm: row.classification.roofForm,
+        program: row.classification.program,
+        detailSlots: assembled.slots,
       };
       buildingGroup.add(mesh);
 
-      for (const row of profile.floorRows) {
-        const surfaceY = profile.floorYs[row.floorIndex];
+      for (const row2 of profile.floorRows) {
+        const surfaceY = profile.floorYs[row2.floorIndex];
         const floorShape = shapeFromRing(building.poly);
         if (!floorShape || surfaceY == null) continue;
         const slab = new THREE.Mesh(new THREE.ShapeGeometry(floorShape), materials.floorSurface);
         slab.position.z = surfaceY + 0.025;
-        slab.name = `${mesh.name}:floor:${row.floorIndex}`;
+        slab.name = `${mesh.name}:floor:${row2.floorIndex}`;
         slab.receiveShadow = true;
         slab.userData = {
-          kind: 'floor-surface', label: slab.name, floorIndex: row.floorIndex,
-          surfaceY, stableId: row.stableId ?? null,
+          kind: 'floor-surface', label: slab.name, floorIndex: row2.floorIndex,
+          surfaceY, stableId: row2.stableId ?? null,
         };
         buildingGroup.add(slab);
         surfaceRenderStats.floors++;
-        if (row.stableId) surfaceRenderStats.stableIds.push(row.stableId);
+        if (row2.stableId) surfaceRenderStats.stableIds.push(row2.stableId);
       }
       if (profile.measuredRoof) {
         surfaceRenderStats.roofs++;
         if (profile.roofRow?.stableId) surfaceRenderStats.stableIds.push(profile.roofRow.stableId);
       }
     }
+
+    addBuildingDetailInstances();
+    rebuildPlinths();
+
+    // ONLY the numbers that cannot change after the mount. Everything that CAN — the skirt counts,
+    // the draw-call total, the triangle total, how many instances are drawing — is derived at read
+    // time by `buildingStatsNow()`, because a snapshot taken here reported 67 skirts / 756 triangles
+    // forever while `rebuildPlinths()` had already cut the frame to 66 / 748 on a suppression.
+    buildingRenderStats = {
+      ...buildingDetail.stats,
+      groups,
+      outlinesBuilt: outlines,
+      massTriangles,
+      detailTriangles,
+    };
     worldRoot.add(buildingGroup);
+  }
+
+  /**
+   * The buildings' cost as of RIGHT NOW — one call per material group, one per outline, one per
+   * instanced mesh, one for the skirt while there is a skirt to draw.
+   *
+   * Live inputs only: `plinthRenderStats` is reassigned by `rebuildPlinths()` on every change to the
+   * authored ledger, `plinthMesh` is null when the skirt has no geometry left to draw, and
+   * `entry.mesh.count` is what `refreshDetailInstances()` last set. Read at call time, never stored.
+   */
+  function buildingStatsNow() {
+    return buildingRenderStatsNow(buildingRenderStats, {
+      plinths: plinthRenderStats,
+      instancedMeshes: detailInstanceMeshes.length,
+      instancesDrawn: detailInstanceMeshes.reduce((sum, entry) => sum + entry.mesh.count, 0),
+      skirtDrawCalls: plinthMesh ? 1 : 0,
+    });
+  }
+
+  /**
+   * ONE `InstancedMesh` per (family, prototype), for the whole map.
+   *
+   * Not one per family, which is what `contract.js` assumed: measured against the shipped data
+   * `roof-stack` arrives with three distinct unit prototypes, `roof-vent` with three and
+   * `roof-hatch` with two, because different planners size their own. Merging those into one mesh
+   * keeps one shape and silently discards the rest — see `mergeInstancedFamilies`. Eleven meshes,
+   * 195 instances, 2,540 triangles.
+   */
+  function addBuildingDetailInstances() {
+    for (const family of buildingDetail.families) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(family.prototype.positions), 3));
+      geometry.setIndex(new THREE.BufferAttribute(Uint32Array.from(family.prototype.indices), 1));
+      if (family.prototype.normals) {
+        geometry.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(family.prototype.normals), 3));
+      } else {
+        geometry.computeVertexNormals();
+      }
+      const mesh = new THREE.InstancedMesh(geometry, materials[DETAIL_SLOT_MATERIAL[family.materialSlot]], family.count);
+      mesh.name = `building-detail:${family.familyId}:${family.prototypeDigest}`;
+      mesh.castShadow = mesh.receiveShadow = true;
+      // The instances are scattered across the map, so one bounding sphere around all of them is
+      // the whole map: culling it as a unit can only ever remove the roof plant while the roofs
+      // stay, which is worse than not culling 11 small meshes.
+      mesh.frustumCulled = false;
+      mesh.userData = {
+        kind: 'building-detail-instances',
+        familyId: family.familyId,
+        prototypeDigest: family.prototypeDigest,
+        label: null,
+        stableId: null,
+      };
+      const matrices = new Float32Array(family.count * 16);
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      const matrix = new THREE.Matrix4();
+      const axis = new THREE.Vector3(0, 0, 1);
+      for (let index = 0; index < family.count; index++) {
+        position.set(family.offsets[index * 3], family.offsets[index * 3 + 1], family.offsets[index * 3 + 2]);
+        quaternion.setFromAxisAngle(axis, family.yaws[index]);
+        scale.set(family.scales[index * 3], family.scales[index * 3 + 1], family.scales[index * 3 + 2]);
+        matrix.compose(position, quaternion, scale);
+        matrices.set(matrix.elements, index * 16);
+        mesh.setMatrixAt(index, matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      buildingGroup.add(mesh);
+      detailInstanceMeshes.push({ mesh, family, matrices });
+    }
+  }
+
+  /** Which buildings are currently retired in favour of an authored GLB. */
+  function suppressedBuildingIndices() {
+    const out = new Set();
+    for (const [featureId, entry] of suppressedProceduralFeatures) {
+      if (entry.kind !== 'building') continue;
+      const index = buildingIndexByFeatureId.get(featureId);
+      if (index !== undefined) out.add(index);
+    }
+    return out;
+  }
+
+  /**
+   * The skirt, as ONE mesh for all 71 buildings.
+   *
+   * `src/buildings.js` has computed `plinthBase`/`plinthHeight` since 2026-08-30 and `placeBuildings`
+   * has written them onto every row; `grep plinth src/map3d-three.js` returned nothing until now, so
+   * on a cross-slope these buildings had an open gap on their downhill side and no shadow skirt at
+   * all. Drawn UNLIT and near-black exactly as the deck renderer draws it.
+   *
+   * Rebuilt rather than hidden when the authored ledger changes: 67 skirts are 756 triangles, and a
+   * per-building node would cost 67 draw calls to buy a `visible` flag.
+   */
+  function rebuildPlinths() {
+    const data2 = plinthMeshData(buildingDetail?.rows ?? [], suppressedBuildingIndices());
+    plinthRenderStats = { buildings: data2.buildings, triangles: data2.triangles };
+    if (plinthMesh) {
+      plinthMesh.geometry.dispose();
+      plinthMesh.removeFromParent();
+      plinthMesh = null;
+    }
+    if (!data2.triangles) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(data2.positions, 3));
+    geometry.computeBoundingSphere();
+    plinthMesh = new THREE.Mesh(geometry, materials.plinth);
+    plinthMesh.name = 'building-plinths';
+    // Unlit and never a shadow caster: it IS the shadow. `castShadow` would darken the ground it
+    // is trying to explain.
+    plinthMesh.castShadow = false;
+    plinthMesh.receiveShadow = false;
+    plinthMesh.userData = { kind: 'building-plinth', label: null, stableId: null };
+    buildingGroup?.add(plinthMesh);
+  }
+
+  /**
+   * An instance is a separate object: it does not ride its owner's `visible = false`, so the
+   * authored-asset suppression walk has to hide it by owner. That is one pass over `ownerIndex`,
+   * which is exactly why the contract makes that array mandatory.
+   */
+  function refreshDetailInstances() {
+    if (!detailInstanceMeshes.length) return;
+    const suppressed = suppressedBuildingIndices();
+    for (const entry of detailInstanceMeshes) {
+      const visible = visibleInstanceIndices(entry.family, { suppressed });
+      const array = entry.mesh.instanceMatrix.array;
+      for (const [slot, index] of visible.entries()) {
+        array.set(entry.matrices.subarray(index * 16, index * 16 + 16), slot * 16);
+      }
+      entry.mesh.count = visible.length;
+      entry.mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   function propInteractionLabel(prop, assetKind) {
@@ -2538,75 +3052,6 @@ export async function createView3d(container, mapData, src) {
     worldRoot.add(rockGroup);
   }
 
-  function addUnderground() {
-    undergroundGroup = new THREE.Group();
-    undergroundGroup.name = 'underground';
-    const renderedStableIds = new Set();
-    const addSurface = ({ poly, name, profile }) => {
-      const shape = shapeFromRing(poly);
-      if (!shape) return;
-      const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), materials.underground);
-      mesh.position.z = profile.surfaceY + 0.025;
-      mesh.name = safeText(name) || 'underground';
-      mesh.userData = {
-        kind: 'underground', label: mesh.name, surfaceY: profile.surfaceY,
-        stableId: profile.stableId ?? null, measured: profile.measured,
-      };
-      outlineFor(mesh, materials.outline);
-      undergroundGroup.add(mesh);
-      surfaceRenderStats.underground++;
-      if (profile.stableId) {
-        renderedStableIds.add(profile.stableId);
-        surfaceRenderStats.stableIds.push(profile.stableId);
-      }
-    };
-    for (const item of data.underground || []) {
-      const c = centroid(item.poly);
-      const depth = Number(item.depth) || 3;
-      const groundY = H(c[0], c[1]);
-      const profile = floorResolver.undergroundProfile(item, {
-        fallbackY: groundY - depth,
-        fallbackReferenceY: groundY / relief - depth,
-      });
-      addSurface({ poly: item.poly, name: item.name, profile });
-    }
-    for (const surface of floorResolver.measuredBuildingUndergroundSlabs(seatedBuildings)) {
-      if (surface.stableId && renderedStableIds.has(surface.stableId)) continue;
-      addSurface({
-        poly: surface.building.poly,
-        name: `${surface.building.place ?? surface.building.name ?? 'Building'} basement`,
-        profile: { surfaceY: surface.surfaceY, stableId: surface.stableId, measured: true },
-      });
-    }
-    undergroundGroup.visible = floor === 'U';
-    worldRoot.add(undergroundGroup);
-  }
-
-  function applyFloorVisibility() {
-    if (!buildingGroup || !undergroundGroup) return;
-    buildingGroup.visible = floor !== 'U';
-    if (propGroup) propGroup.visible = floor !== 'U';
-    // Fences and gates are surface features; the underground view is not the place for them.
-    if (wallStructureGroup) wallStructureGroup.visible = floor !== 'U';
-    undergroundGroup.visible = floor === 'U';
-    for (const mesh of buildingGroup.children) {
-      if (mesh.userData.kind === 'floor-surface') {
-        mesh.visible = floor === 'all' || mesh.userData.floorIndex <= Number(floor);
-        continue;
-      }
-      if (mesh.userData.kind !== 'building') continue;
-      mesh.visible = true;
-      const height = mesh.userData.realHeight || 1;
-      const shown = visibleBuildingHeight(mesh.userData.surfaceProfile, floor);
-      mesh.scale.z = Math.max(0.04, shown / height);
-    }
-    for (const node of propGroup?.children ?? []) node.visible = true;
-    for (const node of undergroundGroup.children) node.visible = true;
-    for (const node of authoredRoot.children) {
-      node.visible = customsAssetVisibleForFloor(node.userData?.floor, floor);
-    }
-  }
-
   // Procedural features retired by the *current* attachment ledger, keyed by feature ID. The
   // synchronized map is replaceable: when a cell leaves, an LOD fails, or a replacement starts
   // reloading, its procedural node is restored before the next asynchronous loader wait.
@@ -2615,10 +3060,8 @@ export async function createView3d(container, mapData, src) {
 
   function proceduralFeatureNodes(featureId, kind) {
     const nodes = [];
-    const acceptedKinds = kind === 'surface'
-      ? new Set(['floor-surface', 'underground'])
-      : new Set([kind]);
-    for (const group of [buildingGroup, propGroup, undergroundGroup]) {
+    const acceptedKinds = kind === 'surface' ? new Set(['floor-surface']) : new Set([kind]);
+    for (const group of [buildingGroup, propGroup]) {
       group?.traverse?.((node) => {
         if (node === group || node.userData?.stableId !== featureId) return;
         if (!acceptedKinds.has(node.userData?.kind)) return;
@@ -2639,7 +3082,7 @@ export async function createView3d(container, mapData, src) {
   }
 
   function applyProceduralSuppression() {
-    // Restore the last baseline before capturing this floor's baseline. This makes a floor
+    // Restore the last baseline before capturing this one. This makes a world rebuild or a ledger
     // change while suppressed reversible instead of preserving a stale hidden state forever.
     restoreProceduralSuppression();
     for (const [featureId, entry] of suppressedProceduralFeatures) {
@@ -2654,14 +3097,22 @@ export async function createView3d(container, mapData, src) {
       }
       if (records.length) suppressedProceduralNodes.set(featureId, records);
     }
+    // Detail instances and the merged skirt are NOT nodes with a `stableId`, so the walk above
+    // cannot reach them. Without this the roof plant would hover over the Fortress GLB forever and
+    // its skirt would stay under it — the same class of half-applied state as a building mesh that
+    // is hidden while its floor slabs are not. `applyProceduralSuppression` is the one function
+    // both `rebuildWorld` and `syncProceduralSuppression` funnel through, which is why it is here.
+    refreshDetailInstances();
+    syncPlinthSuppression();
     invalidateRender();
   }
 
-  function applyFloor() {
-    restoreProceduralSuppression();
-    applyFloorVisibility();
-    applyProceduralSuppression();
-    invalidateRender();
+  /** Rebuild the merged skirt only when the retired set actually changed. */
+  function syncPlinthSuppression() {
+    const key = [...suppressedBuildingIndices()].sort((a, b) => a - b).join(',');
+    if (key === plinthSuppressionKey) return;
+    plinthSuppressionKey = key;
+    rebuildPlinths();
   }
 
   /** Synchronize, rather than append to, the set justified by the attachment ledger. */
@@ -2691,7 +3142,6 @@ export async function createView3d(container, mapData, src) {
       suppressedProceduralFeatures.set(featureId, { policy, kind });
       applied.push(featureId);
     }
-    applyFloorVisibility();
     applyProceduralSuppression();
     return { applied, retained };
   }
@@ -2740,7 +3190,18 @@ export async function createView3d(container, mapData, src) {
       'canonicalYM',
     );
     floorResolver = createFloorSurfaceResolver(data.floorSurfaces, relief);
-    surfaceRenderStats = { floors: 0, roofs: 0, underground: 0, stableIds: [] };
+    surfaceRenderStats = { floors: 0, roofs: 0, stableIds: [] };
+    // `disposeTree(worldRoot)` above has already released every building geometry; these handles
+    // would otherwise point at disposed buffers and the next suppression pass would write into
+    // them. Cleared here rather than inside `addBuildings` so the state cannot outlive one world.
+    detailInstanceMeshes = [];
+    plinthMesh = null;
+    plinthSuppressionKey = null;
+    plinthRenderStats = { buildings: 0, triangles: 0 };
+    buildingRenderStats = null;
+    buildingDetail = null;
+    buildingIndexByFeatureId = new Map();
+    buildingProfilesByIndex = new Map();
     addTerrain();
     addUnderstory();
     addWater();
@@ -2748,11 +3209,10 @@ export async function createView3d(container, mapData, src) {
     addBuildings();
     addProps();
     addTreesAndRocks();
-    addUnderground();
-    applyFloor();
+    applyProceduralSuppression();
     applyNature();
-    // `applyFloor` also re-applies the synchronized suppression map after rebuilding every
-    // procedural group, so a world refresh cannot resurrect an authored replacement's proxy.
+    // `applyProceduralSuppression` re-applies the synchronized suppression map after rebuilding
+    // every procedural group, so a world refresh cannot resurrect an authored replacement's proxy.
     updateUnderstoryLod();
     invalidateRender();
   }
@@ -2761,6 +3221,9 @@ export async function createView3d(container, mapData, src) {
     const real = look === 'realistic';
     scene.background = new THREE.Color(real ? 0x353d36 : 0x0a100e);
     scene.fog = null;
+    // A MATERIAL change, never a geometry one: the flip "cannot move a vertex" and the skirt's
+    // buffer is built once, in `rebuildPlinths`, from data that has no `look` in it.
+    materials.plinth.color.copy(rgb(plinthColor(look)));
     hemi.intensity = real ? 2.05 : 1.2;
     ambient.intensity = real ? 0.24 : 0.08;
     sun.intensity = real ? 2.65 : 2;
@@ -2804,17 +3267,50 @@ export async function createView3d(container, mapData, src) {
     invalidateRender();
   }
 
-  function makeOverlayItem({ label, x, z, y = null, kind = 'place', markerKind = null, onClick = null, title = '' }) {
+  /*
+   * THE PLACE-NAME LEADER, in the HTML overlay (founder-approved, 2026-09-02).
+   *
+   *     anchor ring at the real position -> hairline stem rising -> cap tick -> the name above it
+   *
+   * `updateOverlayPositions()` anchors every overlay element BOTTOM-CENTRE on its projected point,
+   * so the leader lives in the element's own bottom padding: the box's bottom edge IS the ground
+   * position, the ring sits on it, and the word rides `stemPx` above. Every number — size, weight,
+   * tracking, case, ink, halo, stem length — comes from src/label-tier.js through custom
+   * properties, exactly as in the 2D pass; style.css holds no tier value of its own.
+   *
+   * `zone` has `stemPx: 0` by definition, so it gets no ring, no stem and no cap; its padding
+   * centres the word on the anchor instead, the cartographic convention for a region name.
+   */
+  function placeLabelChrome(element, text, tier) {
+    const s = labelStyleFor(tier);       // THROWS on an unknown tier — deliberately, see label-tier.js
+    element.classList.add(`tier-${tier}`);
+    for (const [prop, value] of Object.entries(labelCssProps(tier))) element.style.setProperty(prop, value);
+    element.textContent = '';
+    const name = document.createElement('span');
+    name.className = 'pl-name';
+    // The tier decides the register; the overlay's CSS `text-transform` does the drawing, so the
+    // text node keeps the real string and a screen reader is not handed shouted capitals.
+    name.textContent = text;
+    element.append(name);
+    if (s.stemPx > 0) for (const cls of LEADER_PIECES) {
+      const piece = document.createElement('i');
+      piece.className = cls;
+      element.append(piece);
+    }
+  }
+
+  function makeOverlayItem({ label, x, z, y = null, kind = 'place', markerKind = null, onClick = null, title = '', tier = null }) {
     if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(z))) return;
     const element = document.createElement(onClick ? 'button' : 'div');
     if (onClick) element.type = 'button';
     element.className = `tz-three-marker tz-three-marker-${kind}`;
     element.textContent = safeText(label);
     element.title = safeText(title || label);
+    if (tier) placeLabelChrome(element, safeText(label), tier);
     if (markerKind) element.dataset.markerKind = markerKind;
     if (onClick) element.addEventListener('click', (event) => { event.stopPropagation(); onClick(); });
     overlay.append(element);
-    overlayItems.push({ element, x: Number(x), z: Number(z), y: Number.isFinite(Number(y)) ? Number(y) : null, kind });
+    overlayItems.push({ element, x: Number(x), z: Number(z), y: Number.isFinite(Number(y)) ? Number(y) : null, kind, tier });
   }
 
   function clearOverlays() {
@@ -2825,7 +3321,7 @@ export async function createView3d(container, mapData, src) {
   function refreshDynamic() {
     clearOverlays();
     disposeTree(dynamicRoot);
-    if (floor !== 'U') for (const callout of TACTICAL_PROP_CALLOUTS) {
+    for (const callout of TACTICAL_PROP_CALLOUTS) {
       const prop = (data.props || []).find((candidate) => candidate.featureId === callout.featureId);
       if (!prop || !Number.isFinite(Number(prop.x)) || !Number.isFinite(Number(prop.z))
         || !withinScope(prop)) continue;
@@ -2838,15 +3334,23 @@ export async function createView3d(container, mapData, src) {
         title: propInteractionLabel(prop, prop.type),
       });
     }
+    /*
+     * THINNING IS NOT DONE HERE. `src.labels()` is main.js's labelSet(), which has already applied
+     * the metres-per-pixel ladder in src/label-tier.js plus the Density override — one ladder for
+     * all three renderers. main.js re-runs it from updateHud(), and this renderer raises
+     * onViewChange on every camera move, so refresh() lands here whenever the tier set changes.
+     */
     for (const label of src.labels?.() || []) {
       const [x, z] = label.position || [];
-      if (withinScope([x, z]) && visibleForFloor(label.floor ?? 'surface', floor)) {
-        makeOverlayItem({ label: label.text ?? label.name, x, z, kind: 'place' });
+      if (withinScope([x, z])) {
+        // tierOf() THROWS on a row with no valid tier: a label that lost its tier must fail where
+        // the bad value is, not quietly inherit one and be believed (handoff §6).
+        makeOverlayItem({ label: label.text ?? label.name, x, z, kind: 'place', tier: labelTierOf(label) });
       }
     }
     for (const marker of src.markers?.() || []) {
       const spec = markerOverlaySpec(marker);
-      if (!spec || !withinScope([spec.x, spec.z]) || !visibleForFloor(spec.level, floor)) continue;
+      if (!spec || !withinScope([spec.x, spec.z])) continue;
       makeOverlayItem({
         ...spec,
         y: spec.y == null
@@ -2857,7 +3361,7 @@ export async function createView3d(container, mapData, src) {
     const questData = src.quests?.() || {};
     for (const sourceZone of questData.zones || []) {
       const zone = questZoneSpec(sourceZone);
-      if (!zone || !visibleForFloor(zone.level, floor) || !zone.outline.some((point) => withinScope(point))) continue;
+      if (!zone || !zone.outline.some((point) => withinScope(point))) continue;
       const shape = shapeFromRing(zone.outline);
       if (!shape) continue;
       const geometry = new THREE.ShapeGeometry(shape);
@@ -2875,7 +3379,7 @@ export async function createView3d(container, mapData, src) {
     }
     for (const point of questData.points || []) {
       const pos = point.pin ?? point.position;
-      if (!pos || !withinScope(pos) || !visibleForFloor(point.level ?? 'surface', floor)) continue;
+      if (!pos || !withinScope(pos)) continue;
       const canonicalPosition = point.position ?? pos;
       const y = displayCanonicalObjectY(
         canonicalPosition.y,
@@ -2941,7 +3445,6 @@ export async function createView3d(container, mapData, src) {
     syncSuppression: syncProceduralSuppression,
     loaderHost: authoredLoaderHost,
     cache: authoredAssetCache,
-    instanceVisible: (instance) => customsAssetVisibleForFloor(instance.floor, floor),
     onChanged: () => invalidateRender(1),
   });
   const updateAuthoredAssetsForTarget = () => {
@@ -3511,7 +4014,7 @@ export async function createView3d(container, mapData, src) {
     }
     treeGroup.userData = exactVegetationGroupUserData(nextPlan);
     addExactVegetationMeshes(nextPlan, treeGroup);
-    applyFloor();
+    applyProceduralSuppression();
     invalidateRender();
   }
 
@@ -3844,11 +4347,6 @@ export async function createView3d(container, mapData, src) {
     renderer: 'three',
     backend: status.backend,
     refresh: refreshDynamic,
-    setFloor: (next) => {
-      floor = next;
-      applyFloor();
-      refreshDynamic();
-    },
     setNature: (next) => { nature = { ...nature, ...next }; applyNature(); updateUnderstoryLod(); },
     setRelief: () => relief,
     setLook: (next) => { look = VALID_LOOK.has(next) ? next : 'realistic'; applyLook(); return look; },
@@ -3890,7 +4388,15 @@ export async function createView3d(container, mapData, src) {
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
       railway: { ...railwayRenderStats },
+      water: { ...waterRenderStats },
+      bridges: { ...bridgeRenderStats, local: localBridgeStatus },
       walls: { ...wallRenderStats, unclassifiedPathProps: [...unclassifiedPathProps] },
+      // The building-detail lane's cost, counted from the objects that were built. `drawCalls.after`
+      // is groups + outlines + instanced meshes + the one merged skirt; `before` is what the
+      // pre-lane renderer drew for the same rows (two material groups and one outline each, and one
+      // group with no outline for the row that took the `place === 'skeleton'` open-frame literal).
+      // Floor slabs are in neither and are reported by `floorSurfaces`.
+      buildings: buildingStatsNow(),
       provisional: true,
     }),
     diagnostics: () => ({
@@ -3902,7 +4408,13 @@ export async function createView3d(container, mapData, src) {
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
       railway: { ...railwayRenderStats },
+      water: { ...waterRenderStats },
+      bridges: { ...bridgeRenderStats, local: localBridgeStatus },
       walls: { ...wallRenderStats, unclassifiedPathProps: [...unclassifiedPathProps] },
+      buildings: buildingStatsNow(),
+      buildingArchetypes: buildingDetail
+        ? { ...buildingDetail.byArchetype, roofForms: { ...buildingDetail.roofCensus }, programs: { ...buildingDetail.programCensus } }
+        : null,
     }),
     dispose: () => {
       stopped = true;

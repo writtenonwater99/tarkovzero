@@ -4,7 +4,7 @@
  *
  * Codex's finding #2 asked for a 5-user click-prototype falsification test. That was declined —
  * there are no test users — and the falsifier put in its place was a founder walkthrough of one
- * chain: *find an extract → select a quest → adjust a layer → inspect a photo card → switch floor*.
+ * chain: *find an extract → select a quest → adjust a layer → inspect a photo card → step 6*.
  * A falsifier nobody runs is not a falsifier, so this script runs that chain on every build against
  * the real UI: a production `dist`, served by `vite preview`, driven in headless Chromium over CDP.
  *
@@ -449,18 +449,34 @@ async function main() {
       return { clickedAt: hitAt, badge: p.badge, card, avoidRect: safe };
     });
 
-    /* -- 6 ------------------------------------------------------------ ']' steps a floor -- */
-    await step(page, "6. ']' switches floor — #floors active cell moves", 'floor-step', async () => {
+    /* -- 6 ------------------------------------------------- the floor selector is retired -- */
+    // This step used to press ']' and watch the #floors active cell move. The whole selector went
+    // out on 2026-09-02 (founder: "floor system fully out the project"), so the step now asserts it
+    // is GONE from the running page — markup, keyboard, omnibox command and renderer API. A step
+    // that was simply deleted would have left the walkthrough green if any of those came back.
+    await step(page, '6. the floor selector is gone from the live page', 'floor-retired', async () => {
       await blur(page);
-      const before = await page.evaluate(`document.querySelector('#floors .seg-cell.on')?.dataset.floor ?? null`);
-      assert(before !== null, 'no active cell in #floors');
+      const dom = await page.evaluate(`({
+        rail: document.querySelectorAll('#floors, .tb-floors, [data-floor]').length,
+        api: typeof window.tz.setFloor,
+        shortcut: (document.getElementById('hint3d')?.textContent ?? '').includes('Step floors'),
+      })`);
+      assert(dom.rail === 0, `the floor rail is still in the DOM (${dom.rail} nodes)`);
+      assert(dom.api === 'undefined', `window.tz.setFloor is still ${dom.api}`);
+      assert(!dom.shortcut, 'the help sheet still advertises the floor shortcut');
+      // ']' must be inert, not merely unbound to a rail that no longer exists: the camera may not
+      // move and nothing may toast about a floor.
+      const camBefore = await page.evaluate('window.tz.camera');
       await page.key(']');
-      await sleep(700);
-      const after = await page.evaluate(`document.querySelector('#floors .seg-cell.on')?.dataset.floor ?? null`);
-      assert(after !== before, `the active floor cell did not move (still "${before}")`);
-      const onCount = await page.evaluate(`document.querySelectorAll('#floors .seg-cell.on').length`);
-      assert(onCount === 1, `${onCount} floor cells are active at once`);
-      return { before, after };
+      await sleep(400);
+      const camAfter = await page.evaluate('window.tz.camera');
+      assert(near(camAfter.zoom, camBefore.zoom, 1e-6), `']' moved the camera: ${camBefore.zoom} → ${camAfter.zoom}`);
+      const toast = await page.evaluate(`(document.getElementById('toast')?.textContent ?? '').trim()`);
+      assert(!/floor/i.test(toast), `']' still says something about floors: "${toast}"`);
+      // …and the storey articulation the selector was NOT is still on screen.
+      const bands = await page.evaluate('window.tz.renderStats()?.buildings?.detailTriangles ?? null');
+      assert(bands === null || bands > 0, `the building detail lane stopped drawing (${bands})`);
+      return { rail: dom.rail, keyInert: true, detailTriangles: bands };
     });
 
     /* -- 7 --------------------------------------------- Esc peels transient, keeps pinned -- */
@@ -540,12 +556,196 @@ async function main() {
       return { twoDShot: flat, zoom: { before: before.zoom, after: after.zoom }, frameMean: Number(stats.mean.toFixed(1)) };
     });
 
-    /* -- 9 ------------------------------------------- the page threw nothing along the way -- */
+    /* -- 9 ----------------------------- the assistant panel: upper-left, and structural -- */
+    // Founder, 2026-09-02: "move the AI chat to there" (a box drawn in the upper-left of the map),
+    // "also shows a picture in the chat", "this quest is on woods, want to move to that map? option".
+    //
+    // The model boundary is STUBBED here — `window.fetch` returns a canned envelope for
+    // /api/assistant only, so this step never needs a key, a network or DeepSeek. Everything after
+    // that is the real client: the real omnibox route, the real contract validation, the real panel.
+    await step(page, '9. `?` answers into the upper-left panel — buttons from actions, photos, stale is inert', 'assistant-panel', async () => {
+      await blur(page);
+      // One real Customs quest slug, so the stale half below has something it COULD have selected.
+      const slug = await page.evaluate(`(async () => {
+        const all = await window.tz.quests.all();
+        const q = all.find((x) => (x.siteMaps ?? []).includes('customs') && (x.objectives ?? []).length);
+        return q ? q.slug : null;
+      })()`, { awaitPromise: true });
+      assert(slug, 'no Customs quest in quests.json to build the stale envelope from');
+
+      await page.evaluate(`(() => {
+        const real = window.fetch.bind(window);
+        window.__ask = { calls: 0, reply: null, sent: null };
+        window.fetch = (url, init) => {
+          if (String(url).includes('/api/assistant')) {
+            window.__ask.calls += 1;
+            try { window.__ask.sent = JSON.parse(init.body); } catch { window.__ask.sent = null; }
+            return Promise.resolve({ ok: true, status: 200, json: async () => window.__ask.reply });
+          }
+          return real(url, init);
+        };
+        // The prose PROMISES a map switch in words. Whether a button appears is decided by the
+        // envelope's actions and nothing else — that is what the first half of this step asserts.
+        const prose = 'The sawmill is in the middle of the map.\\n\\nThis quest is on **Woods** — want to move to that map? Switch to Woods and I will mark it.';
+        const shots = [0, 1].map((i) => ({
+          id: 'img' + (i + 1),
+          url: 'https://static.wikia.nocookie.net/tarkovzero-e2e-no-such-image/' + i + '.png',
+          caption: 'Screenshot ' + (i + 1), depicts: 'The sawmill, shot ' + (i + 1), map: 'woods',
+          questSlug: 'the-punisher-part-4', questName: 'The Punisher - Part 4', objectiveId: null,
+          credit: 'EFT Wiki (CC BY-NC-SA)',
+        }));
+        window.__envelopes = {
+          // (a) prose begs for a switch, envelope carries NO actions -> zero buttons
+          proseOnly: { protocol: 2, map: 'customs', answer: prose, actions: [], images: [], imageIndexOk: true, quests: [], sources: [
+            { slug: 'the-punisher-part-4', name: 'The Punisher - Part 4', trader: 'Prapor', wikiLink: null, maps: ['woods'], siteMaps: ['woods'] },
+          ] },
+          // (b) the same prose WITH the action -> exactly the buttons the actions describe
+          withActions: { protocol: 2, map: 'customs', answer: prose, imageIndexOk: true, quests: [], images: shots,
+            actions: [
+              { type: 'switchMap', map: 'woods', label: 'Woods', slug: 'the-punisher-part-4', name: 'The Punisher - Part 4', objectiveId: null },
+              { type: 'showImages', imageIds: ['img1', 'img2'] },
+            ],
+            sources: [{ slug: 'the-punisher-part-4', name: 'The Punisher - Part 4', trader: 'Prapor', wikiLink: null, maps: ['woods'], siteMaps: ['woods'] }] },
+          // (c) an answer that outlived a map switch: echoes woods while the tab is on customs
+          stale: { protocol: 2, map: 'woods', answer: 'Here it is on Woods.', imageIndexOk: true, quests: [], images: [], sources: [],
+            actions: [{ type: 'selectQuest', slug: ${JSON.stringify(slug)}, name: 'A quest' }] },
+        };
+        return true;
+      })()`);
+
+      /* (a) --------------------------------------------- prose is not a button source -- */
+      await page.evaluate('window.__ask.reply = window.__envelopes.proseOnly');
+      await omni(page, '?where is the sawmill');
+      await page.waitFor('!document.getElementById("panel-ask").hidden', { timeout: 8000, label: 'the assistant panel' });
+      await page.waitFor('document.querySelectorAll("#ask-log .ask-msg").length >= 3', { timeout: 8000, label: 'the answer' });
+      const a = await page.evaluate(`(() => {
+        const log = document.getElementById('ask-log');
+        const last = log.querySelector('.ask-msg:last-child');
+        return {
+          asked: [...log.querySelectorAll('.ask-user')].map((n) => n.textContent.trim()),
+          buttons: [...last.querySelectorAll('.ask-act')].map((b) => b.textContent.trim()),
+          prose: last.querySelector('.ask-prose')?.textContent ?? '',
+          sources: [...last.querySelectorAll('.ask-src')].map((n) => n.textContent.replace(/\\s+/g, ' ').trim()),
+        };
+      })()`);
+      assert(a.asked.includes('where is the sawmill'), `the question did not reach the panel: ${JSON.stringify(a.asked)}`);
+      assert(/want to move to that map/.test(a.prose), 'the answer prose was not rendered');
+      assert(a.buttons.length === 0, `the prose alone produced buttons: ${JSON.stringify(a.buttons)}`);
+      // …and the panel still looks finished: the source line says where the quest actually is.
+      assert(a.sources.length === 1 && /Woods/.test(a.sources[0]), `no honest source line: ${JSON.stringify(a.sources)}`);
+
+      /* (b) ------------------------------------- the same prose, now WITH the action -- */
+      await page.evaluate('window.__ask.reply = window.__envelopes.withActions');
+      await omni(page, '?and on which map is it');
+      await page.waitFor('document.querySelectorAll("#ask-log .ask-msg").length >= 5', { timeout: 8000, label: 'the second answer' });
+      const b = await page.evaluate(`(() => {
+        const last = document.getElementById('ask-log').querySelector('.ask-msg:last-child');
+        return {
+          buttons: [...last.querySelectorAll('.ask-act')].map((x) => x.textContent.trim()),
+          figures: last.querySelectorAll('figure.ask-shot').length,
+          imgs: [...last.querySelectorAll('img')].map((i) => ({ lazy: i.getAttribute('loading'), ref: i.getAttribute('referrerpolicy'), alt: i.getAttribute('alt') })),
+          credit: last.querySelector('.ask-credit')?.textContent ?? '',
+        };
+      })()`);
+      assert(b.buttons.length === 2 && /Switch to Woods/.test(b.buttons[0]),
+        `buttons do not match the envelope's actions: ${JSON.stringify(b.buttons)}`);
+      assert(b.figures === 2, `expected the envelope's two photos, got ${b.figures}`);
+      assert(b.imgs.every((i) => i.lazy === 'lazy' && i.ref === 'no-referrer' && i.alt),
+        `an image shipped without lazy/no-referrer/alt: ${JSON.stringify(b.imgs)}`);
+      assert(/EFT Wiki/.test(b.credit), 'the wiki credit is missing from the photo strip');
+      // Offering the switch is not taking it: the page must still be on Customs.
+      assert(await page.evaluate('window.tz.map') === 'customs', 'a switchMap button performed itself');
+
+      /* (b2) ------------------------------- a photo that fails to load leaves nothing -- */
+      // The real onerror handler, fired without waiting on a network the harness does not have.
+      await page.evaluate(`(() => { for (const i of document.querySelectorAll('#ask-log img')) i.onerror(); return true; })()`);
+      const broken = await page.evaluate(`(() => {
+        const log = document.getElementById('ask-log');
+        return {
+          figures: log.querySelectorAll('figure').length,
+          imgs: log.querySelectorAll('img').length,
+          strips: log.querySelectorAll('.ask-shots').length,
+          note: log.querySelector('.ask-shots-note')?.textContent ?? '',
+        };
+      })()`);
+      assert(broken.figures === 0 && broken.imgs === 0, `a broken image left ${broken.figures} frame(s) behind`);
+      assert(broken.strips === 0, 'an empty picture strip is still on screen');
+      assert(/could not be loaded/i.test(broken.note), `nothing said the screenshots failed: "${broken.note}"`);
+      assert(!/\bno (photos|images|screenshots)\b/i.test(broken.note), `a failed LOAD was reported as "no photos": "${broken.note}"`);
+
+      /* (c) ------------------------------------------- a stale answer is never replayed -- */
+      const beforeSel = await page.evaluate('window.tz.quests.selected()');
+      const beforeCam = await page.evaluate('window.tz.camera');
+      await page.evaluate('window.__ask.reply = window.__envelopes.stale');
+      await omni(page, '?what about woods');
+      await page.waitFor('document.querySelectorAll("#ask-log .ask-msg").length >= 7', { timeout: 8000, label: 'the stale answer' });
+      await sleep(600);
+      const c = await page.evaluate(`(() => {
+        const last = document.getElementById('ask-log').querySelector('.ask-msg:last-child');
+        return {
+          buttons: last.querySelectorAll('.ask-act').length,
+          stale: last.querySelectorAll('.ask-stale').length,
+          note: last.querySelector('.ask-stale')?.textContent ?? '',
+          selected: window.tz.quests.selected(),
+          map: window.tz.map,
+        };
+      })()`);
+      const afterCam = await page.evaluate('window.tz.camera');
+      assert(c.buttons === 0, `a stale answer offered ${c.buttons} button(s) to replay`);
+      assert(c.stale === 1 && /Woods/.test(c.note) && /Customs/.test(c.note), `the stale answer does not name both maps: "${c.note}"`);
+      assert(JSON.stringify(c.selected) === JSON.stringify(beforeSel),
+        `a stale answer selected a quest: ${JSON.stringify(beforeSel)} → ${JSON.stringify(c.selected)}`);
+      assert(near(afterCam.zoom, beforeCam.zoom, 1e-6) && near(afterCam.target[0], beforeCam.target[0], 0.01),
+        `a stale answer moved the camera: ${JSON.stringify(beforeCam)} → ${JSON.stringify(afterCam)}`);
+
+      /* (d) --------------------- it sits in the upper-left, OUTSIDE the reader's rect -- */
+      const geo = await page.evaluate(`(() => {
+        const s = document.getElementById('stage').getBoundingClientRect();
+        const p = document.getElementById('panel-ask').getBoundingClientRect();
+        return {
+          stage: { w: s.width, h: s.height },
+          panel: { left: p.left - s.left, right: p.right - s.left, top: p.top - s.top, bottom: p.bottom - s.top, w: p.width, h: p.height },
+          avoid: window.tz.avoidRect(), fit: window.tz.safeRect(),
+        };
+      })()`);
+      assert(geo.panel.w > 200 && geo.panel.h > 120, `the panel has no box: ${JSON.stringify(geo.panel)}`);
+      assert(geo.panel.left < geo.stage.w * 0.25 && geo.panel.top < geo.stage.h * 0.35,
+        `the panel is not in the upper-left: ${JSON.stringify(geo.panel)} of ${JSON.stringify(geo.stage)}`);
+      // avoidRect() owns everything reader-facing (label seating, the quest card, fly-to
+      // recentring). If it does not start to the RIGHT of this panel, the map believes labels are
+      // visible underneath the conversation.
+      assert(geo.avoid.left >= geo.panel.right - 1,
+        `avoidRect starts at ${geo.avoid.left} but the panel reaches ${geo.panel.right} — labels would be seated behind it`);
+      // …and it is NOT an inset on the fit: panels float, they never shrink the map (QA H4).
+      assert(geo.fit.left <= 1, `the assistant panel took ${geo.fit.left}px off the FIT rect`);
+
+      /* (e) --------------------------------- closing gives the left edge back; the button -- */
+      await page.evaluate(`window.tz.panel.close('ask')`);
+      await sleep(350);
+      const closed = await page.evaluate(`({ hidden: document.getElementById('panel-ask').hidden, avoid: window.tz.avoidRect() })`);
+      assert(closed.hidden, 'closing the assistant panel left it on screen');
+      assert(closed.avoid.left < geo.avoid.left - 20,
+        `closing the panel did not give the left edge back (${geo.avoid.left} → ${closed.avoid.left})`);
+      await clickEl(page, `document.getElementById('tb-ask')`);
+      await sleep(350);
+      assert(await page.evaluate(`window.tz.panel.isOpen('ask')`), 'the toolbar button did not reopen the conversation');
+
+      return {
+        questionsAsked: await page.evaluate('window.__ask.calls'),
+        proseOnlyButtons: a.buttons.length,
+        withActionsButtons: b.buttons,
+        brokenImageNote: broken.note,
+        staleButtons: c.buttons,
+        panel: geo.panel, avoidRect: geo.avoid, fitRect: geo.fit,
+      };
+    });
+
+    /* -- 10 ------------------------------------------ the page threw nothing along the way -- */
     // The chain above drives the real app for a couple of minutes; every uncaught exception and
     // console error it produced is already in `pageLog`. It used to be collected and then only ever
     // printed when some *other* assertion had already failed — a page throwing on every frame could
     // walk the whole chain and report PASS. This is the assertion that arms it.
-    await step(page, '9. no page console errors during the walkthrough', 'console-clean', async () => {
+    await step(page, '10. no page console errors during the walkthrough', 'console-clean', async () => {
       // Deduped: one broken frame can log the same line hundreds of times.
       const seen = [...new Set(pageLog)];
       assert(seen.length === 0, `${pageLog.length} console error(s) during the run:\n    ${seen.slice(0, 8).join('\n    ')}`);

@@ -17,7 +17,6 @@ import {
   customsAssetAxisMatrix,
   customsAssetLinearMatrix,
   customsAssetRotationMatrix,
-  customsAssetVisibleForFloor,
   customsAssetWorldPosition,
   selectLodLevel,
 } from '../src/customs-asset-runtime.js';
@@ -582,15 +581,17 @@ test('customsAssetWorldPosition matches the renderer gameToWorld mapping', () =>
   assert.deepEqual(customsAssetWorldPosition({ x: 0, y: 0, z: 0 }), [-0, -0, 0]);
 });
 
-test('authored floor tags follow the all/numbered/underground selector', () => {
-  assert.equal(customsAssetVisibleForFloor('ground', 'all'), true);
-  assert.equal(customsAssetVisibleForFloor('floor-2', 'all'), true);
-  assert.equal(customsAssetVisibleForFloor('underground', 'all'), false);
-  assert.equal(customsAssetVisibleForFloor('underground', 'U'), true);
-  assert.equal(customsAssetVisibleForFloor('ground', 'U'), false);
-  assert.equal(customsAssetVisibleForFloor('ground', '0'), true);
-  assert.equal(customsAssetVisibleForFloor('floor-1', '0'), false);
-  assert.equal(customsAssetVisibleForFloor('floor-1', '1'), true);
-  assert.equal(customsAssetVisibleForFloor('floor-3', '2'), false);
-  assert.equal(customsAssetVisibleForFloor('roof', '3'), false);
+test('the authored floor-tag selector predicate is gone, but the manifest tag is not', async () => {
+  // `customsAssetVisibleForFloor` existed only to map an instance's manifest `floor` tag onto the
+  // renderer's all/0/1/2/3/U rail. The rail went out on 2026-09-02 (founder: "floor system fully
+  // out the project") and the predicate went with it — asserted ABSENT, because a predicate left
+  // behind unused is a hidden feature, not a removed one.
+  const runtime = await import('../src/customs-asset-runtime.js');
+  assert.equal(runtime.customsAssetVisibleForFloor, undefined);
+  // The manifest SCHEMA keeps its floor tag: it is authoring metadata that says which storey a GLB
+  // was authored for, it is validated against the asset's own `masks.floors`, and it is what a
+  // future interior pass would key on. It is not a filter and nothing filters on it now.
+  const manifest = await import('../src/customs-asset-manifest.js');
+  assert.deepEqual(manifest.CUSTOMS_ASSET_ENUMS.floorTags,
+    ['terrain', 'ground', 'floor-1', 'floor-2', 'floor-3', 'roof', 'underground']);
 });

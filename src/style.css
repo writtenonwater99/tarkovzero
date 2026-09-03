@@ -2,7 +2,7 @@
    TarkovZero — floating HUD. The map is edge-to-edge; every control floats.
    Chips (top-left id/status, top-right view), a right icon toolbar with a dock
    column of panels beside it, an omnibox bottom-centre, telemetry bottom-left.
-   Type: Barlow Condensed (display) / Barlow (body) / JetBrains Mono (numbers).
+   Type: IBM Plex Sans Condensed (display) / Barlow (body) / JetBrains Mono (numbers).
    Desktop only — mobile was dropped 2026-08-29.
 --------------------------------------------------------------------------- */
 :root{
@@ -28,7 +28,11 @@
   --tb-btn:38px; --tb-gap:6px; --dock-w:360px; --dock-top:58px; --dock-bottom:104px;
   --r-sm:3px; --r-md:5px; --r-lg:8px; --r-pill:999px;
   /* type */
-  --f-display:'Barlow Condensed','Arial Narrow',system-ui,sans-serif;
+  /* The display face. Changed Barlow Condensed -> IBM Plex Sans Condensed on 2026-09-02, together
+     with the place-label leader lines. The fallback chain is the SAME one src/icons.js pins into
+     badgeSvg() and map3d.js hands the deck TextLayer atlas, so a machine without the webfont draws
+     one substitute face everywhere instead of three different ones. */
+  --f-display:'IBM Plex Sans Condensed','Arial Narrow',system-ui,sans-serif;
   --f-body:'Barlow',system-ui,-apple-system,sans-serif;
   --f-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
   --fs-title:22px; --fs-body:13.5px; --fs-cap:11px; --fs-num:11px; --fs-micro:10.5px;
@@ -73,7 +77,28 @@ body.view-3d #map3d{display:block}
   font:700 10px/1.15 var(--f-display);letter-spacing:.045em;text-transform:uppercase;white-space:nowrap;
   text-shadow:0 1px 2px #000;box-shadow:0 2px 5px rgba(0,0,0,.42);will-change:transform}
 button.tz-three-marker{appearance:none;cursor:pointer;pointer-events:auto}
-.tz-three-marker-place{padding:0;background:transparent;border:0;box-shadow:none;font-size:12px;text-shadow:0 1px 2px #000,0 0 4px #000}
+/* Three's place names wear the SAME leader as the 2D map and the deck diorama: ring / stem / cap /
+   name, with every number coming from src/label-tier.js through inline custom properties (see
+   map3d-three.js makeOverlayItem). The overlay element is anchored bottom-centre on the projected
+   ground point (updateOverlayPositions writes `translate(-50%,-100%)`), so the stem lives in the
+   box's own bottom padding and the anchor is the box's bottom edge — the word rides above it and
+   the ring sits exactly on the position. `zone` has no leader; its padding centres the word on the
+   anchor instead, the same region-name convention the 2D pass uses. */
+.tz-three-marker-place{padding:0 0 var(--stem,0px);background:transparent;border:0;box-shadow:none;
+  --ink:var(--ink-dark);--halo:var(--halo-dark);color:var(--ink);
+  font-weight:var(--fw,700);font-size:var(--fs,12px);letter-spacing:var(--ls,.045em);text-transform:var(--tt,uppercase);
+  text-shadow:0 0 var(--halo-px,2px) var(--halo),0 1px var(--halo-px,2px) var(--halo),
+    1px 0 var(--halo-px,2px) var(--halo),-1px 0 var(--halo-px,2px) var(--halo)}
+.tz-three-marker-place.tier-zone{padding-bottom:.62em}
+.tz-three-marker-place .pl-ring,.tz-three-marker-place .pl-stem,.tz-three-marker-place .pl-cap{
+  position:absolute;left:50%;filter:drop-shadow(0 0 1.5px var(--halo))}
+.tz-three-marker-place .pl-ring{bottom:0;width:7px;height:7px;margin:0;transform:translate(-50%,50%);
+  border:1.5px solid var(--ink);border-radius:50%;background:none;opacity:.8}
+.tz-three-marker-place .pl-stem{bottom:0;width:1px;height:var(--stem);transform:translateX(-.5px);
+  background:var(--ink);
+  background:linear-gradient(to top,var(--ink),color-mix(in srgb,var(--ink) 32%,transparent));opacity:.85}
+.tz-three-marker-place .pl-cap{bottom:var(--stem);width:10px;height:1px;transform:translateX(-50%);
+  background:var(--ink);opacity:.9}
 .tz-three-marker-marker{border-color:rgba(230,227,215,.34);color:var(--cream)}
 .tz-three-marker-extract{border-color:rgba(45,190,108,.62);color:#8df0bb}
 .tz-three-marker-extract.focused{background:rgba(30,138,78,.52);border-color:var(--acc)}
@@ -134,8 +159,6 @@ body.view-3d .line.only-2d{display:none}
 body.view-3d .line-note.only-3d{display:block}
 .tb-btn.only-3d{display:none}
 body.view-3d .tb-btn.only-3d{display:grid}
-.tb-floors.only-3d{display:none}
-body.view-3d .tb-floors.only-3d{display:flex}
 
 /* ---------- floating chips (top strip) ---------- */
 .chipbar{position:absolute;top:var(--edge);z-index:600;display:flex;align-items:flex-start;gap:8px}
@@ -153,7 +176,7 @@ body.view-3d .tb-floors.only-3d{display:flex}
 .chip-status{position:relative;height:46px}
 
 /* width:max-content so the title sizes to itself — the chip grows, the name never ellipsises
-   just because a fallback font is wider than Barlow Condensed */
+   just because a fallback font is wider than IBM Plex Sans Condensed */
 .head-id{position:relative;width:max-content;max-width:280px}
 .wordmark{font:500 9.5px/1 var(--f-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--text-ghost)}
 .map-title{margin:1px 0 0;font:inherit;width:max-content;max-width:100%}
@@ -267,27 +290,20 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .tb-hud .tb-btn:first-child{border-radius:var(--r-md) var(--r-md) 0 0}
 .tb-hud .tb-btn:last-child{border-radius:0 0 var(--r-md) var(--r-md)}
 
-/* floors: a vertical stack under the HUD buttons, 3D only.
-   Bare letters floating on the map edge read as a rendering glitch, not a control (Gemini,
-   2026-08-29), so the whole stack lives in one translucent pill on the same surface as the toolbar
-   buttons — and it stays exactly --tb-btn wide so its right edge lines up with them. The active
-   floor is a filled cream cell: a 2 px accent rule is a hint, and which floor you are on is a fact. */
-.tb-floors{align-items:stretch;flex-direction:column;gap:5px;width:var(--tb-btn);padding:6px 5px 5px;
-  background:var(--glass);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
-  border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-hud)}
-.tb-floors-cap{width:100%;text-align:center;font:600 9px/1 var(--f-mono);letter-spacing:.14em;color:var(--text-mute)}
-.seg-v{flex-direction:column;height:auto;width:100%;background:transparent;backdrop-filter:none;
-  -webkit-backdrop-filter:none;border:0;border-radius:0;box-shadow:none;gap:1px}
-.seg-v .seg-cell{height:22px;padding:0;border:0;border-radius:var(--r-sm);font-size:11px;color:var(--text-mute)}
-.seg-v .seg-cell:hover{color:var(--text);background:rgba(255,255,255,.05)}
-.seg-v .seg-cell.on{background:var(--cream);color:var(--bg-app);font-weight:700;box-shadow:none}
-.seg-v .seg-cell.on:hover{background:var(--cream);color:var(--bg-app)}
-
 /* ---------- dock column ---------- */
 #dock{position:absolute;right:calc(var(--edge) + var(--tb-btn) + 10px);top:var(--dock-top);bottom:var(--dock-bottom);
   width:min(var(--dock-w),calc(100vw - 140px));z-index:590;display:flex;flex-direction:column;align-items:stretch;
   gap:8px;pointer-events:none}
 #dock > .panel{pointer-events:auto}
+/* The LEFT column (2026-09-02): the assistant, in the upper-left of the map where the founder drew
+   it. Same top as the right dock — i.e. clear of the id/status chip band — and the same bottom, so
+   it never reaches the coords/scale chips. shell.js insets avoidRect()'s LEFT edge while anything
+   here is open, which is what keeps place labels, the quest card and every fly-to out from behind
+   it (the mirror image of what the right dock already gets). */
+#dock-left{position:absolute;left:var(--edge);top:var(--dock-top);bottom:var(--dock-bottom);
+  width:min(var(--dock-w),calc(100vw - 160px));z-index:590;display:flex;flex-direction:column;align-items:stretch;
+  gap:8px;pointer-events:none}
+#dock-left > .panel{pointer-events:auto}
 .panel{display:flex;flex-direction:column;min-height:0;flex:0 1 auto;overflow:hidden;
   background:var(--panel-flat);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel)}
 .panel-hd{display:flex;align-items:center;gap:8px;height:32px;flex:none;padding:0 6px 0 11px;
@@ -381,34 +397,28 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
   font:700 8.5px/1 var(--f-mono);letter-spacing:.04em}
 .res-ask.act{background:rgba(45,190,108,.14)}
 
-/* ---------- assistant card (above the omnibox) ---------- */
-.askcard{margin:0 0 7px;display:flex;flex-direction:column;min-height:0;max-height:40vh;overflow:hidden;
-  background:var(--panel-flat);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel)}
-.askcard-hd{display:flex;align-items:center;gap:7px;height:28px;flex:none;padding:0 5px 0 10px;
-  border-bottom:1px solid var(--line-soft);background:var(--panel-tint)}
-.askcard-ico{color:var(--acc);flex:none}
-.askcard-name{font:600 var(--fs-cap)/1 var(--f-display);text-transform:uppercase;letter-spacing:var(--ls-cap);color:var(--text-dim)}
-.askcard-hist{margin-left:auto;height:19px;font-size:10px;padding:0 6px}
-.askcard-hist[aria-pressed=true]{color:var(--acc);border-color:var(--acc-dim)}
-.askcard-x{appearance:none;background:none;border:0;cursor:pointer;width:20px;height:20px;flex:none;display:grid;
-  place-items:center;border-radius:var(--r-sm);color:var(--text-ghost);font-size:11px;line-height:1}
-.askcard-x:hover{color:var(--text);background:var(--panel-hi)}
-.askcard .ask-log{max-height:none;flex:1 1 auto;min-height:0;padding:8px 10px 0}
-/* the card shows the current exchange; "↑ History" flips the last five into view */
-.askcard .ask-log > .ask-msg{display:none}
-.askcard .ask-log > .ask-msg:nth-last-child(-n+2){display:block}
-.askcard.show-history .ask-log > .ask-msg:nth-last-child(-n+10){display:block}
-.askcard .ask-chips,.askcard .ask-acts{flex:none;padding:0 10px}
-.askcard .ask-chips{margin-top:6px}
-.askcard .ask-foot{flex:none;padding:6px 10px 7px;margin-top:6px;border-top:1px solid var(--line-soft)}
+/* ---------- action buttons inside an answer ---------- */
 .ask-acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .ask-acts:empty,.ask-chips:empty{display:none}
 .ask-act{appearance:none;background:var(--panel-hi);border:1px solid var(--line);border-radius:var(--r-sm);
-  height:24px;padding:0 9px;cursor:pointer;color:var(--text);font:600 11px/1 var(--f-display);
-  letter-spacing:var(--ls-btn);text-transform:uppercase;transition:border-color var(--t-fast),color var(--t-fast)}
+  min-height:24px;padding:4px 9px;cursor:pointer;color:var(--text);font:600 11px/1.2 var(--f-display);
+  letter-spacing:var(--ls-btn);text-transform:uppercase;text-align:left;
+  transition:border-color var(--t-fast),color var(--t-fast)}
 .ask-act:hover{border-color:var(--acc-dim);color:var(--cream)}
-.ask-act-map{border-color:var(--warn);color:#F0B36B}     /* never automatic — a click, always */
-.ask-act-undo{margin-left:auto;color:var(--text-mute);background:transparent}
+/* the founder's headline case: "this quest is on woods, want to move to that map?" — it reloads the
+   page, so it is the one button that is warned about and never fired on its own */
+.ask-act-map{border-color:var(--warn);color:#F0B36B}
+.ask-act-shots.on{border-color:var(--acc-dim);color:var(--cream)}
+/* Restore is the omnibox's undo, not one of the envelope's actions — a different class on purpose,
+   because `.ask-act` is what the tests count when they assert buttons come from `actions` alone. */
+.ask-undo{appearance:none;background:transparent;border:1px solid var(--line);border-radius:var(--r-sm);
+  min-height:24px;padding:4px 9px;margin-left:auto;cursor:pointer;color:var(--text-mute);
+  font:600 11px/1.2 var(--f-display);letter-spacing:var(--ls-btn);text-transform:uppercase;
+  transition:border-color var(--t-fast),color var(--t-fast)}
+.ask-undo:hover{border-color:var(--text-ghost);color:var(--text)}
+/* an answer whose map is no longer the tab's: read it, do not replay it */
+.ask-act[disabled]{cursor:default;opacity:.4;color:var(--text-mute);border-color:var(--line-soft)}
+.ask-act[disabled]:hover{border-color:var(--line-soft);color:var(--text-mute)}
 
 /* find / results (shared with the Quests panel search) */
 .find{position:relative;display:flex;align-items:center;gap:8px;height:32px;background:var(--panel-2);
@@ -572,33 +582,81 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .leaflet-popup-close-button:hover{color:var(--text)!important}
 .leaflet-bar,.leaflet-control-attribution{display:none}
 
-/* place labels
-   --dx/--dy are the safe-rect nudge from placeLabelsLayer(): a label that would otherwise be read
-   as a truncated word under the toolbar/dock slides back into the clear (or is hidden outright).
-   The halo is a full ring, not three stacked drop shadows — at the minor tier the type is small
+/* ---------------------------------------------------------------- place labels ----
+   THE NAME LIFTS OFF THE GROUND ON A LEADER LINE (founder-approved, 2026-09-02).
+
+       anchor ring at the real position  ->  hairline stem rising  ->  cap tick  ->  the name
+
+   The point is that the word stops sitting in the terrain it names, AND that the stem becomes
+   where collision is resolved: lengthen a stem to dodge a neighbour and the anchor never leaves
+   the building — which beats moving the word off its subject or hiding it, the two things the
+   old pass could do.
+
+   Every number here is a CUSTOM PROPERTY WRITTEN BY src/placeLabels.js FROM src/label-tier.js.
+   Nothing about a tier's size, weight, tracking, ink, halo or stem length is authored in this
+   file: the contract is the single source, and a value copied here would be a second one.
+
+   `--stem` starts at the tier's `stemPx` and is REWRITTEN by the clip pass when a label has to
+   dodge something. `--dx` is the horizontal slide; the cap tick widens into an elbow
+   (`--cap-x`/`--cap-w`) so the leader still reaches the name it belongs to.
+
+   `zone` (stemPx: 0 by definition — an area has no point to stand a stem on) gets no ring, no
+   stem and no cap, and its name is CENTRED on the anchor: that is the cartographic convention for
+   a region name, and it is exactly what these labels did before the leader existed.
+
+   The halo is a full ring, not three stacked drop shadows — at the small tiers the type is small
    enough that a one-sided shadow leaves the left edge of every glyph unlit against pale terrain. */
 .place-label-wrap{background:none;border:none}
 .place-label{
   --z:var(--label-zoom,3);
-  position:absolute;
-  transform:translate(calc(-50% + var(--dx,0px)),calc(-50% + var(--dy,0px))) rotate(var(--r,0deg));
-  font:700 max(12.5px,calc((12px + 3px*(var(--z) - 2))*var(--s,1))) var(--f-display);
-  letter-spacing:.085em;text-transform:uppercase;white-space:nowrap;color:#EEEBE2;
-  text-shadow:0 0 3px #0E1110,0 0 3px #0E1110,1px 0 1.5px #0E1110,-1px 0 1.5px #0E1110,
-    0 1px 1.5px #0E1110,0 -1px 1.5px #0E1110;
+  /* the dark bases are the default; the pale roadmap ground inverts them below */
+  --ink:var(--ink-dark);--halo:var(--halo-dark);
+  --cap-half:5px;--name-gap:4px;--ring:7px;
+  position:absolute;left:0;top:0;width:0;height:0;
+  z-index:var(--z-tier,1);
 }
-.place-label.minor{font-weight:600;letter-spacing:.045em;text-transform:none;color:#CFCCC1;
-  font-size:max(11px,calc((10.5px + 2.4px*(var(--z) - 2))*var(--s,1)))}
-#map.base-roadmap .place-label{color:#2B3130;
-  text-shadow:0 0 3px #fff,0 0 3px #fff,1px 0 1.5px #fff,-1px 0 1.5px #fff,0 1px 1.5px #fff,0 -1px 1.5px #fff}
-/* minor place names live in their own Leaflet pane so they can be quieter — quieter, not smaller
-   than 11 px: below that the sentence-case secondary names stopped being readable at all (QA D13) */
-.leaflet-labelsMinor-pane .place-label{font-weight:600;letter-spacing:.045em;text-transform:none;color:#D6D3C8;
-  font-size:max(11px,calc((10.5px + 2.4px*(var(--z) - 2))*var(--s,1)));
-  text-shadow:0 0 2px #0E1110,0 0 3px #0E1110,1px 0 2px #0E1110,-1px 0 2px #0E1110,
-    0 1px 2px #0E1110,0 -1px 2px #0E1110}
-#map.base-roadmap .leaflet-labelsMinor-pane .place-label{color:#3E4643;
-  text-shadow:0 0 3px #fff,0 0 3px #fff,1px 0 1.5px #fff,-1px 0 1.5px #fff,0 1px 1.5px #fff,0 -1px 1.5px #fff}
+/* THE NAME. `bottom` is measured from the anchor, so growing --stem lifts the word and nothing
+   else moves. Longhands, not the `font` shorthand: the shorthand would need every slot to survive
+   var() substitution at once, and one bad custom property would drop the whole declaration. */
+.place-label .pl-name{
+  position:absolute;left:0;bottom:calc(var(--stem) + var(--name-gap));
+  transform:translate(calc(-50% + var(--dx,0px)),var(--dy,0px)) rotate(var(--rot,0deg));
+  transform-origin:50% 100%;
+  font-family:var(--f-display);font-weight:var(--fw);
+  /* the tier's authored size at zoom 3, ramped with zoom; every tier takes the SAME multiplier, so
+     the ratios the contract fixes survive the ramp. The floor is the legibility one (QA D13/M10). */
+  font-size:max(var(--fs-min),calc(var(--fs) * (1 + .14 * (var(--z) - 3))));
+  letter-spacing:var(--ls);text-transform:var(--tt);white-space:nowrap;color:var(--ink);
+  text-shadow:0 0 var(--halo-px) var(--halo),0 0 var(--halo-px) var(--halo),
+    1px 0 var(--halo-px) var(--halo),-1px 0 var(--halo-px) var(--halo),
+    0 1px var(--halo-px) var(--halo),0 -1px var(--halo-px) var(--halo);
+}
+/* a region name sits ON its ground, centred, with no leader at all */
+.place-label.tier-zone .pl-name{bottom:0;transform:translate(calc(-50% + var(--dx,0px)),calc(50% + var(--dy,0px))) rotate(var(--rot,0deg))}
+/* THE LEADER. All three pieces hang off the anchor at (0,0) and are drawn in the tier's own ink;
+   `drop-shadow` in the halo colour is what keeps a 1 px line alive over a bright roof. */
+.place-label .pl-ring,.place-label .pl-stem,.place-label .pl-cap{
+  position:absolute;left:0;filter:drop-shadow(0 0 1.5px var(--halo));pointer-events:none}
+/* hollow, never filled: a filled dot disappears against a bright roof and reads as dirt on a dark one */
+.place-label .pl-ring{
+  top:0;width:var(--ring);height:var(--ring);
+  margin:calc(var(--ring) / -2) 0 0 calc(var(--ring) / -2);
+  border:1.5px solid var(--ink);border-radius:50%;background:none;opacity:.8}
+/* hairline, fading upward: the ink is heaviest where it touches the ground it points at */
+.place-label .pl-stem{
+  bottom:0;width:1px;height:var(--stem);transform:translateX(-.5px);
+  background:var(--ink);
+  background:linear-gradient(to top,var(--ink),color-mix(in srgb,var(--ink) 32%,transparent));
+  opacity:.85}
+/* the cap tick. --cap-x/--cap-w are written by the clip pass: with no slide it is a short symmetric
+   tick, and after a slide it is the elbow that reaches under the name. */
+.place-label .pl-cap{
+  bottom:var(--stem);height:1px;
+  margin-left:var(--cap-x,calc(var(--cap-half) * -1));
+  width:var(--cap-w,calc(var(--cap-half) * 2));
+  background:var(--ink);opacity:.9}
+/* the pale roadmap ground: ONE swap of the two ink variables repaints the name AND its leader */
+#map.base-roadmap .place-label{--ink:var(--ink-light);--halo:var(--halo-light)}
 
 /* live players */
 /* live player marker: the art is authored at its real size (48 px box, apex at its centre), so the
@@ -793,12 +851,29 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .qcredit a{color:var(--text-mute)}
 
 /* ---------- ask (AI quest assistant) ---------------------------------------
-   Answers come from /api/assistant (DeepSeek, grounded on quests.json); the
-   actions it returns drive window.tz. The bubbles below live in #ask-card,
-   above the omnibox — the old Ask panel is a hidden mount, nothing more.
+   Answers come from /api/assistant (DeepSeek, grounded on quests.json). The
+   conversation lives in #panel-ask, the upper-LEFT dock panel (2026-09-02):
+   question, prose, the wiki's photographs, the buttons the ENVELOPE's actions
+   earn, and the quests the answer was read out of.
 --------------------------------------------------------------------------- */
+/* sizes to the conversation and stops at the column: an empty panel is a small one */
+#panel-ask{flex:0 1 auto;max-height:100%}
+.ask-ico{color:var(--acc);flex:none}
+.panel-body.ask-body{display:flex;flex-direction:column;gap:0;padding-bottom:8px}
 .ask-log{max-height:min(46vh,340px);overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:6px;
   padding-right:2px;scrollbar-color:var(--line) transparent;scrollbar-width:thin}
+#panel-ask .ask-log{max-height:none;flex:1 1 auto;min-height:0}
+/* the composer sits under the scrolling log, on the panel's own surface */
+#panel-ask .find-ask{flex:none;margin:0 var(--gutter) 0;height:34px}
+#panel-ask .find-ask input{font-size:13px}
+.ask-send{appearance:none;background:none;border:0;cursor:pointer;width:26px;height:26px;margin-right:3px;flex:none;
+  display:grid;place-items:center;border-radius:var(--r-sm);color:var(--text-mute);transition:color var(--t-fast),background var(--t-fast)}
+.ask-send:hover{color:var(--acc);background:var(--panel-hi)}
+.find-ask.busy{opacity:.6;pointer-events:none}
+#panel-ask .ask-foot{flex:none;padding:7px var(--gutter) 9px
+  ;margin-top:6px;border-top:1px solid var(--line-soft)}
+#panel-ask .ask-foot a{color:var(--text-mute);text-decoration:none}
+#panel-ask .ask-foot a:hover{color:var(--text-dim);text-decoration:underline}
 .ask-log::-webkit-scrollbar{width:6px}
 .ask-log::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .ask-msg{border:1px solid var(--line);border-radius:var(--r-md);padding:6px 8px;font:400 12.5px/1.45 var(--f-body);
@@ -831,6 +906,39 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 
 /* the source credit is a promise about where the answer came from — it has to be readable */
 .ask-foot{margin-top:6px;font:400 9.5px/1.4 var(--f-mono);color:var(--text-mute)}
+
+/* ---------- inside one answer: photos, sources, the stale line ---------- */
+.ask-prose > p:first-child{margin-top:0}
+/* An answer computed for another map. Its prose and photos are still true; its buttons are not,
+   and they are disabled rather than removed so the reader can see what WAS offered. */
+.ask-stale{margin-top:6px;padding:5px 7px;border-radius:var(--r-sm);border:1px dashed rgba(224,135,43,.45);
+  background:rgba(224,135,43,.07);font:400 11px/1.4 var(--f-body);color:#E3A868}
+.ask-msg.is-stale{box-shadow:inset 2px 0 0 var(--warn)}
+
+/* the wiki's screenshots. Thumbnails by default; the answer's Photos button opens them full width */
+.ask-shots{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.ask-shot{margin:0;position:relative;flex:0 0 auto;width:calc(50% - 3px);border:1px solid var(--line);
+  border-radius:var(--r-sm);overflow:hidden;background:var(--panel-2)}
+.ask-shot img{display:block;width:100%;height:74px;object-fit:cover}
+.ask-shot figcaption{padding:3px 5px;font:400 10px/1.35 var(--f-body);color:var(--text-mute);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ask-shots.is-open .ask-shot{width:100%}
+.ask-shots.is-open .ask-shot img{height:auto;max-height:230px;object-fit:contain;background:#000}
+.ask-shots.is-open .ask-shot figcaption{white-space:normal}
+/* attribution rides with the pictures, once per answer — EFT Wiki, CC BY-NC-SA */
+.ask-credit{flex:1 0 100%;font:400 9.5px/1.4 var(--f-mono);color:var(--text-ghost)}
+/* "the index was unreadable" and "these did not load" are UNKNOWN, never "there are no photos" */
+.ask-shots-note{margin-top:7px;font:400 10.5px/1.4 var(--f-body);color:var(--text-mute);font-style:italic}
+
+/* where the answer came from — and, when nothing is drawable, where the quest actually is */
+.ask-srcs{margin-top:9px;padding-top:7px;border-top:1px solid var(--line-soft);display:flex;flex-direction:column;gap:3px}
+.ask-srcs-cap{font:600 9.5px/1 var(--f-display);text-transform:uppercase;letter-spacing:var(--ls-cap);color:var(--text-ghost)}
+.ask-src{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font:400 11px/1.4 var(--f-body)}
+.ask-src-name{color:var(--text);text-decoration:none;border-bottom:1px solid transparent}
+a.ask-src-name:hover{color:var(--acc);border-bottom-color:rgba(45,190,108,.35)}
+.ask-src-trader{color:var(--text-mute);font-size:10.5px}
+.ask-src-where{margin-left:auto;color:var(--text-ghost);font:400 10px/1.4 var(--f-mono);white-space:nowrap}
+.ask-src.is-elsewhere .ask-src-where{color:#B98A52}
 
 /* narrow desktops: keep the dock and omnibox from meeting */
 @media (max-width:1100px){

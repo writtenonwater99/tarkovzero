@@ -10,11 +10,23 @@ import { dirname, join } from 'node:path';
 import {
   index, rank, groundingFor, parseReply, buildActions,
   normalizeActiveIds, activeQuestNames, cacheKeyFor, MAX_ACTIVE,
+  imageCatalog, buildImages, crossMapFor, mapCoverage,
 } from '../api/assistant.js';
+import {
+  isValidAction, isValidImageRef, isAllowedImageUrl, validateEnvelope,
+  PROTOCOL_VERSION, MAX_IMAGES,
+} from '../src/assistant-contract.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quests = JSON.parse(readFileSync(join(root, 'public/data/quests.json'), 'utf8'));
 const entries = index(quests);
+
+// The screenshot index, exactly as the server loads it: quest id -> the set of URLs the wiki
+// scraper recorded. Every image reference the assistant returns must be in here.
+const imageFile = JSON.parse(readFileSync(join(root, 'public/data/quest-images.json'), 'utf8'));
+const allow = new Map(Object.entries(imageFile)
+  .filter(([k, v]) => !k.startsWith('_') && Array.isArray(v))
+  .map(([k, v]) => [k, new Set(v.map((im) => im.url))]));
 
 let pass = 0, fail = 0;
 const ok = (cond, label, extra = '') => {
@@ -140,6 +152,168 @@ console.log('\n# action validation');
 
   out = buildActions(hits, { answer: '', actions: [], quests: [] }, 'customs');
   ok(out.actions.length === 0, 'no quest identified -> no actions');
+}
+
+/* --------------------------------------------------------------- map awareness */
+// The map the tab is on is not decoration: it decides what the model is told about coverage and
+// what the cross-map handoff offers. quests.json covers all eleven EFT maps; this site draws three.
+
+console.log('\n# map awareness');
+const woodsOnly = quests.find((q) => (q.siteMaps ?? []).length === 1 && q.siteMaps[0] === 'woods');
+const offSiteOnly = quests.find((q) => !(q.siteMaps ?? []).length
+  && (q.objectives ?? []).some((o) => (o.zones ?? []).length));
+{
+  const cov = mapCoverage(woodsOnly, 'customs');
+  ok(!cov.here && cov.elsewhere.includes('woods'), 'a woods quest reads as "not here, drawable on woods"', JSON.stringify(cov));
+  ok(mapCoverage(woodsOnly, 'woods').here, 'the same quest reads as "here" from the woods tab');
+
+  const g = groundingFor(rank(entries, `where is ${woodsOnly.name}`, 'customs'), 'customs');
+  ok(g.includes('NOTHING TO DRAW ON customs'), 'the prompt says outright that the quest is not on this map');
+  ok(g.includes('drawable here instead: woods'), 'and names the map it IS on');
+  ok(groundingFor(rank(entries, `where is ${woodsOnly.name}`, 'woods'), 'woods').includes('HAS MARKERS ON woods'),
+    'from the woods tab the same quest reads as present');
+  ok(g.includes('CURRENT MAP') === false, 'the CURRENT MAP line belongs to the handler, not the block');
+}
+{
+  // Off-site quests (Shoreline, Streets, …) must never be offered as a switch — there is no map
+  // to switch to. 110 of the 517 quests are in exactly this state.
+  const g = groundingFor(rank(entries, `where is ${offSiteOnly.name}`, 'customs'), 'customs');
+  ok(g.includes('MAPS THIS SITE DOES NOT HAVE'), 'a quest on an unshipped map is flagged as such to the model', offSiteOnly.name);
+  ok(crossMapFor(offSiteOnly, 'customs') === null, 'and it produces no switchMap action');
+}
+
+console.log('\n# cross-map handoff');
+{
+  const jump = crossMapFor(woodsOnly, 'customs');
+  ok(jump?.type === 'switchMap' && jump.map === 'woods', 'a woods quest asked about from customs offers woods', JSON.stringify(jump));
+  ok(jump?.label === 'Woods', 'the button gets a human map name', jump?.label);
+  ok(jump?.slug === woodsOnly.slug && jump?.name === woodsOnly.name, 'and carries what to select on arrival');
+  const landing = (woodsOnly.objectives ?? []).find((o) => o.id === jump.objectiveId);
+  ok(!!landing && (landing.zones ?? []).some((z) => z.map === 'woods'),
+    'the fly-to it hands over is marked ON THE TARGET MAP, not on the map we left', jump?.objectiveId);
+  ok(crossMapFor(woodsOnly, 'woods') === null, 'no switch offered when the player is already there');
+  ok(crossMapFor(woodsOnly, 'customs', 'reserve')?.map === 'woods', 'the data overrules a map the model asked for');
+  ok(crossMapFor(woodsOnly, 'customs', 'atlantis')?.map === 'woods', 'an invented map key never becomes the target');
+  ok(crossMapFor(null, 'customs') === null, 'no quest, no switch');
+
+  // …and end to end, from a model reply, which is what the client actually receives
+  const hits = rank(entries, `where is ${woodsOnly.name}`, 'customs');
+  ok(hits[0]?.q.slug === woodsOnly.slug, 'the woods quest is the lead hit from the customs tab', hits[0]?.q.slug);
+  const built = buildActions(hits, parseReply(JSON.stringify({
+    answer: 'x', actions: [{ type: 'switchMap', map: 'woods' }], quests: [woodsOnly.slug],
+  })), 'customs');
+  const sw = built.actions.find((a) => a.type === 'switchMap');
+  ok(sw?.map === 'woods' && sw?.objectiveId === jump.objectiveId, 'the built envelope carries the same handoff', JSON.stringify(sw));
+  ok(!built.actions.some((a) => a.type === 'flyTo'), 'and never a flyTo for a map we are not on');
+}
+{
+  // an action naming a map key that does not exist must be DROPPED, not forwarded
+  const hits = rank(entries, `where is ${woodsOnly.name}`, 'customs');
+  for (const bogus of ['shoreline', 'streets-of-tarkov', 'customs', '../../etc', '', null, 42]) {
+    const built = buildActions(hits, parseReply(JSON.stringify({
+      answer: 'x', actions: [{ type: 'switchMap', map: bogus }], quests: [woodsOnly.slug],
+    })), 'customs');
+    const got = built.actions.find((a) => a.type === 'switchMap')?.map ?? null;
+    ok(got === 'woods', `switchMap "${bogus}" never survives (data says woods)`, String(got));
+  }
+  ok(!isValidAction({ type: 'switchMap', map: 'shoreline', slug: 'x', objectiveId: null }, { map: 'customs' }),
+    'the contract rejects a switch to a map this site does not draw');
+  ok(!isValidAction({ type: 'switchMap', map: 'customs', slug: 'x', objectiveId: null }, { map: 'customs' }),
+    'the contract rejects a switch to the map we are already on');
+  ok(!isValidAction({ type: 'flyTo', objectiveId: 'a'.repeat(24), slug: 'x', map: 'woods' }, { map: 'customs' }),
+    'the contract rejects a flyTo aimed at another map');
+  ok(!isValidAction({ type: 'openHideout', slug: 'x' }, { map: 'customs' }), 'an action type outside the vocabulary is rejected');
+}
+
+/* --------------------------------------------------------------------- images */
+// The failure mode that matters: an invented image URL. The model is never shown one — it picks
+// server-minted ids out of a catalogue built from quests.json AND cross-checked against
+// quest-images.json — so there is no field in its output that any code path reads a URL from.
+
+console.log('\n# images');
+const imgQuest = quests.find((q) => allow.has(q.id) && (q.images ?? []).length >= 2);
+{
+  const hits = rank(entries, `how do I do ${imgQuest.name}`, 'customs');
+  ok(hits[0]?.q.slug === imgQuest.slug, 'the image-bearing quest is the lead hit', hits[0]?.q.slug);
+  const cat = imageCatalog(hits, allow, 'customs');
+  ok(cat.available && cat.refs.length > 0, `catalogue built (${cat.refs.length} refs)`);
+  ok(cat.refs.every((r, i) => r.id === `img${i + 1}`), 'ids are minted img1..imgN', cat.refs.map((r) => r.id).join(','));
+  ok(cat.refs.every(isValidImageRef), 'every ref satisfies the contract shape');
+  ok(cat.refs.every((r) => allow.get(r.questSlug ? quests.find((q) => q.slug === r.questSlug).id : '')?.has(r.url)),
+    'EVERY ref resolves to a real entry in quest-images.json under its own quest id');
+  ok(cat.refs.every((r) => r.depicts.length > 0 && r.credit.includes('EFT Wiki')), 'every ref says what it depicts and carries its credit');
+  ok(cat.refs.every((r) => new URL(r.url).host === 'static.wikia.nocookie.net'), 'one host, https only');
+
+  const pick = { actions: [{ type: 'showImages', imageIds: [cat.refs[1].id, cat.refs[0].id] }], quests: [] };
+  const got = buildImages(cat, pick);
+  ok(got.length === 2 && got[0].id === cat.refs[1].id, 'the model picks by id, in its own order', got.map((g) => g.id).join(','));
+
+  ok(buildImages(cat, { actions: [{ type: 'showImages', imageIds: ['img99', 'nope', 'img0'] }], quests: [] }).length === 0,
+    'an id that was never minted resolves to nothing');
+  ok(buildImages(cat, { actions: [{ type: 'showImages', imageIds: [{ url: 'https://evil.example/x.png' }] }], quests: [] }).length === 0,
+    'an object where an id belongs is dropped');
+  // the model hands us a complete, plausible, entirely invented image record
+  const forged = buildImages(cat, {
+    actions: [{ type: 'showImages', imageIds: ['img1'], url: 'https://evil.example/fake.png', images: [{ url: 'https://evil.example/fake.png', caption: 'Dorms' }] }],
+    quests: [],
+  });
+  ok(forged.length === 1 && forged[0].url === cat.refs[0].url && !JSON.stringify(forged).includes('evil.example'),
+    'a URL the model supplies is never read — only the id is', JSON.stringify(forged[0]?.url));
+  ok(buildImages(cat, { actions: [], quests: [] }, [imgQuest.slug]).length > 0,
+    'no showImages but the quest has photos -> the quest\'s own photos, still from the catalogue');
+  ok(buildImages(cat, { actions: [{ type: 'showImages', imageIds: cat.refs.map((r) => r.id) }], quests: [] }).length <= MAX_IMAGES,
+    `at most ${MAX_IMAGES} refs reach the client`);
+}
+{
+  // a subject with no screenshot yields ZERO refs — never a placeholder, never a broken URL
+  const bare = quests.find((q) => !allow.has(q.id) && !(q.images ?? []).length
+    && !(q.objectives ?? []).some((o) => (o.images ?? []).length));
+  const cat = imageCatalog([{ q: bare }], allow, 'customs');
+  ok(cat.refs.length === 0, 'a quest with no wiki gallery has an empty catalogue', bare.slug);
+  ok(buildImages(cat, { actions: [{ type: 'showImages', imageIds: ['img1'] }], quests: [] }).length === 0,
+    'and asking for a photo there returns none rather than a broken one');
+}
+{
+  // the index is a SECOND source: a quests.json row the index does not confirm is dropped.
+  // One quest only, so the count is exactly the number of rows the index still vouches for.
+  const solo = [{ q: imgQuest }];
+  const full = imageCatalog(solo, allow, 'customs').refs.length;
+  const half = new Map(allow);
+  half.set(imgQuest.id, new Set([...allow.get(imgQuest.id)].slice(0, 1)));
+  const halved = imageCatalog(solo, half, 'customs').refs.length;
+  ok(full > 1 && halved === 1, 'an embedded row missing from quest-images.json is dropped', `${full} -> ${halved}`);
+  const poisoned = new Map(allow);
+  poisoned.set(imgQuest.id, new Set(['http://static.wikia.nocookie.net/x.png', 'https://evil.example/x.png']));
+  ok(imageCatalog(solo, poisoned, 'customs').refs.length === 0, 'a wrong-host or non-https entry never becomes a ref');
+  ok(imageCatalog(solo, null, 'customs').available === false, 'no index -> the catalogue reports itself unavailable');
+  ok(imageCatalog(solo, null, 'customs').refs.length === 0, 'and offers nothing');
+  ok(!isAllowedImageUrl('http://static.wikia.nocookie.net/x.png') && !isAllowedImageUrl('https://evil.example/x.png')
+    && !isAllowedImageUrl('javascript:alert(1)') && isAllowedImageUrl(imageCatalog(solo, allow, 'customs').refs[0].url),
+  'the URL gate holds');
+}
+
+/* ------------------------------------------------------------------ envelope */
+console.log('\n# envelope (what the UI is handed)');
+{
+  const e = validateEnvelope({
+    protocol: PROTOCOL_VERSION,
+    map: 'woods',
+    answer: 'x',
+    actions: [
+      { type: 'selectQuest', slug: 'abandoned-cargo', name: 'Abandoned Cargo' },
+      { type: 'switchMap', map: 'shoreline', slug: 'abandoned-cargo', objectiveId: null },
+      { type: 'showImages', imageIds: ['img7'] },
+    ],
+    images: [{ id: 'img1', url: 'https://evil.example/x.png', depicts: 'x', questSlug: 'a', objectiveId: null }],
+    quests: ['abandoned-cargo', 'NOT A SLUG'],
+  }, { map: 'customs' });
+  ok(e.stale === true, 'an answer for another map is reported stale, not replayed');
+  ok(e.images.length === 0, 'an image ref on a foreign host is dropped client-side too');
+  ok(!e.actions.some((a) => a.type === 'switchMap'), 'a switch to an unshipped map is dropped client-side too');
+  ok(!e.actions.some((a) => a.type === 'showImages'), 'a showImages naming no surviving ref is dropped');
+  ok(e.quests.length === 1, 'a malformed slug is dropped');
+  ok(validateEnvelope(null).protocol === 0 && validateEnvelope(null).actions.length === 0, 'garbage in, empty envelope out');
+  ok(validateEnvelope({ imageIndexOk: false }).imageIndexOk === false, 'an index outage stays visible to the UI');
 }
 
 console.log(`\n${fail ? 'FAILED' : 'PASSED'}  ${pass} passed, ${fail} failed`);

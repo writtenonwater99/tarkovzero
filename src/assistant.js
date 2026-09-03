@@ -1,15 +1,28 @@
 /**
- * TarkovZero — Ask panel (AI quest assistant, client half).
+ * TarkovZero — the assistant (client half).
  *
  * Sends the question plus the map context to /api/assistant (a Vercel function that does the
- * retrieval and talks to DeepSeek — the key never leaves the server) and then *performs* the
- * actions that come back through the `window.tz` API: put a quest's objectives on the map, fly
- * to the first one, switch map when the quest lives elsewhere.
+ * retrieval and talks to DeepSeek — the key never leaves the server), hands the reply to the panel
+ * in the upper-left dock (`src/assistant-panel.js`), and *performs* the actions that came back
+ * through `window.tz`: put a quest's objectives on the map, fly to the first one.
  *
- * Chat history is kept in memory only. The one exception is a map switch, which reloads the page:
- * the pending action + the last exchange ride across in sessionStorage so the panel can finish
- * the job on the other side instead of looking broken.
+ * Three rules this file keeps:
+ *
+ * 1. **The envelope is validated before anything is done with it.** `validateEnvelope()` in
+ *    src/assistant-contract.js re-checks every shape claim client-side, so a UI bug or a stale
+ *    deployment degrades to "prose with no buttons" instead of firing an action at data that is
+ *    not there. Nothing here reads `data.actions` raw.
+ * 2. **Nothing is performed for a stale answer.** The actions this file replays are exactly the
+ *    ones the panel drew buttons for, and the panel draws none when the echoed map is not the
+ *    tab's map — so an answer that outlived a map switch cannot move the camera.
+ * 3. **A map switch is offered, never taken.** It reloads the page; only a click does that.
+ *    The pending action + the last exchange ride across in sessionStorage so the panel can finish
+ *    the job on the other side instead of looking broken.
+ *
+ * Chat history is kept in memory only.
  */
+import { createAskPanel } from './assistant-panel.js';
+import { emptyEnvelope, validateEnvelope } from './assistant-contract.js';
 
 const HANDOFF = 'tz:askPending';
 const MAX_TURNS = 8;
@@ -19,82 +32,46 @@ const CHIPS = [
   'Which quests are on this map?',
 ];
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-/** Markdown-lite: bold, inline code, links, "- " bullets, blank-line paragraphs. Nothing else. */
-export function mdLite(src) {
-  const inline = (s) => esc(s)
-    .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
-    .replace(/\*\*([^*]+)\*\*/g, (_, c) => `<strong>${c}</strong>`)
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
-  const out = [];
-  let list = null;
-  for (const raw of String(src ?? '').split('\n')) {
-    const line = raw.trimEnd();
-    const bullet = /^\s*[-*•]\s+(.*)$/.exec(line);
-    if (bullet) { (list ??= []).push(`<li>${inline(bullet[1])}</li>`); continue; }
-    if (list) { out.push(`<ul>${list.join('')}</ul>`); list = null; }
-    if (line.trim()) out.push(`<p>${inline(line)}</p>`);
-  }
-  if (list) out.push(`<ul>${list.join('')}</ul>`);
-  return out.join('') || `<p>${inline(src)}</p>`;
-}
+/** The no-op assistant, for a document that does not carry the panel (tests, a trimmed build). */
+const DEAD = {
+  init() {}, setOpen() {}, isOpen: () => false, ask() {}, preview() {}, armUndo() {},
+  switchMap: () => false, getHistory: () => [], focus() {}, setMap() {},
+};
 
 /**
  * @param {object} deps
- * @param {{setOpen(on:boolean):void, isOpen():boolean}} deps.panel  the omnibox card
- * @param {(x:{answer:string,actions:object[],note:string})=>void} [deps.onAnswer]  render action chips
+ * @param {string} deps.mapKey                 the map this tab is on
+ * @param {object} deps.tz                     window.tz
+ * @param {object} deps.shell                  src/shell.js — owns the panel's open/close/pin
+ * @param {(text:string)=>void} [deps.route]   send a user-initiated question through the omnibox,
+ *                                             which is where the Restore snapshot is taken
  */
-export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
-  const el = {
-    block: document.getElementById('ask-block'),
-    toggle: document.getElementById('ask-toggle'),
-    body: document.getElementById('ask'),
-    log: document.getElementById('ask-log'),
-    chips: document.getElementById('ask-chips'),
-    form: document.getElementById('ask-form'),
-    input: document.getElementById('ask-input'),
-  };
-  if (!el.block) return { init() {}, setOpen() {}, ask() {}, preview() {}, switchMap: () => false, getHistory: () => [], focus() {} };
-
+export function createAssistant({ mapKey, tz, shell, route }) {
   let history = [];       // [{role, content}] — memory only
   let busy = false;
   let inflight = null;
+  let undo = null;        // armed by the omnibox for the next answer
 
-  /* ------------------------------------------------------------ rendering -- */
-  const scroll = () => { el.log.scrollTop = el.log.scrollHeight; };
+  /** A starter chip or the composer is a question the player asked, so it takes the same road a
+   *  typed question does: through the omnibox, which is the only place the camera + selection
+   *  snapshot behind the Restore button is taken. Calling `ask` directly would fly the map with
+   *  no way back. */
+  const askFromUser = (text) => (route ? route(text) : ask(text));
 
-  function bubble(role, html, cls = '') {
-    const div = document.createElement('div');
-    div.className = `ask-msg ask-${role}${cls ? ' ' + cls : ''}`;
-    div.innerHTML = html;
-    el.log.append(div);
-    scroll();
-    return div;
-  }
-  const sayUser = (text) => bubble('user', `<p>${esc(text)}</p>`);
-  const sayError = (text) => bubble('bot', `<p>${esc(text)}</p>`, 'ask-err');
-
-  function thinking() {
-    const div = bubble('bot', '<span class="ask-dots"><i></i><i></i><i></i></span>', 'ask-wait');
-    return div;
-  }
-
-  /**
-   * A starter chip is a question the player asked, so it takes the same road a typed question does:
-   * through the omnibox, which is the only place the camera + selection snapshot behind the Restore
-   * chip is taken. Calling `ask` directly would fly the map with no way back.
-   */
-  const askFromUser = (text) => (panel?.ask ? panel.ask(text) : ask(text));
-
-  function renderChips() {
-    el.chips.innerHTML = CHIPS.map((c) => `<button type="button" class="ask-chip">${esc(c)}</button>`).join('');
-    for (const b of el.chips.querySelectorAll('.ask-chip')) b.onclick = () => askFromUser(b.textContent);
-  }
+  const panel = createAskPanel({
+    mapKey, shell, chips: CHIPS,
+    act: (action) => performOne(action),
+    onAsk: (text) => askFromUser(text),
+  });
+  if (!panel) return DEAD;
 
   /* -------------------------------------------------------------- actions -- */
 
-  /** Run the server's actions against the map. Returns the one-line confirmation. */
+  /**
+   * Run the answer's actions against the map. Takes the VALIDATED actions the panel drew buttons
+   * from, so a stale envelope (zero buttons) performs nothing at all.
+   * Returns the one-line confirmation.
+   */
   async function perform(actions) {
     if (!actions?.length) return '';
     await tz.quests.all();                       // make sure quests.json is loaded before select()
@@ -121,13 +98,21 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
     }
 
     // A map switch reloads the page and throws away everything on screen, so the assistant may ask
-    // for it but never do it (red team #6): the card offers a chip and the player decides.
-    const jump = actions.find((a) => a.type === 'switchMap' && typeof a.map === 'string' && a.map !== mapKey);
-    if (jump) notes.push(`this one is on ${jump.map}`);
+    // for it but never do it (red team #6): the panel offers a button and the player decides. It
+    // is deliberately NOT mentioned here — the button beside this line already says "Switch to
+    // Woods", and a note repeating it is the same fact twice in two voices.
     return notes.join(' · ');
   }
 
-  /** Perform the switch the answer asked for. Called from the card's chip — never automatically. */
+  /** One action, from a button click. `showImages` never reaches here — the panel owns the strip. */
+  async function performOne(action) {
+    if (!action || typeof action !== 'object') return;
+    if (action.type === 'switchMap') { switchMap(action.map, action.objectiveId ?? null); return; }
+    if (action.type === 'selectQuest') { await tz.quests.all(); tz.quests.select(action.slug); return; }
+    if (action.type === 'flyTo') { await tz.quests.all(); tz.quests.flyTo(action.objectiveId); }
+  }
+
+  /** Perform the switch the answer asked for. Called from a button — never automatically. */
   function switchMap(map, objectiveId = null) {
     if (!map || map === mapKey) return false;
     // the quest slugs are already in ?quest= (quests.js writes them), so the reload keeps them
@@ -146,14 +131,19 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
   async function ask(text) {
     const message = String(text ?? '').trim();
     if (!message || busy) return;
-    setOpen(true);
-    el.input.value = '';
-    el.chips.hidden = true;
-    sayUser(message);
+    panel.setOpen(true);
+    panel.clearInput();
+    panel.hideChips();
+    panel.sayUser(message);
     history.push({ role: 'user', content: message });
     busy = true;
-    el.form.classList.add('busy');
-    const wait = thinking();
+    panel.busy(true);
+    const wait = panel.thinking();
+    // The map this question was asked ON. The picker navigates, so a live map change kills the
+    // document and this request with it; the echoed map is still checked on arrival, because a
+    // cache, a replayed transcript or a future in-place switch can all put an answer in front of
+    // the wrong map — and `validateEnvelope` is the only thing that would notice.
+    const askedMap = mapKey;
 
     inflight?.abort();
     inflight = new AbortController();
@@ -164,7 +154,7 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
         signal: inflight.signal,
         body: JSON.stringify({
           message,
-          map: mapKey,
+          map: askedMap,
           selectedQuests: tz.quests.selected(),
           // What the GAME says the player is on (companion -> relay -> live.js -> quests.js), as
           // tarkov.dev task ids. Empty without a companion; the server treats it as optional, so an
@@ -180,74 +170,64 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
       wait.remove();
       if (!r.ok || !data) {
         history.pop();
-        sayError(data?.error || (r.status === 429 ? 'Too many questions — try again in a minute.' : `The assistant is unavailable (${r.status}).`));
+        panel.sayError(data?.error || (r.status === 429 ? 'Too many questions — try again in a minute.' : `The assistant is unavailable (${r.status}).`));
         return;
       }
-      history.push({ role: 'assistant', content: data.answer });
+      const env = validateEnvelope(data, { map: mapKey });
+      history.push({ role: 'assistant', content: env.answer });
       if (history.length > MAX_TURNS * 2) history = history.slice(-MAX_TURNS * 2);
-      const msg = bubble('bot', mdLite(data.answer));
-      const actions = Array.isArray(data.actions) ? data.actions : [];
-      const note = await perform(actions);
-      if (note) msg.insertAdjacentHTML('beforeend', `<div class="ask-did">${esc(note)}</div>`);
-      onAnswer?.({ answer: data.answer, actions, note });
-      scroll();
+      const drawn = panel.answer(data, { undo });
+      undo = null;
+      // The actions the panel drew buttons for — empty when the envelope is stale, so a reply that
+      // outlived a map switch is read, never replayed.
+      const note = await perform(drawn.view.buttons.map((b) => b.action));
+      panel.saidDid(drawn.el, note);
     } catch (e) {
       wait.remove();
       history.pop();
       if (e?.name !== 'AbortError') {
-        sayError(import.meta.env?.DEV
+        panel.sayError(import.meta.env?.DEV
           ? 'No answer — is `vercel dev` running on :3000? (npm run dev proxies /api/assistant to it.)'
           : 'The assistant could not be reached. Try again in a moment.');
       }
     } finally {
       busy = false;
-      el.form.classList.remove('busy');
+      panel.busy(false);
       inflight = null;
     }
   }
 
   /* ---------------------------------------------------------------- panel -- */
 
-  /** The Ask panel is one of the shell's transient panels; this only asks it to show/hide. */
-  const panelOpen = () => panel?.isOpen?.() ?? !el.body.hidden;
-  function setOpen(open) {
-    panel?.setOpen?.(!!open);
-    el.toggle.setAttribute('aria-expanded', String(!!open));
-    store.set('askOpen', !!open);
-    if (!open) return;
-    scroll();
-  }
-
   /** Show a question and the waiting state without calling the API (QA screenshots, ?q=?…). */
   function preview(text) {
-    setOpen(true);
-    el.chips.hidden = true;
-    sayUser(String(text ?? ''));
-    thinking();
+    panel.setOpen(true);
+    panel.hideChips();
+    panel.sayUser(String(text ?? ''));
+    panel.thinking();
   }
 
   function init() {
-    renderChips();
-    el.toggle.onclick = () => setOpen(!panelOpen());
-    el.form.onsubmit = (e) => { e.preventDefault(); askFromUser(el.input.value); };
-    // ?ask=1 opens the card; ?ask=<question> opens it and asks — a shareable "show me this" link.
-    // The card is an overlay over the map, so unlike the old panel it does not reopen on load.
+    panel.init();
+
+    // ?ask=1 opens the panel; ?ask=<question> opens it and asks — a shareable "show me this" link.
     const param = new URLSearchParams(location.search).get('ask');
-    if (param != null) setOpen(true);
-    else el.toggle.setAttribute('aria-expanded', String(panelOpen()));
+    if (param != null) panel.setOpen(true);
     if (param && param !== '1') setTimeout(() => ask(param.slice(0, 2000)), 300);
 
     // finish a map switch that the assistant asked for
     let pending = null;
     try { pending = JSON.parse(sessionStorage.getItem(HANDOFF) || 'null'); sessionStorage.removeItem(HANDOFF); } catch { /* ignore */ }
     if (pending && pending.map === mapKey) {
-      setOpen(true);
+      panel.setOpen(true);
       for (const t of pending.turns ?? []) {
         history.push(t);
-        if (t.role === 'user') sayUser(t.content);
-        else bubble('bot', mdLite(t.content));
+        // Replayed turns are prose only: whatever buttons the other map's answer had do not apply
+        // here, and an empty envelope is the one shape that cannot smuggle one across.
+        if (t.role === 'user') panel.sayUser(t.content);
+        else panel.answer(emptyEnvelope(mapKey, t.content));
       }
-      el.chips.hidden = (pending.turns ?? []).length > 0;
+      if ((pending.turns ?? []).length) panel.hideChips();
       // quests.js restores ?quest= just after its own load() resolves, so the marker we want may
       // not exist for another tick — retry briefly rather than racing it.
       tz.quests.all().then(async () => {
@@ -256,14 +236,22 @@ export function createAssistant({ mapKey, tz, store, panel, onAnswer }) {
           done = tz.quests.flyTo(pending.objectiveId);
           if (!done) await new Promise((r) => setTimeout(r, 120));
         }
-        bubble('bot', `<p>Switched to <strong>${esc(mapKey)}</strong>.</p>${done ? '<div class="ask-did">flew to the first objective</div>' : ''}`, 'ask-note');
+        panel.sayNote(done
+          ? `Switched to ${mapKey} — flew to the first objective.`
+          : `Switched to ${mapKey}.`);
       });
     }
   }
 
   return {
-    init, setOpen, ask, preview, switchMap,
+    init, ask, preview, switchMap,
+    setOpen: (on) => panel.setOpen(on),
+    isOpen: () => panel.isOpen(),
+    /** The omnibox arms the Restore button just before it sends a question. */
+    armUndo: (fn) => { undo = typeof fn === 'function' ? fn : null; },
+    /** The tab changed map: every answer already on screen is about a different one. */
+    setMap: (k) => { mapKey = String(k ?? mapKey); panel.setMap(mapKey); },
     getHistory: () => history.slice(-10),
-    focus: () => { setOpen(true); el.input.focus(); },
+    focus: () => panel.focus(),
   };
 }

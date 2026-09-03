@@ -13,6 +13,10 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCustomsLocalTerrainManifest } from '../../src/customs-local-terrain.js';
+import {
+  CUSTOMS_LOCAL_BRIDGES_SEGMENTS,
+  validateCustomsLocalBridgesPackage,
+} from '../../src/customs-local-bridges.js';
 
 /** Repo-local, gitignored root that holds the extracted package. */
 export const LOCAL_GAME_DERIVED_DIRNAME = '.local-game-derived';
@@ -216,8 +220,33 @@ export function collectAuthorizedCustomsPaths(manifestValue) {
   return authorized;
 }
 
+/**
+ * The bridge package is its OWN authorization document: one JSON file that authorizes exactly
+ * itself, and only while it satisfies the contract the renderer reads it with.
+ *
+ * It is deliberately not folded into `collectAuthorizedCustomsPaths` above. That function derives
+ * the terrain manifest's file set, and the bridge package is not a terrain asset — it is a
+ * different payload with a different producer and a different validator, exactly as
+ * `vegetation-authored-dev.mjs` authorizes against `pack-index.json` instead of the terrain
+ * manifest. No suffix is added here: `.json` was already the manifest's own media type, so a file
+ * that merely ends in `.json` is still unreachable unless it IS this document and it validates.
+ */
+async function isAuthorizedBridgesPath(root, segments) {
+  if (segments.join('/') !== CUSTOMS_LOCAL_BRIDGES_SEGMENTS.join('/')) return false;
+  const file = await resolveLocalGameDerivedFile(root, CUSTOMS_LOCAL_BRIDGES_SEGMENTS);
+  if (!file || file.size > MAX_MANIFEST_BYTES) return false;
+  try {
+    validateCustomsLocalBridgesPackage(JSON.parse((await readFile(file.path)).toString('utf8')));
+    return true;
+  } catch {
+    // An unreadable or invalid package authorizes nothing, including itself.
+    return false;
+  }
+}
+
 async function isAuthorizedCustomsPath(root, segments) {
   if (segments[0] !== 'customs') return false;
+  if (await isAuthorizedBridgesPath(root, segments)) return true;
   const manifestFile = await resolveLocalGameDerivedFile(root, CUSTOMS_MANIFEST_SEGMENTS);
   if (!manifestFile || manifestFile.size > MAX_MANIFEST_BYTES) return false;
   try {

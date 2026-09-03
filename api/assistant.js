@@ -2,15 +2,23 @@
  * TarkovZero — AI quest assistant (Vercel Node serverless function).
  *
  * POST /api/assistant  { message, map, selectedQuests?, activeQuests?, history? }
+ *   `map` is the map the player's tab is on. It is not decoration: it picks the retrieval bonus,
+ *   it is stated to the model, every objective in the grounding block says whether it has markers
+ *   there, and it is echoed back on the answer so a reply that arrives after the player has
+ *   switched maps can be recognised as stale.
  *   `activeQuests` are tarkov.dev task ids the player's game reports as active (the companion
  *   reads them out of EFT's own logs). Optional in every sense: absent, empty or unknown ids
  *   change nothing except a line of context and a small ranking nudge.
- *   -> { answer, actions:[{type,...}], quests:[slug], sources:[...] }
+ *
+ * The response envelope — every field, every rule — is defined ONCE in src/assistant-contract.js,
+ * which this file and the chat panel both import. Read that file before changing this one.
  *
  * How it works: retrieval over public/data/quests.json (fuzzy rank against name / trader /
- * objective text, current map preferred) -> a compact grounding block -> DeepSeek chat
- * completion in JSON mode. Every action the model returns is re-validated against the
- * retrieved quests, so a hallucinated slug, objective id or map can never reach the client.
+ * objective text, current map preferred) -> a compact grounding block, including a numbered
+ * catalogue of the screenshots those quests actually have -> DeepSeek chat completion in JSON
+ * mode. Every action the model returns is re-derived from the retrieved quests, so a hallucinated
+ * slug, objective id or map can never reach the client; and the model is never shown an image URL
+ * (it picks catalogue ids), so it has nothing to fabricate one out of.
  *
  * The DeepSeek key is read from process.env.DEEPSEEK_API_KEY on the server only. It is never
  * logged and never included in a response.
@@ -20,9 +28,14 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  PROTOCOL_VERSION, SITE_MAPS, MAP_LABELS, OTHER_MAP_LABELS,
+  MAX_IMAGES, MAX_QUESTS, mapLabel, isSiteMap, normalizeMapKey,
+  isAllowedImageUrl, mintImageId, IMAGE_ID_RE, isValidImageRef, isValidAction,
+} from '../src/assistant-contract.js';
+
 const MODEL = 'deepseek-chat';
 const ENDPOINT = 'https://api.deepseek.com/chat/completions';
-const SITE_MAPS = ['customs', 'reserve', 'woods'];
 const MAX_MESSAGE = 2048;          // bytes of user text we accept
 const MAX_HISTORY = 8;             // turns kept from the client
 const RATE_LIMIT = 20;             // requests…
@@ -30,41 +43,87 @@ const RATE_WINDOW = 60_000;        // …per minute per IP
 const UPSTREAM_TIMEOUT = 12_000;
 const CACHE_TTL = 10 * 60_000;
 const TOP_K = 3;
+const CATALOG_MAX = 8;             // screenshots offered to the model (it may pick MAX_IMAGES)
 
 /* ------------------------------------------------------------------ data -- */
 
 let questsPromise = null;
+let imagesPromise = null;
 
-/** Load quests.json once per lambda instance: bundled file first, deployment URL as fallback. */
+/**
+ * Read one of our public data files: bundled copy first (three candidate roots, because the
+ * function's cwd differs between `vercel dev` and the deployed lambda), our own deployment URL
+ * last. Returns null instead of throwing when `required` is false.
+ */
+async function loadPublicJson(req, name) {
+  const here = fileURLToPath(new URL('.', import.meta.url));
+  const candidates = [
+    join(process.cwd(), 'public', 'data', name),
+    join(here, '..', 'public', 'data', name),
+    join('/var/task', 'public', 'data', name),
+  ];
+  for (const file of candidates) {
+    try {
+      const parsed = JSON.parse(await readFile(file, 'utf8'));
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch { /* try the next one */ }
+  }
+  // Fallback: read it back off our own deployment (these are public static assets).
+  const host = req?.headers?.['x-forwarded-host'] || req?.headers?.host;
+  if (host) {
+    const proto = /^(localhost|127\.)/.test(host) ? 'http' : 'https';
+    try {
+      const r = await fetch(`${proto}://${host}/data/${name}`);
+      if (r.ok) {
+        const parsed = await r.json();
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch { /* fall through */ }
+  }
+  return null;
+}
+
+/** Load quests.json once per lambda instance. Fatal: without it there is no answer to give. */
 function loadQuests(req) {
   if (questsPromise) return questsPromise;
   questsPromise = (async () => {
-    const here = fileURLToPath(new URL('.', import.meta.url));
-    const candidates = [
-      join(process.cwd(), 'public', 'data', 'quests.json'),
-      join(here, '..', 'public', 'data', 'quests.json'),
-      join('/var/task', 'public', 'data', 'quests.json'),
-    ];
-    for (const file of candidates) {
-      try {
-        const raw = await readFile(file, 'utf8');
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr) && arr.length) return index(arr);
-      } catch { /* try the next one */ }
-    }
-    // Fallback: read it back off our own deployment (the file is a public static asset).
-    const host = req?.headers?.['x-forwarded-host'] || req?.headers?.host;
-    if (host) {
-      const proto = /^(localhost|127\.)/.test(host) ? 'http' : 'https';
-      const r = await fetch(`${proto}://${host}/data/quests.json`);
-      if (r.ok) {
-        const arr = await r.json();
-        if (Array.isArray(arr) && arr.length) return index(arr);
-      }
-    }
-    throw new Error('quests.json unavailable');
+    const arr = await loadPublicJson(req, 'quests.json');
+    if (!Array.isArray(arr) || !arr.length) throw new Error('quests.json unavailable');
+    return index(arr);
   })().catch((e) => { questsPromise = null; throw e; });
   return questsPromise;
+}
+
+/**
+ * The image allow-list: quest id -> the set of URLs the wiki scraper recorded for that quest
+ * (public/data/quest-images.json, built by scripts/fetch-quest-images.mjs).
+ *
+ * quests.json already embeds these rows, so this is a SECOND, independent source for the same
+ * fact, and an image is only ever offered when both agree. That is the whole point: if a future
+ * build-quests run ever synthesised an image row, or a quests.json row were tampered with, the
+ * URL would not be in this file and the reference would be dropped rather than rendered.
+ *
+ * Not fatal. When it cannot be read the catalogue is empty and `imageIndexOk` on the envelope
+ * says so — an outage must not be indistinguishable from "this quest has no screenshots".
+ */
+function loadImageAllow(req) {
+  if (imagesPromise) return imagesPromise;
+  imagesPromise = (async () => {
+    const obj = await loadPublicJson(req, 'quest-images.json');
+    if (!obj || Array.isArray(obj)) return null;
+    const allow = new Map();
+    for (const [questId, rows] of Object.entries(obj)) {
+      if (questId.startsWith('_') || !Array.isArray(rows)) continue;
+      const urls = new Set();
+      for (const row of rows) if (row && isAllowedImageUrl(row.url)) urls.add(row.url);
+      if (urls.size) allow.set(questId, urls);
+    }
+    return allow.size ? allow : null;
+  })()
+    // a miss is not cached: a cold lambda that lost one fetch must not lose photos for its life
+    .then((allow) => { if (!allow) imagesPromise = null; return allow; })
+    .catch(() => { imagesPromise = null; return null; });
+  return imagesPromise;
 }
 
 /** Precompute the per-quest search fields once (bigrams, token sets) - reused for every request. */
@@ -211,17 +270,105 @@ export function cacheKeyFor({ map, message, history = [], activeIds = [] }) {
   ].join('');
 }
 
-/* ---------------------------------------------------------- grounding ----- */
+/* ------------------------------------------------------------- images ----- */
 
 const clip = (s, n) => (String(s ?? '').length > n ? String(s).slice(0, n - 1) + '…' : String(s ?? ''));
+const IMAGE_CREDIT = 'EFT Wiki (Fandom), CC BY-NC-SA';
+
+/**
+ * The screenshots the retrieved quests actually have, minted as `img1`, `img2`, … — the ONLY
+ * image handles that exist in this request. Two independent sources must agree on every row:
+ * the embedded `images` array in quests.json AND the URL set in quest-images.json for the same
+ * quest id (`allow`). No allow-list, no catalogue.
+ *
+ * The model is shown ids and captions and never a URL, so `showImages` can only ever *select*
+ * from this list. Order is map-aware: shots taken on the map the player is looking at come first.
+ */
+export function imageCatalog(hits, allow, map, limit = CATALOG_MAX) {
+  const refs = [];
+  if (!(allow instanceof Map)) return { refs, byId: new Map(), available: false };
+  const seen = new Set();
+  const rows = [];
+  for (const { q } of hits) {
+    const urls = allow.get(q.id);
+    if (!urls) continue;
+    const push = (im, objective) => {
+      if (!im || !isAllowedImageUrl(im.url) || !urls.has(im.url) || seen.has(im.url)) return;
+      seen.add(im.url);
+      const caption = typeof im.caption === 'string' ? clip(im.caption, 160) : '';
+      rows.push({
+        url: im.url,
+        caption,
+        depicts: caption || clip(objective?.text, 160) || q.name,
+        map: typeof im.map === 'string' ? im.map : '',
+        questSlug: q.slug,
+        questName: q.name,
+        objectiveId: objective ? objective.id : null,
+        credit: IMAGE_CREDIT,
+      });
+    };
+    for (const o of q.objectives ?? []) for (const im of o.images ?? []) push(im, o);
+    for (const im of q.images ?? []) push(im, null);
+  }
+  // a shot of the map the player is on is the useful one; everything else keeps its order
+  rows.sort((a, b) => (a.map === map ? 0 : 1) - (b.map === map ? 0 : 1));
+  for (const row of rows.slice(0, limit)) refs.push({ id: mintImageId(refs.length), ...row });
+  return { refs, byId: new Map(refs.map((r) => [r.id, r])), available: true };
+}
+
+/**
+ * The image refs the answer carries. The model's `showImages.imageIds` are looked up in the mint
+ * table and nothing else is read from its output — an id that was never minted resolves to
+ * nothing, and a `url` field on a model action is ignored because no code path reads one.
+ * A subject with no screenshot returns [], never a placeholder.
+ */
+export function buildImages(catalog, modelOut, slugs = []) {
+  const byId = catalog?.byId instanceof Map ? catalog.byId : new Map();
+  if (!byId.size) return [];
+  const out = [];
+  const take = (ref) => {
+    if (!ref || out.includes(ref)) return;
+    // belt and braces: the mint table is ours, but the shape gate is the contract's
+    if (isValidImageRef(ref) && out.length < MAX_IMAGES) out.push(ref);
+  };
+  for (const a of modelOut?.actions ?? []) {
+    if (!a || a.type !== 'showImages' || !Array.isArray(a.imageIds)) continue;
+    for (const id of a.imageIds) if (typeof id === 'string' && IMAGE_ID_RE.test(id)) take(byId.get(id));
+  }
+  // The model asked for no photos but the answer is about a quest that has some: show the ones
+  // belonging to the quests we are actually putting on the map, rather than none at all.
+  if (!out.length && slugs.length) {
+    for (const ref of catalog.refs) if (slugs.includes(ref.questSlug)) take(ref);
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------- grounding ----- */
+
+/** How a quest's maps read to the model, given the map the player is on. */
+export function mapCoverage(q, map) {
+  const site = (q.siteMaps ?? []).filter(isSiteMap);
+  const here = site.includes(map);
+  const elsewhere = site.filter((m) => m !== map);
+  const offSite = [...new Set([...(q.maps ?? []), ...(q.objectives ?? []).flatMap((o) => (o.zones ?? []).map((z) => z.map))])]
+    .filter((m) => !isSiteMap(m) && Object.prototype.hasOwnProperty.call(OTHER_MAP_LABELS, m));
+  return { here, elsewhere, offSite };
+}
 
 /** Compact, token-cheap context for the model. Only facts that exist in quests.json. */
-export function groundingFor(hits, map) {
-  return hits.map(({ q }, i) => {
+export function groundingFor(hits, map, catalog = null) {
+  const cov = (q) => {
+    const { here, elsewhere, offSite } = mapCoverage(q, map);
+    const bits = [here ? `HAS MARKERS ON ${map}` : `NOTHING TO DRAW ON ${map}`];
+    if (elsewhere.length) bits.push(`drawable here instead: ${elsewhere.join(', ')}`);
+    if (offSite.length) bits.push(`also on ${offSite.join(', ')} - MAPS THIS SITE DOES NOT HAVE`);
+    return bits.join(' | ');
+  };
+  const blocks = hits.map(({ q }, i) => {
     const lines = [];
-    const site = (q.siteMaps ?? []).join(', ') || 'none';
     lines.push(`[${i + 1}] ${q.name} - trader ${q.trader}, min level ${q.minLevel ?? 0}`);
-    lines.push(`    slug: ${q.slug} | maps: ${(q.maps ?? []).join(', ') || 'none'} | drawable on this site: ${site}`);
+    lines.push(`    slug: ${q.slug} | maps: ${(q.maps ?? []).join(', ') || 'none'}`);
+    lines.push(`    ${cov(q)}`);
     if (q.wikiLink) lines.push(`    wiki: ${q.wikiLink}`);
     for (const o of (q.objectives ?? []).slice(0, 12)) {
       const zones = (o.zones ?? []).filter((z) => z.map === map);
@@ -237,19 +384,34 @@ export function groundingFor(hits, map) {
       if (o.item) bits.push(`item ${o.item}`);
       if (o.optional) bits.push('OPTIONAL');
       lines.push(`    - ${bits.join(' | ')}`);
-      for (const im of (o.images ?? []).slice(0, 2)) if (im.caption) lines.push(`      photo: ${clip(im.caption, 100)}`);
     }
     return lines.join('\n');
-  }).join('\n');
+  });
+
+  const refs = catalog?.refs ?? [];
+  if (refs.length) {
+    blocks.push(`PHOTOS (screenshots this site already has - reference them BY ID, never by URL):\n${
+      refs.map((r) => `  ${r.id} | ${r.questName}${r.objectiveId ? ` | objective ${r.objectiveId}` : ''}${
+        r.map ? ` | taken on ${r.map}` : ''} | "${clip(r.depicts, 120)}"`).join('\n')}`);
+  } else {
+    blocks.push('PHOTOS: none of these quests has a screenshot. Do not offer one.');
+  }
+  return blocks.join('\n');
 }
 
-const SYSTEM = (map, selected, activeNames = []) => `You are the quest assistant built into TarkovZero, an interactive Escape from Tarkov map (Customs, Reserve, Woods).
-The player is looking at the ${map} map right now.${selected.length ? ` Already on their map: ${selected.join(', ')}.` : ''}${
+const SYSTEM = (map, selected, activeNames = []) => `You are the quest assistant built into TarkovZero, an interactive Escape from Tarkov map.
+
+THE MAP THE PLAYER IS ON RIGHT NOW: ${map} (${mapLabel(map)}). Answer for THIS map first.
+TarkovZero can draw exactly three maps: ${SITE_MAPS.map((m) => `${m} (${MAP_LABELS[m]})`).join(', ')}.
+Every other Tarkov map (${Object.values(OTHER_MAP_LABELS).join(', ')}) exists in the quest data but CANNOT be
+opened here - for those you may describe and show photos, and you must say the site does not have that map yet.${
+  selected.length ? `\nAlready on their map: ${selected.join(', ')}.` : ''}${
   activeNames.length ? `\nTheir game reports these quests as ACTIVE right now: ${activeNames.join(', ')}. Prefer them when the question is vague ("what next?", "where do I go?"), but never claim a quest is active or finished beyond this list.` : ''}
 
 Rules:
 - Use ONLY the QUEST DATA block for anything factual: objectives, where they are, trader, level, items, photos.
-- NEVER invent coordinates, zone names, objective ids, slugs or quest names. If the data does not answer the question, say so in one line.
+- NEVER invent coordinates, zone names, objective ids, slugs, quest names or image URLs. If the data does not answer the question, say so in one line.
+- If the quest the player is asking about is on a DIFFERENT map from ${map}, say which map it is on in the first sentence and offer to move there. Do not pretend it is here.
 - Be concise and practical, in English: 2-5 short sentences, or up to 5 bullets. Markdown-lite only (**bold**, \`code\`, "- " bullets). No headings, no tables.
 - You never move the map yourself - you return actions and the site performs them.
 
@@ -259,9 +421,13 @@ Reply with ONE JSON object and nothing else:
 Allowed actions (use slugs and ids exactly as they appear in the data):
   {"type":"selectQuest","slug":"<slug>"}             put that quest's objectives on the map
   {"type":"flyTo","objectiveId":"<objective id>"}    centre the map on that objective - only if it has marked locations on ${map}
-  {"type":"switchMap","map":"customs|reserve|woods"} only when the quest's objectives are on a different one of those three maps.
-                                                     The site switches immediately, so word the answer as if the player is already on the way there.
-Put selectQuest before flyTo. At most 3 quests. Use an empty actions array when the question is not about a specific quest.`;
+  {"type":"switchMap","map":"${SITE_MAPS.join('|')}"} the quest's objectives are on one of the other two maps this site has.
+                                                     The site offers it as a button; the player decides, so word the answer as an offer
+                                                     ("that one is on Woods - want to move there?"), not as something already done.
+  {"type":"showImages","imageIds":["img1", ...]}     show screenshots from the PHOTOS list. Ids only - the site owns the URLs.
+                                                     Pick at most ${MAX_IMAGES}, only ones that actually help ("this is the building"). Omit the
+                                                     action entirely when the PHOTOS list is empty or nothing there is relevant.
+Put selectQuest before flyTo. At most ${MAX_QUESTS} quests. Use an empty actions array when the question is not about a specific quest.`;
 
 /* ------------------------------------------------------------- guards ----- */
 
@@ -311,9 +477,41 @@ export function parseReply(content) {
   };
 }
 
+/** Does this objective have at least one marked location on `m`? */
+const onMap = (o, m) => (o.zones ?? []).some((z) => z.map === m);
+
+/**
+ * The cross-map handoff, derived from quests.json - never from the model's word.
+ *
+ * Returns the switchMap action for a quest whose objectives are on one of the other two maps this
+ * site can draw, carrying what to select AND what to fly to once there, so the switch lands the
+ * player on the thing they asked about instead of on the map's default view. Returns null when
+ * the quest has nothing on any *other* site map - including the common case of a quest that lives
+ * on Shoreline or Streets, which this site cannot open at all.
+ *
+ * `wanted` is the map the model asked for; it is honoured only if the data agrees.
+ */
+export function crossMapFor(quest, map, wanted = null) {
+  if (!quest) return null;
+  const options = (quest.siteMaps ?? []).filter((m) => isSiteMap(m) && m !== map);
+  if (!options.length) return null;
+  const target = (isSiteMap(wanted) && wanted !== map && options.includes(wanted)) ? wanted : options[0];
+  const landing = (quest.objectives ?? []).find((o) => onMap(o, target));
+  return {
+    type: 'switchMap',
+    map: target,
+    label: mapLabel(target),
+    slug: quest.slug,
+    name: quest.name,
+    objectiveId: landing ? landing.id : null,
+  };
+}
+
 /**
  * Re-derive the action list from the retrieved quests. The model can only *pick*; ids, slugs and
- * map names always come from quests.json, so nothing invented survives.
+ * map names always come from quests.json, so nothing invented survives. Every action returned
+ * here is additionally run through the contract's own shape gate, so a field this function
+ * forgets to fill is dropped rather than shipped half-formed.
  */
 export function buildActions(hits, modelOut, map) {
   const bySlug = new Map(hits.map(({ q }) => [q.slug, q]));
@@ -326,22 +524,23 @@ export function buildActions(hits, modelOut, map) {
       if (owner && !wanted.includes(owner.q.slug)) wanted.push(owner.q.slug);
     }
   }
-  const slugs = wanted.slice(0, 3);
-  const actions = slugs.map((slug) => ({ type: 'selectQuest', slug }));
-  if (!slugs.length) return { actions, quests: slugs };
-
-  const lead = bySlug.get(slugs[0]);
-  const here = (o) => (o.zones ?? []).some((z) => z.map === map);
-  // honour the model's flyTo when it points at a real objective with a zone on this map
-  const asked = modelOut.actions.find((a) => a.type === 'flyTo'
-    && (lead.objectives ?? []).some((o) => o.id === a.objectiveId && here(o)));
-  const target = asked ? { id: asked.objectiveId } : (lead.objectives ?? []).find(here);
-  if (target) actions.push({ type: 'flyTo', objectiveId: target.id });
-  else {
-    const other = (lead.siteMaps ?? []).find((m) => m !== map && SITE_MAPS.includes(m));
-    if (other) actions.push({ type: 'switchMap', map: other });
+  const slugs = wanted.slice(0, MAX_QUESTS);
+  const actions = slugs.map((slug) => ({ type: 'selectQuest', slug, name: bySlug.get(slug).name }));
+  if (slugs.length) {
+    const lead = bySlug.get(slugs[0]);
+    // honour the model's flyTo when it points at a real objective with a zone on THIS map
+    const asked = modelOut.actions.find((a) => a.type === 'flyTo'
+      && (lead.objectives ?? []).some((o) => o.id === a.objectiveId && onMap(o, map)));
+    const target = asked ? { id: asked.objectiveId } : (lead.objectives ?? []).find((o) => onMap(o, map));
+    if (target) actions.push({ type: 'flyTo', objectiveId: target.id, slug: lead.slug, map });
+    else {
+      const askedMap = modelOut.actions.find((a) => a.type === 'switchMap')?.map ?? null;
+      const jump = crossMapFor(lead, map, askedMap);
+      if (jump) actions.push(jump);
+    }
   }
-  return { actions, quests: slugs };
+  // last gate: shape, in the contract's own words. Nothing malformed reaches the client.
+  return { actions: actions.filter((a) => isValidAction(a, { map })), quests: slugs };
 }
 
 /* ------------------------------------------------------------- handler ---- */
@@ -390,7 +589,9 @@ export default async function handler(req, res) {
   if (!message) return send(res, 400, { error: 'message is required' });
   if (Buffer.byteLength(message, 'utf8') > MAX_MESSAGE) return send(res, 400, { error: 'message too long (2 KB max)' });
 
-  const map = SITE_MAPS.includes(String(body.map)) ? String(body.map) : 'customs';
+  // The tab the player is on. It steers retrieval, the prompt and the actions, and it is echoed
+  // on the answer so the client can spot a reply that outlived the map it was asked about.
+  const map = normalizeMapKey(body.map);
   const selected = Array.isArray(body.selectedQuests) ? body.selectedQuests.filter((s) => typeof s === 'string').slice(0, 12) : [];
   // Optional grounding: task ids the player's own game reports as active. Untrusted input, so it is
   // only ever *matched* against quests.json — an id that resolves to nothing is silently dropped.
@@ -413,9 +614,13 @@ export default async function handler(req, res) {
   const activeSet = new Set(activeIds);
   const activeNames = activeQuestNames(entries, activeSet);
   const hits = rank(entries, message, map, { activeIds: activeSet });
+  // The second source behind every image reference. A miss here means no photos this turn, and
+  // `imageIndexOk: false` on the envelope so that outage is not mistaken for "no photos exist".
+  const allow = await loadImageAllow(req);
+  const catalog = imageCatalog(hits, allow, map);
   const grounding = hits.length
-    ? `QUEST DATA (the only facts you may use):\n${groundingFor(hits, map)}`
-    : 'QUEST DATA: no quest in the database matched this question.';
+    ? `CURRENT MAP: ${map}\nQUEST DATA (the only facts you may use):\n${groundingFor(hits, map, catalog)}`
+    : `CURRENT MAP: ${map}\nQUEST DATA: no quest in the database matched this question.`;
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return send(res, 502, { error: 'assistant is not configured' });
@@ -454,11 +659,27 @@ export default async function handler(req, res) {
 
   const parsed = parseReply(content);
   const { actions, quests } = buildActions(hits, parsed, map);
+  const images = buildImages(catalog, parsed, quests);
+  if (images.length) actions.push({ type: 'showImages', imageIds: images.map((i) => i.id) });
+
+  // src/assistant-contract.js is the contract; assemble it in that order and nothing else.
   const payload = {
+    protocol: PROTOCOL_VERSION,
+    map,
     answer: parsed.answer || 'I could not find anything about that in the quest data.',
     actions,
+    images,
+    imageIndexOk: catalog.available,
     quests,
-    sources: hits.map(({ q }) => ({ slug: q.slug, name: q.name, trader: q.trader, wikiLink: q.wikiLink ?? null })),
+    sources: hits.map(({ q }) => ({
+      slug: q.slug,
+      name: q.name,
+      trader: q.trader,
+      wikiLink: q.wikiLink ?? null,
+      // honest per-quest coverage, so the UI never has to guess from prose which maps this is on
+      maps: q.maps ?? [],
+      siteMaps: (q.siteMaps ?? []).filter(isSiteMap),
+    })),
   };
   cacheSet(key, payload);
   return send(res, 200, payload);

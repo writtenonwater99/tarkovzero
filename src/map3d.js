@@ -5,6 +5,13 @@ import { SolidPolygonLayer, PathLayer, IconLayer, TextLayer, LineLayer, Scatterp
 import { PathStyleExtension } from '@deck.gl/extensions';
 import { KINDS, iconDataUrl, arrowDataUrl, soldierDataUrl, extractLetter, extractReq, subText, dotRgb, clusterCount } from './icons.js';
 import { updateTier, currentTier, cellFor, clusterPoints, countsVisible } from './lod.js';
+// The PLACE-LABEL tier contract: what a name looks like and how far its leader lifts it. Aliased on
+// import because src/lod.js exports a `TIERS`/`tierOf` of its own for the MARKER ladder, and the two
+// vocabularies must never be mistaken for each other.
+import {
+  TIERS as LABEL_TIERS, TIER_RANK as LABEL_TIER_RANK, REFERENCE_MPP,
+  styleFor as labelStyleFor, tierOf as labelTierOf,
+} from './label-tier.js';
 import { esc, COLORS } from './live.js';
 import { buildTerrain } from './terrain.js'; // TRACK B: smooth terrain mesh + baked ground texture
 import { prepareTrees, treeLayers } from './trees.js';
@@ -18,7 +25,7 @@ import {
 } from './atmosphere.js';
 import { buildingMaterialId, roofMaterialId } from './render-style.js';
 import {
-  buildingFloorLevels, createFloorSurfaceResolver, measuredSurfaceY, visibleBuildingHeight,
+  buildingFloorLevels, createFloorSurfaceResolver, measuredSurfaceY,
 } from './surfaces.js';
 // Where a building's walls meet the ground, and what fills the downhill gap. Pure module, shared
 // verbatim with scripts/building-height-test.mjs — see its header for the foundation bug it exists
@@ -296,7 +303,7 @@ const catenary = (path, y, sag = 1.2) => {
 // Every recipe below composes the primitives that already exist (obb / expand / rbox / circle /
 // strip / ringAt / columns) into FIVE shared buckets — extruded boxes, flat quads, solid lines,
 // dashed lines, dots — so ~20 identity recipes cost 5 draw calls, not 100.
-// `lvl` on each item is its height ABOVE the building base, so the floor selector can cut it.
+// `lvl` on each item is its height ABOVE the building base.
 const mul = (c, k) => [Math.min(255, Math.round(c[0] * k)), Math.min(255, Math.round(c[1] * k)), Math.min(255, Math.round(c[2] * k)), c[3] ?? 255];
 // generic unnamed boxes must not all be the same grey; the tint is a deterministic hash of the
 // centroid so it never flickers between frames.
@@ -559,7 +566,7 @@ function detailParts(bs, scenes = []) {
 
   // --- 11. scenes with no footprint in the data: bunker mouths + checkpoints ---------------
   // These assemblies are not owned by the last building visited above. Leaving `owner` set
-  // would make the floor selector truncate an unrelated checkpoint using that building's survey.
+  // would attribute an unrelated checkpoint to that building's survey.
   owner = null;
   for (const s of scenes) {
     const [x, z] = s.pos, a = s.rot, ca = Math.cos(a), sa = Math.sin(a);
@@ -861,7 +868,7 @@ export async function createView3d(container, mapData, src) {
   /* --- STAGE 1: the render style ---------------------------------------------------------
    * `look` is a MATERIAL state. It selects the colour table, the light, the fog, the background,
    * the terrain bake and the post grade — and nothing else. Geometry buffers, transforms, feature
-   * ids, picking colours, LOD placement, floor filtering and the camera are invariant across it.
+   * ids, picking colours, LOD placement and the camera are invariant across it.
    */
   let look = applyLook(src.look ?? DEFAULT_LOOK);
   /* --- the atmosphere switches -----------------------------------------------------------
@@ -939,7 +946,6 @@ export async function createView3d(container, mapData, src) {
    */
   let floorResolver = createFloorSurfaceResolver(data.floorSurfaces, relief);
   let measuredFloorSlabs = [];
-  let undergroundSurfaces = [];
   const placeBuildings = () => {
     seatBuildings(data.buildings, H);
     floorResolver = createFloorSurfaceResolver(data.floorSurfaces, relief);
@@ -958,28 +964,6 @@ export async function createView3d(container, mapData, src) {
       building.plinthHeight = Math.max(0.47, profile.baseY - building.plinthBase + 0.12);
     }
     measuredFloorSlabs = floorResolver.measuredFloorSlabs(data.buildings);
-    const namedUnderground = (data.underground || []).map((item) => {
-      const center = centroidOf(item.poly);
-      const depth = Number(item.depth) || 4;
-      const groundY = H(center[0], center[1]);
-      const profile = floorResolver.undergroundProfile(item, {
-        fallbackY: groundY - depth,
-        fallbackReferenceY: groundY / relief - depth,
-      });
-      return { ...item, ...profile, surfaceY: profile.surfaceY, surfaceStableId: profile.stableId };
-    });
-    const namedStableIds = new Set(namedUnderground.map((item) => item.surfaceStableId).filter(Boolean));
-    const buildingUnderground = floorResolver.measuredBuildingUndergroundSlabs(data.buildings)
-      .filter((surface) => !surface.stableId || !namedStableIds.has(surface.stableId))
-      .map((surface) => ({
-        name: `${surface.building.place ?? surface.building.name ?? 'Building'} basement`,
-        poly: surface.building.poly,
-        measured: true,
-        row: surface.row,
-        surfaceY: surface.surfaceY,
-        surfaceStableId: surface.stableId,
-      }));
-    undergroundSurfaces = [...namedUnderground, ...buildingUnderground];
     return data.buildings;
   };
   const tBuildings = performance.now();
@@ -1053,14 +1037,36 @@ export async function createView3d(container, mapData, src) {
   // has not been populated yet (see the note there).
   let lastViewport = null;
   let fontsReady = false, initialised = false;
-  // atlas is keyed on fontFamily: use the fallback stack until the webfont is confirmed, then switch (forces a fresh atlas)
-  const LABEL_FONT = () => (fontsReady ? 'Barlow Condensed, Arial Narrow, system-ui, sans-serif' : 'Arial Narrow, system-ui, sans-serif');
-  const fontLoaded = () => { try { return document.fonts?.check?.('700 16px "Barlow Condensed"') ?? true; } catch { return true; } };
-  const waitFonts = (async () => { try { await Promise.race([document.fonts?.load?.('700 16px "Barlow Condensed"') ?? Promise.resolve(), new Promise((r) => setTimeout(r, 4000))]); } catch {} })();
+  /*
+   * THE WEBFONT GATE — the atlas cannot be un-baked.
+   *
+   * deck's TextLayer builds a glyph atlas keyed on `fontFamily` + `fontWeight`, ONCE, from whatever
+   * the browser resolves at that moment. Name the webfont before it has loaded and every glyph in
+   * the atlas is the fallback face at the fallback's widths, permanently — a wrong-width map that
+   * never repaints itself. So `LABEL_FONT()` keeps returning the fallback stack until
+   * `document.fonts` confirms the face, and only then switches, which changes the key and forces a
+   * fresh atlas.
+   *
+   * 2026-09-02: the face is IBM Plex Sans Condensed, and the gate now waits for EVERY weight the
+   * tier contract resolves to (500/600/700 — src/label-tier.js), not just 700. One TextLayer per
+   * tier means one atlas per weight, and a weight that had not landed would bake the fallback into
+   * its own atlas while the others looked right.
+   */
+  const LABEL_FACE = 'IBM Plex Sans Condensed';
+  const LABEL_WEIGHTS = [...new Set(LABEL_TIERS.map((t) => labelStyleFor(t).fontWeight))].sort();
+  const LABEL_FALLBACK = 'Arial Narrow, system-ui, sans-serif';
+  const LABEL_FONT = () => (fontsReady ? `${LABEL_FACE}, ${LABEL_FALLBACK}` : LABEL_FALLBACK);
+  const fontLoaded = () => { try { return LABEL_WEIGHTS.every((w) => document.fonts?.check?.(`${w} 16px "${LABEL_FACE}"`) ?? true); } catch { return true; } };
+  const waitFonts = (async () => {
+    try {
+      await Promise.race([
+        Promise.all(LABEL_WEIGHTS.map((w) => document.fonts?.load?.(`${w} 16px "${LABEL_FACE}"`) ?? Promise.resolve())),
+        new Promise((r) => setTimeout(r, 4000)),
+      ]);
+    } catch {}
+  })();
   waitFonts.then(() => { fontsReady = fontLoaded(); if (initialised) render(); });
-  let floor = 'all'; // 'all' | 0 | 1 | 2 | 3 | 'U'
   let nature = { trees: true, rocks: true };
-  const capH = (b, h) => (b.style === 'canopy' ? h : Math.min(h, visibleBuildingHeight(b._surfaceProfile, floor)));
 
   // TRACK B / STAGE 1: the scene light and the terrain bake's key light now come from the SAME two
   // frozen numbers in src/render-style.js (azimuth 230, elevation 21), so the two shading systems
@@ -1272,15 +1278,8 @@ export async function createView3d(container, mapData, src) {
     type: SCENES[m.name.trim()], pos: [m.position.x, m.position.z], tower: m.name.trim() === 'Military Base CP',
     rot: Math.atan2(mid[1] - m.position.z, mid[0] - m.position.x) }));
   let details = detailParts(data.buildings, scenes);
-  const showLvl = (d) => floor === 'all' || floor === 'U' || !d.owner
-    || d.lvl <= visibleBuildingHeight(d.owner._surfaceProfile, floor) + 0.4;
   let parts = buildingParts(data.buildings);
-  const undergroundLayers = () => floor !== 'U' ? [] : [
-    new SolidPolygonLayer({ id: 'underground', shadowEnabled: false, data: undergroundSurfaces, getPolygon: (d) => ringAt(d.poly, d.surfaceY + 0.04), getFillColor: C.undergroundOn, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, pickable: true, parameters: OVERLAY }),
-    new PathLayer({ id: 'underground-outline', shadowEnabled: false, data: undergroundSurfaces, getPath: (d) => ringAt([...d.poly, d.poly[0]], d.surfaceY + 0.08), getColor: [255, 220, 150, 235], getWidth: 2, widthUnits: 'pixels', updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, parameters: OVERLAY }),
-    new TextLayer({ id: 'underground-badges', data: undergroundSurfaces.filter((d) => polyArea(d.poly) > 1000), getPosition: (d) => P(centroidOf(d.poly), d.surfaceY + 0.32), getText: () => 'U', getSize: 13, sizeUnits: 'pixels', getColor: C.ink, background: true, getBackgroundColor: [255, 176, 48, 245], backgroundPadding: [4, 2, 4, 2], fontFamily: LABEL_FONT(), fontWeight: 700, fontSettings: LABEL_SDF, billboard: true, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-  ];
-  const buildingLayer = () => [...undergroundLayers(),
+  const buildingLayer = () => [
     /*
      * The dark skirt that closes the gap between a wall base and the downhill ground.
      *
@@ -1292,28 +1291,28 @@ export async function createView3d(container, mapData, src) {
      * ever be counted as storeys.
      */
     new SolidPolygonLayer({
-      id: 'building-plinths', visible: floor !== 'U', shadowEnabled: false, data: details.plinths,
+      id: 'building-plinths', shadowEnabled: false, data: details.plinths,
       getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h,
       getFillColor: plinthColor(look), material: false,
       updateTriggers: { getPolygon: heightEpoch, getFillColor: look },
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(),
     }),
     new SolidPolygonLayer({
-      id: 'buildings', visible: floor !== 'U', data: parts.walls, getPolygon: (d) => ringAt(d.poly, d.base ?? footprintGround(d.poly)), extruded: true, getElevation: (d) => capH(d, d.h), updateTriggers: { getPolygon: heightEpoch, getElevation: floor, getFillColor: [hover, floor] },
+      id: 'buildings', data: parts.walls, getPolygon: (d) => ringAt(d.poly, d.base ?? footprintGround(d.poly)), extruded: true, getElevation: (d) => d.h, updateTriggers: { getPolygon: heightEpoch, getFillColor: hover },
       getFillColor: (d, { index }) => (hover === index ? C.buildingHover : d.color ? liftTone(d.color, 0.12) : d.tint ? d.tint : d.kind === 'tank' ? C.tank : d.kind === 'powerline_towers' ? C.tower : d.floors > 1 ? C.buildingMulti : C.building),
       pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(),
       material: surfaceMaterial(look, 'building'),
       onHover: (i) => { if (i.index !== hover) { hover = i.index; render(); } },
     }),
     new SolidPolygonLayer({
-      id: 'measured-floor-surfaces', visible: floor !== 'U', shadowEnabled: false,
-      data: measuredFloorSlabs.filter((d) => floor === 'all' || d.floorIndex <= Number(floor)),
+      id: 'measured-floor-surfaces', shadowEnabled: false,
+      data: measuredFloorSlabs,
       getPolygon: (d) => ringAt(d.building.poly, d.surfaceY + 0.025),
       getFillColor: [154, 151, 141, 235], pickable: true,
-      updateTriggers: { getPolygon: [floor, heightEpoch] },
+      updateTriggers: { getPolygon: heightEpoch },
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(),
     }),
-    new SolidPolygonLayer({ id: 'roofs', visible: floor === 'all', data: parts.roofs, getPolygon: (d) => d.pts.map(([x, z, y]) => P([x, z], y + (d.b.base ?? footprintGround(d.b.poly)))), getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'roof') }),
+    new SolidPolygonLayer({ id: 'roofs', data: parts.roofs, getPolygon: (d) => d.pts.map(([x, z, y]) => P([x, z], y + (d.b.base ?? footprintGround(d.b.poly)))), getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, pickable: true, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'roof') }),
     /*
      * Flat roof decks. No `material` here, and none is missing: deck's SolidPolygonLayer only calls
      * `lighting_getLightColor` when `extruded` is true (solid-polygon-layer-vertex-main.glsl), so
@@ -1321,24 +1320,42 @@ export async function createView3d(container, mapData, src) {
      * UNLIT and takes its albedo verbatim. That is why a roof's sky lobe is folded into its colour
      * by atmosphere.js's materialTint() instead of being asked for as a Phong specular here.
      */
-    new SolidPolygonLayer({ id: 'slabs', visible: floor !== 'U', shadowEnabled: false, data: parts.slabs.filter((d) => floor === 'all' || !d.owner || d.z <= visibleBuildingHeight(d.owner._surfaceProfile, floor) + 0.4), getPolygon: (d) => ringAt(d.poly, d.z + (d.base ?? footprintGround(d.poly))), updateTriggers: { getPolygon: [floor, heightEpoch] }, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
-    new SolidPolygonLayer({ id: 'posts', visible: floor !== 'U', data: parts.posts, getPolygon: (d) => box(P(d.pos), d.w).map(([x, y]) => [x, y, d.base ?? H(d.pos[0], d.pos[1])]), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'slabLike') }),
-    new SolidPolygonLayer({ id: 'detail-boxes', visible: floor !== 'U', data: details.boxes.filter(showLvl), getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: [floor, heightEpoch] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'prop') }),
-    new SolidPolygonLayer({ id: 'detail-flats', visible: floor !== 'U', shadowEnabled: false, data: details.flats.filter(showLvl), getPolygon: (d) => d.ring, getFillColor: (d) => d.color, updateTriggers: { getPolygon: [floor, heightEpoch] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
-    new PathLayer({ id: 'detail-lines', visible: floor !== 'U', shadowEnabled: false, data: details.lines.filter(showLvl), getPath: (d) => d.path, getColor: (d) => d.color, getWidth: (d) => d.w, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: [floor, heightEpoch] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
-    new PathLayer({ id: 'detail-dashes', visible: floor !== 'U', shadowEnabled: false, data: details.dashes.filter(showLvl), getPath: (d) => d.path, getColor: (d) => d.color, getWidth: (d) => d.w, widthUnits: 'meters', widthMinPixels: 1, getDashArray: (d) => d.dash, dashJustified: false, updateTriggers: { getPath: [floor, heightEpoch] }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...foggedWith(dashExt) }),
-    new ScatterplotLayer({ id: 'detail-dots', visible: floor !== 'U', shadowEnabled: false, data: [...details.dots, ...parts.dots].filter(showLvl), getPosition: (d) => d.pos, getRadius: (d) => d.r, radiusUnits: 'meters', radiusMinPixels: 0.5, getFillColor: (d) => d.color, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
-    new PathLayer({ id: 'slab-edges', visible: floor !== 'U', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path.map((q) => [q[0], q[1], q[2] + (d.base ?? 0)]), getColor: [143, 137, 125], getWidth: (d) => (d.wide ? 0.9 : 0.3), widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new SolidPolygonLayer({ id: 'slabs', shadowEnabled: false, data: parts.slabs, getPolygon: (d) => ringAt(d.poly, d.z + (d.base ?? footprintGround(d.poly))), updateTriggers: { getPolygon: heightEpoch }, getFillColor: (d) => d.color, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new SolidPolygonLayer({ id: 'posts', data: parts.posts, getPolygon: (d) => box(P(d.pos), d.w).map(([x, y]) => [x, y, d.base ?? H(d.pos[0], d.pos[1])]), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'slabLike') }),
+    new SolidPolygonLayer({ id: 'detail-boxes', data: details.boxes, getPolygon: (d) => ringAt(d.poly, d.base), extruded: true, getElevation: (d) => d.h, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged(), material: surfaceMaterial(look, 'prop') }),
+    new SolidPolygonLayer({ id: 'detail-flats', shadowEnabled: false, data: details.flats, getPolygon: (d) => d.ring, getFillColor: (d) => d.color, updateTriggers: { getPolygon: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new PathLayer({ id: 'detail-lines', shadowEnabled: false, data: details.lines, getPath: (d) => d.path, getColor: (d) => d.color, getWidth: (d) => d.w, widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new PathLayer({ id: 'detail-dashes', shadowEnabled: false, data: details.dashes, getPath: (d) => d.path, getColor: (d) => d.color, getWidth: (d) => d.w, widthUnits: 'meters', widthMinPixels: 1, getDashArray: (d) => d.dash, dashJustified: false, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...foggedWith(dashExt) }),
+    new ScatterplotLayer({ id: 'detail-dots', shadowEnabled: false, data: [...details.dots, ...parts.dots], getPosition: (d) => d.pos, getRadius: (d) => d.r, radiusUnits: 'meters', radiusMinPixels: 0.5, getFillColor: (d) => d.color, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
+    new PathLayer({ id: 'slab-edges', shadowEnabled: false, data: parts.edges, getPath: (d) => d.path.map((q) => [q[0], q[1], q[2] + (d.base ?? 0)]), getColor: [143, 137, 125], getWidth: (d) => (d.wide ? 0.9 : 0.3), widthUnits: 'meters', widthMinPixels: 1, updateTriggers: { getPath: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, ...fogged() }),
   ];
-  const major = (d) => (d.size ?? 100) >= 100;
-  const lift = (d) => (major(d) ? 26 : 16) * ((d.size ?? 100) / 100);
-  // name "beam": a soft vertical light column from the ground to the name (no cap, no outline)
-  const pingLayers = (labelsAll) => { const labels = labelsAll.filter((d) => major(d) || viewState.zoom >= 0.8); return [
-    new ScatterplotLayer({ id: 'ping-base', data: labels, getPosition: (d) => Pg(d.position, 0.65), getRadius: (d) => (major(d) ? 2.4 : 1.6), radiusUnits: 'meters', radiusMinPixels: 2, getFillColor: [255, 255, 255, 110], parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-beam-glow', data: labels, getSourcePosition: (d) => Pg(d.position, 0.7), getTargetPosition: (d) => Pg(d.position, lift(d) - 0.5), getColor: [255, 255, 255, 38], getWidth: 7, widthUnits: 'pixels', parameters: OVERLAY, updateTriggers: { getSourcePosition: heightEpoch, getTargetPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-beam-mid', data: labels, getSourcePosition: (d) => Pg(d.position, 0.7), getTargetPosition: (d) => Pg(d.position, lift(d) - 0.5), getColor: [255, 255, 255, 90], getWidth: 3, widthUnits: 'pixels', parameters: OVERLAY, updateTriggers: { getSourcePosition: heightEpoch, getTargetPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-    new LineLayer({ id: 'ping-beam-core', data: labels, getSourcePosition: (d) => Pg(d.position, 0.7), getTargetPosition: (d) => Pg(d.position, lift(d) - 0.5), getColor: [255, 255, 255, 230], getWidth: 1, widthUnits: 'pixels', parameters: OVERLAY, updateTriggers: { getSourcePosition: heightEpoch, getTargetPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
-  ]; };
+  /* --- the leader line ---------------------------------------------------------------------
+   * THE NAME LIFTS OFF THE GROUND (founder-approved, 2026-09-02):
+   *
+   *     anchor ring at the real position -> hairline stem rising -> cap tick -> the name above it
+   *
+   * What replaced what. The old "ping" was a 26 m / 16 m WORLD-SPACE light column whose length came
+   * from the deleted `size` percentage, so a name's height above the ground changed with the camera
+   * and a shed's beam was the same object as a landmark's. The leader is a SCREEN-SPACE quantity —
+   * `stemPx` in src/label-tier.js — which is why it is built inside textLayout(), the one place in
+   * this file that has a viewport and can convert pixels back into metres honestly.
+   *
+   * Everything is drawn in the TIER'S OWN INK, not white: the leader belongs to the name, and a
+   * white beam under a cream name read as a separate object.
+   */
+  const rgbOf = (hexStr, a = 255) => [parseInt(hexStr.slice(1, 3), 16), parseInt(hexStr.slice(3, 5), 16), parseInt(hexStr.slice(5, 7), 16), a];
+  const leaderLayers = (leader) => [
+    // The stem, as three stacked segments with falling alpha — deck's LineLayer takes one colour per
+    // row, so an upward fade IS a set of rows. Hairline: 1 px, never scaled with the map.
+    new LineLayer({ id: 'label-stem', data: leader.stems, getSourcePosition: (d) => d.a, getTargetPosition: (d) => d.b, getColor: (d) => d.color, getWidth: 1, widthUnits: 'pixels', parameters: OVERLAY, updateTriggers: { getSourcePosition: heightEpoch, getTargetPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    // The cap tick at the top of the stem. Its direction is solved per frame against the projection
+    // so it stays horizontal ON SCREEN however the orbit is rotated, and it elbows sideways when the
+    // name had to slide — a leader that does not reach its name points at nothing.
+    new LineLayer({ id: 'label-cap', data: leader.caps, getSourcePosition: (d) => d.a, getTargetPosition: (d) => d.b, getColor: (d) => d.color, getWidth: 1, widthUnits: 'pixels', parameters: OVERLAY, updateTriggers: { getSourcePosition: heightEpoch, getTargetPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+    // The anchor ring, at the real position. HOLLOW on purpose: a filled dot vanishes on a bright
+    // roof and reads as dirt on a dark one. Pixel radius, so it is the same mark at every zoom.
+    new ScatterplotLayer({ id: 'label-anchor', data: leader.rings, getPosition: (d) => d.pos, getRadius: LABEL_RING_PX, radiusUnits: 'pixels', radiusMinPixels: LABEL_RING_PX, radiusMaxPixels: LABEL_RING_PX, stroked: true, filled: false, lineWidthUnits: 'pixels', getLineWidth: 1.2, lineWidthMinPixels: 1, getLineColor: (d) => d.color, parameters: OVERLAY, updateTriggers: { getPosition: heightEpoch }, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
+  ];
 
   /* --- screen-space text placement -------------------------------------------------------
    * Everything with words in it is laid out ONCE per frame, in screen pixels, against one
@@ -1353,24 +1370,43 @@ export async function createView3d(container, mapData, src) {
    *          on every Customs frame; same for OLD GAS and FORTRESS.
    *   D6     a quest pin landed centred on "CRACKHOUSE" and ate a letter.
    *
-   * One pass, in priority order — quest pins (they are why the panel is open) → major place
-   * names → the extract names that belong under them → minor place names. Each box is first
-   * NUDGED into the safe rect (never cut), then walked up/down a short ladder until it is clear
-   * of everything already seated; a box that can do neither is hidden. Hiding beats cutting: a
-   * word the reader cannot finish is worse than a landmark they can still see the ping of.
+   * One pass, in priority order — quest pins (they are why the panel is open) → place names in
+   * TIER order → the extract names that belong under them. Each box is first NUDGED into the safe
+   * rect (never cut), then resolved against everything already seated; a box that cannot be
+   * resolved is hidden. Hiding beats cutting: a word the reader cannot finish is worse than a
+   * landmark they can still see the anchor ring of.
+   *
+   * COLLISION IS RESOLVED ON THE STEM (2026-09-02). A place name that lands on a neighbour grows
+   * its leader until it is clear — the word moves, the ANCHOR RING DOES NOT, so the label never
+   * stops pointing at its own building. Only when no rung of that ladder clears it is the name
+   * dropped. `zone` has `stemPx: 0` by definition (an area has no point to stand a stem on), so it
+   * has nothing to lengthen and keeps the plain up/down walk it always had.
    */
   const LABEL_INSET = 12;   // px of clear air between a label's ink and the chrome
   const LABEL_NUDGE = 22;   // px a label may slide to escape the chrome before it is hidden
-  // M10: Woods place labels bottomed out at 10 px, ≈7 px of cap height — shapes, not words, on the
-  // physically largest map. The floor is the one number that decides the smallest map's type.
-  const MAJOR_MIN_PX = 12, MINOR_MIN_PX = 11;
+  const LABEL_STEM_STEP = 9;    // px a stem grows per rung when a neighbour is in the way…
+  const LABEL_STEM_RUNGS = 4;   // …and how many rungs it may climb before the name is dropped
+  const LABEL_CAP_HALF_PX = 5;  // half-width of the cap tick (matches style.css --cap-half)
+  const LABEL_NAME_GAP = 5;     // px between the cap tick and the name's box
+  const LABEL_RING_PX = 3.6;    // radius of the hollow anchor ring
+  /*
+   * The tier's authored size, ramped with scale.
+   *
+   * `fontSizePx` in the contract is the size at REFERENCE_MPP (1 m/px). EVERY tier takes the SAME
+   * multiplier here, so the RATIOS the contract fixes — the thing that makes FORTRESS outrank a
+   * shed — survive the ramp exactly. The clamp is on the multiplier, not on a per-tier pixel floor:
+   * the old MAJOR_MIN_PX/MINOR_MIN_PX (12/11, QA D13/M10) existed because minor names were drawn at
+   * every zoom; they are now thinned OUT above 0.6 m/px, so the smallest type any tier can reach is
+   * its own size at its own threshold, and scripts/label-tier.test.mjs asserts that stays ≥ 11 px.
+   */
+  const labelRamp = (mpp) => Math.min(1.35, Math.max(0.8, (REFERENCE_MPP / Math.max(1e-6, mpp)) ** 0.25));
   // The live marker's own screen footprint (ring + dot), and the name plate that hangs off it.
   const PLAYER_MARK_PX = 30, PLAYER_NAME_PX = 13, PLAYER_NAME_GAP = 15;
   /*
    * How wide a label's ink actually is, MEASURED — not estimated.
    *
    * This used to be `text.length * px * (weight >= 700 ? 0.52 : 0.47)`, a per-glyph average for
-   * Barlow Condensed. A name that draws WIDER than its estimate clears boxHit() against a
+   * the display face. A name that draws WIDER than its estimate clears boxHit() against a
    * neighbour that is already seated and is then seated straight on top of it. That is QA H1 on
    * the Customs default frame: "POWERLINE TOWER" and "SNIPER RIDGE" printing as one word,
    * "DEPOT" over "SMUGGLERS' BUNKER · UNDERGROUND", which in turn ran under "WAREHOUSE 3".
@@ -1381,8 +1417,8 @@ export async function createView3d(container, mapData, src) {
    * (LABEL_FONT()), so the two cannot disagree. Text metrics are linear in font size, so each
    * string is measured ONCE at a reference size and scaled — the cache is bounded by the number
    * of distinct names, not by the continuum of zoom-driven pixel sizes. The font epoch is part of
-   * the key: LABEL_FONT() switches from the Arial Narrow fallback to Barlow Condensed the moment
-   * document.fonts confirms it, and a width measured against the fallback is wrong afterwards.
+   * the key: LABEL_FONT() switches from the Arial Narrow fallback to IBM Plex Sans Condensed the
+   * moment document.fonts confirms it, and a width measured against the fallback is wrong after.
    */
   const MEASURE_PX = 100;
   const measureCtx = (() => { try { return document.createElement('canvas').getContext('2d'); } catch { return null; } })();
@@ -1432,19 +1468,37 @@ export async function createView3d(container, mapData, src) {
    * "the pass never ran" instead of a bisect.
    */
   let layoutStats = { bail: 'not-yet-run', seated: 0, hidden: 0, rect: null };
+  /** An empty leader set — what a bailed pass hands back. A stem with no seated name is a line
+   *  pointing at nothing, so the leader is built ONLY for rows this pass actually placed. */
+  const noLeader = () => ({ stems: [], caps: [], rings: [] });
 
   /**
-   * @returns {{place:object[],extract:object[]}} draw-ready rows. `off` is the pixel offset the
-   *   TextLayer applies; rows that could not be seated are simply absent. With no viewport yet
-   *   (the very first frame) both lists come back unculled — drawing every name beats drawing none.
+   * @returns {{place:object[],extract:object[],leader:object}} draw-ready rows. `off` is the pixel
+   *   offset the TextLayer applies from the label's GROUND anchor; rows that could not be seated
+   *   are simply absent. With no viewport yet (the very first frame) both lists come back unculled
+   *   — drawing every name beats drawing none — and with no leader, because a leader is a
+   *   screen-space measurement and there is nothing to measure in.
    */
   function textLayout(labelRows, markers, questPts, players = []) {
     const z = viewState.zoom ?? 0;
     const full = z >= 0.6;
-    const place = labelRows
-      .filter((d) => major(d) || z >= 0.8)
-      .map((d) => ({ d, major: major(d), text: major(d) ? d.text.toUpperCase() : d.text,
-        pos: Pg(d.position, lift(d) + 1.5), off: [0, 0] }));
+    /*
+     * THINNING IS NOT DONE HERE. `labelRows` is already the set main.js's labelSet() decided draws
+     * at the current metres-per-pixel (src/label-tier.js's ladder plus the Density override), and
+     * that is the ONE implementation of the ladder in the app — the old `major(d) || z >= 0.8`
+     * gate was a second one, cut on a zoom integer that means three different real scales across
+     * the three maps. What is decided here is what a name LOOKS like and where it sits.
+     */
+    const ramp = labelRamp(1 / 2 ** z);
+    const place = labelRows.map((d) => {
+      const tier = labelTierOf(d);            // THROWS on a row with no valid tier — deliberately
+      const s = labelStyleFor(tier);
+      return { d, tier, s, rank: LABEL_TIER_RANK[tier],
+        text: s.textTransform === 'uppercase' ? d.text.toUpperCase() : d.text,
+        px: s.fontSizePx * ramp,
+        // The anchor is the GROUND now. The lift is the leader's job, in pixels, below.
+        pos: Pg(d.position, 0.7), off: [0, 0] };
+    });
     // Every extract marker gets a badge seat; only some of them get their NAME drawn.
     const extractAll = markers.filter((m) => m.kind.startsWith('extract')).map((m) => {
       const k = eKey(m), lit = pinnedExtract === k || hoverExtract === k;
@@ -1472,29 +1526,55 @@ export async function createView3d(container, mapData, src) {
      */
     let vp = null;
     try { vp = deck?.getViewports?.()[0] ?? lastViewport; } catch { vp = lastViewport; }
-    if (!vp || !vp.width || !vp.height) { layoutStats = { bail: 'no-viewport', seated: 0, hidden: place.length, rect: null }; return { place, extract, badge: null }; }
+    if (!vp || !vp.width || !vp.height) { layoutStats = { bail: 'no-viewport', seated: 0, hidden: place.length, rect: null }; return { place, extract, badge: null, leader: noLeader() }; }
     const rect = textRect(vp);
     if (rect.right - rect.left < 60 || rect.bottom - rect.top < 60) {
       layoutStats = { bail: 'rect-too-small', seated: 0, hidden: place.length, rect };
-      return { place, extract, badge: null };
+      return { place, extract, badge: null, leader: noLeader() };
     }
     const taken = [];
     const project = (world) => { try { const q = vp.project(world); return Number.isFinite(q?.[0]) && Number.isFinite(q?.[1]) ? q : null; } catch { return null; } };
-    /** Pixels per world metre AT this point — the only honest way to size `sizeUnits:'meters'` text. */
-    const perMetre = (world, at) => { const b = project([world[0] + 1, world[1], world[2]]); return b ? Math.hypot(b[0] - at[0], b[1] - at[1]) : 0; };
+    /**
+     * The world offsets that move a point exactly one SCREEN pixel up, and one screen pixel right,
+     * at `world`. The leader is authored in pixels (src/label-tier.js `stemPx`) but deck's
+     * LineLayer only speaks world coordinates, so this is the conversion — and it is a conversion,
+     * not an assumption: the up vector is measured (a tilted orbit foreshortens world Y), and the
+     * right vector is SOLVED from the two horizontal basis vectors, so the cap tick stays
+     * horizontal on screen at every orbit rotation instead of swinging with the camera.
+     *
+     * Returns null where the projection is degenerate rather than guessing — a leader drawn from a
+     * guessed basis would point somewhere confident and wrong.
+     */
+    function screenBasis(world, at) {
+      const up = project([world[0], world[1], world[2] + 1]);
+      const ea = project([world[0] + 1, world[1], world[2]]);
+      const eb = project([world[0], world[1] + 1, world[2]]);
+      if (!up || !ea || !eb) return null;
+      const upPx = Math.hypot(up[0] - at[0], up[1] - at[1]);
+      const a = [ea[0] - at[0], ea[1] - at[1]], b = [eb[0] - at[0], eb[1] - at[1]];
+      const det = a[0] * b[1] - a[1] * b[0];
+      if (!(upPx > 1e-6) || !Number.isFinite(det) || Math.abs(det) < 1e-9) return null;
+      // solve  s*a + t*b = (1, 0)   — one pixel to the right, no pixel up or down
+      const s = b[1] / det, t = -a[1] / det;
+      return { metresPerUpPx: 1 / upPx, rightPerPx: [s, t] };
+    }
     /**
      * Nudge a box into the rect, then walk it clear of everything seated. Returns the pixel
      * offset to apply, or null when the box belongs nowhere on this frame.
+     *
+     * `ladder` overrides the default up/down walk. Place names pass `[0]`: their vertical ladder
+     * is the STEM, walked by the caller, because a longer stem moves the word without moving the
+     * anchor ring — which is the whole point of the leader.
      */
-    function seat(cx, cy, w, h, upFirst) {
+    function seat(cx, cy, w, h, upFirst, ladder = null) {
       if (w > rect.right - rect.left || h > rect.bottom - rect.top) return null;
       const b = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
       const dx = b[2] > rect.right ? rect.right - b[2] : b[0] < rect.left ? rect.left - b[0] : 0;
       const dy = b[3] > rect.bottom ? rect.bottom - b[3] : b[1] < rect.top ? rect.top - b[1] : 0;
       if (Math.abs(dx) > LABEL_NUDGE || Math.abs(dy) > LABEL_NUDGE) return null;
       const step = h + 4;
-      const ladder = upFirst ? [0, -step, step, -2 * step, 2 * step] : [0, step, -step, 2 * step, -2 * step];
-      for (const k of ladder) {
+      const steps = ladder ?? (upFirst ? [0, -step, step, -2 * step, 2 * step] : [0, step, -step, 2 * step, -2 * step]);
+      for (const k of steps) {
         const c = [b[0] + dx, b[1] + dy + k, b[2] + dx, b[3] + dy + k];
         if (c[1] < rect.top || c[3] > rect.bottom || c[0] < rect.left || c[2] > rect.right) continue;
         if (taken.some((o) => boxHit(c, o))) continue;
@@ -1567,19 +1647,73 @@ export async function createView3d(container, mapData, src) {
       }
       player.set(p.code, off ?? [PLAYER_MARK_PX / 2 + PLAYER_NAME_GAP, 0]);
     }
-    // 3. major place names, longest first so the landmark that needs the room asks for it first.
-    //    upFirst: a quest pin under the name pushes the NAME up, which is the D6 fix.
+    /*
+     * 3. PLACE NAMES ON THEIR LEADERS.
+     *
+     * The word starts `stemPx` above the anchor and, when something is already sitting there, the
+     * STEM GROWS until it is clear. Only the word moves — the ring stays on the building — which is
+     * why this is the ladder instead of the old up/down box walk (`seat` is handed `[0]`, so it
+     * still nudges out of the chrome but never invents a vertical offset of its own).
+     *
+     * `zone` has no stem to grow, so it keeps a small symmetric walk: an area name is not pointing
+     * at a point, and lifting it off nothing would be a lie about where the region is.
+     */
+    const stems = [], caps = [], rings = [];
     const seatPlace = (rows) => rows.filter((e) => {
       const p = project(e.pos);
       if (!p) return false;
-      const px = Math.max(e.major ? MAJOR_MIN_PX : MINOR_MIN_PX,
-        Math.min(e.major ? 15 : 12, (e.major ? 6.2 : 4.6) * perMetre(e.pos, p)));
-      const off = seat(p[0], p[1], inkWidth(e.text, px, e.major ? 700 : 600) + 6, px * 1.18 + 4, true);
-      if (!off) return false;
-      e.off = off;
-      return true;
+      const w = inkWidth(e.text, e.px, e.s.fontWeight) + 6;
+      const h = e.px * 1.18 + 4;
+      const stem0 = e.s.stemPx;
+      const rungs = stem0 > 0
+        ? Array.from({ length: LABEL_STEM_RUNGS + 1 }, (_, i) => stem0 + i * LABEL_STEM_STEP)
+        : [0];
+      for (const stem of rungs) {
+        // A stemmed name hangs its BOX above the cap tick; a zone's box sits on the anchor.
+        const cy = stem > 0 ? p[1] - stem - LABEL_NAME_GAP - h / 2 : p[1];
+        const off = seat(p[0], cy, w, h, true, stem > 0 ? [0] : null);
+        if (!off) continue;
+        e.off = [off[0], cy + off[1] - p[1]];   // pixel offset from the GROUND anchor
+        /*
+         * The stem the leader actually has to draw is MEASURED BACK OUT of where the name landed,
+         * never taken from the rung: `seat()` may also have slid the box vertically to clear the
+         * chrome, and a cap tick drawn at the rung's height would then float in the gap under a
+         * word that had moved on. This is the same class of bug as a metric that cannot fail —
+         * derive it from the outcome, not from the intent.
+         */
+        e.stem = Math.max(0, -e.off[1] - h / 2 - LABEL_NAME_GAP);
+        if (e.stem > 1) {
+          const basis = screenBasis(e.pos, p);
+          // No basis means the projection is degenerate here. The NAME still draws — it is seated,
+          // and dropping it would be worse — but no leader is invented for it, and `renderStats()`
+          // counts it, so "seated but no ring" is a number rather than a mystery.
+          if (basis) {
+            const stemM = e.stem * basis.metresPerUpPx;
+            const top = [e.pos[0], e.pos[1], e.pos[2] + stemM];
+            // three segments, falling alpha: the ink is heaviest where it touches the ground
+            const ink = e.s.color.ink;
+            for (const [a0, a1, alpha] of [[0, 1 / 3, 215], [1 / 3, 2 / 3, 140], [2 / 3, 1, 70]]) {
+              stems.push({ a: [e.pos[0], e.pos[1], e.pos[2] + stemM * a0], b: [e.pos[0], e.pos[1], e.pos[2] + stemM * a1], color: rgbOf(ink, alpha) });
+            }
+            // the cap tick, elbowed out to reach under a name that had to slide
+            const dx = e.off[0];
+            const capL = Math.min(-LABEL_CAP_HALF_PX, dx - LABEL_CAP_HALF_PX);
+            const capR = Math.max(LABEL_CAP_HALF_PX, dx + LABEL_CAP_HALF_PX);
+            const at = (px) => [top[0] + basis.rightPerPx[0] * px, top[1] + basis.rightPerPx[1] * px, top[2]];
+            caps.push({ a: at(capL), b: at(capR), color: rgbOf(ink, 230) });
+            rings.push({ pos: Pg(e.d.position, 0.65), color: rgbOf(ink, 200) });
+          } else {
+            e.stem = 0;
+          }
+        }
+        return true;
+      }
+      return false;
     });
-    const placedMajor = seatPlace(place.filter((e) => e.major).sort((a, b) => b.text.length - a.text.length));
+    // Landmarks and named buildings first — they are what the map is navigated by, and they ask for
+    // their room before the secondary names do. Longest first inside a rank.
+    const byRank = (a, b) => a.rank - b.rank || b.text.length - a.text.length;
+    const placedMajor = seatPlace(place.filter((e) => e.rank <= LABEL_TIER_RANK.building).sort(byRank));
     // 4. extract names, stacked BELOW their badge and below any place name they would print
     //    through. Ranked south-first, then by faction, so the same frame decides the same way.
     for (const d of extract) { const p = project(d.rankPos); d.px = p ? p[0] : 0; d.py = p ? p[1] : 0; }
@@ -1602,11 +1736,14 @@ export async function createView3d(container, mapData, src) {
       d.off = [d.shift[0] + off[0], d.shift[1] + 8 + off[1]];
       return true;
     });
-    // 5. minor names last: they are the tier the map can afford to lose.
-    const placedMinor = seatPlace(place.filter((e) => !e.major));
+    // 5. the secondary tiers last: they are the ones the map can afford to lose.
+    const placedMinor = seatPlace(place.filter((e) => e.rank > LABEL_TIER_RANK.building).sort(byRank));
     const seated = placedMajor.length + placedMinor.length;
-    layoutStats = { bail: null, seated, hidden: place.length - seated, rect };
-    return { place: [...placedMajor, ...placedMinor], extract: placedExtract, badge, player };
+    layoutStats = { bail: null, seated, hidden: place.length - seated, rect,
+      // What the leader actually drew, so "the names lifted but the lines are missing" is a
+      // read-out and not a bisect. `stems` is three rows per leader (the fade).
+      leaders: { anchors: rings.length, stems: stems.length, caps: caps.length } };
+    return { place: [...placedMajor, ...placedMinor], extract: placedExtract, badge, player, leader: { stems, caps, rings } };
   }
 
   // --- TRACK C: extract names in 3D -----------------------------------------------------
@@ -1615,7 +1752,6 @@ export async function createView3d(container, mapData, src) {
   // draw the text straight through the badge.
   let pinnedExtract = null, hoverExtract = null;
   const eKey = (m) => (m.name || '') + '|' + m.kind;
-  const minorAlpha = () => Math.round(120 + 135 * Math.min(1, Math.max(0, ((viewState.zoom ?? 0) - 0.8) / 0.4)));
   const EXTRACT_PRIORITY = { 'extract-pmc': 0, 'extract-shared': 1, 'extract-scav': 2, 'extract-transit': 3 };
   const EXTRACT_CHARS = [...new Set(
     src.markers().filter((m) => m.kind.startsWith('extract') && m.name).flatMap((m) => [(m.name || '').toUpperCase(), shortName(m.name), subText(m)]).join('')
@@ -1771,9 +1907,8 @@ export async function createView3d(container, mapData, src) {
   }
 
   const dynamicLayers = () => {
-    const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z) && (floor !== 'U' || markerLevel(m) === 'underground'));
-    const labels = src.labels().filter((d) => inLimit(d.position[0], d.position[1])
-      && (floor === 'U' ? d.floor === 'U' || d.floor === 'both' : d.floor !== 'U'));
+    const markers = src.markers().filter((m) => inLimit(m.position.x, m.position.z));
+    const labels = src.labels().filter((d) => inLimit(d.position[0], d.position[1]));
     const players = src.players().filter((p) => p.last);
     // One screen-space pass decides where every word goes — see textLayout(). The quest points it
     // lays out around are the same ones questLayers() draws, filtered the same way.
@@ -1794,25 +1929,36 @@ export async function createView3d(container, mapData, src) {
         onHover: (i) => { const k = i.object && i.object.kind.startsWith('extract') ? eKey(i.object) : null; if (k !== hoverExtract) { hoverExtract = k; render(); } },
         onClick: (i) => { if (!i.object || !i.object.kind.startsWith('extract')) return false; const k = eKey(i.object); pinnedExtract = pinnedExtract === k ? null : k; render(); return true; } }),
       ...lodMarkerLayers(markers),
-      ...pingLayers(laid.place.map((e) => e.d)),
-      // TRACK C typography: majors are UPPERCASE/700, minors Title Case/600 — case, not a second grey,
-      // carries the hierarchy, because a grey-on-grey difference dies at 9 px.
-      ...[true, false].map((isMajor) => new TextLayer({ id: isMajor ? 'labels-major' : 'labels-minor',
-        data: laid.place.filter((e) => e.major === isMajor),
-        getPosition: (d) => d.pos, getText: (d) => d.text, getSize: isMajor ? 6.2 : 4.6, sizeUnits: 'meters',
-        sizeMinPixels: isMajor ? MAJOR_MIN_PX : MINOR_MIN_PX, sizeMaxPixels: isMajor ? 15 : 12,
-        // The seat textLayout() found: 0,0 for a label with room, otherwise the slide that kept it
-        // out of the chrome and off its neighbour.
-        getPixelOffset: (d) => d.off,
-        getColor: isMajor ? [...C.cream, 255] : [...C.creamDim, minorAlpha()], updateTriggers: { getColor: isMajor ? 0 : minorAlpha() },
-        fontFamily: LABEL_FONT(), fontWeight: isMajor ? 700 : 600, fontSettings: LABEL_SDF,
-        // QA D13, both halves. The minor tier used to bottom out at 8 px of sentence-case type over
-        // hillshade, where neither a 2 px halo nor a second grey is enough separation to read the
-        // word — the 2D half of the same defect raised `.place-label` to 12.5/11 px in 32ce1cc, and
-        // leaving 3D at 8 made one defect behave two ways. QA M10 then found Woods, the physically
-        // largest map, sitting ON that floor at ~7 px of cap height, so the floor is 12/11 now.
-        outlineWidth: isMajor ? 3.2 : 3, outlineColor: isMajor ? [...C.ink, 252] : [...C.ink, 250],
-        billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN })),
+      // The leader lines, for the names this frame actually seated. A stem under a hidden name is a
+      // line pointing at nothing (QA L2 — twelve of the old beams out-contrasted the buildings they
+      // marked), so textLayout() builds these from the seated rows and nothing else.
+      ...leaderLayers(laid.leader),
+      /*
+       * ONE TextLayer PER TIER — because deck bakes one glyph atlas per (fontFamily, fontWeight)
+       * and the tiers differ in weight. Everything visible about a name comes from the contract:
+       * size (ramped, ratios preserved), weight, case, ink and halo radius.
+       *
+       * `letterSpacingEm` is the one contract property this renderer CANNOT honour: deck's
+       * TextLayer has no tracking prop, and faking it by padding the string would break the
+       * measured widths the seating pass depends on. The 2D pass applies it; here the hierarchy is
+       * carried by size, weight, case and the leader's length. Stated, not silently dropped.
+       */
+      ...LABEL_TIERS.map((tier) => {
+        const st = labelStyleFor(tier);
+        const rows = laid.place.filter((e) => e.tier === tier);
+        return new TextLayer({ id: `labels-${tier}`, data: rows,
+          // The anchor is the GROUND point; the leader's length lives in the pixel offset, so a
+          // name cannot drift off its stem when the camera tilts.
+          getPosition: (d) => d.pos, getText: (d) => d.text,
+          getSize: (d) => d.px, sizeUnits: 'pixels', sizeMinPixels: 9, sizeMaxPixels: 30,
+          getPixelOffset: (d) => d.off,
+          getColor: rgbOf(st.color.ink, 255),
+          fontFamily: LABEL_FONT(), fontWeight: st.fontWeight, fontSettings: LABEL_SDF,
+          outlineWidth: st.color.haloPx, outlineColor: rgbOf(st.color.halo, 252),
+          getTextAnchor: 'middle',
+          updateTriggers: { getPixelOffset: rows.map((e) => e.off), getSize: rows.map((e) => e.px) },
+          billboard: true, parameters: OVERLAY, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN });
+      }),
       ...extractNameLayers(laid.extract),
       ...questLayers(),
       new PathLayer({ id: 'trails', data: players.filter((p) => p.trail), getPath: (p) => p.trail.getLatLngs().map((ll) => Pg([ll.lng, ll.lat], 0.6)), getColor: (p) => hex(p.color, 200), getWidth: 1.2, widthUnits: 'meters', widthMinPixels: 2, coordinateSystem: COORDINATE_SYSTEM.CARTESIAN }),
@@ -1906,7 +2052,7 @@ export async function createView3d(container, mapData, src) {
       const hasModels = (l) => !!(l?.getModels?.().length) || !!(l?.getSubLayers?.().some((s) => s?.getModels?.().length));
       const drawn = (id) => { const l = layers.find((x) => x && x.id === id); return !!(l && l.props.data?.length && hasModels(l)); };
       const t = Math.round(performance.now() - bootMs);
-      if (firstLabelMs == null && drawn('labels-major')) firstLabelMs = t;
+      if (firstLabelMs == null && LABEL_TIERS.some((tier) => drawn(`labels-${tier}`))) firstLabelMs = t;
       if (firstBadgeMs == null && drawn('markers-extract')) {
         const l = layers.find((x) => x && x.id === 'markers-extract');
         // an IconLayer with no atlas texture yet draws nothing — that WAS the defect. Neither does
@@ -2015,8 +2161,8 @@ export async function createView3d(container, mapData, src) {
    * colour at build time.
    *
    * What does NOT change: the terrain mesh and its skirt (built once by buildTerrain and shared by
-   * both bakes), H(), every geometry accessor, feature ids, picking colours, the floor state, the
-   * LOD tier, and the camera. `rebuildGround()` is deliberately NOT called.
+   * both bakes), H(), every geometry accessor, feature ids, picking colours, the LOD tier, and
+   * the camera. `rebuildGround()` is deliberately NOT called.
    */
   function setLook(next) {
     const wanted = resolveLook(next);
@@ -2162,7 +2308,6 @@ export async function createView3d(container, mapData, src) {
     // Every caller of refresh() is a "the marker set may have changed" event, so this is where the
     // atlas is checked against it — see ensureMarkerIcons().
     refresh: () => { ensureMarkerIcons(); render(); },
-    setFloor: (f) => { floor = f; render(); },
     setNature: (next) => { nature = { ...nature, ...next }; render(); },
     setRelief,
     setLook,

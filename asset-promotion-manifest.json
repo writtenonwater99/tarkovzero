@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "documentType": "tarkovzero-asset-promotion-manifest",
+  "notes": "The single explicit allow-list of local-package artifacts that may reach dist/. Empty means nothing is promoted and the build behaves exactly as it did before this file existed. An entry names a SOURCE KEY from PROMOTABLE_SOURCES in scripts/lib/asset-promotion.mjs -- never a path -- and must cite that source's required provenance documents by role and repo path, with the sha256 each one currently hashes to. Editing a path here promotes nothing: the receipt documents, the source bytes and the bytes in dist/ must all hash to the declared values. Raw captures (unity-facts, the raw Unity vegetation dumps, the scalar facts file, the survey photographs) have no source key at all and are refused even when listed. See scripts/verify-build-boundary.mjs and docs/CONTINUATION-HANDOFF-2026-09-02.md section 9.",
+  "promotions": []
+}

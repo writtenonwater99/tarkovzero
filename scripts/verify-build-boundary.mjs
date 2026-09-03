@@ -1,26 +1,65 @@
 #!/usr/bin/env node
 //
-// Deterministic build-boundary verifier.
+// Deterministic build-boundary verifier — layer 4 of the four documented in `src/renderer-gate.js`.
 //
-// Runs after `vite build` and proves that nothing derived from a local Escape
-// from Tarkov installation reached `dist/`. Three independent checks, each of
-// which alone is enough to fail the build:
+// WHAT CHANGED, AND WHY IT IS NOT A RELAXATION
 //
-//   1. path/name  — no build output may live under, or be named after, the
-//                   local game-derived root, and no local payload suffix
-//                   (`.f32le`, `extraction-report.json`) may appear at all.
-//   2. content    — no build output may embed an absolute EFT-install path or
-//                   the local package root name, in UTF-8 or UTF-16LE.
-//   3. hash       — no build output may be byte-for-byte identical to a file
-//                   the local package manifest accounts for.
+// This verifier used to enforce one rule: nothing from the local roots may reach `dist/`. The
+// founder has ruled that the local packages hold no extracted game assets ("there are no real
+// assets from the game in there. we took measurements and designed") and approved promoting
+// specific AUTHORED OUTPUTS into `public/`, to ship the way `public/assets/3d/customs/authored/
+// fortress/` already does. The rule is therefore now:
 //
-// The verifier never deletes or rewrites `dist/`: a failure leaves the build
-// tree in place for inspection and exits non-zero.
+//   * nothing from the RAW CAPTURE roots may reach `dist/` — ever, by any route, listed or not;
+//   * anything else from a local package may reach `dist/` only if it is named in
+//     `asset-promotion-manifest.json` by a source key from the closed registry in
+//     `scripts/lib/asset-promotion.mjs`, with a receipt whose declared hashes verify against
+//     git-tracked provenance documents AND against the bytes actually in `dist/`.
+//
+// That is strictly MORE coverage than before, not less. `.local-candidates/survey-2026-09-01/`
+// (the 65 in-game photographs) and the proof/probe packages were never under any scanned root:
+// a photograph renamed into `dist/assets/` passed every check this file ran. It no longer does.
+//
+// Checks, each of which alone is enough to fail the build:
+//
+//   1. path/name  — no build output may live under, or be named after, a local root, and no local
+//                   payload suffix (`.f32le`, `extraction-report.json`) may appear unless the
+//                   promotion manifest admits that exact file at that exact path with that exact
+//                   digest.
+//   2. content    — no build output may embed an absolute EFT-install path or a local package root
+//                   name, in UTF-8 or UTF-16LE. NEVER clearable by the manifest.
+//   3. hash       — no build output may be byte-for-byte identical to a file a local package
+//                   manifest accounts for, or to any build intermediate / QA artifact, unless the
+//                   promotion manifest admits it (see above).
+//   4. capture    — no build output may be byte-for-byte identical to, named like, or nested under
+//                   a RAW CAPTURE. This check never consults the manifest, so a capture cannot be
+//                   promoted even by someone who writes it into the allow-list.
+//   5. promotion  — every entry in the promotion manifest must validate against the closed
+//                   registry and its receipt must verify. A bad receipt fails the build whether or
+//                   not the artifact it describes is in `dist/` at all.
+//
+// The verifier never deletes or rewrites `dist/`: a failure leaves the build tree in place for
+// inspection and exits non-zero.
 
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import {
+  CAPTURE_FILE_NAME_PATTERNS,
+  CAPTURE_PATH_SEGMENTS,
+  CAPTURE_SUBTREES,
+  INTERMEDIATE_SUBTREES,
+  PROMOTABLE_SOURCES,
+  PROMOTION_MANIFEST_PATH,
+  REPOSITORY_ROOT as PROMOTION_REPOSITORY_ROOT,
+  collectSubtreeHashes,
+  readPromotionManifest,
+  sha256File,
+  validatePromotionManifest,
+  verifyPromotionEntries,
+} from './lib/asset-promotion.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(SCRIPT_DIR, '..');
@@ -31,17 +70,17 @@ export const DEFAULT_LOCAL_ROOT = resolve(REPOSITORY_ROOT, '.local-game-derived'
  * Second local root: the independently-authored Customs vegetation pack
  * (docs/plans/VEGETATION-SERVING.md). It is original authored work, not
  * game-derived data — a different threat model from `DEFAULT_LOCAL_ROOT` —
- * but the one property that matters here (it must never reach `dist/`) is
- * identical, so it is scanned by the same verifier, as a second root, not
- * folded into the first.
+ * but the one property that matters here (it must never reach `dist/`
+ * unpromoted) is identical, so it is scanned by the same verifier, as a second
+ * root, not folded into the first.
  */
 export const DEFAULT_VEGETATION_ROOT = resolve(REPOSITORY_ROOT, '.local-candidates', 'vegetation-full-v2');
 /**
  * Third local root: the offline-built vegetation texture-array set
  * (docs/plans/VEGETATION-DRAWCALLS.md, `scripts/vegetation-asset-factory/build_texture_arrays.py`) —
  * `veg-layers.json` plus the nine `veg-l{0,1,2}-{basecolor,orm,normal}.bin` blobs it declares. Same
- * threat model and same one property that matters (never reach `dist/`) as
- * `DEFAULT_VEGETATION_ROOT`, so it is scanned by the same verifier, as a third root.
+ * threat model and same one property that matters as `DEFAULT_VEGETATION_ROOT`, so it is scanned by
+ * the same verifier, as a third root.
  */
 export const DEFAULT_VEGETATION_ARRAYTEX_ROOT =
   resolve(REPOSITORY_ROOT, '.local-candidates', 'vegetation-arraytex-v1');
@@ -91,10 +130,15 @@ export const FORBIDDEN_FILE_NAMES = Object.freeze([
  * File suffixes that only a local extraction produces.
  *
  * Deliberately does NOT include `.glb`. `.f32le` is unique to the terrain
- * package, so forbidding it outright is free. `.glb` is not unique —
- * `public/assets/3d/customs/authored/fortress/*.glb` already ships to
- * `dist/` legitimately, so a blanket suffix ban would fail every future
- * production build on its own admitted assets. `.glb` protection for the
+ * package, so forbidding it outright is nearly free — and it is now
+ * *clearable*, because the founder approved promoting the terrain height
+ * surfaces, which carry exactly that suffix. Clearing still requires a manifest
+ * entry naming that dist path with that digest and a receipt that verifies;
+ * an unlisted `.f32le` in `dist/` fails exactly as it did before.
+ *
+ * `.glb` is not unique — `public/assets/3d/customs/authored/fortress/*.glb`
+ * already ships to `dist/` legitimately, so a blanket suffix ban would fail
+ * every production build on its own admitted assets. `.glb` protection for the
  * vegetation pack rests on the hash check alone (byte-for-byte identity,
  * immune to renaming or relocation) plus the path/name checks above, which
  * catch the common case of a lazy recursive copy. See
@@ -112,6 +156,10 @@ export const FORBIDDEN_FILE_SUFFIXES = Object.freeze(['.f32le']);
  * root names (`.local-game-derived`, `.local-candidates`) ARE listed,
  * because they can only appear if build tooling touched the local
  * directory.
+ *
+ * A `content` violation is NEVER cleared by a promotion. A promoted artifact is
+ * geometry or a surface map; if it embeds an install path, the thing to fix is
+ * the artifact.
  */
 export const FORBIDDEN_CONTENT_LITERALS = Object.freeze([
   '.local-game-derived',
@@ -155,6 +203,9 @@ const HASH_MANIFEST_NAMES = Object.freeze([
   'veg-layers.json',
   'veg-layers.receipt.json',
 ]);
+
+/** Only these two checks may ever be cleared by a verified promotion. */
+const CLEARABLE_CHECKS = Object.freeze(new Set(['hash', 'name']));
 
 class BuildBoundaryError extends Error {
   constructor(code, message) {
@@ -218,6 +269,12 @@ function sha256(bytes) {
  * SHA-256 recorded by the local package manifests, plus the actual digest of
  * every file in the local root (which covers payloads the manifest does not
  * checksum, including the manifest itself).
+ *
+ * Payload digests are STREAMED (`sha256File`), never buffered: `.local-game-derived/unity-facts/
+ * customs-unity-facts.json` is 460 MB on a drvfs mount and `readFile` allocated all of it. The
+ * digests, and therefore this function's output, are identical either way. Only the small
+ * manifest documents named by `HASH_MANIFEST_NAMES` are read into memory, because their TEXT has
+ * to be scraped for declared hashes.
  */
 export async function collectLocalPackageHashes(localRoot) {
   const files = await listFiles(localRoot);
@@ -225,14 +282,21 @@ export async function collectLocalPackageHashes(localRoot) {
   const hashes = new Map();
   for (const file of files) {
     if (file.symlink || file.directory) continue;
-    let bytes;
+    const isManifest = HASH_MANIFEST_NAMES.includes(file.relativePath.split('/').pop());
+    let digest;
+    let bytes = null;
     try {
-      bytes = await readFile(file.absolutePath);
+      if (isManifest) {
+        bytes = await readFile(file.absolutePath);
+        digest = sha256(bytes);
+      } else {
+        digest = await sha256File(file.absolutePath);
+      }
     } catch {
       continue;
     }
-    hashes.set(sha256(bytes), `${file.relativePath} (file bytes)`);
-    if (!HASH_MANIFEST_NAMES.includes(file.relativePath.split('/').pop())) continue;
+    hashes.set(digest, `${file.relativePath} (file bytes)`);
+    if (!isManifest) continue;
     for (const match of bytes.toString('utf8').matchAll(SHA256_HEX)) {
       if (!hashes.has(match[0])) hashes.set(match[0], `${file.relativePath} (declared hash)`);
     }
@@ -248,14 +312,24 @@ function pathViolations(file) {
     if (FORBIDDEN_PATH_SEGMENTS.some((forbidden) => lower.includes(forbidden))) {
       found.push(violation('path', file.relativePath, `path segment "${segment}" is local-derived`));
     }
+    // A capture package's own directory name, reported under the non-clearable `capture` check.
+    if (CAPTURE_PATH_SEGMENTS.some((forbidden) => lower.includes(forbidden))) {
+      found.push(violation('capture', file.relativePath, `path segment "${segment}" names a raw capture package`));
+    }
   }
   const name = segments[segments.length - 1].toLowerCase();
+  const rawName = segments[segments.length - 1];
   if (FORBIDDEN_FILE_NAMES.includes(name)) {
     found.push(violation('name', file.relativePath, `"${name}" is a local extraction artifact`));
   }
   for (const suffix of FORBIDDEN_FILE_SUFFIXES) {
     if (name.endsWith(suffix)) {
       found.push(violation('name', file.relativePath, `"${suffix}" is a local extraction payload suffix`));
+    }
+  }
+  for (const { pattern, detail } of CAPTURE_FILE_NAME_PATTERNS) {
+    if (pattern.test(rawName)) {
+      found.push(violation('capture', file.relativePath, `"${rawName}" ${detail}`));
     }
   }
   if (file.symlink) {
@@ -290,7 +364,8 @@ function contentViolations(file, bytes) {
 
 /**
  * Verify that `distDir` contains no local game-derived (or locally-authored,
- * unshipped) truth.
+ * unshipped) truth that the promotion manifest has not explicitly admitted, and
+ * no raw capture under any circumstances.
  *
  * Pure with respect to the filesystem: it only reads. Callers (including tests)
  * may point it at temporary fixture directories.
@@ -301,13 +376,25 @@ function contentViolations(file, bytes) {
  * defaults to `[DEFAULT_LOCAL_ROOT, DEFAULT_VEGETATION_ROOT, DEFAULT_VEGETATION_ARRAYTEX_ROOT]` —
  * the common case, since `npm run build` invokes this with no arguments and must keep
  * protecting all three roots.
+ *
+ * `repositoryRoot` anchors the capture subtrees, the intermediate subtrees, the promotion manifest
+ * and every receipt's `repoPath`. It exists so a test can stand up a whole fixture repository in a
+ * temp directory; production never passes it.
  */
 export async function verifyBuildBoundary({
   distDir = DEFAULT_DIST_DIR,
   localRoot,
   localRoots,
+  repositoryRoot = PROMOTION_REPOSITORY_ROOT,
+  promotionManifestPath,
 } = {}) {
   const dist = resolve(distDir);
+  const repoRoot = resolve(repositoryRoot);
+  const manifestPath = promotionManifestPath === undefined
+    ? (repoRoot === PROMOTION_REPOSITORY_ROOT
+      ? PROMOTION_MANIFEST_PATH
+      : resolve(repoRoot, 'asset-promotion-manifest.json'))
+    : resolve(promotionManifestPath);
   const rawRoots = Array.isArray(localRoots)
     ? localRoots
     : localRoot !== undefined
@@ -334,6 +421,38 @@ export async function verifyBuildBoundary({
   const files = entries.filter((entry) => !entry.directory);
   const directories = entries.filter((entry) => entry.directory);
 
+  // --- the promotion manifest, part 1: parse and validate. Pure; no filesystem beyond the read.
+  const manifestDocument = await readPromotionManifest(manifestPath);
+  const manifestRelative = relative(repoRoot, manifestPath).split(sep).join('/');
+  const violations = [];
+  let promotionEntries = [];
+  const manifestValid = manifestDocument.present && manifestDocument.parseError === null;
+  if (manifestDocument.present && manifestDocument.parseError !== null) {
+    violations.push(violation('promotion', manifestRelative, `is not valid JSON: ${manifestDocument.parseError}`));
+  } else if (manifestDocument.present) {
+    const validation = validatePromotionManifest(manifestDocument.value, { path: manifestRelative });
+    for (const error of validation.errors) {
+      violations.push(violation('promotion', error.path ?? manifestRelative, `${error.code}: ${error.message}`));
+    }
+    promotionEntries = validation.entries;
+  }
+
+  // Sizes. A build artifact can only be BYTE-IDENTICAL to a local file of the same length, so the
+  // capture and intermediate sweeps hash only the files whose size some build artifact shares —
+  // plus every size a promotion entry DECLARES, so that "this entry's approved digest is a
+  // capture's digest" is answerable without reading the whole capture set. That is what makes it
+  // affordable to cover 284 MB of screenshots and a 460 MB facts dump on every build: on a normal
+  // build neither is read at all.
+  const candidateSizes = new Set();
+  for (const file of files) {
+    try {
+      candidateSizes.add((await stat(file.absolutePath)).size);
+    } catch {
+      // An unreadable artifact is reported by the read below; nothing to size-match against.
+    }
+  }
+  for (const entry of promotionEntries) candidateSizes.add(entry.bytes);
+
   const localResults = await Promise.all(locals.map(async (local) => ({
     root: local,
     ...(await collectLocalPackageHashes(local)),
@@ -353,26 +472,68 @@ export async function verifyBuildBoundary({
     }
   }
 
-  const violations = [];
+  const captureIndex = await collectSubtreeHashes(CAPTURE_SUBTREES, {
+    baseDir: repoRoot,
+    candidateSizes,
+  });
+  const intermediateIndex = await collectSubtreeHashes(INTERMEDIATE_SUBTREES, {
+    baseDir: repoRoot,
+    candidateSizes,
+  });
+  // Intermediates join the ordinary hash sweep. They are not captures, so in principle a promotion
+  // could clear one — but no registry key is rooted at an intermediate, so the only way that can
+  // happen is if a promoted artifact is byte-identical to an intermediate copy of itself, which is
+  // the correct outcome rather than a hole.
+  for (const [digest, source] of intermediateIndex.hashes) {
+    if (!hashes.has(digest)) hashes.set(digest, source);
+  }
+
+  // --- the promotion manifest, part 2: prove every receipt against disk -----------------------
+  let promotionVerification = { verified: new Map(), errors: [], records: [] };
+  if (manifestValid) {
+    promotionVerification = await verifyPromotionEntries(promotionEntries, {
+      repositoryRoot: repoRoot,
+      captureHashes: captureIndex.hashes,
+    });
+    for (const error of promotionVerification.errors) {
+      violations.push(violation('promotion', `${manifestRelative}#${error.path}`, `${error.code}: ${error.message}`));
+    }
+  }
+  const verifiedPromotions = promotionVerification.verified;
+
   let scannedBytes = 0;
+  const promotedFiles = [];
 
   // Directories first: an EMPTY directory named after a local root carries no bytes and so is
   // invisible to every file-based check, but it sits inside the tree Vite copies wholesale.
   for (const directory of directories) {
     const segments = directory.relativePath.split('/');
-    const name = segments[segments.length - 1].toLowerCase();
+    const rawName = segments[segments.length - 1];
+    const name = rawName.toLowerCase();
     if (FORBIDDEN_PATH_SEGMENTS.some((forbidden) => name.includes(forbidden))) {
       violations.push(violation(
         'path',
         `${directory.relativePath}/`,
-        `build output contains a directory named after a local root ("${segments[segments.length - 1]}")`,
+        `build output contains a directory named after a local root ("${rawName}")`,
+      ));
+    }
+    if (CAPTURE_PATH_SEGMENTS.some((forbidden) => name.includes(forbidden))) {
+      violations.push(violation(
+        'capture',
+        `${directory.relativePath}/`,
+        `build output contains a directory named after a raw capture package ("${rawName}")`,
       ));
     }
   }
 
   for (const file of files) {
-    violations.push(...pathViolations(file));
-    if (file.symlink) continue;
+    const found = pathViolations(file);
+    if (file.symlink) {
+      // A symlink is never read and therefore never has a digest to match a promotion against:
+      // it can never be cleared, which is the intended answer.
+      violations.push(...found);
+      continue;
+    }
     let bytes;
     try {
       bytes = await readFile(file.absolutePath);
@@ -381,16 +542,45 @@ export async function verifyBuildBoundary({
       continue;
     }
     scannedBytes += bytes.byteLength;
-    violations.push(...contentViolations(file, bytes));
+    found.push(...contentViolations(file, bytes));
     const digest = sha256(bytes);
+
+    // The capture check runs against its own index and does not see the promotion manifest at all.
+    const captureSource = captureIndex.hashes.get(digest);
+    if (captureSource !== undefined) {
+      found.push(violation(
+        'capture',
+        file.relativePath,
+        `sha256 ${digest} matches raw capture ${captureSource}; a capture is never promotable`,
+      ));
+    }
     const source = hashes.get(digest);
     if (source !== undefined) {
-      violations.push(violation(
+      found.push(violation(
         'hash',
         file.relativePath,
         `sha256 ${digest} matches local package ${source}`,
       ));
     }
+
+    const promotion = verifiedPromotions.get(file.relativePath);
+    const cleared = promotion !== undefined && promotion.sha256 === `sha256:${digest}`;
+    if (!cleared) {
+      violations.push(...found);
+      if (promotion !== undefined) {
+        violations.push(violation(
+          'promotion',
+          file.relativePath,
+          `is admitted by promotion ${promotion.id} as ${promotion.sha256} but hashes to sha256:${digest}`,
+        ));
+      }
+      continue;
+    }
+    promotedFiles.push({ file: file.relativePath, promotion: promotion.id, sha256: promotion.sha256 });
+    // `path`, `content` and `read` findings survive a promotion. A promoted asset lives under
+    // `public/assets/…`; if it also carries a local-root path segment or an install string, the
+    // promotion is not what is wrong with it.
+    violations.push(...found.filter((entry) => !CLEARABLE_CHECKS.has(entry.check)));
   }
 
   return {
@@ -405,6 +595,27 @@ export async function verifyBuildBoundary({
     directoryCount: directories.length,
     scannedBytes,
     violations,
+    promotion: {
+      manifest: manifestRelative,
+      manifestPresent: manifestDocument.present,
+      entries: promotionEntries.length,
+      verified: verifiedPromotions.size,
+      appliedInDist: promotedFiles.length,
+      promoted: promotedFiles,
+      records: promotionVerification.records,
+    },
+    capture: {
+      subtreesPresent: captureIndex.present,
+      filesSeen: captureIndex.filesSeen,
+      filesHashed: captureIndex.filesIndexed,
+      bytesHashed: captureIndex.bytesRead,
+    },
+    intermediate: {
+      subtreesPresent: intermediateIndex.present,
+      filesSeen: intermediateIndex.filesSeen,
+      filesHashed: intermediateIndex.filesIndexed,
+      bytesHashed: intermediateIndex.bytesRead,
+    },
   };
 }
 
@@ -415,16 +626,21 @@ export async function verifyBuildBoundary({
  * through to its own default — `DEFAULT_LOCAL_ROOT`, `DEFAULT_VEGETATION_ROOT`,
  * and `DEFAULT_VEGETATION_ARRAYTEX_ROOT` — which is what keeps `npm run build`
  * (no arguments) protecting all three roots without any `package.json` change.
+ *
+ * `--repository-root PATH` re-anchors the capture/intermediate registry and the promotion
+ * manifest. It exists for fixture-driven tests; a build never passes it.
  */
 function parseArguments(argv) {
-  const options = { distDir: DEFAULT_DIST_DIR, localRoots: undefined, help: false };
+  const options = {
+    distDir: DEFAULT_DIST_DIR, localRoots: undefined, repositoryRoot: undefined, help: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--help' || argument === '-h') {
       options.help = true;
       continue;
     }
-    if (argument !== '--dist-dir' && argument !== '--local-root') {
+    if (argument !== '--dist-dir' && argument !== '--local-root' && argument !== '--repository-root') {
       throw new BuildBoundaryError('ERR_BUILD_BOUNDARY_ARGS', `unsupported argument: ${argument}`);
     }
     const value = argv[index + 1];
@@ -434,11 +650,14 @@ function parseArguments(argv) {
     const resolved = resolve(process.cwd(), value);
     if (argument === '--dist-dir') {
       options.distDir = resolved;
+    } else if (argument === '--repository-root') {
+      options.repositoryRoot = resolved;
     } else {
       options.localRoots = [...(options.localRoots ?? []), resolved];
     }
     index += 1;
   }
+  if (options.repositoryRoot === undefined) delete options.repositoryRoot;
   return options;
 }
 
@@ -454,10 +673,27 @@ async function main() {
   if (options.help) {
     process.stdout.write(`${JSON.stringify({
       verifier: 'build-boundary',
-      usage: 'node scripts/verify-build-boundary.mjs [--dist-dir PATH] [--local-root PATH ...repeatable]',
+      usage: 'node scripts/verify-build-boundary.mjs [--dist-dir PATH] [--local-root PATH ...repeatable]'
+        + ' [--repository-root PATH]',
       defaultDistDir: relative(REPOSITORY_ROOT, DEFAULT_DIST_DIR),
       defaultLocalRoots: [DEFAULT_LOCAL_ROOT, DEFAULT_VEGETATION_ROOT, DEFAULT_VEGETATION_ARRAYTEX_ROOT]
         .map((root) => relative(REPOSITORY_ROOT, root)),
+      promotionManifest: relative(REPOSITORY_ROOT, PROMOTION_MANIFEST_PATH),
+      // `filePattern` marks a MIXED directory: only the files it names are captures, the rest of
+      // that directory belongs to another tier. Printing it keeps `--help` from reading as though
+      // `.local-game-derived/customs/` were a capture wholesale — it is not; its terrain height
+      // and control surfaces are a promotable source.
+      captureSubtrees: CAPTURE_SUBTREES.map((entry) => (entry.filePattern
+        ? `${entry.path}/${entry.filePattern.source}`
+        : entry.path)),
+      intermediateSubtrees: INTERMEDIATE_SUBTREES.map((entry) => entry.path),
+      promotableSources: Object.fromEntries(
+        Object.entries(PROMOTABLE_SOURCES).map(([key, source]) => [key, {
+          root: source.root,
+          files: source.filePattern.source,
+          receipt: source.receipt.documents.map((document) => `${document.role}=${document.repoPath}`),
+        }]),
+      ),
       writesFiles: false,
     }, null, 2)}\n`);
     return;

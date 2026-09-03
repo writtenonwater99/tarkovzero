@@ -68,7 +68,7 @@ const UI = {
   cream: [230, 227, 215], creamDim: [198, 196, 182], ink: [14, 18, 15], amber: [255, 208, 92],
   accentExtract: [45, 190, 108], accentExtractScav: [224, 135, 43], accentExtractTransit: [58, 150, 186], accentExtractNeutral: [128, 134, 130],
   accentPlayer: [56, 214, 200], accentDanger: [210, 69, 63], accentSpawn: [92, 122, 158], accentBoss: [190, 46, 48],
-  undergroundOn: [255, 176, 48, 190], glass: [37, 49, 52, 225],
+  glass: [37, 49, 52, 225],
 };
 
 /**

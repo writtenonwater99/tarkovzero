@@ -156,13 +156,3 @@ export function buildingFloorLevels(profile, { inset = 0, includeRoof = false } 
   if (includeRoof) levels.push(profile.height);
   return levels;
 }
-
-/** Wall height visible for the existing `all | 0..3 | U` floor selector contract. */
-export function visibleBuildingHeight(profile, selectedFloor, inset = 0.4) {
-  if (!profile) return 0;
-  if (selectedFloor === 'all' || selectedFloor === 'U') return profile.height;
-  const floorIndex = Math.max(0, Math.floor(Number(selectedFloor) || 0));
-  if (floorIndex >= profile.floorCount - 1) return profile.height;
-  const nextFloorY = profile.floorYs[floorIndex + 1];
-  return Math.max(0.04, Math.min(profile.height, nextFloorY - profile.baseY - inset));
-}
