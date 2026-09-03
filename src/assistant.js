@@ -22,7 +22,7 @@
  * Chat history is kept in memory only.
  */
 import { createAskPanel } from './assistant-panel.js';
-import { emptyEnvelope, validateEnvelope } from './assistant-contract.js';
+import { emptyEnvelope, isSiteMap, validateEnvelope } from './assistant-contract.js';
 
 const HANDOFF = 'tz:askPending';
 const MAX_TURNS = 8;
@@ -115,6 +115,11 @@ export function createAssistant({ mapKey, tz, shell, route }) {
   /** Perform the switch the answer asked for. Called from a button — never automatically. */
   function switchMap(map, objectiveId = null) {
     if (!map || map === mapKey) return false;
+    // The last client-side gate on the handoff. The server cannot mint a switchMap to a locked map
+    // (`crossMapFor` filters SITE_MAPS) and `validateEnvelope` drops one that arrives anyway, so
+    // this only fires for a caller that skipped both — `window.tz` is public, and a navigation to
+    // a map the picker refuses would leave the URL saying `?map=woods` on a Customs page.
+    if (!isSiteMap(map)) return false;
     // the quest slugs are already in ?quest= (quests.js writes them), so the reload keeps them
     try {
       sessionStorage.setItem(HANDOFF, JSON.stringify({ map, objectiveId, turns: history.slice(-2) }));
@@ -132,7 +137,6 @@ export function createAssistant({ mapKey, tz, shell, route }) {
     const message = String(text ?? '').trim();
     if (!message || busy) return;
     panel.setOpen(true);
-    panel.clearInput();
     panel.hideChips();
     panel.sayUser(message);
     history.push({ role: 'user', content: message });

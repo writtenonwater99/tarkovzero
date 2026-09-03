@@ -18,6 +18,7 @@ process.env.DEEPSEEK_API_KEY = 'test-key-never-real';
 
 const handler = (await import('../api/assistant.js')).default;
 const { isValidAction, isValidImageRef, PROTOCOL_VERSION, SITE_MAPS } = await import('../src/assistant-contract.js');
+const { LOCKED_MAP_KEYS, MAP_NAMES } = await import('../src/map-availability.js');
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quests = JSON.parse(readFileSync(join(root, 'public/data/quests.json'), 'utf8'));
@@ -140,17 +141,29 @@ test('an upstream failure is a 502 that leaks nothing', async () => {
 
 test('the map the tab is on reaches the prompt and is echoed on the answer', async () => {
   stubModel(SILENT);
-  const r = await call({ body: { message: ask(WOODS_ONLY, 'af'), map: 'woods' } });
+  // The OPEN map, whatever it is. This used to hard-code `woods`; Woods is locked (2026-09-02) and
+  // a request naming it now falls back to customs — which is the next test, not this one.
+  const tab = SITE_MAPS[0];
+  const r = await call({ body: { message: ask(WOODS_ONLY, 'af'), map: tab } });
   assert.equal(r.code, 200);
-  assert.equal(r.body.map, 'woods', 'the envelope echoes the map it answered for');
+  assert.equal(r.body.map, tab, 'the envelope echoes the map it answered for');
   assert.equal(r.body.protocol, PROTOCOL_VERSION);
 
   const system = upstream.messages.find((m) => m.role === 'system').content;
   const user = upstream.messages.at(-1).content;
-  assert.match(system, /THE MAP THE PLAYER IS ON RIGHT NOW: woods/);
-  assert.match(user, /^CURRENT MAP: woods/m);
-  assert.match(system, /TarkovZero can draw exactly three maps/);
+  assert.match(system, new RegExp(`THE MAP THE PLAYER IS ON RIGHT NOW: ${tab}`));
+  assert.match(user, new RegExp(`^CURRENT MAP: ${tab}`, 'm'));
+  // The prompt states the availability list, in the list's own words, and never advertises a
+  // switchMap the server could not mint (SWITCH_MAP_LINE in api/assistant.js).
+  assert.match(system, SITE_MAPS.length === 1
+    ? /TarkovZero can open exactly one map/
+    : new RegExp(`TarkovZero can open exactly ${SITE_MAPS.length} maps`));
+  assert.equal(/"type":"switchMap"/.test(system), SITE_MAPS.length > 1,
+    'the switchMap verb is taught only when a second map is open');
   for (const m of SITE_MAPS) assert.ok(system.includes(m), `the prompt names ${m}`);
+  for (const m of LOCKED_MAP_KEYS) {
+    assert.ok(system.includes(MAP_NAMES[m]), `the prompt names ${m} as a map it cannot open`);
+  }
   // the settings the panel depends on are unchanged
   assert.equal(upstream.max_tokens, 600);
   assert.deepEqual(upstream.response_format, { type: 'json_object' });
@@ -164,20 +177,24 @@ test('an unknown map key falls back to customs everywhere, not just in the promp
   assert.match(upstream.messages.find((m) => m.role === 'system').content, /RIGHT NOW: customs/);
 });
 
-test('a question about another map produces a switch-map action naming that map', async () => {
-  stubModel({ answer: `That one is on Woods.`, actions: [], quests: [WOODS_ONLY.slug] });
+test('a question about a LOCKED map never produces a switch-map action, through the real handler', async () => {
+  // The founder's rule, proved on the server path rather than in the picker: Woods still has all
+  // its zones in quests.json and the model is even told to ask for the switch — and no button
+  // reaches the client, because `crossMapFor` filters through the availability list.
+  stubModel({
+    answer: 'That one is on Woods.',
+    actions: [{ type: 'switchMap', map: 'woods' }],
+    quests: [WOODS_ONLY.slug],
+  });
   const r = await call({ body: { message: ask(WOODS_ONLY, 'ah'), map: 'customs' } });
   assert.equal(r.body.map, 'customs');
-  const jump = r.body.actions.find((a) => a.type === 'switchMap');
-  assert.ok(jump, `expected a switchMap in ${JSON.stringify(r.body.actions)}`);
-  assert.equal(jump.map, 'woods');
-  assert.equal(jump.label, 'Woods');
-  assert.equal(jump.slug, WOODS_ONLY.slug);
-  // it lands the player on the thing they asked about, on the TARGET map
-  const landing = WOODS_ONLY.objectives.find((o) => o.id === jump.objectiveId);
-  assert.ok(landing, 'the handoff names a real objective');
-  assert.ok((landing.zones ?? []).some((z) => z.map === 'woods'), 'marked on woods, the map we are going to');
+  assert.ok(!r.body.actions.some((a) => a.type === 'switchMap'),
+    `a switchMap survived to the client: ${JSON.stringify(r.body.actions)}`);
   assert.ok(!r.body.actions.some((a) => a.type === 'flyTo'), 'and no flyTo on the map we are leaving');
+  // The quest is still findable and still described — locking a map hid the button, not the data.
+  assert.ok(r.body.sources.some((s) => s.slug === WOODS_ONLY.slug), 'the woods quest is still retrieved');
+  assert.ok(r.body.sources.find((s) => s.slug === WOODS_ONLY.slug).siteMaps.length === 0,
+    'and reports no openable map, which is what makes the panel say where it is instead');
 });
 
 test('an action naming a map, quest or objective that does not exist is dropped server-side', async () => {
@@ -264,8 +281,11 @@ test('an identical question inside the cache window is served from memory', asyn
   assert.equal(second.body.cached, true);
   assert.equal(upstreamCalls, before, 'the second answer cost no model call');
   assert.equal(second.body.map, first.body.map);
-  // …but the same words on another map are a different question
+  // …and the cache key is still per-map. With one open map the only way to reach a different key
+  // is a different map value, and every locked/unknown value normalizes to customs — so a request
+  // naming Woods hits the SAME cache entry rather than opening a second one under a dead key.
   const other = await call({ body: { ...body, map: 'woods' } });
-  assert.equal(other.body.cached, undefined);
-  assert.equal(other.body.map, 'woods');
+  assert.equal(other.body.map, 'customs', 'a locked map normalizes to the open one');
+  assert.equal(other.body.cached, true, 'and lands on the customs entry, not a woods entry');
+  assert.equal(upstreamCalls, before, 'still no extra model call');
 });

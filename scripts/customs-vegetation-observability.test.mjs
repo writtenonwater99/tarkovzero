@@ -315,13 +315,20 @@ function degradedStatesTable() {
   return {
     'runtime-disposed': healthy({ disposed: true, runtime: null }),
     'no-authored-plan': totalMountFailure({ hasAuthoredPlan: false, reason: 'no-exact-vegetation-plan', mount: null }),
-    // The SAME absent plan on a release build, where local game-derived data is gated off by
-    // design. `localEnhancements` is the only field that separates the two, and it must, because
-    // one is a defect on a dev machine and the other is the shipped configuration.
-    'authored-unavailable-in-release': totalMountFailure({
+    // The SAME absent plan on a release build. `localEnhancements` is still the only field that
+    // separates the two codes, but since the 2026-09-02 VEGETATION promotion they are both defects:
+    // the authored pack ships from public/assets/3d/customs/authored/vegetation/, so a release
+    // frame with no placements to route means the promoted package did not load. The two codes now
+    // differ only in which package a reader should go and check.
+    //
+    // `terrainDistribution: 'promoted-public'` keeps the ground half of the notice on the shipped
+    // value, so this row exercises "exact ground, missing forest" — the two subsystems disagreeing,
+    // which is the case the per-subsystem wording exists for.
+    'promoted-vegetation-missing': totalMountFailure({
       hasAuthoredPlan: false,
       localEnhancements: false,
-      reason: 'release-build-public-tree-positions',
+      terrainDistribution: 'promoted-public',
+      reason: 'promoted-vegetation-unavailable',
       mount: null,
     }),
     'authored-disabled-by-query': totalMountFailure({ request: 'procedural', reason: 'disabled-by-query', mount: null }),
@@ -379,7 +386,7 @@ test('THE CONTRACT: empty warnings means, and only means, the authored path is f
 const PRIMARY_STATE_OF = {
   'runtime-disposed': 'disposed',
   'no-authored-plan': 'procedural',
-  'authored-unavailable-in-release': 'procedural',
+  'promoted-vegetation-missing': 'procedural',
   'authored-disabled-by-query': 'procedural',
   'mount-in-flight': 'loading',
   'mount-failed': 'procedural',

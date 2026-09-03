@@ -10,6 +10,30 @@ import {
 export const CUSTOMS_LOCAL_TERRAIN_MANIFEST_PATH =
   '/@local-game-derived/customs/manifest.json';
 
+/**
+ * The PROMOTED terrain package: the same height and control surfaces, shipped.
+ *
+ * On 2026-09-02 the founder looked at production and said "this is far from what we worked on. not
+ * even the floor ground correct" — production was drawing the public heightfield fitted from spawn
+ * and loot points while the reviewed local build drew the exact tiles. He approved promoting the
+ * terrain surfaces, and `scripts/promote-terrain-surfaces.mjs` copies them into
+ * `public/assets/3d/customs/terrain/` under `asset-promotion-manifest.json`, the way
+ * `public/assets/3d/customs/authored/fortress/` already ships.
+ *
+ * SO THIS PATH IS NOT GATED, AND THE GATE DID NOT MOVE. `canLoadLocalGameDerivedAssets()` is
+ * unchanged — dev AND loopback — and still governs everything that is still local: the raw Unity
+ * vegetation dumps, the authored vegetation packs, the bridge corrections, the scalar facts. What
+ * changed is that the terrain surfaces are no longer among them. They are public assets now, and a
+ * public asset does not ask a local-data gate for permission.
+ *
+ * The two entry points below are deliberately separate functions rather than one with a flag:
+ * `loadCustomsLocalTerrainPackage()` keeps its loopback-origin refusal (boundary layer 2, see
+ * `src/renderer-gate.js`) and requires `localOnly: true`; this one has no origin rule and requires
+ * `localOnly: false`. Neither accepts the other's package.
+ */
+export const CUSTOMS_PROMOTED_TERRAIN_MANIFEST_PATH =
+  '/assets/3d/customs/terrain/terrain-manifest.json';
+
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const SAFE_RELATIVE_ASSET_PATH = /^[A-Za-z0-9._/-]+$/;
 
@@ -141,22 +165,32 @@ function packageAssetUrl(packageBaseUrl, relativePath, resource) {
   return resolved.href;
 }
 
-function requestOptions(signal) {
+/**
+ * `cache` is the one option that differs between the two packages, and it is not a detail.
+ *
+ * The LOCAL package is served by a dev middleware off files the founder is actively regenerating;
+ * `no-store` is what stops a stale terrain surviving a re-extraction. The PROMOTED package is an
+ * immutable, digest-pinned public asset — 10.7 MiB of it — and `no-store` there would forbid the
+ * browser from caching it at all, re-downloading every surface on every navigation. That is a
+ * first-paint cost paid on every visit for no safety: the promotion manifest already proves those
+ * bytes, and a change to them is a new deploy.
+ */
+function requestOptions(signal, cache) {
   return {
     method: 'GET',
     mode: 'same-origin',
     credentials: 'same-origin',
-    cache: 'no-store',
+    cache,
     redirect: 'error',
     signal,
   };
 }
 
-async function fetchLocalResource(fetchImplementation, url, resource, signal) {
+async function fetchLocalResource(fetchImplementation, url, resource, signal, cache = 'no-store') {
   throwIfAborted(signal);
   let response;
   try {
-    response = await fetchImplementation(url, requestOptions(signal));
+    response = await fetchImplementation(url, requestOptions(signal, cache));
   } catch (cause) {
     rethrowAbort(cause, signal);
     throw new CustomsLocalTerrainUnavailableError(
@@ -180,7 +214,46 @@ async function fetchLocalResource(fetchImplementation, url, resource, signal) {
   return response;
 }
 
-async function readManifest(response, manifestUrl, signal) {
+/**
+ * The page URL for a package that is NOT origin-restricted.
+ *
+ * The promoted surfaces are ordinary public assets, so the only thing that matters is that we have
+ * a usable http(s) base to resolve against and that credentials cannot be smuggled into it.
+ */
+function publicPageUrl(locationValue) {
+  let raw;
+  if (typeof locationValue === 'string' || locationValue instanceof URL) {
+    raw = String(locationValue);
+  } else if (locationValue && typeof locationValue.href === 'string') {
+    raw = locationValue.href;
+  } else if (locationValue && typeof locationValue.origin === 'string') {
+    raw = `${locationValue.origin}/`;
+  }
+  if (!raw) {
+    throw new CustomsLocalTerrainUnavailableError(
+      'Promoted Customs terrain requires a page URL to resolve against.',
+      { resource: 'location' },
+    );
+  }
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (cause) {
+    throw new CustomsLocalTerrainUnavailableError(
+      'Promoted Customs terrain requires a valid page URL.',
+      { cause, resource: 'location' },
+    );
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new CustomsLocalTerrainUnavailableError(
+      'Promoted Customs terrain requires a plain http(s) page URL.',
+      { resource: 'location', url: parsed.origin },
+    );
+  }
+  return parsed;
+}
+
+async function readManifest(response, manifestUrl, signal, { expectLocalOnly = true } = {}) {
   if (typeof response.json !== 'function') {
     throw new CustomsLocalTerrainInvalidError(
       'Local Customs terrain manifest response cannot be decoded as JSON.',
@@ -198,7 +271,7 @@ async function readManifest(response, manifestUrl, signal) {
     );
   }
   try {
-    return validateCustomsLocalTerrainManifest(value);
+    return validateCustomsLocalTerrainManifest(value, { expectLocalOnly });
   } catch (cause) {
     throw new CustomsLocalTerrainInvalidError(
       `Local Customs terrain manifest failed validation: ${cause.message}`,
@@ -254,29 +327,27 @@ async function readHeight(response, asset, signal) {
 }
 
 /**
- * Load and hydrate the ignored, local-only Customs terrain package.
+ * The shared fetch/validate/hydrate core. It has no policy of its own: the caller has already
+ * decided which page URLs are acceptable and which `localOnly` value this package must declare.
  *
- * The entry point is intentionally fixed. Callers may inject browser primitives
- * for testing, but cannot supply another path, origin, or network fallback.
+ * `distribution` travels out on the result so a renderer can SAY which package it is drawing
+ * rather than infer it. A frame that cannot name its own source is how the CUSTOMS TRUTH strip
+ * came to claim 7,108 authored placements over a procedural forest (handoff §6).
  */
-export async function loadCustomsLocalTerrainPackage({
-  fetch: fetchImplementation = globalThis.fetch,
-  location: locationValue = globalThis.location,
+async function loadTerrainPackage({
+  fetchImplementation,
+  pageUrl,
+  manifestPath,
+  expectLocalOnly,
+  distribution,
+  allowVegetation,
+  cache,
   signal,
-} = {}) {
-  throwIfAborted(signal);
-  const pageUrl = locationUrl(locationValue);
-  if (typeof fetchImplementation !== 'function') {
-    throw new CustomsLocalTerrainUnavailableError(
-      'Customs local terrain requires the browser Fetch API.',
-      { resource: 'fetch' },
-    );
-  }
-
-  const manifestUrlObject = new URL(CUSTOMS_LOCAL_TERRAIN_MANIFEST_PATH, pageUrl);
+}) {
+  const manifestUrlObject = new URL(manifestPath, pageUrl);
   if (manifestUrlObject.origin !== pageUrl.origin) {
     throw new CustomsLocalTerrainUnavailableError(
-      'Customs local terrain manifest must remain on the current loopback origin.',
+      'Customs terrain manifest must remain on the current page origin.',
       { resource: 'manifest' },
     );
   }
@@ -287,8 +358,23 @@ export async function loadCustomsLocalTerrainPackage({
     manifestUrl,
     'manifest',
     signal,
+    cache,
   );
-  const manifest = await readManifest(manifestResponse, manifestUrl, signal);
+  const manifest = await readManifest(manifestResponse, manifestUrl, signal, { expectLocalOnly });
+  // The promoted package ships. `terrain-NNN-vegetation.json` is a RAW CAPTURE and never leaves
+  // `.local-game-derived/`, so a promoted manifest that references vegetation is either a stale
+  // document or an attempt to route one — refuse it here rather than emit a URL for a file that
+  // must not exist in `public/`.
+  if (!allowVegetation) {
+    const offender = manifest.tiles.find((tile) => tile.vegetation);
+    if (offender) {
+      throw new CustomsLocalTerrainInvalidError(
+        `Promoted Customs terrain must not reference vegetation (tile ${offender.tileId ?? offender.id}); `
+        + 'the Unity vegetation dump is a raw capture and is never promoted.',
+        { resource: 'manifest', url: manifestUrl },
+      );
+    }
+  }
   const assets = assetIndex(manifest, packageBaseUrl);
 
   const heightEntries = await Promise.all(assets.map(async (asset) => {
@@ -298,6 +384,7 @@ export async function loadCustomsLocalTerrainPackage({
       asset.heightUrl,
       resource,
       signal,
+      cache,
     );
     const bytes = await readHeight(response, asset, signal);
     const tile = manifest.tiles.find(({ id }) => id === asset.tileId);
@@ -315,9 +402,83 @@ export async function loadCustomsLocalTerrainPackage({
   }
 
   return freezeTree({
+    distribution,
     manifestUrl,
     manifest,
     runtime,
     assets,
+  });
+}
+
+/**
+ * Load and hydrate the ignored, local-only Customs terrain package.
+ *
+ * The entry point is intentionally fixed. Callers may inject browser primitives
+ * for testing, but cannot supply another path, origin, or network fallback.
+ *
+ * UNCHANGED by the 2026-09-02 terrain promotion: this is still boundary layer 2 (see
+ * `src/renderer-gate.js`). It still refuses any non-loopback page origin before it fetches, and it
+ * still requires a package that declares itself local-only. The promoted surfaces have their own
+ * entry point below and never travel through this one.
+ */
+export async function loadCustomsLocalTerrainPackage({
+  fetch: fetchImplementation = globalThis.fetch,
+  location: locationValue = globalThis.location,
+  signal,
+} = {}) {
+  throwIfAborted(signal);
+  const pageUrl = locationUrl(locationValue);
+  if (typeof fetchImplementation !== 'function') {
+    throw new CustomsLocalTerrainUnavailableError(
+      'Customs local terrain requires the browser Fetch API.',
+      { resource: 'fetch' },
+    );
+  }
+  return loadTerrainPackage({
+    fetchImplementation,
+    pageUrl,
+    manifestPath: CUSTOMS_LOCAL_TERRAIN_MANIFEST_PATH,
+    expectLocalOnly: true,
+    distribution: 'local-package',
+    allowVegetation: true,
+    cache: 'no-store',
+    signal,
+  });
+}
+
+/**
+ * Load and hydrate the PROMOTED Customs terrain package from `public/assets/`.
+ *
+ * Identical bytes, identical schema, identical runtime — a different distribution. This is what
+ * makes production draw the exact ground instead of the fitted public heightfield, and it needs no
+ * gate because nothing it fetches is local: every file it names is admitted by
+ * `asset-promotion-manifest.json` and re-proved by `npm run verify:build-boundary` after every
+ * build, by digest, against the bytes actually in `dist/`.
+ *
+ * It refuses a package that declares `localOnly: true` and one that references vegetation, so the
+ * local package cannot be served through this path by moving a file.
+ */
+export async function loadCustomsPromotedTerrainPackage({
+  fetch: fetchImplementation = globalThis.fetch,
+  location: locationValue = globalThis.location,
+  signal,
+} = {}) {
+  throwIfAborted(signal);
+  const pageUrl = publicPageUrl(locationValue);
+  if (typeof fetchImplementation !== 'function') {
+    throw new CustomsLocalTerrainUnavailableError(
+      'Promoted Customs terrain requires the browser Fetch API.',
+      { resource: 'fetch' },
+    );
+  }
+  return loadTerrainPackage({
+    fetchImplementation,
+    pageUrl,
+    manifestPath: CUSTOMS_PROMOTED_TERRAIN_MANIFEST_PATH,
+    expectLocalOnly: false,
+    distribution: 'promoted-public',
+    allowVegetation: false,
+    cache: 'default',
+    signal,
   });
 }

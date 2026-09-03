@@ -4,41 +4,57 @@ This renderer replaces only the 3D presentation layer. Leaflet, map coordinates,
 quests, live tracking, floors, UI, camera hand-off, and generated Customs data stay in the existing
 application.
 
-It is Customs-only, opt-in, and — since 2026-09-01 — available in production on **public data
-only**. Its local game-derived enhancements remain unavailable outside dev + loopback.
+It is Customs-only, available in production on **public data only** (since 2026-09-01), and — since
+2026-09-02 — the **default renderer for Customs**. Its local game-derived enhancements remain
+unavailable outside dev + loopback; that boundary did not move and is not what this page is about.
 
 ## Reaching the renderer
 
-`?renderer=three`, on Customs, in any environment:
+Nothing to type. Customs, in any environment, is Three:
 
 ```text
-https://tarkovzero.com/?map=customs&view=3d&renderer=three
+https://tarkovzero.com/?map=customs
 ```
 
-**It is deliberately NOT the default for Customs in production, and the default was not changed.**
-The argument, so a later reader does not have to reconstruct it:
+`?renderer=three` still names it explicitly and is what Reserve/Woods refuse. **`?renderer=deck` is
+the opt-out** — the escape hatch back to the renderer that served production for months:
 
-- **It is one map.** deck.gl serves Customs, Reserve and Woods from one code path. Defaulting
-  Customs to Three splits the product in two and makes the map switcher a renderer switcher as a
-  side effect — the same site behaving differently depending on which map you landed on.
-- **It removes controls a visitor already has.** Three mode fixes relief at 2×, forces the
-  realistic look, and deletes the Relief row and the Fog toggle from the View panel. A default that
-  silently discards a stored `tz:look` / `tz:relief` preference is a regression for anyone who set
-  one, and they never asked for a new renderer.
+```text
+https://tarkovzero.com/?map=customs&renderer=deck
+```
+
+The value is read case- and space-insensitively (`?renderer=DECK` works); any other spelling is a
+typo, warns on the console, and leaves the map on its default renderer.
+
+### Why the default flipped (2026-09-02)
+
+The founder opened tarkovzero.com and said *"is this what i am supposed to see? cause the map we
+build is not this."* He was right: the 71 detailed buildings, the bridge abutments/piers/railings
+and the rounded cooling towers all live in `src/map3d-three.js`, while the site handed every visitor
+deck.gl's older `detailParts()` geometry with today's labels and icons on top. The work was only
+reachable by typing a query parameter nobody knew about.
+
+The four arguments the old default rested on are still true, and are now accepted costs rather than
+blockers — the audience is the founder and his friends, on hardware he owns, with the escape hatch a
+URL away:
+
+- **It is one map.** deck.gl still serves Reserve and Woods, so the map switcher now changes
+  renderer as a side effect when you leave or return to Customs. Accepted.
+- **It removes controls a visitor already has.** Three fixes relief at 2×, forces the realistic
+  look, and deletes the Relief row and the Fog toggle. A stored `tz:look` / `tz:relief` is not
+  written by the Three path and is waiting intact behind `?renderer=deck`.
 - **Its breadth is unmeasured.** `WebGPURenderer` with a WebGL2 fallback has been exercised on one
-  machine's GPU. deck.gl has months of real traffic behind it. A default is a promise about every
-  visitor's hardware; a query parameter is a promise about the person who typed it.
+  machine's GPU, and `gpuFrameMs` is `null` under SwiftShader, so no frame-time claim in this repo
+  is backed by anything. What IS on record is the geometry cost — see "Production Customs cost".
 - **It is a preview of an unfinished thing.** In production the authored vegetation placements are
-  absent by design (they are local game-derived), so the production Three frame is not the frame
-  the founder has been reviewing locally. Shipping it as the default would present the reduced
-  version as the product.
+  absent by design (they are local game-derived), so the production frame is not the frame the
+  founder reviews locally. `renderStats().gate.localEnhancementReason === 'release-build'` is how a
+  reader tells that apart from a failure.
 
-What ships behind the query parameter is nevertheless a complete, legitimate scene: the public
-heightfield from `public/data/customs-3d.json`, the public tree positions from the same file, the
-authored walls/gates/fences from its `props` and `fences` arrays, the terrain PBR materials and
-Fortress under `public/assets/`. Every byte of it is already in `dist/` today.
-
-Flip back at any time by dropping the parameter, or with `?renderer=deck`.
+What ships is a complete, legitimate scene: the public heightfield from
+`public/data/customs-3d.json`, the public tree positions from the same file, the authored
+walls/gates/fences from its `props` and `fences` arrays, the terrain PBR materials and Fortress
+under `public/assets/`. Every byte of it is already in `dist/` today.
 
 ## The two gates, and why they are two
 
@@ -46,7 +62,7 @@ Flip back at any time by dropping the parameter, or with `?renderer=deck`.
 
 | Question | Predicate | Answer |
 | --- | --- | --- |
-| (a) May the Three renderer run at all? | `canRunThreeRenderer({mapKey, rendererRequest})` | Customs + `?renderer=three`, **any** environment |
+| (a) May the Three renderer run at all? | `canRunThreeRenderer({mapKey, rendererRequest})` | Customs unless `?renderer=deck`, **any** environment |
 | (b) May it load local game-derived enhancements? | `canLoadLocalGameDerivedAssets({dev, hostname})` | Vite DEV **and** a loopback hostname, and nothing else |
 
 (a) takes no environment inputs at all, and (b) takes no map or request inputs, so neither can drift
@@ -60,23 +76,51 @@ of shipping (a).
 
 ## What a production frame says about itself
 
+> **Since 2026-09-02 the strip and the chip are DRAWN on dev + loopback only** — founder: *"also
+> remove the notification boxes in the middle about the build."* On the live page they are
+> instruments a visitor cannot act on, sitting over the map.
+>
+> **Nothing below stopped being true or stopped being measured.** Both nodes are still built and
+> repainted on the same 400 ms tick in every environment; what a release build loses is the pixels.
+> Read the state with **`window.tz.renderStats().truth`** (also on `diagnostics()`): it is the last
+> painted `customsTruthStripCopy()` — `{title, detail, segments, state}` — plus `shown`, which is
+> `gate.diagnosticReadouts` (question (c) of `src/renderer-gate.js`, dev + loopback). Every wording
+> quoted in this section is what `truth.title` / `truth.detail` carry on a production frame; on dev
+> it is additionally what is on screen, asserted field-for-field by e2e step 14.
+
 The CUSTOMS TRUTH strip and the vegetation chip are two renderings of one
-`describeVegetationObservability()` call, and both are gate-aware. On tarkovzero.com the strip reads:
+`describeVegetationObservability()` call. Since **both** 2026-09-02 promotions — the terrain height
+and control surfaces, then the authored vegetation — the shipped production frame is the exact
+ground under the authored forest, and the healthy strip reads:
 
 ```text
-CUSTOMS PUBLIC DATA
-PUBLIC HEIGHTFIELD · SEMANTIC GROUND ATLAS · 0 AUTHORED VEGETATION — PUBLIC TREE POSITIONS · FIXED RELIEF 2×
+CUSTOMS TRUTH
+EXACT TERRAIN — PROMOTED · 12-LAYER AUTHORED PBR · 7,108 AUTHORED VEGETATION · FIXED RELIEF 2×
 ```
 
-and the chip reads `Procedural forest — public tree positions (release build)`. Neither claims exact
-terrain, authored PBR, or authored vegetation, because none of those is on screen. The strip's state
-is `requested`, not `degraded`: the public configuration is what the build ships, and painting the
-intended state amber trains a reader to ignore the one colour that has to mean something. A ground
-bake that genuinely fell back (`TILEABLE GROUND FALLBACK`) still reads `degraded`, gate or no gate.
+with the chip reading `Authored vegetation — live` and the strip state `exact`. While the 93 GLBs
+are still decoding the strip says `0 AUTHORED VEGETATION — PACK LOADING`, state `pending`, and the
+chip carries the real count (`41 of 93 GLBs · loading GLBs · 38s elapsed`). A number above zero is
+reachable only from a state whose chip says a live authored runtime exists.
 
-The observability code for the release case is `authored-unavailable-in-release`, in
+**Every fallback reads as degraded, in every environment.** The strip's one exemption is
+`?vegetation=procedural`, which is a request rather than a defect. Before the promotions a release
+build legitimately had neither subsystem and the calm wording was honest; both ship now, so:
+
+```text
+CUSTOMS TRUTH
+EXACT TERRAIN — PROMOTED · 12-LAYER AUTHORED PBR · 0 AUTHORED VEGETATION — PROMOTED PACK DID NOT LOAD · FIXED RELIEF 2×
+```
+
+is state `degraded`, and the chip reads `Procedural forest — the promoted vegetation pack did not
+load`. The notice behind it still states the two subsystems SEPARATELY (`GROUND: …` / `VEGETATION:
+…`), because they ship from different directories and fail independently.
+
+The observability code for that case is `promoted-vegetation-missing`, in
 `src/customs-vegetation-observability.js` — a code in the same enumeration as every other
-degradation, not a second source of truth in the renderer.
+degradation, not a second source of truth in the renderer. It replaced
+`authored-unavailable-in-release`, whose whole purpose was to say "this is the design"; keeping that
+wording over a shipped-but-missing pack is exactly the failure mode in handoff §6.
 
 ## Renderer decision
 

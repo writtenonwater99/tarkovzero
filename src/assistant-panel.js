@@ -1,14 +1,17 @@
 /**
- * TarkovZero — the assistant panel (upper-left dock, `#panel-ask`).
+ * TarkovZero — the Ask panel's conversation (`#panel-ask`).
  *
  * Founder, 2026-09-02, over a screenshot with a box drawn in the upper-left of the map:
  *   "move the AI chat to there … when u ask a question like how it shows on the map also shows a
  *    picture in the chat. the AI should know what Map the tab is on so if a player asks about a
  *    question for a different map ai can help and say this quest is on woods, want to move to that
  *    map? option"
+ * …then, the same day: "lets remove the bar from the bottom" and "omni bar should be first".
  *
  * So a conversation lives here: the question, the prose answer, the wiki's photographs, the
- * buttons the answer earns, and the quests it was read out of.
+ * buttons the answer earns, and the quests it was read out of. The panel it lives in FLOATS —
+ * shell.js drags, resizes and minimises it — and the omnibox sits above this log as the one place
+ * anything is typed. This file owns the log and nothing else: no input, no geometry.
  *
  * ============================================================================================
  * THE ONE RULE THIS FILE EXISTS TO ENFORCE
@@ -138,7 +141,9 @@ export function sourceView(s, { map } = {}) {
   let coverage;
   if (siteMaps.includes(map)) coverage = `marked on ${mapLabel(map)}`;
   else if (siteMaps.length) coverage = `marked on ${siteMaps.map(mapLabel).join(', ')}`;
-  else if (elsewhere.length) coverage = `${elsewhere.map(mapLabel).join(', ')} — a map TarkovZero does not draw yet`;
+  // "cannot open yet", not "does not draw yet": since 2026-09-02 this branch carries Reserve and
+  // Woods, which TarkovZero DOES draw and will not open. The reader can see them in the picker.
+  else if (elsewhere.length) coverage = `${elsewhere.map(mapLabel).join(', ')} — TarkovZero cannot open that map yet`;
   else coverage = 'no marked location in our data';
   return {
     name,
@@ -168,11 +173,14 @@ export function answerView(body, { map } = {}) {
   }));
   return {
     map: env.map,
+    echoedMap: env.echoedMap ?? env.map,
     stale: env.stale,
     cached: env.cached,
     answerHtml: mdLite(env.answer),
+    // `echoedMap` is the map the body SAID it was for, before the contract normalised it — the only
+    // value that can name a locked map here, and therefore the only one that reads correctly.
     staleNote: env.stale
-      ? `Worked out for ${mapLabel(env.map)} — this tab is on ${mapLabel(here)} now. Ask again for a ${mapLabel(here)} answer.`
+      ? `Worked out for ${mapLabel(env.echoedMap ?? env.map)} — this tab is on ${mapLabel(here)} now. Ask again for a ${mapLabel(here)} answer.`
       : '',
     // Stale ⇒ no buttons. The prose and the photos survive; the actions do not, because every one
     // of them names an objective, a quest selection or a map that only holds for `env.map`.
@@ -208,8 +216,6 @@ export function createAskPanel({ mapKey, shell, act, onAsk, chips = [] } = {}) {
     panel: document.getElementById('panel-ask'),
     log: document.getElementById('ask-log'),
     chips: document.getElementById('ask-chips'),
-    form: document.getElementById('ask-form'),
-    input: document.getElementById('ask-input'),
   };
   if (!el.panel || !el.log) return null;
 
@@ -363,7 +369,8 @@ export function createAskPanel({ mapKey, shell, act, onAsk, chips = [] } = {}) {
     // question, so leaving one on every older answer offers an undo that no longer means anything.
     for (const old of el.log.querySelectorAll('.ask-undo')) old.remove();
     const box = bubble('bot', view.stale ? 'is-stale' : '');
-    box.dataset.map = view.map;
+    // The map the answer was FOR, not the normalised one — so a later `setMap()` can still name it.
+    box.dataset.map = view.echoedMap;
 
     const prose = node('div', 'ask-prose');
     prose.innerHTML = view.answerHtml;
@@ -418,9 +425,11 @@ export function createAskPanel({ mapKey, shell, act, onAsk, chips = [] } = {}) {
   /* --------------------------------------------------------------- shell -- */
   const isOpen = () => !!shell?.isOpen?.('ask');
   function setOpen(on, { focus = false } = {}) {
-    shell?.setOpen?.('ask', !!on);
+    // `reveal` also uncollapses a minimised panel and moves the keyboard to `[data-focus]` — the
+    // omnibox at the top of this panel, which is the app's ONE text field.
+    if (on && focus && shell?.reveal) shell.reveal('ask', { focus: true });
+    else shell?.setOpen?.('ask', !!on);
     if (on) scroll();
-    if (on && focus) el.input?.focus?.();
   }
 
   function renderChips() {
@@ -437,23 +446,22 @@ export function createAskPanel({ mapKey, shell, act, onAsk, chips = [] } = {}) {
   }
   const hideChips = () => { if (el.chips) el.chips.hidden = true; };
 
+  /**
+   * The panel has NO input of its own. The omnibox in its header is the one text field in the app
+   * (2026-09-02) — a second composer down here would be two entry points to the same router, and
+   * the one that did not go through `route()` would answer `> 3d` to the model. The starter chips
+   * are the only thing that starts a question from inside the panel, and they go out through the
+   * same door a typed one does (`onAsk` → the omnibox).
+   */
   function init() {
     renderChips();
-    if (el.form) {
-      el.form.onsubmit = (e) => {
-        e.preventDefault();
-        const v = el.input?.value ?? '';
-        if (v.trim()) onAsk?.(v);
-      };
-    }
   }
 
   return {
     init, setOpen, isOpen, setMap,
     answer, saidDid, sayUser, sayNote, sayError, thinking, hideChips,
     focus: () => { setOpen(true, { focus: true }); },
-    busy: (on) => { el.form?.classList?.toggle('busy', !!on); el.panel?.classList?.toggle('is-busy', !!on); },
-    clearInput: () => { if (el.input) el.input.value = ''; },
+    busy: (on) => { el.panel?.classList?.toggle('is-busy', !!on); },
     /** QA hook: the panel element, for the walkthrough's rect assertions. */
     node: () => el.panel,
   };

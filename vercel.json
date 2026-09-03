@@ -7,9 +7,38 @@
     }
   },
   "rewrites": [
-    { "source": "/api/graphql", "destination": "https://api.tarkov.dev/graphql" }
+    {
+      "source": "/api/graphql",
+      "destination": "https://api.tarkov.dev/graphql"
+    }
   ],
   "headers": [
-    { "source": "/data/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }] }
+    {
+      "source": "/data/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
+      "source": "/assets/3d/customs/terrain/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        }
+      ]
+    },
+    {
+      "source": "/assets/3d/customs/authored/vegetation/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        }
+      ]
+    }
   ]
 }

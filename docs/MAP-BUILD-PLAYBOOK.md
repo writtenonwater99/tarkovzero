@@ -101,3 +101,82 @@ A missing or hash-mismatched exact cache is a hard error with the fetch command;
 
 * **Reserve** (`rezervbase`): mountainous — real elevation matters (bunkers, the hill with the radar, the pawn/knight/bishop/rook buildings, the train station and the underground tunnels). SVG likely has multiple underground layers; extracts include the armored train and manholes. Cliffs form the boundary on most sides.
 * **Woods** (`woods`): large, rolling terrain, few buildings (sawmill, scav base, USEC camp, lumber mill), many rocks; roads are mostly dirt; the lake and river; the crash site. Terrain and rocks are the personality here — expect the SPT spawn coverage to be sparse in the forest, so hand-authored hills will carry more weight.
+
+---
+
+# Part II — from "a map exists" to the Customs standard (added 2026-09-03)
+
+Everything above gets a map *drawn*. This part is what took Customs from drawn to finished, in the
+order that actually worked. Written the day Customs shipped, for whenever Reserve and Woods come off
+hold.
+
+## 7. The bottleneck is raids, not build hours
+
+Both things that make Customs look right — the exact terrain and the 8,805 authored vegetation
+placements — trace back to the founder's own captures from his install. **Reserve and Woods have
+none.** No amount of agent time substitutes for him playing the map with the companion running.
+
+Plan a new map around that: the survey pass is the long pole and everything downstream waits on it.
+Everything else in this Part is already built and is reusable as-is.
+
+## 8. The order that worked
+
+1. **Geometry before signage.** Bridges and buildings first; labels and icons last. Signage over wrong
+   geometry has to be redone.
+2. **One router, one archetype per building, asserted total.** Six parallel design specs produced 84
+   claims over 71 buildings — 15 built twice, 2 built by nobody. `style` and `kind` are ORTHOGONAL axes
+   in this data; routing on both is the structural error. `src/building-archetype.js` is the fix and is
+   map-agnostic.
+3. **Silhouette over surface.** Metres-per-pixel is exactly `2^-zoom`, and the default 3D framing is
+   ~0.8–1.0 m/px — so **one pixel is about one metre**. Roof form, ridges, parapets and roof plant read.
+   0.35 m wall ribs and pilasters are sub-pixel and buy nothing. Four of six design specs got this
+   backwards and put their largest triangle budget into invisible detail.
+4. **Detail proportional to screen area.** The first pass gave four powerline pylons 45% of the detail
+   budget and the 13 largest buildings — 58.6% of all footprint — 5.5%.
+5. **Heights are a standing decision.** A roof lands *within* the stated height. The first pass added
+   ridges on top and 61 of 71 buildings grew.
+6. **Labels: a semantic `tier`, never a per-label size.** `src/label-tier.js` is map-agnostic; tier
+   drives size, weight, tracking, stem length AND zoom thinning. Thresholds are in **metres per pixel,
+   not zoom** — the three maps have CRS offsets 2.065 / 1.340 / 2.431, so one zoom integer is three
+   different real scales.
+7. **Derive tiers from evidence, then have the founder red-pen the table.** Footprint, height, extract
+   proximity, quest density. Print the table; he corrects it in thirty seconds.
+8. A hut cluster must not clear a structure floor by **summation** — use the largest single element.
+   Two 33 m² huts are not a 66 m² building.
+
+## 9. The promotion road — built once, reusable
+
+`src/map-availability.js` → `AVAILABLE_MAP_KEYS`. **Unlocking a map is one line.**
+
+Promotion of authored outputs to production is solved and generic:
+`asset-promotion-manifest.json` + `scripts/lib/asset-promotion.mjs` + `capture-digest-inventory.json`,
+with `npm run promote:terrain` / `npm run promote:vegetation` as the working models. A new map's
+terrain and vegetation follow the same path: register a source key, produce a receipt, promote.
+
+Know the two receipt classes before you promote anything (handoff §4): vegetation has a **generative**
+chain (re-running the committed factory regenerates the bytes); terrain has only an **integrity seal**
+on its extractor, and rests on the founder's ruling. They are not interchangeable and a test enforces it.
+
+And know what the verifier cannot prove: authorship, and any **transformed or re-encoded** capture.
+Stated in `coverage.doesNotProve` and pinned by a test that passes when the leak passes.
+
+## 10. Look at the pixels, at a low angle
+
+A top-down map view hid both of the worst defects of the day:
+
+* a Main Bridge deck folded into a **102% local grade** — invisible from above, obvious from the side;
+* the Junk Bridge rendered **14 m underwater**, while `renderStats()` reported
+  `applied: true`, six decks and eleven piers, all green.
+
+Screenshot at map zoom to check layout. Screenshot at a low oblique angle to check that anything is
+actually *right*. Then check the numbers — and make sure the numbers can fail (handoff §7).
+
+## 11. What is map-agnostic and already paid for
+
+Reusable without change on any new map: the archetype router and the six geometry planners; the label
+tier system, leader lines and the icon vocabulary; the bridge structure planner (piers, fascia,
+railings, abutments, approach embankments); the water-surface seating rule; the promotion road and the
+boundary; the assistant contract and its map-awareness.
+
+What is per-map: survey raids, the hand-traced roads/props/features tables, the tier assignments, and
+the terrain + vegetation packages those raids produce.

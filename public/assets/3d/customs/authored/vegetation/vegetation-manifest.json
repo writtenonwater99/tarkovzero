@@ -1,0 +1,1824 @@
+{
+  "schemaVersion": 1,
+  "documentType": "tarkovzero-customs-promoted-vegetation-manifest",
+  "map": "customs",
+  "localOnly": false,
+  "distribution": "promoted-public",
+  "status": "promoted-public-live",
+  "sourceFrame": "eft-unity-world-metres-y-up",
+  "approvedBy": "founder (explicit approval to promote the authored vegetation, 2026-09-02)",
+  "approvedOn": "2026-09-02",
+  "runtimeContract": {
+    "collision": "none",
+    "exactScalarPlacement": true,
+    "fixedDisplayReliefOwnedByRuntime": true,
+    "geometry": "original approximation; not source-game topology or measured source-mesh bounds",
+    "livePromotion": true
+  },
+  "counts": {
+    "authoredAssets": 31,
+    "lodFiles": 93,
+    "placements": 8805,
+    "tilePrototypeBindings": 58
+  },
+  "provenance": {
+    "geometry": {
+      "receipt": "vegetation-factory",
+      "class": "generative",
+      "statement": "Every family reports geometryEvidence \"original approximation from scalar prototype identity and fallback envelope\"; the git-tracked factory and catalog cited in asset-promotion-manifest.json regenerate these bytes.",
+      "documents": [
+        {
+          "role": "factory",
+          "repoPath": "scripts/vegetation-asset-factory/vegetation_factory.py"
+        },
+        {
+          "role": "catalog",
+          "repoPath": "scripts/vegetation-asset-factory/prototype_catalog.json"
+        }
+      ]
+    },
+    "textureArrays": {
+      "receipt": "vegetation-texture-array",
+      "class": "generative",
+      "statement": "The same authored source textures, repacked by the git-tracked builder cited in asset-promotion-manifest.json.",
+      "documents": [
+        {
+          "role": "builder",
+          "repoPath": "scripts/vegetation-asset-factory/build_texture_arrays.py"
+        },
+        {
+          "role": "catalog",
+          "repoPath": "scripts/vegetation-asset-factory/prototype_catalog.json"
+        }
+      ]
+    },
+    "placements": {
+      "receipt": "derived-scalar-extract",
+      "class": "measurement",
+      "statement": "NOT covered by the factory receipt above. These are measured scalars: the authored pack carries no coordinates, and the coordinates exist only in the raw Unity TerrainData dump, which is a registered raw capture and never ships. scripts/promote-authored-vegetation.mjs reads that capture and writes this table as a derived subset — position, rotation, the two scale factors, the instance colour and the prototype binding, and nothing else. What authorises it is the founder's ruling, recorded in approvedBy, exactly as with the promoted terrain surfaces. Read it as a measurement promoted by decision, never as authored geometry.",
+      "generator": "scripts/promote-authored-vegetation.mjs",
+      "dropped": [
+        "positionNormalized",
+        "lightmapColor",
+        "prototype records (kind, bendFactor, navMeshLod, ordinals)",
+        "per-tile document structure"
+      ],
+      "derivedFrom": [
+        {
+          "tileId": "terrain-000",
+          "instances": 3617,
+          "captureSha256": "sha256:7e18faf44deaa6bf9d66de981be934b9d0634378d752b4c91b01968e653b8441"
+        },
+        {
+          "tileId": "terrain-001",
+          "instances": 5188,
+          "captureSha256": "sha256:61c820306da5c0c5d8194953bf7c6616f85b5570a6f011cbe280f767c1a5a07f"
+        }
+      ]
+    }
+  },
+  "placements": {
+    "file": "veg-placements.bin",
+    "format": "tarkovzero-customs-vegetation-placement-table-v1",
+    "stride": 48,
+    "headerBytes": 48,
+    "count": 8805,
+    "bytes": 422688,
+    "sha256": "sha256:48ab169970373d51bd73e325f9e3c12c538b5f74c659876a6baffe16124f4ff7",
+    "fields": [
+      {
+        "name": "worldPositionX",
+        "offset": 0,
+        "type": "float64"
+      },
+      {
+        "name": "worldPositionY",
+        "offset": 8,
+        "type": "float64"
+      },
+      {
+        "name": "worldPositionZ",
+        "offset": 16,
+        "type": "float64"
+      },
+      {
+        "name": "rotationRadians",
+        "offset": 24,
+        "type": "float32"
+      },
+      {
+        "name": "widthScale",
+        "offset": 28,
+        "type": "float32"
+      },
+      {
+        "name": "heightScale",
+        "offset": 32,
+        "type": "float32"
+      },
+      {
+        "name": "instanceIndex",
+        "offset": 36,
+        "type": "uint32"
+      },
+      {
+        "name": "bindingIndex",
+        "offset": 40,
+        "type": "uint16"
+      },
+      {
+        "name": "flags",
+        "offset": 42,
+        "type": "uint8",
+        "detail": "bit0: the source declared a colour"
+      },
+      {
+        "name": "colorR",
+        "offset": 43,
+        "type": "uint8",
+        "detail": "value/255"
+      },
+      {
+        "name": "colorG",
+        "offset": 44,
+        "type": "uint8",
+        "detail": "value/255"
+      },
+      {
+        "name": "colorB",
+        "offset": 45,
+        "type": "uint8",
+        "detail": "value/255"
+      },
+      {
+        "name": "colorA",
+        "offset": 46,
+        "type": "uint8",
+        "detail": "value/255"
+      },
+      {
+        "name": "reserved",
+        "offset": 47,
+        "type": "uint8"
+      }
+    ],
+    "flatIndex": "the row ordinal; the rows are in the local package's own flat order (tile order, then per-tile instance index ascending)"
+  },
+  "arrays": {
+    "indexFile": "arrays/veg-arrays.json"
+  },
+  "authoredAssets": [
+    {
+      "assetId": "customs.vegetation.birch01",
+      "collision": "none",
+      "dry": false,
+      "family": "birch",
+      "form": "airy-oval",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 466988,
+          "file": "assets/birch01/birch01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:a362c562530f2aac171b47c1ba296c3cc2514d927d99c325b65ec29bd5fb00f5",
+          "textureResolution": 128,
+          "triangles": 4140
+        },
+        {
+          "bytes": 78756,
+          "file": "assets/birch01/birch01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:9ffc6006312dabe321d8f4af39a0d755048c47d2f8af8f6d1b07afef2931f726",
+          "textureResolution": 64,
+          "triangles": 540
+        },
+        {
+          "bytes": 26564,
+          "file": "assets/birch01/birch01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:47fb577e736bee483fa4c4772f887d35270ddecc2b4617b3e51c7e786021e657",
+          "textureResolution": 32,
+          "triangles": 136
+        }
+      ],
+      "prototypeName": "birch01",
+      "seed": 1622733947
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "collision": "none",
+      "dry": false,
+      "family": "birch",
+      "form": "airy-oval",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 467188,
+          "file": "assets/birch02/birch02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:70ce6521777bbcd2edadae30ec19d92e137548e3cf79bfaf5eba123c3e84f3dd",
+          "textureResolution": 128,
+          "triangles": 4140
+        },
+        {
+          "bytes": 78748,
+          "file": "assets/birch02/birch02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:e74dc6b55071e8c2a1cf5881f0a1f8fe77a88b8a4071a56ada4222270ec420e8",
+          "textureResolution": 64,
+          "triangles": 540
+        },
+        {
+          "bytes": 26584,
+          "file": "assets/birch02/birch02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:4804eeb71f35bc1c498f4957f0ac20bff9044c2c9812d47b27d3f58ddf144755",
+          "textureResolution": 32,
+          "triangles": 136
+        }
+      ],
+      "prototypeName": "birch02",
+      "seed": 2069395625
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "collision": "none",
+      "dry": false,
+      "family": "birch",
+      "form": "airy-oval",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 467324,
+          "file": "assets/birch03/birch03-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:b59ab8cd8cd256c2ad736f4f045f4a4b4ce42855500e729e4114895f2b6d7a6d",
+          "textureResolution": 128,
+          "triangles": 4140
+        },
+        {
+          "bytes": 78808,
+          "file": "assets/birch03/birch03-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:58bd7ba4a4b4fa88e8f54aa87438d19d22835deb274b896c18db832b0a5c67e5",
+          "textureResolution": 64,
+          "triangles": 540
+        },
+        {
+          "bytes": 26788,
+          "file": "assets/birch03/birch03-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:05ca1dc304aa297c424b75ccdcb6faa764a9d2dcc7dcc2f8a4f3b1dd799839d1",
+          "textureResolution": 32,
+          "triangles": 136
+        }
+      ],
+      "prototypeName": "birch03",
+      "seed": 2010693971
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "collision": "none",
+      "dry": true,
+      "family": "filbert-shrub",
+      "form": "dry-brush",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 313048,
+          "file": "assets/brush_dry01/brush_dry01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:be39e458744be71ff54cfabf44ba93e3a4c60f32d944b8383932281ed4f5ccdc",
+          "textureResolution": 128,
+          "triangles": 1648
+        },
+        {
+          "bytes": 64364,
+          "file": "assets/brush_dry01/brush_dry01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:6d752f6e587753a9c107885a73186f3cabf14a77f68c4709e8db5502b493f0ab",
+          "textureResolution": 64,
+          "triangles": 318
+        },
+        {
+          "bytes": 19724,
+          "file": "assets/brush_dry01/brush_dry01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:62498d7a6ec101acaa01932a3f36508dbff7c44f782875674546d97e32206008",
+          "textureResolution": 32,
+          "triangles": 60
+        }
+      ],
+      "prototypeName": "brush_dry01",
+      "seed": 424225452
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "collision": "none",
+      "dry": true,
+      "family": "filbert-shrub",
+      "form": "dry-brush",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 313196,
+          "file": "assets/brush_dry02/brush_dry02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:f9a7197f07eab6655ac75af4e676cd27775333a63e2b927c6aab0d426c857011",
+          "textureResolution": 128,
+          "triangles": 1648
+        },
+        {
+          "bytes": 64380,
+          "file": "assets/brush_dry02/brush_dry02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:4fb1053ec9c60661c8d01d9a208be28ef937af1fd600b13f4b2d12865ec55ee3",
+          "textureResolution": 64,
+          "triangles": 318
+        },
+        {
+          "bytes": 19820,
+          "file": "assets/brush_dry02/brush_dry02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:e562ea28ebac60548bc94f2aaf5836e93e7682eb82bdac112a9b2eafbb8295cd",
+          "textureResolution": 32,
+          "triangles": 60
+        }
+      ],
+      "prototypeName": "brush_dry02",
+      "seed": 2108497119
+    },
+    {
+      "assetId": "customs.vegetation.fern01",
+      "collision": "none",
+      "dry": false,
+      "family": "ground-plant",
+      "form": "fern",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 111792,
+          "file": "assets/fern01/fern01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:00ae0ed59608b931690e3bd358ea30f6fa2c656a41379ae6aab42ac3e073352c",
+          "textureResolution": 128,
+          "triangles": 576
+        },
+        {
+          "bytes": 33840,
+          "file": "assets/fern01/fern01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:c3c5d2bdf4b38734ed656a4b7a0f9c1ddc4ba9828ff7bda5d6ad48399d6a783f",
+          "textureResolution": 64,
+          "triangles": 160
+        },
+        {
+          "bytes": 10060,
+          "file": "assets/fern01/fern01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:6d71d22c205746ee2fc2e95949a4fa49a580d41fe7d20d0d64ae0d3b41be4630",
+          "textureResolution": 32,
+          "triangles": 12
+        }
+      ],
+      "prototypeName": "fern01",
+      "seed": 373269556
+    },
+    {
+      "assetId": "customs.vegetation.fern02",
+      "collision": "none",
+      "dry": false,
+      "family": "ground-plant",
+      "form": "fern",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 111832,
+          "file": "assets/fern02/fern02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:dce90d3485d8e6d848b07df97595cea66a89f480855c66e0ce572bc297218243",
+          "textureResolution": 128,
+          "triangles": 576
+        },
+        {
+          "bytes": 34156,
+          "file": "assets/fern02/fern02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:dc9bfeeb495dbb0314353c479b0c3860dc185791b8e615108364a484b0680b5b",
+          "textureResolution": 64,
+          "triangles": 160
+        },
+        {
+          "bytes": 10084,
+          "file": "assets/fern02/fern02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:e2011f853a4f0b316d3f7bac9af559f7699e6a089459c2425f5a1085ee41a052",
+          "textureResolution": 32,
+          "triangles": 12
+        }
+      ],
+      "prototypeName": "fern02",
+      "seed": 1412916855
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "collision": "none",
+      "dry": false,
+      "family": "filbert-shrub",
+      "form": "medium",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 417380,
+          "file": "assets/filbert_01/filbert_01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:a79c887602a76bd80f32f8f7b92ba5096e312047ed63e145e75a30602cce1332",
+          "textureResolution": 128,
+          "triangles": 3440
+        },
+        {
+          "bytes": 80200,
+          "file": "assets/filbert_01/filbert_01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:46bddeb3ca4ac6cfca06cef4b7cd70925d6eb879207ca66793880dc7f9c61f4e",
+          "textureResolution": 64,
+          "triangles": 570
+        },
+        {
+          "bytes": 23716,
+          "file": "assets/filbert_01/filbert_01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:8f14802c36f8184a89e4fc8777ffd981adb7a20664e8f5fe367212e12f72faf8",
+          "textureResolution": 32,
+          "triangles": 108
+        }
+      ],
+      "prototypeName": "filbert_01",
+      "seed": 1228593320
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "collision": "none",
+      "dry": false,
+      "family": "filbert-shrub",
+      "form": "big",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 418288,
+          "file": "assets/filbert_big01/filbert_big01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:125bf4f23175647113dac04147da0081102cd92f8777479b18133d0c1453cead",
+          "textureResolution": 128,
+          "triangles": 3440
+        },
+        {
+          "bytes": 80200,
+          "file": "assets/filbert_big01/filbert_big01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:1b8cd55f66cb85d2ce2c10f8ca3d37dbd5a33afb0f6911a9504d0a045c1b403a",
+          "textureResolution": 64,
+          "triangles": 570
+        },
+        {
+          "bytes": 23648,
+          "file": "assets/filbert_big01/filbert_big01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:84a567a64d6add70e698c65ec3abaefb94157688ae0c31a8586a4f979372b4db",
+          "textureResolution": 32,
+          "triangles": 108
+        }
+      ],
+      "prototypeName": "filbert_big01",
+      "seed": 251269099
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "collision": "none",
+      "dry": false,
+      "family": "filbert-shrub",
+      "form": "big",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 417836,
+          "file": "assets/filbert_big02/filbert_big02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:288988054960bde871e98fea4eabccdd3a47020037202481861d0a7708278da4",
+          "textureResolution": 128,
+          "triangles": 3440
+        },
+        {
+          "bytes": 80224,
+          "file": "assets/filbert_big02/filbert_big02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:31bd791b1323d810117d7c81cae2e9cc2c9f748f5ffcf36bf60167b470c7a25c",
+          "textureResolution": 64,
+          "triangles": 570
+        },
+        {
+          "bytes": 23708,
+          "file": "assets/filbert_big02/filbert_big02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:8f2d02b0a14f9036b5a260dc7efb03b7ba8ab33e043845c7f0a58d2a76893764",
+          "textureResolution": 32,
+          "triangles": 108
+        }
+      ],
+      "prototypeName": "filbert_big02",
+      "seed": 129702100
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "collision": "none",
+      "dry": false,
+      "family": "filbert-shrub",
+      "form": "big",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 417340,
+          "file": "assets/filbert_big03/filbert_big03-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:c129e477ca5d6665d1f10169bd203f8380f8b5614b491f09976d9cbfa4d5ba4f",
+          "textureResolution": 128,
+          "triangles": 3440
+        },
+        {
+          "bytes": 80432,
+          "file": "assets/filbert_big03/filbert_big03-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:5506f4ddd06602c2fb087dd40bc54c811266e4e2465a098d74473be47b76e766",
+          "textureResolution": 64,
+          "triangles": 570
+        },
+        {
+          "bytes": 23688,
+          "file": "assets/filbert_big03/filbert_big03-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:7dce7b7a59488156fe74cc9e2b512b302b04facd17a18fb0e35d571eac4b8ef0",
+          "textureResolution": 32,
+          "triangles": 108
+        }
+      ],
+      "prototypeName": "filbert_big03",
+      "seed": 236534700
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "collision": "none",
+      "dry": true,
+      "family": "filbert-shrub",
+      "form": "dry-filbert",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 344296,
+          "file": "assets/filbert_dry01/filbert_dry01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:50a417ee3d6393bbb50f3ece69896a9ca0c95ae093ab85f655e22b2fa4fab6d0",
+          "textureResolution": 128,
+          "triangles": 2192
+        },
+        {
+          "bytes": 69400,
+          "file": "assets/filbert_dry01/filbert_dry01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:3c7b61addfa426dcd0423877377fbb777d501b596fdee12b4d6e28162adf4bda",
+          "textureResolution": 64,
+          "triangles": 402
+        },
+        {
+          "bytes": 19788,
+          "file": "assets/filbert_dry01/filbert_dry01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:d2c8980441f8a679a7e68d2b5d85424d1994778333eb7b482963a624b443c87a",
+          "textureResolution": 32,
+          "triangles": 60
+        }
+      ],
+      "prototypeName": "filbert_dry01",
+      "seed": 895549872
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "collision": "none",
+      "dry": true,
+      "family": "filbert-shrub",
+      "form": "dry-filbert",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 343832,
+          "file": "assets/filbert_dry03/filbert_dry03-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:2f22c998b0c0e79d3cfb147dc38c6d089bec6468fb4b0c4841b922e857003487",
+          "textureResolution": 128,
+          "triangles": 2192
+        },
+        {
+          "bytes": 69352,
+          "file": "assets/filbert_dry03/filbert_dry03-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:b0626a3f8fcf34457b84740fec3fc0eabe6f04a83f56bc7444ac2c1baa4e48f0",
+          "textureResolution": 64,
+          "triangles": 402
+        },
+        {
+          "bytes": 19792,
+          "file": "assets/filbert_dry03/filbert_dry03-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:cb4ff8a0b4178f192d890e3161cc13dff70b52039d09b4d918e3ce0b61047915",
+          "textureResolution": 32,
+          "triangles": 60
+        }
+      ],
+      "prototypeName": "filbert_dry03",
+      "seed": 1068007757
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "collision": "none",
+      "dry": false,
+      "family": "filbert-shrub",
+      "form": "small",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 415656,
+          "file": "assets/filbert_small01/filbert_small01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:2ece4e7f58d42653b01b069f85944deefb9b1c1c709e9de377283f6c128e3e3f",
+          "textureResolution": 128,
+          "triangles": 3440
+        },
+        {
+          "bytes": 80552,
+          "file": "assets/filbert_small01/filbert_small01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:796f013e0ba5b2b01ddae557735bba538dbcb8968b7cc8f6ad33ddf44e0a6df3",
+          "textureResolution": 64,
+          "triangles": 570
+        },
+        {
+          "bytes": 23672,
+          "file": "assets/filbert_small01/filbert_small01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:bafd8411954d4072d4209f69cfc8e2fbd790add34ede441fcbc735866ee5fbfe",
+          "textureResolution": 32,
+          "triangles": 108
+        }
+      ],
+      "prototypeName": "filbert_small01",
+      "seed": 421751037
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "collision": "none",
+      "dry": false,
+      "family": "filbert-shrub",
+      "form": "small",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 417528,
+          "file": "assets/filbert_small02/filbert_small02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:6a11a9dd918996f852ecb5d381ef91c30316aae9ff49e641d254e18dcaa87aa9",
+          "textureResolution": 128,
+          "triangles": 3440
+        },
+        {
+          "bytes": 80648,
+          "file": "assets/filbert_small02/filbert_small02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:197ce6fb596f61ade4d500b183b3091106d2659a0465ad7a4f7b0e115c7f6d39",
+          "textureResolution": 64,
+          "triangles": 570
+        },
+        {
+          "bytes": 23732,
+          "file": "assets/filbert_small02/filbert_small02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:c82819619c64b699105b0f9d8dd2e83d4b61a38e472f6758780c91bb73f7c528",
+          "textureResolution": 32,
+          "triangles": 108
+        }
+      ],
+      "prototypeName": "filbert_small02",
+      "seed": 1056730712
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "collision": "none",
+      "dry": false,
+      "family": "filbert-shrub",
+      "form": "small",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 418404,
+          "file": "assets/filbert_small03/filbert_small03-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:30905c89b294b6f5c2dc169ad686af1821e14f6edd7e56a2ec21f57d4357d7de",
+          "textureResolution": 128,
+          "triangles": 3440
+        },
+        {
+          "bytes": 80292,
+          "file": "assets/filbert_small03/filbert_small03-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:e2e6c642f5a98d7ff629771edc7a41d75e96d24c88e60356c3394e91148a2ad6",
+          "textureResolution": 64,
+          "triangles": 570
+        },
+        {
+          "bytes": 23784,
+          "file": "assets/filbert_small03/filbert_small03-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:01e7c07aefeb4e5102db259648190b05ba4485affdba0df5a4957c7ec86d11ee",
+          "textureResolution": 32,
+          "triangles": 108
+        }
+      ],
+      "prototypeName": "filbert_small03",
+      "seed": 940970893
+    },
+    {
+      "assetId": "customs.vegetation.grass_dry3",
+      "collision": "none",
+      "dry": true,
+      "family": "ground-plant",
+      "form": "dry-grass",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 92952,
+          "file": "assets/grass_dry3/grass_dry3-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:7fa00820df4b0eb851115bdf99c8b24b29433fc4b877a5968295ab577cc05d64",
+          "textureResolution": 128,
+          "triangles": 320
+        },
+        {
+          "bytes": 28568,
+          "file": "assets/grass_dry3/grass_dry3-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:054f735ee2177c6b384fb402338780c8bd55c47c904ee2b8d5cb173d38adeee3",
+          "textureResolution": 64,
+          "triangles": 80
+        },
+        {
+          "bytes": 10368,
+          "file": "assets/grass_dry3/grass_dry3-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:44fa907ca7db16fb1df3081329fd3d48c689fa35c7d9f9f25bf4ecb3efe951f0",
+          "textureResolution": 32,
+          "triangles": 16
+        }
+      ],
+      "prototypeName": "grass_dry3",
+      "seed": 594022193
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "collision": "none",
+      "dry": false,
+      "family": "pine",
+      "form": "conical",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 775396,
+          "file": "assets/pine01/pine01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:7d07e2fc466224a1a96b103ac911ba0f21493d605bf0938857ec6b43ce5cda12",
+          "textureResolution": 128,
+          "triangles": 8748
+        },
+        {
+          "bytes": 90700,
+          "file": "assets/pine01/pine01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:26d9a8418b9e37b681d3a2638e077d9a86107f09434538ecdc084cfecadcccf6",
+          "textureResolution": 64,
+          "triangles": 552
+        },
+        {
+          "bytes": 20064,
+          "file": "assets/pine01/pine01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:f628f0c2eb12cb4a04472313b7fbbcbbbae41d3eb07baaaf06c457378d322ada",
+          "textureResolution": 32,
+          "triangles": 46
+        }
+      ],
+      "prototypeName": "pine01",
+      "seed": 997817530
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "collision": "none",
+      "dry": false,
+      "family": "pine",
+      "form": "conical",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 777392,
+          "file": "assets/pine02/pine02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:5145d16b9faeed8025aa62eb7e1c0841565be52cac4e24f6d135d90b6e3df045",
+          "textureResolution": 128,
+          "triangles": 8748
+        },
+        {
+          "bytes": 90424,
+          "file": "assets/pine02/pine02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:738a694a12f39034236b55c46d25fd1122a79da23565436a936dec38b1504a9d",
+          "textureResolution": 64,
+          "triangles": 552
+        },
+        {
+          "bytes": 20088,
+          "file": "assets/pine02/pine02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:6044c898dc5f16f47b500e19aa5d94f5a26fdb5640229adec574c8bb4350c95f",
+          "textureResolution": 32,
+          "triangles": 46
+        }
+      ],
+      "prototypeName": "pine02",
+      "seed": 13575330
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "collision": "none",
+      "dry": false,
+      "family": "pine",
+      "form": "conical",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 775436,
+          "file": "assets/pine03/pine03-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:dd679dc56fd802d4985d05bfb25733fc2b1ed9f5e4cc131d0099b12502b8ad26",
+          "textureResolution": 128,
+          "triangles": 8748
+        },
+        {
+          "bytes": 91828,
+          "file": "assets/pine03/pine03-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:01de03ae347c85349557f05737d21167d73f2b331bc3c49df523b261316660b4",
+          "textureResolution": 64,
+          "triangles": 552
+        },
+        {
+          "bytes": 20028,
+          "file": "assets/pine03/pine03-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:9d2708d6b38a3601560781965f9864b8daaca08bc1aca0b9221848a453027163",
+          "textureResolution": 32,
+          "triangles": 46
+        }
+      ],
+      "prototypeName": "pine03",
+      "seed": 68520371
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "collision": "none",
+      "dry": false,
+      "family": "pine",
+      "form": "conical",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 780084,
+          "file": "assets/pine04/pine04-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:2bc183db30261ed96a7f5c79cabe67836f90dd7d500d04d8870a2980e40572b8",
+          "textureResolution": 128,
+          "triangles": 8748
+        },
+        {
+          "bytes": 90388,
+          "file": "assets/pine04/pine04-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:7f4d2cf661aea8f81d327faf4694462e582bce6b173ac0ffe5d1d8cc1ec10eea",
+          "textureResolution": 64,
+          "triangles": 552
+        },
+        {
+          "bytes": 20268,
+          "file": "assets/pine04/pine04-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:f90b5a4e80781d8624c298202aa3501a3af258982643d86453872e6626c07a29",
+          "textureResolution": 32,
+          "triangles": 46
+        }
+      ],
+      "prototypeName": "pine04",
+      "seed": 689897648
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "collision": "none",
+      "dry": false,
+      "family": "pine",
+      "form": "conical",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 776960,
+          "file": "assets/pine05/pine05-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:afa31ae4f937a7b24b740a4d51b3f4c70d569a8d3544bc3a92f01e22f0ebd2e7",
+          "textureResolution": 128,
+          "triangles": 8748
+        },
+        {
+          "bytes": 91148,
+          "file": "assets/pine05/pine05-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:68fda9427fb94139f54e89bb087c1d82954436e8edde2234c263839e7698445a",
+          "textureResolution": 64,
+          "triangles": 552
+        },
+        {
+          "bytes": 20116,
+          "file": "assets/pine05/pine05-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:115cfe6a4b5430225fdfa5bd2a0035c0d5de654dcd81ed0c692cc708e158aa3d",
+          "textureResolution": 32,
+          "triangles": 46
+        }
+      ],
+      "prototypeName": "pine05",
+      "seed": 758862684
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf01",
+      "collision": "none",
+      "dry": false,
+      "family": "ground-plant",
+      "form": "broadleaf-rosette",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 154360,
+          "file": "assets/plant_wolf01/plant_wolf01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:7155e31bb73494c3e5fa844b13a70f45fedf084023b8fc53eeca8be82d135062",
+          "textureResolution": 128,
+          "triangles": 308
+        },
+        {
+          "bytes": 27280,
+          "file": "assets/plant_wolf01/plant_wolf01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:a4d0d0f2428dd0a2598462c912a59cb9d464ddccc4b6093fad7034a90aa0c8b1",
+          "textureResolution": 64,
+          "triangles": 56
+        },
+        {
+          "bytes": 10396,
+          "file": "assets/plant_wolf01/plant_wolf01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:13e0f0b594e21c0843cb87abe8c995666e5862f37b7f9baa83b9181741d373c5",
+          "textureResolution": 32,
+          "triangles": 16
+        }
+      ],
+      "prototypeName": "plant_wolf01",
+      "seed": 1273433753
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf02",
+      "collision": "none",
+      "dry": false,
+      "family": "ground-plant",
+      "form": "broadleaf-rosette",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 154408,
+          "file": "assets/plant_wolf02/plant_wolf02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:834b3637393afb7fd1fa10ec66dc2a0c9263d86cbcf2153e82a1a202aa5a5843",
+          "textureResolution": 128,
+          "triangles": 308
+        },
+        {
+          "bytes": 27180,
+          "file": "assets/plant_wolf02/plant_wolf02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:5a218eb4500fc4f3cdbc955e62c665523de38f46b9bb1784a5a1e97413ae6035",
+          "textureResolution": 64,
+          "triangles": 56
+        },
+        {
+          "bytes": 10352,
+          "file": "assets/plant_wolf02/plant_wolf02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:35a641f5c8bc2cbc17a1c667792d1b789f36f888363cb0084c760bddbdf8f7ad",
+          "textureResolution": 32,
+          "triangles": 16
+        }
+      ],
+      "prototypeName": "plant_wolf02",
+      "seed": 1582569212
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "collision": "none",
+      "dry": false,
+      "family": "stump",
+      "form": "cut-stump",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 242896,
+          "file": "assets/stump01_update/stump01_update-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:2270408784a321b7b859b093a4bfcc2fb57bab9b89037cfbdb008cf0672a7219",
+          "textureResolution": 128,
+          "triangles": 150
+        },
+        {
+          "bytes": 50528,
+          "file": "assets/stump01_update/stump01_update-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:32b4f5183c50acff9f04baea74c2c915ee1c6e14e9d2592ced6008a5964c9283",
+          "textureResolution": 64,
+          "triangles": 64
+        },
+        {
+          "bytes": 18040,
+          "file": "assets/stump01_update/stump01_update-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:9b84f65e7fb227c348a85649eb3ac94f49779c4ec87e74b6c6be745189e87111",
+          "textureResolution": 32,
+          "triangles": 22
+        }
+      ],
+      "prototypeName": "Stump01_update",
+      "seed": 209948487
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "collision": "none",
+      "dry": false,
+      "family": "stump",
+      "form": "cut-stump",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 243232,
+          "file": "assets/stump02_update/stump02_update-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:aa225a0a6d39ba60fcca2f26ca9889d6f2031d7c57048f106c235ddbb520cd9d",
+          "textureResolution": 128,
+          "triangles": 150
+        },
+        {
+          "bytes": 50504,
+          "file": "assets/stump02_update/stump02_update-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:d59fbf4ed066d2d5969642a02da3f136167551399c2f86f1e5df2806f8a8c55c",
+          "textureResolution": 64,
+          "triangles": 64
+        },
+        {
+          "bytes": 18024,
+          "file": "assets/stump02_update/stump02_update-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:f5d009730bf91bd3f48bbe6b8c30f667caa6b9fa51060f47aff03efba346df03",
+          "textureResolution": 32,
+          "triangles": 22
+        }
+      ],
+      "prototypeName": "Stump02_update",
+      "seed": 886693674
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "collision": "none",
+      "dry": false,
+      "family": "stump",
+      "form": "broken-stump",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 245428,
+          "file": "assets/stump03_update/stump03_update-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:58b1b0fbd2c43d6f0d3ecbaf6eba4e18ca8d0586552e22984922d5d22166fc5e",
+          "textureResolution": 128,
+          "triangles": 170
+        },
+        {
+          "bytes": 50436,
+          "file": "assets/stump03_update/stump03_update-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:00843c1e03f8782caee927946250985f663e3f9b7be2fae540ebea09ab18510b",
+          "textureResolution": 64,
+          "triangles": 64
+        },
+        {
+          "bytes": 18048,
+          "file": "assets/stump03_update/stump03_update-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:88ed1c88a44e7e67645b45a6b52ad095121e8ee08ba34461592b232979d55af1",
+          "textureResolution": 32,
+          "triangles": 22
+        }
+      ],
+      "prototypeName": "Stump03_update",
+      "seed": 361400479
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "collision": "none",
+      "dry": false,
+      "family": "stump",
+      "form": "broken-stump",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 244400,
+          "file": "assets/stump04_update/stump04_update-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:336752e6bfa33f7337ec0c5464453349ebb23bc77c3dcf599c1ecb9b2c945b88",
+          "textureResolution": 128,
+          "triangles": 170
+        },
+        {
+          "bytes": 50504,
+          "file": "assets/stump04_update/stump04_update-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:46a5fb12a3b4bb0a766fd8d4c4cbf64629fe6f73370717446f92b99fc51eb109",
+          "textureResolution": 64,
+          "triangles": 64
+        },
+        {
+          "bytes": 18104,
+          "file": "assets/stump04_update/stump04_update-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:ba29483ed8c3c5aa18b3efad4b57dae21ceb99f5d2d9b049f1224c959ea61086",
+          "textureResolution": 32,
+          "triangles": 22
+        }
+      ],
+      "prototypeName": "Stump04_update",
+      "seed": 1107098692
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "collision": "none",
+      "dry": false,
+      "family": "deciduous-broadleaf",
+      "form": "round-crown",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 503936,
+          "file": "assets/tree01/tree01-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:bb9c1dfb5bf62c02c7ea74a7784c72a97f166e4581486ecb63b0f52c3367456c",
+          "textureResolution": 128,
+          "triangles": 4764
+        },
+        {
+          "bytes": 83792,
+          "file": "assets/tree01/tree01-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:782e50c5427b749d37f091efc4baaeea2c8170c16dd28c19deba4b8522ef3668",
+          "textureResolution": 64,
+          "triangles": 624
+        },
+        {
+          "bytes": 26836,
+          "file": "assets/tree01/tree01-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:28437cfae886e8ca7f32b51af48bc99c03cd41bbc0fc5de701324883496eb070",
+          "textureResolution": 32,
+          "triangles": 136
+        }
+      ],
+      "prototypeName": "tree01",
+      "seed": 265527709
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "collision": "none",
+      "dry": false,
+      "family": "deciduous-broadleaf",
+      "form": "round-crown",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 505576,
+          "file": "assets/tree02/tree02-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:fc36f344a7ba7e5459257599dfe5d5a300ace14633194e1ad07c2f774626f3f7",
+          "textureResolution": 128,
+          "triangles": 4764
+        },
+        {
+          "bytes": 85124,
+          "file": "assets/tree02/tree02-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:e1c6d386b57d77622b70bc5fa902b51aad0c38a090c23cd9119eb00a09a1cb7d",
+          "textureResolution": 64,
+          "triangles": 624
+        },
+        {
+          "bytes": 26724,
+          "file": "assets/tree02/tree02-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:f3a165a04cb88c33edb6203665c0cf440d274426c5bebc2bf032844e0bbbf9f0",
+          "textureResolution": 32,
+          "triangles": 136
+        }
+      ],
+      "prototypeName": "tree02",
+      "seed": 1210025002
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "collision": "none",
+      "dry": false,
+      "family": "deciduous-broadleaf",
+      "form": "round-crown",
+      "geometryEvidence": "original approximation from scalar prototype identity and fallback envelope",
+      "gltf": {
+        "forwardAxis": "+z",
+        "pivot": "base-center",
+        "unit": "metre",
+        "upAxis": "+y"
+      },
+      "lods": [
+        {
+          "bytes": 504976,
+          "file": "assets/tree03/tree03-lod0.glb",
+          "lod": 0,
+          "sha256": "sha256:b8080b19dc7f16b648ce8e1bc0bda7ff4b30331331b3ec8494fd936f467fbf22",
+          "textureResolution": 128,
+          "triangles": 4764
+        },
+        {
+          "bytes": 84488,
+          "file": "assets/tree03/tree03-lod1.glb",
+          "lod": 1,
+          "sha256": "sha256:d323c2c53ddba3e8d8d2438cd3a864efa3c1a784fb9b304429bc6e09fb16728b",
+          "textureResolution": 64,
+          "triangles": 624
+        },
+        {
+          "bytes": 27000,
+          "file": "assets/tree03/tree03-lod2.glb",
+          "lod": 2,
+          "sha256": "sha256:8ce65303c843bdba2c3500d22179f80282e04eb5ea1fdcaf57c514a02a308435",
+          "textureResolution": 32,
+          "triangles": 136
+        }
+      ],
+      "prototypeName": "tree03",
+      "seed": 1811997239
+    }
+  ],
+  "prototypeBindings": [
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-000",
+      "prototypeName": "tree02",
+      "assetId": "customs.vegetation.tree02"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-001",
+      "prototypeName": "pine01",
+      "assetId": "customs.vegetation.pine01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-002",
+      "prototypeName": "pine02",
+      "assetId": "customs.vegetation.pine02"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-003",
+      "prototypeName": "pine03",
+      "assetId": "customs.vegetation.pine03"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-004",
+      "prototypeName": "pine04",
+      "assetId": "customs.vegetation.pine04"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-005",
+      "prototypeName": "pine05",
+      "assetId": "customs.vegetation.pine05"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-006",
+      "prototypeName": "filbert_big02",
+      "assetId": "customs.vegetation.filbert_big02"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-007",
+      "prototypeName": "filbert_big01",
+      "assetId": "customs.vegetation.filbert_big01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-008",
+      "prototypeName": "filbert_big03",
+      "assetId": "customs.vegetation.filbert_big03"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-009",
+      "prototypeName": "Stump01_update",
+      "assetId": "customs.vegetation.stump01_update"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-010",
+      "prototypeName": "Stump02_update",
+      "assetId": "customs.vegetation.stump02_update"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-011",
+      "prototypeName": "Stump03_update",
+      "assetId": "customs.vegetation.stump03_update"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-012",
+      "prototypeName": "Stump04_update",
+      "assetId": "customs.vegetation.stump04_update"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-013",
+      "prototypeName": "grass_dry3",
+      "assetId": "customs.vegetation.grass_dry3"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-014",
+      "prototypeName": "brush_dry01",
+      "assetId": "customs.vegetation.brush_dry01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-015",
+      "prototypeName": "brush_dry02",
+      "assetId": "customs.vegetation.brush_dry02"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-016",
+      "prototypeName": "birch01",
+      "assetId": "customs.vegetation.birch01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-017",
+      "prototypeName": "birch02",
+      "assetId": "customs.vegetation.birch02"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-018",
+      "prototypeName": "birch03",
+      "assetId": "customs.vegetation.birch03"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-019",
+      "prototypeName": "tree01",
+      "assetId": "customs.vegetation.tree01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-020",
+      "prototypeName": "tree03",
+      "assetId": "customs.vegetation.tree03"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-021",
+      "prototypeName": "filbert_01",
+      "assetId": "customs.vegetation.filbert_01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-022",
+      "prototypeName": "filbert_small01",
+      "assetId": "customs.vegetation.filbert_small01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-023",
+      "prototypeName": "filbert_dry03",
+      "assetId": "customs.vegetation.filbert_dry03"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-024",
+      "prototypeName": "plant_wolf01",
+      "assetId": "customs.vegetation.plant_wolf01"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-025",
+      "prototypeName": "plant_wolf02",
+      "assetId": "customs.vegetation.plant_wolf02"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-026",
+      "prototypeName": "fern02",
+      "assetId": "customs.vegetation.fern02"
+    },
+    {
+      "tileId": "terrain-000",
+      "prototypeId": "terrain-000-vegetation-027",
+      "prototypeName": "filbert_small02",
+      "assetId": "customs.vegetation.filbert_small02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-000",
+      "prototypeName": "pine01",
+      "assetId": "customs.vegetation.pine01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-001",
+      "prototypeName": "filbert_big01",
+      "assetId": "customs.vegetation.filbert_big01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-002",
+      "prototypeName": "filbert_01",
+      "assetId": "customs.vegetation.filbert_01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-003",
+      "prototypeName": "filbert_big03",
+      "assetId": "customs.vegetation.filbert_big03"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-004",
+      "prototypeName": "pine04",
+      "assetId": "customs.vegetation.pine04"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-005",
+      "prototypeName": "pine02",
+      "assetId": "customs.vegetation.pine02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-006",
+      "prototypeName": "pine03",
+      "assetId": "customs.vegetation.pine03"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-007",
+      "prototypeName": "pine05",
+      "assetId": "customs.vegetation.pine05"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-008",
+      "prototypeName": "Stump01_update",
+      "assetId": "customs.vegetation.stump01_update"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-009",
+      "prototypeName": "Stump02_update",
+      "assetId": "customs.vegetation.stump02_update"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-010",
+      "prototypeName": "Stump03_update",
+      "assetId": "customs.vegetation.stump03_update"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-011",
+      "prototypeName": "Stump04_update",
+      "assetId": "customs.vegetation.stump04_update"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-012",
+      "prototypeName": "filbert_small01",
+      "assetId": "customs.vegetation.filbert_small01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-013",
+      "prototypeName": "filbert_small02",
+      "assetId": "customs.vegetation.filbert_small02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-014",
+      "prototypeName": "filbert_small03",
+      "assetId": "customs.vegetation.filbert_small03"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-015",
+      "prototypeName": "tree01",
+      "assetId": "customs.vegetation.tree01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-016",
+      "prototypeName": "tree02",
+      "assetId": "customs.vegetation.tree02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-017",
+      "prototypeName": "filbert_dry01",
+      "assetId": "customs.vegetation.filbert_dry01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-018",
+      "prototypeName": "brush_dry01",
+      "assetId": "customs.vegetation.brush_dry01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-019",
+      "prototypeName": "fern01",
+      "assetId": "customs.vegetation.fern01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-020",
+      "prototypeName": "plant_wolf02",
+      "assetId": "customs.vegetation.plant_wolf02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-021",
+      "prototypeName": "tree03",
+      "assetId": "customs.vegetation.tree03"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-022",
+      "prototypeName": "fern02",
+      "assetId": "customs.vegetation.fern02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-023",
+      "prototypeName": "brush_dry02",
+      "assetId": "customs.vegetation.brush_dry02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-024",
+      "prototypeName": "plant_wolf01",
+      "assetId": "customs.vegetation.plant_wolf01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-025",
+      "prototypeName": "filbert_big02",
+      "assetId": "customs.vegetation.filbert_big02"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-026",
+      "prototypeName": "grass_dry3",
+      "assetId": "customs.vegetation.grass_dry3"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-027",
+      "prototypeName": "birch01",
+      "assetId": "customs.vegetation.birch01"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-028",
+      "prototypeName": "birch03",
+      "assetId": "customs.vegetation.birch03"
+    },
+    {
+      "tileId": "terrain-001",
+      "prototypeId": "terrain-001-vegetation-029",
+      "prototypeName": "filbert_dry03",
+      "assetId": "customs.vegetation.filbert_dry03"
+    }
+  ]
+}

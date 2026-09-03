@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "map": "customs",
+  "localOnly": false,
+  "sourceFrame": "eft-unity-world-metres-y-up",
+  "reliefOriginYM": 0,
+  "tiles": [
+    {
+      "controlMaps": [
+        {
+          "channels": [
+            "r",
+            "g",
+            "b",
+            "a"
+          ],
+          "columnOrder": "x-min-to-x-max",
+          "file": "terrain-000-control-0.png",
+          "height": 1024,
+          "id": "terrain-000-control-0",
+          "rowOrder": "z-min-to-z-max",
+          "width": 1024
+        },
+        {
+          "channels": [
+            "r",
+            "g",
+            "b",
+            "a"
+          ],
+          "columnOrder": "x-min-to-x-max",
+          "file": "terrain-000-control-1.png",
+          "height": 1024,
+          "id": "terrain-000-control-1",
+          "rowOrder": "z-min-to-z-max",
+          "width": 1024
+        },
+        {
+          "channels": [
+            "r",
+            "g",
+            "b",
+            "a"
+          ],
+          "columnOrder": "x-min-to-x-max",
+          "file": "terrain-000-control-2.png",
+          "height": 1024,
+          "id": "terrain-000-control-2",
+          "rowOrder": "z-min-to-z-max",
+          "width": 1024
+        }
+      ],
+      "heightEncoding": {
+        "endianness": "little",
+        "sampleOrder": "row-major-z-times-columns-plus-x",
+        "scalarType": "float32",
+        "storage": "float32le",
+        "values": "canonical-world-y-metres"
+      },
+      "heightFile": "terrain-000-height-world-y.f32le",
+      "id": "terrain-000",
+      "layers": [
+        {
+          "channel": "r",
+          "controlMapId": "terrain-000-control-0",
+          "id": "terrain-000-layer-00",
+          "index": 0,
+          "name": "microsplat_layer_Grass_summer_D_0"
+        },
+        {
+          "channel": "g",
+          "controlMapId": "terrain-000-control-0",
+          "id": "terrain-000-layer-01",
+          "index": 1,
+          "name": "microsplat_layer_Ground_summer_D_1"
+        },
+        {
+          "channel": "b",
+          "controlMapId": "terrain-000-control-0",
+          "id": "terrain-000-layer-02",
+          "index": 2,
+          "name": "microsplat_layer_Gravel_Road_A_summer_D_2"
+        },
+        {
+          "channel": "a",
+          "controlMapId": "terrain-000-control-0",
+          "id": "terrain-000-layer-03",
+          "index": 3,
+          "name": "microsplat_layer_Forest_Ground_summer_D_3"
+        },
+        {
+          "channel": "r",
+          "controlMapId": "terrain-000-control-1",
+          "id": "terrain-000-layer-04",
+          "index": 4,
+          "name": "microsplat_layer_Stone_Ground_summer_D_4"
+        },
+        {
+          "channel": "g",
+          "controlMapId": "terrain-000-control-1",
+          "id": "terrain-000-layer-05",
+          "index": 5,
+          "name": "microsplat_layer_Rock_Ground_summer_D_5"
+        },
+        {
+          "channel": "b",
+          "controlMapId": "terrain-000-control-1",
+          "id": "terrain-000-layer-06",
+          "index": 6,
+          "name": "microsplat_layer_Gravel_Road_B_summer_D_6"
+        },
+        {
+          "channel": "a",
+          "controlMapId": "terrain-000-control-1",
+          "id": "terrain-000-layer-07",
+          "index": 7,
+          "name": "microsplat_layer_Gravel_summer_D_7"
+        },
+        {
+          "channel": "r",
+          "controlMapId": "terrain-000-control-2",
+          "id": "terrain-000-layer-08",
+          "index": 8,
+          "name": "microsplat_layer_Grassy_Ground_summer_D_8"
+        },
+        {
+          "channel": "g",
+          "controlMapId": "terrain-000-control-2",
+          "id": "terrain-000-layer-09",
+          "index": 9,
+          "name": "microsplat_layer_Sand_summer_D_9"
+        },
+        {
+          "channel": "b",
+          "controlMapId": "terrain-000-control-2",
+          "id": "terrain-000-layer-10",
+          "index": 10,
+          "name": "microsplat_layer_Pebbles_Ground_summer_D_10"
+        },
+        {
+          "channel": "a",
+          "controlMapId": "terrain-000-control-2",
+          "id": "terrain-000-layer-11",
+          "index": 11,
+          "name": "microsplat_layer_Soil_Grass_summer_D_11"
+        }
+      ],
+      "origin": {
+        "x": -552.699951171875,
+        "y": -103.676025390625,
+        "z": -359.121337890625
+      },
+      "resolution": {
+        "columns": 1025,
+        "rows": 1025
+      },
+      "sampleSpacingM": {
+        "x": 0.68359375,
+        "z": 0.68359375
+      }
+    },
+    {
+      "controlMaps": [
+        {
+          "channels": [
+            "r",
+            "g",
+            "b",
+            "a"
+          ],
+          "columnOrder": "x-min-to-x-max",
+          "file": "terrain-001-control-0.png",
+          "height": 1024,
+          "id": "terrain-001-control-0",
+          "rowOrder": "z-min-to-z-max",
+          "width": 1024
+        },
+        {
+          "channels": [
+            "r",
+            "g",
+            "b",
+            "a"
+          ],
+          "columnOrder": "x-min-to-x-max",
+          "file": "terrain-001-control-1.png",
+          "height": 1024,
+          "id": "terrain-001-control-1",
+          "rowOrder": "z-min-to-z-max",
+          "width": 1024
+        },
+        {
+          "channels": [
+            "r",
+            "g",
+            "b",
+            "a"
+          ],
+          "columnOrder": "x-min-to-x-max",
+          "file": "terrain-001-control-2.png",
+          "height": 1024,
+          "id": "terrain-001-control-2",
+          "rowOrder": "z-min-to-z-max",
+          "width": 1024
+        }
+      ],
+      "heightEncoding": {
+        "endianness": "little",
+        "sampleOrder": "row-major-z-times-columns-plus-x",
+        "scalarType": "float32",
+        "storage": "float32le",
+        "values": "canonical-world-y-metres"
+      },
+      "heightFile": "terrain-001-height-world-y.f32le",
+      "id": "terrain-001",
+      "layers": [
+        {
+          "channel": "r",
+          "controlMapId": "terrain-001-control-0",
+          "id": "terrain-001-layer-00",
+          "index": 0,
+          "name": "microsplat_layer_Grass_summer_D_0"
+        },
+        {
+          "channel": "g",
+          "controlMapId": "terrain-001-control-0",
+          "id": "terrain-001-layer-01",
+          "index": 1,
+          "name": "microsplat_layer_Ground_summer_D_1"
+        },
+        {
+          "channel": "b",
+          "controlMapId": "terrain-001-control-0",
+          "id": "terrain-001-layer-02",
+          "index": 2,
+          "name": "microsplat_layer_Gravel_Road_A_summer_D_2"
+        },
+        {
+          "channel": "a",
+          "controlMapId": "terrain-001-control-0",
+          "id": "terrain-001-layer-03",
+          "index": 3,
+          "name": "microsplat_layer_Forest_Ground_summer_D_3"
+        },
+        {
+          "channel": "r",
+          "controlMapId": "terrain-001-control-1",
+          "id": "terrain-001-layer-04",
+          "index": 4,
+          "name": "microsplat_layer_Stone_Ground_summer_D_4"
+        },
+        {
+          "channel": "g",
+          "controlMapId": "terrain-001-control-1",
+          "id": "terrain-001-layer-05",
+          "index": 5,
+          "name": "microsplat_layer_Rock_Ground_summer_D_5"
+        },
+        {
+          "channel": "b",
+          "controlMapId": "terrain-001-control-1",
+          "id": "terrain-001-layer-06",
+          "index": 6,
+          "name": "microsplat_layer_Gravel_Road_B_summer_D_6"
+        },
+        {
+          "channel": "a",
+          "controlMapId": "terrain-001-control-1",
+          "id": "terrain-001-layer-07",
+          "index": 7,
+          "name": "microsplat_layer_Gravel_summer_D_7"
+        },
+        {
+          "channel": "r",
+          "controlMapId": "terrain-001-control-2",
+          "id": "terrain-001-layer-08",
+          "index": 8,
+          "name": "microsplat_layer_Grassy_Ground_summer_D_8"
+        },
+        {
+          "channel": "g",
+          "controlMapId": "terrain-001-control-2",
+          "id": "terrain-001-layer-09",
+          "index": 9,
+          "name": "microsplat_layer_Sand_summer_D_9"
+        },
+        {
+          "channel": "b",
+          "controlMapId": "terrain-001-control-2",
+          "id": "terrain-001-layer-10",
+          "index": 10,
+          "name": "microsplat_layer_Pebbles_Ground_summer_D_10"
+        },
+        {
+          "channel": "a",
+          "controlMapId": "terrain-001-control-2",
+          "id": "terrain-001-layer-11",
+          "index": 11,
+          "name": "microsplat_layer_Soil_Grass_summer_D_11"
+        }
+      ],
+      "origin": {
+        "x": 147.300048828125,
+        "y": -103.676025390625,
+        "z": -359.121337890625
+      },
+      "resolution": {
+        "columns": 1025,
+        "rows": 1025
+      },
+      "sampleSpacingM": {
+        "x": 0.68359375,
+        "z": 0.68359375
+      }
+    }
+  ]
+}

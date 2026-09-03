@@ -58,8 +58,11 @@
  *
  *   {type:'switchMap', map, label, slug, name, objectiveId}
  *       THE CROSS-MAP HANDOFF. The subject of the question lives on a different map that this
- *       site can actually draw. Render it as a button ("Switch to Woods"); never perform it
+ *       site can actually OPEN. Render it as a button ("Switch to Woods"); never perform it
  *       automatically — it reloads the page. `map` is one of SITE_MAPS and never the current one.
+ *       While SITE_MAPS holds one key this action is unreachable by construction: there is no
+ *       second open map for `crossMapFor()` to name and `isValidAction()` rejects any that is
+ *       invented. That is the point — a button to a locked map is a button that goes nowhere.
  *       `label` is the human map name ('Woods'). `slug`/`name` are the quest to select on arrival.
  *       `objectiveId` is what to fly to once there — it is a marked objective on the TARGET map,
  *       or null when the quest has no marked location there (then just select the quest).
@@ -112,29 +115,40 @@
  *   reports `stale: true` when the echoed map is not the map the UI is on.
  */
 
+import {
+  AVAILABLE_MAP_KEYS, LOCKED_MAP_KEYS, MAP_NAMES, isAvailableMap,
+} from './map-availability.js';
+
 /** Bump when a field changes meaning or disappears. Additive fields do NOT bump it. */
 export const PROTOCOL_VERSION = 2;
 
-/** The maps this site can actually draw. quests.json covers all eleven EFT maps; we render three. */
-export const SITE_MAPS = Object.freeze(['customs', 'reserve', 'woods']);
+/**
+ * The maps a player can actually be taken to. quests.json covers all eleven EFT maps; the picker
+ * lists all eleven; exactly the ones in `AVAILABLE_MAP_KEYS` open.
+ *
+ * THIS IS NOT A SECOND LIST. It is `src/map-availability.js`'s list, re-exported under the name
+ * the wire contract has always used, so the picker and the assistant cannot disagree about what is
+ * reachable. Since 2026-09-02 that is Customs alone: Reserve and Woods still have their data,
+ * their labels and their tests, and a `switchMap` to either is now impossible by construction
+ * rather than by anybody remembering to check.
+ */
+export const SITE_MAPS = AVAILABLE_MAP_KEYS;
 
-/** Display names, for prose and for the switch-map button. */
-export const MAP_LABELS = Object.freeze({ customs: 'Customs', reserve: 'Reserve', woods: 'Woods' });
+/** Display names for the maps that open — prose and the switch-map button. */
+export const MAP_LABELS = Object.freeze(Object.fromEntries(
+  AVAILABLE_MAP_KEYS.map((k) => [k, MAP_NAMES[k]]),
+));
 
 /**
- * Names for the maps quests.json knows but this site cannot draw. Used to tell the player
+ * Names for the maps quests.json knows but this site will not open. Used to tell the player
  * "that one is on Shoreline, which TarkovZero doesn't have yet" instead of offering a dead button.
+ *
+ * Locking Reserve or Woods moves them into THIS table automatically, which is what makes the
+ * assistant start talking about them the way it already talks about Shoreline.
  */
-export const OTHER_MAP_LABELS = Object.freeze({
-  factory: 'Factory',
-  interchange: 'Interchange',
-  shoreline: 'Shoreline',
-  lighthouse: 'Lighthouse',
-  'streets-of-tarkov': 'Streets of Tarkov',
-  'ground-zero': 'Ground Zero',
-  'the-lab': 'The Lab',
-  'the-labyrinth': 'The Labyrinth',
-});
+export const OTHER_MAP_LABELS = Object.freeze(Object.fromEntries(
+  LOCKED_MAP_KEYS.map((k) => [k, MAP_NAMES[k]]),
+));
 
 export const ACTION_TYPES = Object.freeze(['selectQuest', 'flyTo', 'switchMap', 'showImages']);
 
@@ -153,7 +167,7 @@ export const MAX_ACTIONS = 5;
 export const MAX_IMAGES = 4;
 export const MAX_QUESTS = 3;
 
-export const isSiteMap = (k) => SITE_MAPS.includes(String(k));
+export const isSiteMap = (k) => isAvailableMap(k);
 export const mapLabel = (k) => MAP_LABELS[String(k)] ?? OTHER_MAP_LABELS[String(k)] ?? String(k ?? '');
 export const knownMap = (k) => isSiteMap(k) || Object.prototype.hasOwnProperty.call(OTHER_MAP_LABELS, String(k));
 
@@ -219,6 +233,17 @@ export function isValidAction(a, { map, imageIds = null } = {}) {
 export function validateEnvelope(body, { map } = {}) {
   const src = body && typeof body === 'object' ? body : {};
   const echoed = normalizeMapKey(src.map, isSiteMap(map) ? map : 'customs');
+  /**
+   * The map the body SAYS it was computed for, before normalisation — kept whenever it names a map
+   * we have a display name for, so the stale note can say "Worked out for Woods".
+   *
+   * Staleness has to be judged on this, not on `echoed`. `normalizeMapKey` folds anything
+   * unopenable onto the current map, so once Woods was locked (2026-09-02) a body echoing `woods`
+   * normalised to `customs` and stopped reading as stale — and its map-less actions (`selectQuest`)
+   * survived into buttons on a map the answer was never about. Judging the raw echo keeps that
+   * guard working no matter which maps are open.
+   */
+  const echoedMap = knownMap(src.map) ? String(src.map) : echoed;
   const images = (Array.isArray(src.images) ? src.images : []).filter(isValidImageRef).slice(0, MAX_IMAGES);
   const imageIds = images.map((i) => i.id);
   const actions = (Array.isArray(src.actions) ? src.actions : [])
@@ -227,7 +252,8 @@ export function validateEnvelope(body, { map } = {}) {
   return {
     protocol: Number.isInteger(src.protocol) ? src.protocol : 0,
     map: echoed,
-    stale: isSiteMap(map) ? echoed !== map : false,
+    echoedMap,
+    stale: isSiteMap(map) ? echoedMap !== map : false,
     answer: typeof src.answer === 'string' ? src.answer : '',
     actions,
     images,

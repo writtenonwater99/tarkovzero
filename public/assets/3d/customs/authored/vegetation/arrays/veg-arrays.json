@@ -1,0 +1,5658 @@
+{
+  "schemaVersion": 1,
+  "documentType": "tarkovzero-customs-vegetation-texture-array-index",
+  "map": "customs",
+  "localOnly": false,
+  "distribution": "promoted-public",
+  "status": "promoted-public",
+  "packIndexSha256": "sha256:d6b3b9114cfa4b9d498cc2510111183130ca7d005d2cb117ec9ee3ffffc71b07",
+  "layerAttribute": {
+    "itemSize": 1,
+    "name": "vegLayer",
+    "resolvedBy": [
+      "assetId",
+      "lod",
+      "materialName"
+    ],
+    "type": "float32"
+  },
+  "layout": "level-major: level 0 for every layer, then level 1 for every layer",
+  "mipMode": "box",
+  "slotColorSpace": {
+    "basecolor": "srgb",
+    "normal": "linear",
+    "orm": "linear"
+  },
+  "slots": [
+    "basecolor",
+    "orm",
+    "normal"
+  ],
+  "alphaCutoffByLod": {
+    "0": 0.485,
+    "1": null,
+    "2": null
+  },
+  "alphaModeCounts": {
+    "MASK": 22,
+    "OPAQUE": 177
+  },
+  "counts": {
+    "authoredAssets": 31,
+    "layers": 199,
+    "lodFiles": 93,
+    "primitives": 199
+  },
+  "totalBytes": 26950884,
+  "uploadBytesLevel0": 20213760,
+  "arrays": [
+    {
+      "blobs": {
+        "basecolor": {
+          "bytes": 7427300,
+          "file": "veg-l0-basecolor.bin",
+          "sha256": "sha256:afd6b3855bdf33117aeeb0ac859b826ef7af4affff736440c05566c4451845e6"
+        },
+        "normal": {
+          "bytes": 7427300,
+          "file": "veg-l0-normal.bin",
+          "sha256": "sha256:1e42ab66113707f0231e64159da8ce626146e6ca5c069db5514b67c1001a6376"
+        },
+        "orm": {
+          "bytes": 7427300,
+          "file": "veg-l0-orm.bin",
+          "sha256": "sha256:1716cf13f1b5b26faef6fac499c56b803eda29757a353f59d91b18d481a51c6d"
+        }
+      },
+      "depth": 85,
+      "height": 128,
+      "layerBytes": 65536,
+      "levels": [
+        {
+          "byteLength": 5570560,
+          "byteOffset": 0,
+          "height": 128,
+          "level": 0,
+          "width": 128
+        },
+        {
+          "byteLength": 1392640,
+          "byteOffset": 5570560,
+          "height": 64,
+          "level": 1,
+          "width": 64
+        },
+        {
+          "byteLength": 348160,
+          "byteOffset": 6963200,
+          "height": 32,
+          "level": 2,
+          "width": 32
+        },
+        {
+          "byteLength": 87040,
+          "byteOffset": 7311360,
+          "height": 16,
+          "level": 3,
+          "width": 16
+        },
+        {
+          "byteLength": 21760,
+          "byteOffset": 7398400,
+          "height": 8,
+          "level": 4,
+          "width": 8
+        },
+        {
+          "byteLength": 5440,
+          "byteOffset": 7420160,
+          "height": 4,
+          "level": 5,
+          "width": 4
+        },
+        {
+          "byteLength": 1360,
+          "byteOffset": 7425600,
+          "height": 2,
+          "level": 6,
+          "width": 2
+        },
+        {
+          "byteLength": 340,
+          "byteOffset": 7426960,
+          "height": 1,
+          "level": 7,
+          "width": 1
+        }
+      ],
+      "lod": 0,
+      "mipLevels": 8,
+      "normalScaleBaked": 0.78,
+      "width": 128
+    },
+    {
+      "blobs": {
+        "basecolor": {
+          "bytes": 1245108,
+          "file": "veg-l1-basecolor.bin",
+          "sha256": "sha256:9fd721f603cc0e86d45637f9c7ceb2ad09360467a0b85194a45af6a1c2c33af4"
+        },
+        "normal": {
+          "bytes": 1245108,
+          "file": "veg-l1-normal.bin",
+          "sha256": "sha256:bbc4f1dba4ff4c7fe7ba5ed361149a0461a36fb7d6e02658eb2b839b150798cb"
+        },
+        "orm": {
+          "bytes": 1245108,
+          "file": "veg-l1-orm.bin",
+          "sha256": "sha256:24f7e4146168dd23b301fc9cc1af644ecfc83452b30de7df27a8d436e3f82d41"
+        }
+      },
+      "depth": 57,
+      "height": 64,
+      "layerBytes": 16384,
+      "levels": [
+        {
+          "byteLength": 933888,
+          "byteOffset": 0,
+          "height": 64,
+          "level": 0,
+          "width": 64
+        },
+        {
+          "byteLength": 233472,
+          "byteOffset": 933888,
+          "height": 32,
+          "level": 1,
+          "width": 32
+        },
+        {
+          "byteLength": 58368,
+          "byteOffset": 1167360,
+          "height": 16,
+          "level": 2,
+          "width": 16
+        },
+        {
+          "byteLength": 14592,
+          "byteOffset": 1225728,
+          "height": 8,
+          "level": 3,
+          "width": 8
+        },
+        {
+          "byteLength": 3648,
+          "byteOffset": 1240320,
+          "height": 4,
+          "level": 4,
+          "width": 4
+        },
+        {
+          "byteLength": 912,
+          "byteOffset": 1243968,
+          "height": 2,
+          "level": 5,
+          "width": 2
+        },
+        {
+          "byteLength": 228,
+          "byteOffset": 1244880,
+          "height": 1,
+          "level": 6,
+          "width": 1
+        }
+      ],
+      "lod": 1,
+      "mipLevels": 7,
+      "normalScaleBaked": 0.62,
+      "width": 64
+    },
+    {
+      "blobs": {
+        "basecolor": {
+          "bytes": 311220,
+          "file": "veg-l2-basecolor.bin",
+          "sha256": "sha256:4eeff494a4d84002d45a252ecef29fb6f61debe76a806cd36a34711670d0c6af"
+        },
+        "normal": {
+          "bytes": 311220,
+          "file": "veg-l2-normal.bin",
+          "sha256": "sha256:0ad49ad5682fb015b75978dad4e1953db87dabd0f7d03c1e5c5a428508413e8b"
+        },
+        "orm": {
+          "bytes": 311220,
+          "file": "veg-l2-orm.bin",
+          "sha256": "sha256:f66ad79126e7bd6a8f1ab822731191e906ec6e87424043821555b50035efb3df"
+        }
+      },
+      "depth": 57,
+      "height": 32,
+      "layerBytes": 4096,
+      "levels": [
+        {
+          "byteLength": 233472,
+          "byteOffset": 0,
+          "height": 32,
+          "level": 0,
+          "width": 32
+        },
+        {
+          "byteLength": 58368,
+          "byteOffset": 233472,
+          "height": 16,
+          "level": 1,
+          "width": 16
+        },
+        {
+          "byteLength": 14592,
+          "byteOffset": 291840,
+          "height": 8,
+          "level": 2,
+          "width": 8
+        },
+        {
+          "byteLength": 3648,
+          "byteOffset": 306432,
+          "height": 4,
+          "level": 3,
+          "width": 4
+        },
+        {
+          "byteLength": 912,
+          "byteOffset": 310080,
+          "height": 2,
+          "level": 4,
+          "width": 2
+        },
+        {
+          "byteLength": 228,
+          "byteOffset": 310992,
+          "height": 1,
+          "level": 5,
+          "width": 1
+        }
+      ],
+      "lod": 2,
+      "mipLevels": 6,
+      "normalScaleBaked": 0.48,
+      "width": 32
+    }
+  ],
+  "layers": [
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch01",
+      "family": "birch",
+      "layer": 0,
+      "lod": 0,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L0",
+      "prototypeName": "birch01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9a35c42c7d14c87edd1ad197a033435b0933e7c46af980f61d70c345872dd6ef",
+        "normal": "sha256:d217f7ad5e7bfd735bc0b6863a6ee26f05f73ec9f3899910b356c5ca3ef41039",
+        "orm": "sha256:38ea1f8f736aedc4e135fb418a0e304263049dc247dc02f15f74e293347092e5"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch01",
+      "family": "birch",
+      "layer": 1,
+      "lod": 0,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L0",
+      "prototypeName": "birch01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:fbb1779c951b39efeb54158dcbdb90801879c5260a463af4c74e4d1839630345",
+        "normal": "sha256:867ae74e9ae04c02e5088ae8da114339bdb9191eb052275e0c9461e57fc04241",
+        "orm": "sha256:deacee7bb67288de3d7e229b7141719903f098317104d55dc4ee68ac5e66a6a4"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.birch01",
+      "family": "birch",
+      "layer": 2,
+      "lod": 0,
+      "materialFamily": "leaf-birch-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_birch_card_PBR_L0",
+      "prototypeName": "birch01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:3149fcdbd2e060cd758e9c40c1b510eae627a4ab2e61e21149d7c8414a5c6846",
+        "normal": "sha256:0575a216f2b7aecd2c8447d4673a17fbcc3e0839ed7024f8c544fa077c5a8a54",
+        "orm": "sha256:57d72d781b8e67b31b682ef9a79e07541ee7813f2a873d0539a058ef93cf3ec7"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch01",
+      "family": "birch",
+      "layer": 0,
+      "lod": 1,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L1",
+      "prototypeName": "birch01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8fd980114d12f15556ab5b813006b335107749e805212e1690d3fb394ab48a31",
+        "normal": "sha256:1ded1b9f3998964ca8f1c982660b817ab483bf13dddaa018c94749e171ee7346",
+        "orm": "sha256:58579e364c9c6c2c84c1106f421ec1aecb1bc8647ebad43174036b5b27c2346d"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch01",
+      "family": "birch",
+      "layer": 1,
+      "lod": 1,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L1",
+      "prototypeName": "birch01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:dd5fe71187017e4dfd105152ea0e4c4e10c24ce0bec4ff9d08fa8fda07d4fccc",
+        "normal": "sha256:7040dbc1576243548a3b86fd5a7aa5c3b0568244a2cfb6070644829ca72708d0",
+        "orm": "sha256:b9991279d84b4586e6d2f812e88eb88b678cde60d88d50398c895a57f43ec56b"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch01",
+      "family": "birch",
+      "layer": 0,
+      "lod": 2,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L2",
+      "prototypeName": "birch01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:5e570da1f81508c43370829e5b08424adbae70cdc83833116b1dc6cd11324036",
+        "normal": "sha256:5b07dfeca932a008123d5e41a9d891d6471665165b8dbb7f30c7db063f6d1295",
+        "orm": "sha256:478d58850914a7b4edc26e1014942be80c498c0a309a63bb596e7b8be6b8ae3c"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch01",
+      "family": "birch",
+      "layer": 1,
+      "lod": 2,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L2",
+      "prototypeName": "birch01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:25e63a1d9e44dcd4bc2572492782fc53ccf26a5afa6cdd193411f2f816ff4e1f",
+        "normal": "sha256:d549788f49fd7480f8ccc64571f56f24dcf5dcda9050a87664d54d8bee6d1bf3",
+        "orm": "sha256:143487a49b46d0ea8f3957374942f74fd60848732be690c41ea8f0fea0a1931f"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch02",
+      "family": "birch",
+      "layer": 3,
+      "lod": 0,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L0",
+      "prototypeName": "birch02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:f41b712b01fd7af0e766a1cedf4092bf5f820c4f5d588b9c6238e612bd3235bd",
+        "normal": "sha256:e430027f8813b28f4002962452cbf0a5f9c67952227acac9f27fa5b97bbcb131",
+        "orm": "sha256:17939ee07553b478da2bbf888fd4f0361033d384d35460b48b8d5b89d583d995"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch02",
+      "family": "birch",
+      "layer": 4,
+      "lod": 0,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L0",
+      "prototypeName": "birch02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:0623680ca100a97f4106fa1e4de925820d696bd4e262cf823cdc8f8f67b4ba28",
+        "normal": "sha256:41ac4073a12462e7b1697d2d549d8aea3861e6578bcece71406297d12c2acca4",
+        "orm": "sha256:c0e77d79c1b2032e74ad953d2711af675b397145d95596815f0541560bc6893a"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.birch02",
+      "family": "birch",
+      "layer": 5,
+      "lod": 0,
+      "materialFamily": "leaf-birch-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_birch_card_PBR_L0",
+      "prototypeName": "birch02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:844e37bd6660e65e778303a18d67d1413b02c42fa93eed705f20459727460a01",
+        "normal": "sha256:06a1eda7ed1766a86f761a80ab482b898f066588f56c27344a01c81bad002a8e",
+        "orm": "sha256:7a50f11be2ef45e7c90c903cf8d2e30659068452e72e3ee0048cf12e1dec83bd"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch02",
+      "family": "birch",
+      "layer": 2,
+      "lod": 1,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L1",
+      "prototypeName": "birch02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:678ee87437ff6123245321b0381e193f557e77ee94047dbb5b92dac5b1b9a420",
+        "normal": "sha256:ea7c1c26324643f8a8a4ced089d2d277f61723875c00f14e238bea104081883b",
+        "orm": "sha256:5800d6ee05ad27a7df558035c3d0b6e990fac9692942733d46395f0d5485d7f6"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch02",
+      "family": "birch",
+      "layer": 3,
+      "lod": 1,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L1",
+      "prototypeName": "birch02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4ce9c07e2d7262e996d8bfd916cac7c8884e54e329c99307be762338960a6965",
+        "normal": "sha256:52d71bbef1db9505ecbc44c61b11c08429ad737be5500f55a85c9b302090950b",
+        "orm": "sha256:663a8223b222d92c58f0c39260dec1cb5bc43d7d4a23318789a892efa96ad9b5"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch02",
+      "family": "birch",
+      "layer": 2,
+      "lod": 2,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L2",
+      "prototypeName": "birch02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:fcf01b8e52b3f5359c3e55b1f3629feae699739d799d621dc2005ab86782b1a3",
+        "normal": "sha256:14d871fbf4a27b019f14ab8d249f07db2c25ec3b6b74e0fa5e4e993c61bafe5c",
+        "orm": "sha256:aaee73f861212b3fccb093d5229f41634a78259bcad4296949a85fd05fcd856f"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch02",
+      "family": "birch",
+      "layer": 3,
+      "lod": 2,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L2",
+      "prototypeName": "birch02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:81e02f25958b794e073d34e0f5066e7c3cbe8bb637b55b4a9bbcc5ab746e0f9b",
+        "normal": "sha256:47cf6091673efceaf0e7fc16cccbeccb74e29ebb1992d98091c0c6b31b9185a0",
+        "orm": "sha256:45d9699b992543e24aea18834234e25e71849589f2cf873f52885caf57d5c7cb"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch03",
+      "family": "birch",
+      "layer": 6,
+      "lod": 0,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L0",
+      "prototypeName": "birch03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:35a4ab0c3658c1bb89147ff7d6612f9b7cce8ae198b8cd7a9f9fea8e676dd818",
+        "normal": "sha256:9d17314ab4dffc858b5b0633e58532ae71d45946a0e66a9a798097012ca88461",
+        "orm": "sha256:f2de230e4e0e0019c915149c47e9d9c1ba0e5848df159782697bc3ce3754062f"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch03",
+      "family": "birch",
+      "layer": 7,
+      "lod": 0,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L0",
+      "prototypeName": "birch03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:02132c050e2e62c85d45183a978bc1618bd900105c35b80c6c7843ddea21a679",
+        "normal": "sha256:4260e99fa01469f6f1f093c56c9348354cb8ece500a6a2dde651e96ab7aa3097",
+        "orm": "sha256:913360cf3715cfd26f3629394cbbbe7a9f3c3fe78b1f0d9b86bf5cb7268e5faa"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.birch03",
+      "family": "birch",
+      "layer": 8,
+      "lod": 0,
+      "materialFamily": "leaf-birch-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_birch_card_PBR_L0",
+      "prototypeName": "birch03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b21df551b578e0acac359d33d8bd3c7141cd91ac697286a84bc2d266d6f961ba",
+        "normal": "sha256:f8541c485cf90f015cf37908cf4a4e088d499955de9ba0a8dd6a23566a2573de",
+        "orm": "sha256:11846ad401dcf2d9fcc33f65e93d2c8127b5b799da1bc391e00b89cf7702a567"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch03",
+      "family": "birch",
+      "layer": 4,
+      "lod": 1,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L1",
+      "prototypeName": "birch03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:c0d774b2e3556659f52c21f7d099da54c87f2141b14c37576e33922c27659d44",
+        "normal": "sha256:ecb3dd286a57a05f6268e6a0340bdb8b127669ab06d4c09cdda0472b875b9f67",
+        "orm": "sha256:847ad212c18af210e4fe49d6b4c228349da800a0629dea96d4ac74cfd6fec7c5"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch03",
+      "family": "birch",
+      "layer": 5,
+      "lod": 1,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L1",
+      "prototypeName": "birch03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:099377af3eb2d165ca9dc36b0e0104f1595e21043a52bc81190dea3cbfa63176",
+        "normal": "sha256:2edb076152a2755db11a9e3539b586ab704386e2549d2796d0caebe2b6d89b9c",
+        "orm": "sha256:479b0e967d9303e269864483ddf4da89c102e697e7714ff2b22f2289d78756b3"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch03",
+      "family": "birch",
+      "layer": 4,
+      "lod": 2,
+      "materialFamily": "bark-birch",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L2",
+      "prototypeName": "birch03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:f31dde073078f8b9fa0fc4f9526b357b1881bc1289ffbd785b0551698ef65f48",
+        "normal": "sha256:bc18cf3306ea0009097d9a73ae06a64a82f1417b388b7f624bc3e8fb8e488790",
+        "orm": "sha256:94356b6cba0500444fb3ec8d8348d3edad9b8c5569cb8d611adc17f127b9f9ef"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.birch03",
+      "family": "birch",
+      "layer": 5,
+      "lod": 2,
+      "materialFamily": "leaf-birch",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L2",
+      "prototypeName": "birch03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:0c257cc9edaf9ad8df4a02cb47b49ba6917db658d162d0430041f021be2d2d05",
+        "normal": "sha256:5e7769ccbb3679f8e270acb5cd8e60dc327bad99338482cc99d2993bd04fe358",
+        "orm": "sha256:8135b7ddd2b28e69bbee120634c4c069da0e4deda76febe7632b31c632141d67"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry01",
+      "family": "filbert-shrub",
+      "layer": 9,
+      "lod": 0,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "prototypeName": "brush_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d8c150c092cc43cd49072f4e26c7e19bad0818ff90a618257ef6aef0e65619fd",
+        "normal": "sha256:281b3d9ae546aaf97c093cf9fb41841de1cdf300ffe37f204e8dd8f020e08852",
+        "orm": "sha256:3b6e3d45f9969a021c41ab4d9b50c264e084c130ff150f8e0633d2a3c5e3c07f"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.brush_dry01",
+      "family": "filbert-shrub",
+      "layer": 10,
+      "lod": 0,
+      "materialFamily": "leaf-dry-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "prototypeName": "brush_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:abf572b77003d458853f6eecfa1482abeb2ee5a63dc4e2da16c081a6f32225d4",
+        "normal": "sha256:f80b4b1c25a0e3aae35a37a68baaea63553d9dda3a9fd27a718738af57613260",
+        "orm": "sha256:35856fc487c2344a4901102c15262cf35f30d64a34c2924ce7c58a2ac4023196"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry01",
+      "family": "filbert-shrub",
+      "layer": 11,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "brush_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:867e4910d6046d3cfb13b33d571d1a4389c3fa9e927cdd38e70ff7a613facfbd",
+        "normal": "sha256:0c823c5b54aad34aae05a61d71818c113e8d2c55595f1317cab5ec93544d6b8f",
+        "orm": "sha256:dd7ddb05040a1e3647b2dfbe169489f05a4972e05b57babd2b943b28a5486584"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry01",
+      "family": "filbert-shrub",
+      "layer": 6,
+      "lod": 1,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "prototypeName": "brush_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ad71f953abcef7bb54a680a3786248a0656c5e047e93ba2369e7ccf6207bfae6",
+        "normal": "sha256:b44ec0ae315c7623c4e72075d2726f3b7e3c697a47477c7696dadc3c7620b834",
+        "orm": "sha256:03cc2f52638f0c9d8b82a71e3a4447e6675f92806c7e8e07102e7b75a517a6b7"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry01",
+      "family": "filbert-shrub",
+      "layer": 7,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "brush_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:dcf82bd29321cfd176954f4364f45b7ecdc4a0f6a1d1704043c92b56c1c66cb0",
+        "normal": "sha256:218d2d07011e7931a2a77868845c6b6c2a7976cf6c36d325dc762e882378d50b",
+        "orm": "sha256:5b43a948a2ab6006ccc0d51b387a2c38f9ae7f2522aef0df0f60016b78d3dc89"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry01",
+      "family": "filbert-shrub",
+      "layer": 6,
+      "lod": 2,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "prototypeName": "brush_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:eac2217dbeacdcb59c21168378e26140073cc54c3d8fdff7d8c63311560f4e0f",
+        "normal": "sha256:2a0509d342016ca532a988cf9d5d1c4f9b32249594e3a4cbc26bde1cc513096f",
+        "orm": "sha256:ed628c0eb91b58cf0cd1aa36b13ea9ddbb4c5dbf4740079e4994a405ec42ed0a"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry01",
+      "family": "filbert-shrub",
+      "layer": 7,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "brush_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:79592fcc57356656630ee21b8caf3db31b07215766d4825395c991c4a35a23c7",
+        "normal": "sha256:b1c50a4280d03c25aa5def4060db55286cb9264495c977795a2eec2e351aa26d",
+        "orm": "sha256:686a008bbcf671e9c766db144cb38c05b9c9bf92d18d58f8feda3c0dcecb2f88"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry02",
+      "family": "filbert-shrub",
+      "layer": 12,
+      "lod": 0,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "prototypeName": "brush_dry02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9c34d32d8e65ae8d90772152dea69f33adf32147e3b7c640fb1c876ec8437582",
+        "normal": "sha256:9769492c778123e3ea9a100d19545102d924fdbce86d46f642a76cf4f359e210",
+        "orm": "sha256:bb09855154c6253a7b59bfa5a7ef48e3a005191c70998ff705b531b6ab03c31a"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.brush_dry02",
+      "family": "filbert-shrub",
+      "layer": 13,
+      "lod": 0,
+      "materialFamily": "leaf-dry-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "prototypeName": "brush_dry02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9f069f4bcbd2934166c96aa715800378d6c322abd5ac4967fd2055af41eabbab",
+        "normal": "sha256:2ad15b39d317da40c8f44c08a9fb8c90fa22f9269a618f36a15ee823c3f62da0",
+        "orm": "sha256:1de4ac0509913e7a02018993a5c6df85d346edb27fe4a61e3a8105e4714a172c"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry02",
+      "family": "filbert-shrub",
+      "layer": 14,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "brush_dry02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8e8c8837050c5bbdf9dda9e71eca8f8f35c0025dee891d79c873bbcb6643a277",
+        "normal": "sha256:63d78472b5953b4470891812c2ad119baa6875451c9fa65023123dc4680a375c",
+        "orm": "sha256:05780b9f4715f90b158602391a242f6456a808bbbe7fe6113094d024fb59f99a"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry02",
+      "family": "filbert-shrub",
+      "layer": 8,
+      "lod": 1,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "prototypeName": "brush_dry02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:540cf1d0832bd8ab650142866759bac23002577bad5093397247e1af7ed21787",
+        "normal": "sha256:ceea8ae1a3a3a5fb8211e16c8b35cf5f779d1d2efe4a577c4af2178bc91c4966",
+        "orm": "sha256:9e16b823fc4f6240c7c0c9d2b6340f974c79171aa51ff577c159394abfbf74e4"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry02",
+      "family": "filbert-shrub",
+      "layer": 9,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "brush_dry02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:f66352ad16cb6b817abeb781465f2f95bc4299197ec67f965d55b09a6ef056ce",
+        "normal": "sha256:1962a1da2ad3d570e8a10b3439fa76de4a7e3c66296a653866a2db3eabf02663",
+        "orm": "sha256:dbde0f1121af6eed8846d0ef23a9585b0f0bfa114f5b215b814bfb52b1bd8cb1"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry02",
+      "family": "filbert-shrub",
+      "layer": 8,
+      "lod": 2,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "prototypeName": "brush_dry02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:85bb3d6c92aa5c4ff7f4326d33fcc0b35c55e6865be2530321d1f939e770c6a8",
+        "normal": "sha256:ea11acdb2ad50981f5001efd77ec87ac81b450ec7725b26a9e114e9267084b29",
+        "orm": "sha256:2c26c0715ed5ea41346bf79b560c8904a42db980e2a3d9408d72553258096e6d"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.brush_dry02",
+      "family": "filbert-shrub",
+      "layer": 9,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "brush_dry02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:58253148c8f3e59cc6ee6fc5aaa8fde5d67266ab11bc4dc39186ec5ecefe333c",
+        "normal": "sha256:3668ad1947b2b3f525a9d864c284fde5815fb52ecb08649decfe9ac205a5499d",
+        "orm": "sha256:42caaaf0fb54fe8137196713cbdbfca63d75c2b17412a9cab8ae4e40c4e50e68"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.fern01",
+      "family": "ground-plant",
+      "layer": 15,
+      "lod": 0,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "prototypeName": "fern01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:e2a2c8ce837b0dc62c978db257516d9fcd6f5e60cb20672b33dbb2dda35a5633",
+        "normal": "sha256:b305b97fd1102a271aca49a16f0a4892bd185ae871378f7e54d17e7b782e2550",
+        "orm": "sha256:a1936fca8e810746e3416044efaeae22c509a15c338766f0cc2a7f8418517dcc"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.fern01",
+      "family": "ground-plant",
+      "layer": 10,
+      "lod": 1,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "prototypeName": "fern01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:6a6aa9522764489ace1fe20a8e01b4e4d968942fc8506814002129d166ee3120",
+        "normal": "sha256:3e076cbc5baabf9aee642a1bde23646dfac7775dc3708d3e6b7ab18202c39cd4",
+        "orm": "sha256:897d1f003c8371fe10e923673d540abb4e5c16ac0db91e0fb1685f2bf96655dc"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.fern01",
+      "family": "ground-plant",
+      "layer": 10,
+      "lod": 2,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "prototypeName": "fern01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:e6644fe75a246fe63a86764873cc9765ca75f59249111383081266ce4470d345",
+        "normal": "sha256:7b214bbd3ce1c864b41634192b78a58a46489f5a3b95d40944f7dfe721956b2f",
+        "orm": "sha256:17f850bd9b880f20c1ae19aded0c5941ea5fc10eb1943eec5b619621e47c08a0"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.fern02",
+      "family": "ground-plant",
+      "layer": 16,
+      "lod": 0,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "prototypeName": "fern02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:3523b08b01e05da1a9c4adfe030fe8cccb5b77edd75ee23e42f7f3192d9f314b",
+        "normal": "sha256:648d379cbfc910c7bc39894b370399224d5e49310b7fa9d6fc15c309dde1a22b",
+        "orm": "sha256:9e0b168286c62d56eae5912c68a5f916203e6e8ea178098a93427d52f6ebe13d"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.fern02",
+      "family": "ground-plant",
+      "layer": 11,
+      "lod": 1,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "prototypeName": "fern02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:eabbcf48fe490fba08520d21499ede064f3b44d7df23ba24c782347acfc6c17a",
+        "normal": "sha256:acde1674f4679539f212f84538d68e23f56bec7516e1f7b30914646a648565fb",
+        "orm": "sha256:74e77984bf95521fbe863ba5d38e9124c17b19df21cd65e9274bfcec81380dba"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.fern02",
+      "family": "ground-plant",
+      "layer": 11,
+      "lod": 2,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "prototypeName": "fern02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d4d0377b6d3c520463f529d003dbce8ba5721389ace8fe3a86da72725b66631d",
+        "normal": "sha256:21b9695e563a1cf355eeeb660762748bcc718b05575ad54b56bf21e1ab7639c4",
+        "orm": "sha256:79e028c6f93d911259838cf2fd38d25558b67c52bb77ee0a9499dac63bc391b1"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_01",
+      "family": "filbert-shrub",
+      "layer": 17,
+      "lod": 0,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "prototypeName": "filbert_01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:7e4c1a624c302516c8c7da1b7e6595361ffacac971390ee8e624324f9ae3d838",
+        "normal": "sha256:275efc4f784f15838fc168546dbd3c4bb115723bfe5d73a1c9c739697ddf64ce",
+        "orm": "sha256:3495de7dfe4ffc77d2405f5b8e5b964f425e385546d77d8c213c7a2563f6b8a3"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_01",
+      "family": "filbert-shrub",
+      "layer": 18,
+      "lod": 0,
+      "materialFamily": "leaf-shrub-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "prototypeName": "filbert_01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:1edaf566958e13b3e2ababf4da66bae16ccf01a89c1eb0e8da3f5f9e4fe461a9",
+        "normal": "sha256:dfd1cf618807b34a4f6a69396991c9ebd06b16084950e44063ffbbc10f54bad7",
+        "orm": "sha256:aeb3a3388e71fe5892b329a478ddf8a4d37f10888c50639cbca3953f6468b608"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_01",
+      "family": "filbert-shrub",
+      "layer": 19,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8f7b391726656211ae4de39798baac509e122afe1010803e8b70549cf5ab62d1",
+        "normal": "sha256:7ae8daf51815e3ca444a6e1231b4d98a5ee764ce331e335088dbf8a721636e30",
+        "orm": "sha256:3df0a640a165e3260c9a0ac70fe56c5a4f82110076a979dba1a27933e8ecd2b8"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_01",
+      "family": "filbert-shrub",
+      "layer": 12,
+      "lod": 1,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "prototypeName": "filbert_01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:5d6610479b0fb6e0ef341a17fe078de80597d18f72354216905a9a8e276444d0",
+        "normal": "sha256:dc95cf69641ea0fa63f173416789bebd4614e5cc6cde3198780207666bd16bbc",
+        "orm": "sha256:b3a86feaa88a97aaa2d231c658a0c8ce74c555fc867400eb3b753b04bd7b2dcc"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_01",
+      "family": "filbert-shrub",
+      "layer": 13,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:2382a4be741e5b317378ecb6d151b21bd744188347d61aa4aedf51fdbd147b9d",
+        "normal": "sha256:a64bd2189ac55c4f2f02bdd8226be369ec6abad08a72b5a590be8e1be848a019",
+        "orm": "sha256:292c5dbccab3150a0e649b1993aa6b5eab09d2cc709866d49bf676cdeaa7691e"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_01",
+      "family": "filbert-shrub",
+      "layer": 12,
+      "lod": 2,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "prototypeName": "filbert_01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:cdfc8600f5e597fa255a11aa4f16c5d9bd3f8d2f6ad01ef1e8047bc52060008e",
+        "normal": "sha256:d1adaedd12fe20f92f10a0df5908ebe4c5aa09d3d7fdca7646631bcb62844f04",
+        "orm": "sha256:fcb50ca3c3ca940d8b46cec273a4bc30efbd47e1748e51e82f07082a4e8d97de"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_01",
+      "family": "filbert-shrub",
+      "layer": 13,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:c358738183a4e76dc3c230c158a70536db9c33d5ab52ddb414d7419beba16283",
+        "normal": "sha256:45bc3dcf6547f10d2ae34e49997ce4ae3191eb93ae2aab86b8dcb1c0512b2b8a",
+        "orm": "sha256:49c1007621c1420c4c2fd848e34f88c1ee607bad355cd7d54e0babaa320139e9"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big01",
+      "family": "filbert-shrub",
+      "layer": 20,
+      "lod": 0,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "prototypeName": "filbert_big01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a2b944bb54329afd60d98e0245ba88f8c1df5fddfc7e35ff16ccedc5fdf75a1a",
+        "normal": "sha256:3a6536cf31e4724a21139326415fcc451d31d2e0011be9b239ac19a669afe769",
+        "orm": "sha256:5a090159ba31e21cbc5610ddb34bff2e83e6114431e6f3424b72f91593cf3037"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_big01",
+      "family": "filbert-shrub",
+      "layer": 21,
+      "lod": 0,
+      "materialFamily": "leaf-shrub-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "prototypeName": "filbert_big01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:35f399c6f7d70bb5499cb69400837c700e1346e8585a40e64bd5e669d0a876be",
+        "normal": "sha256:45e452d505e652f37f4a4920cc77d373f80f79f3d5a5918e392c8ecdcfc3c68b",
+        "orm": "sha256:d1b481a831032b28b12559eee0f4b9abcf3a4df61e63d7e103baa912d2f4d1cf"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big01",
+      "family": "filbert-shrub",
+      "layer": 22,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_big01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:e8c3e30ed9eed38ef982c6424f0ddce38e3561250b9cc9b2ef2f1d63458f5c1e",
+        "normal": "sha256:96d666a0fa41a2cc78d6008ae02fe32674c0eaac512cb7b5d15c3baf3eb9193e",
+        "orm": "sha256:a74d0308fe211f99ec1a0646cc52f132939706432b0ce29f9150d3e9ba748f5f"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big01",
+      "family": "filbert-shrub",
+      "layer": 14,
+      "lod": 1,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "prototypeName": "filbert_big01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4468647cea3b804e0eccb4a8f0ad12485e0b4d5267a42afdc29c513c8556d45d",
+        "normal": "sha256:f0d00ebec88adcf072af924e78c287cd8bbba35408f320abbad3776762d0c603",
+        "orm": "sha256:4e586e4b855d3f8e4c5e570f1aa1555a802b16deac5cd1fcd6bf75b92fb7f4fe"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big01",
+      "family": "filbert-shrub",
+      "layer": 15,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_big01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:e34c62d6d94a9f79f733085941ef7e25c0853ae8858ecf052913d7df22cc23b1",
+        "normal": "sha256:4524dc7f85d7f36b682bbf223a84667c15d8723e07c26dc69a2f752d65a0f0ee",
+        "orm": "sha256:28d795ea682884cfbe90e6017b13e5f2222306606cf67ee612e48a0d0ae0263b"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big01",
+      "family": "filbert-shrub",
+      "layer": 14,
+      "lod": 2,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "prototypeName": "filbert_big01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:cb4c3ef871f9af12ff96ed7aa5c8091019d4b72af16f46276152f9041cf8257c",
+        "normal": "sha256:c86f72c8d8387dc0dda45e603aca7460023f2795fb1dd1db237b291d488c8077",
+        "orm": "sha256:35da31f510d645e0a8ae0b5f3bd10c76706911352112eb6a848ad450e9bb5f1b"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big01",
+      "family": "filbert-shrub",
+      "layer": 15,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_big01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:2db8b048f70d769985d93e701068ee59f20e5412f0cf82d7ea7897216296defe",
+        "normal": "sha256:fa768418d4b08850764db7e098d72dc93f7e9b2cda6ea88849334b1f41d6d6f9",
+        "orm": "sha256:7f7f176240612c21085ad587147dc5d8e8fdc051404e85a8af87412000ef7d41"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big02",
+      "family": "filbert-shrub",
+      "layer": 23,
+      "lod": 0,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "prototypeName": "filbert_big02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a52a31fc592573f55568b7831df9c037e31751ada09105b425bcfa1887f15983",
+        "normal": "sha256:3843f60111709976d6b2adf0cf7fbf53d03b810306d435e5b0e92a23f54935b1",
+        "orm": "sha256:229074bf098da9a3d06cee8ec7950b2f9f045166340990b8d231e5358e6dcc49"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_big02",
+      "family": "filbert-shrub",
+      "layer": 24,
+      "lod": 0,
+      "materialFamily": "leaf-shrub-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "prototypeName": "filbert_big02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9ea3c963510d889ecb3647a0fb514097b6a380289d0657d5fa08a462b8793fb1",
+        "normal": "sha256:2201ea47d33db14935998feda4f575adb945224af7d1df99cfcffaa797e8f5d3",
+        "orm": "sha256:9d07408500378a109ea8909afafa0c2da975e55e51fb0df5bfd7713f8e64c14d"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big02",
+      "family": "filbert-shrub",
+      "layer": 25,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_big02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:cede4ba6821bed09fda75a78f879dfe4849660d475095c02edd73df9594f2477",
+        "normal": "sha256:1b82f2b5f3caab6e8bb9549adfb68bfae63d600884cad7c31c09a42f020cd1f0",
+        "orm": "sha256:1c594308e9a1003ee691c44d0c69e86bb0ee7b63f2b6385a955b6f4bce24722c"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big02",
+      "family": "filbert-shrub",
+      "layer": 16,
+      "lod": 1,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "prototypeName": "filbert_big02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ccbc6e39aa968012b5d65aaec171229dfe50328258d4425f055ae8ccbdffa840",
+        "normal": "sha256:1a6cf88c4baf7080167cbf08a83996c59c414a3895815105fa2252c9a0839f10",
+        "orm": "sha256:782b406d31f61c78984cd9b004e30d028b4c88340d79ebadb5a6d7843a69f192"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big02",
+      "family": "filbert-shrub",
+      "layer": 17,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_big02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:938329083650846612945932c1f1ab7f567dc59f9a6c9b2f0413ffd216c84d3e",
+        "normal": "sha256:1abc1ca334cccab9a1cec25b6f9728638c5b49f94a5680ccc1589df6d3c75a85",
+        "orm": "sha256:c33747c34dd6980a92428922fdd452374b21cadba8b9c2d0ad6608d3cce8941a"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big02",
+      "family": "filbert-shrub",
+      "layer": 16,
+      "lod": 2,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "prototypeName": "filbert_big02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a0c9a60137e662481f7d66180ef5f925d4952dcdae41d0f07ce0a6da69a09dee",
+        "normal": "sha256:93c5831a8538e518e7af023f611d6250e851cdee25c52c95dee4163a9a7772e7",
+        "orm": "sha256:a8fa45658a8d105b0901fd1b7736a0c8603106bcf372c7e4c96707e97ba431f2"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big02",
+      "family": "filbert-shrub",
+      "layer": 17,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_big02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:c31f190b47539aa6c80c7de41a3ff20dcad0b2b051ca484177bd7e526c2da42d",
+        "normal": "sha256:369fdfa174de3b100376a63506bf303f3fa72c938d95b5c570b2f9b155809a86",
+        "orm": "sha256:55232e408669b8d4322a206d55a5c693ab97abf2a5de5e09063e62c79974e0e5"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big03",
+      "family": "filbert-shrub",
+      "layer": 26,
+      "lod": 0,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "prototypeName": "filbert_big03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d2b5d21a59300bc3be8e6b02d99efeec183464650c2ecaf4872c74befcfb4ded",
+        "normal": "sha256:a1fc18b3715313c54f31143cbdbd6f18cf89a75b7c104032620a26e4a75c0649",
+        "orm": "sha256:d7531d192020aec3c168c9f69074d9e867d7c56bdb7241c91b397d17c8ac806e"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_big03",
+      "family": "filbert-shrub",
+      "layer": 27,
+      "lod": 0,
+      "materialFamily": "leaf-shrub-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "prototypeName": "filbert_big03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d92fd7843d3f806057a5aa2f4be12b5a9df5339caf2e1bab373b06c46b8135b3",
+        "normal": "sha256:f37ee450b2683334bd26a5ffc8306a8062efd9189816da3df22dc0275dd2171b",
+        "orm": "sha256:0fdd2426ab09f5716fef9c478f86ee789da9903b867739c066d029babe360d0c"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big03",
+      "family": "filbert-shrub",
+      "layer": 28,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_big03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:7a119bf9b349e55bb4b451df17149d6fd04bb2e5b14e3592302b4fd031ad3142",
+        "normal": "sha256:04787627b5cead40739ac2dcd56086f5914a8472ae88886dd7e52424556fc7b0",
+        "orm": "sha256:004774547cacd54986f0c4e32aeb4eb5bbfa77a9712ac38e22ab59b3f2d837c0"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big03",
+      "family": "filbert-shrub",
+      "layer": 18,
+      "lod": 1,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "prototypeName": "filbert_big03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:48784c81897d7419c4aa34181b8468e8ede524061f392d6e5ece34eea0395c61",
+        "normal": "sha256:a55fc1c92f983936c97ed04b32110f9d989857f1a1cbff29fb4cea02beb27056",
+        "orm": "sha256:9109707778b824a63cf90ddb3250bc4d3dee513238b92de0ae0f4bdad691dc0c"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big03",
+      "family": "filbert-shrub",
+      "layer": 19,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_big03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8274f845cb95f5925d42e5ec3cf998eb0e8352b96af56823b21fb25d1a8531db",
+        "normal": "sha256:33b7c3dfaae26a5faadc3a3dd96e12c741204635e3689685ed981e6bf0035379",
+        "orm": "sha256:6d692a52da553a89e9c0c5cbcc349357d2e6e6b09eb8a23fab2cf259898f3e2c"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big03",
+      "family": "filbert-shrub",
+      "layer": 18,
+      "lod": 2,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "prototypeName": "filbert_big03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a873271b98644e8cfc1acefc183c1c11a3e1e1e276c17fa5e71ea66a194eb152",
+        "normal": "sha256:29cd889758940bea7f7b52a83a9a231b54008f93573be08222fc77de721a1292",
+        "orm": "sha256:465d9b2af502db3d0a071d1e142db277fb78a333dc4809ecdc733e2b6c953485"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_big03",
+      "family": "filbert-shrub",
+      "layer": 19,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_big03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:0d7a82ce4d8c2b87a06f0a4f3fb30883887e9a47b3958e6d0d0a2ffc0bc0dc3f",
+        "normal": "sha256:5bd28940050d86121fc03a3c9ceb87b270d5d443338e06b7a0eb7e797169e5dd",
+        "orm": "sha256:78ce6a4b166847cafff1c8831d719148ab7ce2ffdc2ce7bfbda9df3a19ee99e8"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry01",
+      "family": "filbert-shrub",
+      "layer": 29,
+      "lod": 0,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "prototypeName": "filbert_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:6f5554a4a0ccd0c3c6f7b981e0e3dc745358b5ab1c4eb63490402e04be832c0a",
+        "normal": "sha256:b1b31ca23827eab28a159ae08771b31aeefda545d05bd77c9710583b52b9aab1",
+        "orm": "sha256:ea415b8cbdc183e2bd1be5d124b9625e86c0b3593eb74bf8561bd84548573352"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_dry01",
+      "family": "filbert-shrub",
+      "layer": 30,
+      "lod": 0,
+      "materialFamily": "leaf-dry-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "prototypeName": "filbert_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:000ae113e62bc043845236af5199d1ef44188346e7ba0184b0fde76068700313",
+        "normal": "sha256:b2dd8dae644a0132414762cce50d6a449add570cc34b9b453fd817394b24cb75",
+        "orm": "sha256:1880468f89dcd8376785810fb09ae4c255e9666b511b40a0227fba7c6c8d2b45"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry01",
+      "family": "filbert-shrub",
+      "layer": 31,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:395f5eaab8463852f5084439924afcde7390afdc465579c2f9ae7e1fab72dc52",
+        "normal": "sha256:cee2353a8dbf0aab9f39fcc0277a46f2145ad9f68602e61cf4d9914ab7135130",
+        "orm": "sha256:6ad0acdb7a4b4bfb7bd052b5040636f89e405f677aee6560ed883fd172cd9b6c"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry01",
+      "family": "filbert-shrub",
+      "layer": 20,
+      "lod": 1,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "prototypeName": "filbert_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d257bc6d8a20e7d4ca8932363ebda6556f18ee04d23bd2db1c29ff9cbf722dad",
+        "normal": "sha256:b1d49942eb2bb360bcb16ed6a95a67eb956aea6d1a979b9fa6bcd938111a8a4c",
+        "orm": "sha256:d6c6733a7df7bd64000f025497230417f8aa381bf47836f5a3260d6317f115d2"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry01",
+      "family": "filbert-shrub",
+      "layer": 21,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4171df314cfc7940299a969e692cd6e1879efa2c2aa3f4a4e88064137c38bc98",
+        "normal": "sha256:678ca3b74422d087f07fb614cc62fedbe4a79d64ea454d129c0d9e629a0de04c",
+        "orm": "sha256:9ac61f27834420155b8bd34d87fa3e227346174de62c5b9990966bec0a563350"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry01",
+      "family": "filbert-shrub",
+      "layer": 20,
+      "lod": 2,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "prototypeName": "filbert_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:efe81fbc4f2e87d88c5e12a5a497978efc7a9d018e13d80d2ab577f6a7b6fb0f",
+        "normal": "sha256:90f9050ad6ac379d15b1f0a122ab3fbc9f103ee7607e705f84f7d111ac9ef244",
+        "orm": "sha256:9c3934ca814b09fdef96bdc36a5b5db27cb272d2671c4b6fdfbf7c0e31efd202"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry01",
+      "family": "filbert-shrub",
+      "layer": 21,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_dry01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ffecf5ccbe911368413d738971123b897d978041e8be3f7c208aa493d15759cd",
+        "normal": "sha256:99f78b8eebbc0424ca01a24df6df84b32606adcd62d4e52bce8a374fc32c2aa4",
+        "orm": "sha256:340875e70131b55abb337d932655dc8cf892a11ac1ac2d2859532a3b083e082c"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry03",
+      "family": "filbert-shrub",
+      "layer": 32,
+      "lod": 0,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "prototypeName": "filbert_dry03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:62450bc94ad8d916f2c4c768d05dae9b3a4f864371e70137177f13acc803a254",
+        "normal": "sha256:532b94776d0e91f960a849515eb906128a3743281ad0f62040c8855bb1513618",
+        "orm": "sha256:e9b465bacd69dc8b9d58bd4e83b79ca979fd8e14b32851cd8b87ce32d16397eb"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_dry03",
+      "family": "filbert-shrub",
+      "layer": 33,
+      "lod": 0,
+      "materialFamily": "leaf-dry-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "prototypeName": "filbert_dry03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:5f53ca790e91ae7a660c3e7fbcf2a1ab314b882f3a183d8cc3fc734bc234007b",
+        "normal": "sha256:b52719223ac7193cc6e8351765d670317a385a23aacb88354dac6fa2132246bd",
+        "orm": "sha256:b4a215e0d000a68e79f04fe50ee6c5d18ba7fd3aa1c8230752afe3057680245d"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry03",
+      "family": "filbert-shrub",
+      "layer": 34,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_dry03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:c447cd9653ca6898ee9a2ac57b230db4f37918b0991eeb15c74bc7021e096f53",
+        "normal": "sha256:4e5acadbef529ff1ee3680a91226c52c65b285bdc585dee57e6eaf74a2c0e7f8",
+        "orm": "sha256:360e0363e256e7d1d1824c851b5f5813f0c501859220e259dcdfcbab6e5a5aa4"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry03",
+      "family": "filbert-shrub",
+      "layer": 22,
+      "lod": 1,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "prototypeName": "filbert_dry03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d5b8dab615155e127dd70de3007e539dff38888c1c1fe816eb2ef849196d57c9",
+        "normal": "sha256:61bc21eeabade5efa0403dda8a399f69480bf09e15daa8be84c49f3282989d9e",
+        "orm": "sha256:27a088b16739a16f83966c2f4a400aae368f01c551598c1c7864bf858ed6a91c"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry03",
+      "family": "filbert-shrub",
+      "layer": 23,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_dry03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:09fd6e88af8113039325c8d361ea1a6c3cf40f5ddbd2b7719712e2ee53043d47",
+        "normal": "sha256:36e3193db32093180054042304f74aaaeea7f4431f6507e5231ec042c6188258",
+        "orm": "sha256:ea0d7e3b2370fafd2f4e3692f5cfbd04f82db595eb687b9f34060c16049ffb29"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry03",
+      "family": "filbert-shrub",
+      "layer": 22,
+      "lod": 2,
+      "materialFamily": "leaf-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "prototypeName": "filbert_dry03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:633b8c2184ea1b7c10bc3af98ce76077632fc7e3505edfa71762fe0e21e110cc",
+        "normal": "sha256:6db2f7f68181e6197cadc241b9a6fb351950a108ac41faeeaecfa97e3be4b18e",
+        "orm": "sha256:dc0d45a7d8013e0423b7c038beb360caa77aed4ec66b6e072f336c932e88c9e8"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_dry03",
+      "family": "filbert-shrub",
+      "layer": 23,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_dry03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d3962a4afbd0277e5470680b81c8e82bbf8fb6f302d0b5a9d0df65407b1f8f6a",
+        "normal": "sha256:795c711ccad5231eea3da72e8aa5fa09e154144bc0f027b17d0a046d4f0fc33e",
+        "orm": "sha256:fa2f87796d56c41674e2fa0161962245626fc087937bc57450eebfb9813eb7bf"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small01",
+      "family": "filbert-shrub",
+      "layer": 35,
+      "lod": 0,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "prototypeName": "filbert_small01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:1d9c97ba6ab421ea537711fb73a30e2b73b9f6db36b16c0e7d170d2626b6624f",
+        "normal": "sha256:a443d01cacf4a788526b9c9a8a8504b44758a704deef44e041d47d31ac53683d",
+        "orm": "sha256:aaa1af5f7d8bf7ae610be3c2c112049d626d851943a45940c10d855afccff5d4"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_small01",
+      "family": "filbert-shrub",
+      "layer": 36,
+      "lod": 0,
+      "materialFamily": "leaf-shrub-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "prototypeName": "filbert_small01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:5fd1bc60f418b68cb216b57b6f1ff14e1b3723af3e51550d450f068520df7fe1",
+        "normal": "sha256:d39f9c117627696e61c7b19343e43b704a25f680ab5f0c7e63b1626e5c2aac5f",
+        "orm": "sha256:b02fc3b8df49da83856ae46fff68c78188a8e33d846aa1651780931811c277fe"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small01",
+      "family": "filbert-shrub",
+      "layer": 37,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_small01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ec7e195c75bd9b58fd7a51f34c43029d2041d7c7a91dc1ff5c5d88e1dc311000",
+        "normal": "sha256:de6810ae1e00bf4a9bf1759d4b06534f048b9631e93a6ceb3f0ab586324f8dba",
+        "orm": "sha256:807b9bddba882e29e21a5531015db5fd1b929afe61aeb45c750ce23834cb37ee"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small01",
+      "family": "filbert-shrub",
+      "layer": 24,
+      "lod": 1,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "prototypeName": "filbert_small01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:c1a77308fd3417738465310d97dfc553b6598523e4fbcc2eec2d7570f4edbcbf",
+        "normal": "sha256:6b2b3876acef83d10f57ae2e9a1870efc44d7e15fc41aa03b02670e47a5f0a32",
+        "orm": "sha256:2ad6d041508ec2ed591128aa06b25e7086395e3a038e16b6326587e58be49848"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small01",
+      "family": "filbert-shrub",
+      "layer": 25,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_small01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:064ec5a765ccedc50debb46610e64bd3ffc8378250610d91f7d4fa0f1ada9b5f",
+        "normal": "sha256:231f0963bf0c7011cea242441314537df99545bd7f29a137ede606f6b098045e",
+        "orm": "sha256:5e598d19f18b88e5bc2e488f8704eb18214675e8757f89d05c4ffa81ad3c99bf"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small01",
+      "family": "filbert-shrub",
+      "layer": 24,
+      "lod": 2,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "prototypeName": "filbert_small01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:bb2705bd06f3f676e5242b230fcce3ba0000f230d1e6241af5fd0e4787757bf4",
+        "normal": "sha256:54fa6068ff995c64a6cf83fc3ff9ce448ff0783c5264985e64d00f03fde50092",
+        "orm": "sha256:9c78bd1fbea2d5baac71bc3ab9afb4e78ff4a49d411cad15e49b31673cf94b32"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small01",
+      "family": "filbert-shrub",
+      "layer": 25,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_small01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:055b06184f5610e69bc4b2ea310e8405eabc039872aaf2d5e5e44f47b5f01674",
+        "normal": "sha256:e5d32c8bc997e6d061e29cfc041660315551ba909d7316815745ad07726897b4",
+        "orm": "sha256:972c7d0ac74c980a7db22c46a22b7f126462c0ee8da9b60f4b5c38f7e86586f4"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small02",
+      "family": "filbert-shrub",
+      "layer": 38,
+      "lod": 0,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "prototypeName": "filbert_small02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:1b9e73a743671a8970be9f1b17b9492a2901f50bbe90990f27676170f1ad829f",
+        "normal": "sha256:d01190b4c833dd0ca3a70732253a4dbf4b51be6b614b7701078b29a8879cd8d0",
+        "orm": "sha256:959767bc5f096f30d9d1d2716fe2e8a11f87f0a0e71822166a1ad5b8618fca7d"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_small02",
+      "family": "filbert-shrub",
+      "layer": 39,
+      "lod": 0,
+      "materialFamily": "leaf-shrub-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "prototypeName": "filbert_small02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:cd609919108d2c69806240e2b027a83eb76ad0cda5c3437f63c4656e9449584e",
+        "normal": "sha256:aa6f7234d70f89109a87b7405916e0c4f9e5aacb1eef397affadb5e5946ca376",
+        "orm": "sha256:2deba31b948274c4a3172d1022c1f33f26cb6dae4b614c41bb797ead1367885c"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small02",
+      "family": "filbert-shrub",
+      "layer": 40,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_small02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9cc9a5a0887c5bae469432dabcb71e55e1d094ef01b9c5922dd54281c41af273",
+        "normal": "sha256:e2c446c759bae264cc13caf401fe9f9cc2d3e533d59e245588ef53f76a2f20c5",
+        "orm": "sha256:3b5a061be5b58fec0c45f0491407e3c69c4836828b37be361d9205c411a6469e"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small02",
+      "family": "filbert-shrub",
+      "layer": 26,
+      "lod": 1,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "prototypeName": "filbert_small02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:2a64cf89bb85e8dfba40fc23ae2a09e3c8f6df54107792bb4a3c486232edbef2",
+        "normal": "sha256:b02729eefe8a558fcc99804adebf02bf80b07ee759a01380ef625fa4686607e7",
+        "orm": "sha256:a4d98a34a08a8f389736e4b00a9ba6ec4ca02f9bb9e30fd7ee16385d5a2f107a"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small02",
+      "family": "filbert-shrub",
+      "layer": 27,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_small02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ff714bb70baa38ac87724681261e0dfacd249be7e13aa5c82a6123421f333e94",
+        "normal": "sha256:e0a22ee745bf8df0036597a5eba877cb3d04ae3be550540ea669229f00a5cd3a",
+        "orm": "sha256:bbd8df0222abf953cfd3b1510afc4bc32ca78a29d34f446d1c6ce27c861c5628"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small02",
+      "family": "filbert-shrub",
+      "layer": 26,
+      "lod": 2,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "prototypeName": "filbert_small02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:676bf7db74e6dd255d30b4780586e9e92653142a7d3b462cb8eb1262cca78088",
+        "normal": "sha256:1f65de844b9644923e9369669a07a3b3133099a98fe592b1d237467f7e289673",
+        "orm": "sha256:ebda92e6e082b0272d6c065de33480c12716dc7d3db3579cd7953a6332facb71"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small02",
+      "family": "filbert-shrub",
+      "layer": 27,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_small02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b3cd7537a29ab9a25ec9dfa3f08916cc558c3d1e853c97158f2305d4d58c732b",
+        "normal": "sha256:0d9f42d4d46851b35033fab268eba1ff17ff41b478bd4375844c5a4489898249",
+        "orm": "sha256:742fae6ec66dd39b121fb5207b29d21cfe6d33fc73feb6028a792727459c039c"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small03",
+      "family": "filbert-shrub",
+      "layer": 41,
+      "lod": 0,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "prototypeName": "filbert_small03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:bf5b1ad2b77a7aee5609af74c2b040a2b7a8433da1b6002c10f8a2d7fb6a0b16",
+        "normal": "sha256:684565568831e7ef876faccbdc120c5ef39fde802a8033c8138ada8e28f04cf3",
+        "orm": "sha256:ffe250adf2ba1ce3685a1b367bac84800a081ef546f5b79df68ca7a2c58bc4f6"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.filbert_small03",
+      "family": "filbert-shrub",
+      "layer": 42,
+      "lod": 0,
+      "materialFamily": "leaf-shrub-card",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "prototypeName": "filbert_small03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:08eecc99976de81bd6111208288ca3f6360a893c8b09d76170704c39084039d8",
+        "normal": "sha256:91b83d6119861ce80b582ae455b608ea8ce849a72d9d41847e8cf507ed016319",
+        "orm": "sha256:1777d61225827a6213407153e66d279a89ce3e83752206a07ef7e0f9c5706477"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small03",
+      "family": "filbert-shrub",
+      "layer": 43,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "filbert_small03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:3f44411ac0962fb1944be1c82b030e5a8781271a0a27fc4f641ebd41a6d18f5b",
+        "normal": "sha256:8d82a9233fadac174328023dbe5e75ad86ff9ca5cc76edbc5a0641b13987c315",
+        "orm": "sha256:2119da0ded959c3e91a8a78b4ceb777e0f2641e4a610dcdc168e9447da9b1084"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small03",
+      "family": "filbert-shrub",
+      "layer": 28,
+      "lod": 1,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "prototypeName": "filbert_small03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:0c0b4229ba5cee9786672dede1077274875aadd736d4c7cf0456c2ac7b03122a",
+        "normal": "sha256:2ab1ca8aad96625382b18f193b4b78ed8d06260ecb6540138952830c694d5a35",
+        "orm": "sha256:e0c12e9b352a81643c80a3a908f91db2655bd0ea5e78f71ac096a7171e56fb3c"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small03",
+      "family": "filbert-shrub",
+      "layer": 29,
+      "lod": 1,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "prototypeName": "filbert_small03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:06aedae00adbc21feb01ff283b9ebbb8aa12cf4d992c72b4385cb2e1932eac77",
+        "normal": "sha256:ebd6330b0d9a54db9d902d7d4cb75b2825863f18dd240b26f8c5864a2df2802d",
+        "orm": "sha256:eff65c5f03b449b5d1f622ce348892836a95db06202e3a283729a2e8af361819"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small03",
+      "family": "filbert-shrub",
+      "layer": 28,
+      "lod": 2,
+      "materialFamily": "leaf-shrub",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "prototypeName": "filbert_small03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:10dcae9604c1f6ca9f69321d23a2c6a2bec994549b50f723d635c6eb6eb549da",
+        "normal": "sha256:884c9e781bd8ce4ea21175070a4bb64546021a9bdf67ebd162667aa0ed657120",
+        "orm": "sha256:3695810de6bb03f37692f44e5b62954f56e8ad5c6441017cb6b4c9c8a760ae03"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.filbert_small03",
+      "family": "filbert-shrub",
+      "layer": 29,
+      "lod": 2,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "prototypeName": "filbert_small03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:3c574c66d469e7d4644eac82a83bb1d3f9c798e302631dfe9e25e5d778d564e5",
+        "normal": "sha256:672b27b90b0dccabbb0aed837e3e881ebc45a73f2ba9e475681be346325b4f95",
+        "orm": "sha256:44f46b70bf299974740dea65401cd896711fdc13c936d41e3fa299f8ca909735"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.grass_dry3",
+      "family": "ground-plant",
+      "layer": 44,
+      "lod": 0,
+      "materialFamily": "ground-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_dry_PBR_L0",
+      "prototypeName": "grass_dry3",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a0b2a9c2f9d1b740a20547d7959021fd6f8ba08ca4f791508b25be1aa18ff4aa",
+        "normal": "sha256:60f361205e43dd21c8406860ebedb499dd7481cb3de3ea0b674f34de01e38fb9",
+        "orm": "sha256:1aeaf8b17d55072c979557b6ddda6c2b168417a7692711abb6b2fcd88c5c9530"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.grass_dry3",
+      "family": "ground-plant",
+      "layer": 30,
+      "lod": 1,
+      "materialFamily": "ground-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_dry_PBR_L1",
+      "prototypeName": "grass_dry3",
+      "sourceImageSha256": {
+        "basecolor": "sha256:54f465904e58c9a7ec35acf736bcccfc040a2ba9ffce37af10df482b3397b7a7",
+        "normal": "sha256:9c0b8bf0e252d1119a48675e9a667fb12520a06b57480da12683d5a5f87566ca",
+        "orm": "sha256:07455fc1c4598dfda14c23cf6d93640ad7c6c08808716033eef3f3f11e135dcc"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.grass_dry3",
+      "family": "ground-plant",
+      "layer": 30,
+      "lod": 2,
+      "materialFamily": "ground-dry",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_dry_PBR_L2",
+      "prototypeName": "grass_dry3",
+      "sourceImageSha256": {
+        "basecolor": "sha256:2b1f040160245ee65539f563fb84c6a367895def7518029f37dda4cb96d132b7",
+        "normal": "sha256:1d49b9639a31f02f2dfe416f7b53480a44e0ca99e79c239b1ef652a33f707524",
+        "orm": "sha256:71e8477972a378baa110b28f29c9ab2d95f359613e9c479857de58966587653a"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine01",
+      "family": "pine",
+      "layer": 45,
+      "lod": 0,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "prototypeName": "pine01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a500369447d6414fd11542d84f76e8b79e71b34bcd738dbc112f89fd39fa8132",
+        "normal": "sha256:f66e9ca20bcf5c376d5b29a9276a0ab799d218c254606a5ac8b766cf4721bef9",
+        "orm": "sha256:ffea55967f6357021207515d9d5b84c60c46d6eec69d8fe74f323e706fb4e98a"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine01",
+      "family": "pine",
+      "layer": 46,
+      "lod": 0,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "prototypeName": "pine01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4a4d083b0dae2023e4bf6536abbb23402f7fe37f19b42624696c3eb99b40e4c5",
+        "normal": "sha256:a6655abdd46669abd49140f960fde90478a480a7a935ab82e8f2488a1748637d",
+        "orm": "sha256:e558c4080735240d48e1e344041181cf88332ab278e43f7dcd99e9baf229e8c0"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.pine01",
+      "family": "pine",
+      "layer": 47,
+      "lod": 0,
+      "materialFamily": "needle-pine-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "prototypeName": "pine01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:de2dbe73c162b0bbac3f223f246ce32a3de99b56e3e389a20be3fdfac32129f1",
+        "normal": "sha256:f500b3b4e53f574dd7b193f6ccaeef1423418da8e0f097145f068792060b34aa",
+        "orm": "sha256:27fa4844e66d73958d454ab579ce44fb371783fdfef39eeb4df8f6acb1214fb2"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine01",
+      "family": "pine",
+      "layer": 31,
+      "lod": 1,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "prototypeName": "pine01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ff159555834dc1116456cfe3aa87ea7d5748c7a2448bbc9e62e07986b4ee671e",
+        "normal": "sha256:90eb4cfbf4042111edf6178f26d52a7ad91242d166b18242858572145de455e5",
+        "orm": "sha256:3a6f1cd196b9cb1e126f2daade513d749c7abf82fbaf976d25676469577accde"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine01",
+      "family": "pine",
+      "layer": 32,
+      "lod": 1,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "prototypeName": "pine01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9a7d8a5a87f39cc41a63ca531499bfec9c6dcba790dc3ee5b65b75699cbee626",
+        "normal": "sha256:b0bc76ee68e133a3fb3470b12274a001c2b6da96c93c7d463be1674824dc478a",
+        "orm": "sha256:613991b601a161dda1cefada67624aa371ae6e0356070caad625d65c770b4fa7"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine01",
+      "family": "pine",
+      "layer": 31,
+      "lod": 2,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "prototypeName": "pine01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:dd7abd0d95094dfeaf89653945b63e610c5f5ffb6185a3b77d9d33615ca13bcf",
+        "normal": "sha256:4eb28a7657b9866cc153800f25588787d5ede06b681290605b75a32655208a9c",
+        "orm": "sha256:f8bcb84708deced15a73edf4622c8cd9de9019158c1106737cb7ad269075fcd3"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine01",
+      "family": "pine",
+      "layer": 32,
+      "lod": 2,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "prototypeName": "pine01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:e8d176805555d21975394b0c30318f6be5f0fb5604f3d61daca92807fb620035",
+        "normal": "sha256:a11473f8c98cdc7e751a9fb96fdffe28910ba0bcb2610913ba877985cc0b3a48",
+        "orm": "sha256:db58f28e097c2325b4758189b266a2f583c67f14f63d2251070581dce2ee6867"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine02",
+      "family": "pine",
+      "layer": 48,
+      "lod": 0,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "prototypeName": "pine02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:35ed47f719ca4c6b92dc1dee07df5222bfca8ea297fe50451f4080e4ac6c94c6",
+        "normal": "sha256:2e5ebaf53d91f5937569f6cfd89202b2ccaa90b2358d168364c214ef13443979",
+        "orm": "sha256:d898239192c7fcec4a0028b87c736a3f13a13d19fb9c535c4ab39e572356b874"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine02",
+      "family": "pine",
+      "layer": 49,
+      "lod": 0,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "prototypeName": "pine02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:919af1859670aa6b3cdfe1fa7d5b0ef1f08667748b88e92ff83236615c7b0e59",
+        "normal": "sha256:311c7dc466cd8a17a7a8debabd7920e79e7dc9310af0f3fb78590a26dcd0fc8e",
+        "orm": "sha256:f206f691a746ffb676f63aff1391622a9d90f7fbffd8935f1c0ef31a463c7e0b"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.pine02",
+      "family": "pine",
+      "layer": 50,
+      "lod": 0,
+      "materialFamily": "needle-pine-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "prototypeName": "pine02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a6fc38e1a07f9975678ff7d01d91deb8bad8ef6f5688dafb88d4f7fb03163ab3",
+        "normal": "sha256:5ff7249b0b5e10fd3862446dd5e913a1e8f3db96f6bd20164884c606abec2335",
+        "orm": "sha256:64ba410fc9c5ccb5e0afbf2e66d593297c12e19e79e00f66b8faa99c7b678cc3"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine02",
+      "family": "pine",
+      "layer": 33,
+      "lod": 1,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "prototypeName": "pine02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:be9261d07a7f8e97a9bbd9e8930fdde212770ee632430ee9fac19f76cbd486ec",
+        "normal": "sha256:d3c6db676146e4cd3db1e133dfcc8bedefdcd21ab30b7d2d2eb68337cc30f2dd",
+        "orm": "sha256:3f7486304c54dcbd125ad2b724b205e9b2a93ec98db6f75aa4e4af918f908129"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine02",
+      "family": "pine",
+      "layer": 34,
+      "lod": 1,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "prototypeName": "pine02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:bafa3b560b2b014828fa8da9867b276563324686a5e60640c04b2dbdc490c8b8",
+        "normal": "sha256:65f08141fbd2640f01eccd58405cae81d645e8928e1c379b23660a16194ab63e",
+        "orm": "sha256:50adc0fee186c94cf1eac902daea66ae8173b0b523ee05727c56f22506b7c4cc"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine02",
+      "family": "pine",
+      "layer": 33,
+      "lod": 2,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "prototypeName": "pine02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:28ec45540e9a3280edd849f34dc846eaf0caf69b5e6fcb1c72063167b4f2a9e2",
+        "normal": "sha256:328e321e9c21cf52b83acfbabed6d1e16fe18ab3aa29ed5e26b24a3648bc0918",
+        "orm": "sha256:548c611d5f862a2114b82ad9b31ba15ed6534125ce47596d866a3157027bfd55"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine02",
+      "family": "pine",
+      "layer": 34,
+      "lod": 2,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "prototypeName": "pine02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:eb34bc802bf6cfa950c975af9d89de68ac781316338804d11e9c4c373884a478",
+        "normal": "sha256:475d15132b407bbd7dae91d46200bb30ad8cfea255b309080808aec64f4c2283",
+        "orm": "sha256:b3f18e6409b389af04de0a383fb29ab97bfb58aae3fd43e8f116056f1dc905ea"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine03",
+      "family": "pine",
+      "layer": 51,
+      "lod": 0,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "prototypeName": "pine03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:46e7dbe4d59fa87624a016f3f634417aa432c7c6349582217c5a433fd7522781",
+        "normal": "sha256:fa45e0e40ab71343e59bcc3d183b39bdfdfae23c601ca04a5a8fb552453038b2",
+        "orm": "sha256:7f47d1133042148fa208e7641b32e52661b7b29447762b37a499e589b94c872f"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine03",
+      "family": "pine",
+      "layer": 52,
+      "lod": 0,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "prototypeName": "pine03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:269c13ff542e89403a895f07e7e6b465d5d1be09df0195462b35482e749712ae",
+        "normal": "sha256:ee3b03a42df686dbce1429dfe4fa102a1cbfa9300df659d0d42050d01453ae66",
+        "orm": "sha256:66d7018839e260546916fed9a7f7bf29fd5dd8e2e011b5196dd6ff07754e25c9"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.pine03",
+      "family": "pine",
+      "layer": 53,
+      "lod": 0,
+      "materialFamily": "needle-pine-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "prototypeName": "pine03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:cf15a2b9826d1b08e560aebc5704a0d7ccea4c1d51b6527b3426e3f14e8d21af",
+        "normal": "sha256:9f3e311d53d7784479ed4dbc8af6adc0c819b4a3188d979620aba83e28385722",
+        "orm": "sha256:1d62bd6ce289a0a6ebcdc9cd24f501c6a0c43458727ff18e2ebe5374fc5e2259"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine03",
+      "family": "pine",
+      "layer": 35,
+      "lod": 1,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "prototypeName": "pine03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:cfe570316d2d8f3a1e61445b72fb4d0c98f253abb48a046c972faf0dd632cba3",
+        "normal": "sha256:1247db51409e9d45f81039a1f637697278c4ed051c514a9955cdb9707ef01996",
+        "orm": "sha256:527336913a7dfee993da4c93c6ea80f5a0370c566006feca8d407cc7745f59ea"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine03",
+      "family": "pine",
+      "layer": 36,
+      "lod": 1,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "prototypeName": "pine03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8fe6bb6f17fd32cc5551a7fdcea22eb3d4f7adbc0aff10350c4c432c4e242cfd",
+        "normal": "sha256:57d5f46c74ea85f010906e3fa75cb14708842356105bfbb7f6ea4b953d988eca",
+        "orm": "sha256:0994917445d811c03cca15cb686b6a4dc9ae7744a0955833242388095d46a1d0"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine03",
+      "family": "pine",
+      "layer": 35,
+      "lod": 2,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "prototypeName": "pine03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4486edbfdb252cac9e6067aaf732bd980d6d5857bf5649a63078cca1a2a35fa3",
+        "normal": "sha256:117738c75d3e2ae8cbc1b0c25b6ae11fd8751ee500008c3e985956b51c501882",
+        "orm": "sha256:c3ee7cdb4c3e657369f6b0a8f03b474099aa13c9f5e0310b5d5c2d80203d2071"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine03",
+      "family": "pine",
+      "layer": 36,
+      "lod": 2,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "prototypeName": "pine03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:59ae8bd9e6d7800cd5cc9266ca45df9990ac9db4824328d08878ed20e5290945",
+        "normal": "sha256:1d493e2ac5d6594d69aa32cc28eb7cf95541741e4d650405136d793286ccac7f",
+        "orm": "sha256:bbec615dc6155159f1d6c419544bd98b61ecebf771e3f11790902461335440a6"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine04",
+      "family": "pine",
+      "layer": 54,
+      "lod": 0,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "prototypeName": "pine04",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b52d0da6f9ffda63161ee5ea66caae2003b873683e81bd59ea69119e2b7a49cc",
+        "normal": "sha256:9697699b3deda91221c52c14a39d632b394e1142fcde698d2173dced5c17a7ce",
+        "orm": "sha256:6e8a8dd80d928016c3fde45bef79485e992c839c84c6df10b11bd6e77d628f91"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine04",
+      "family": "pine",
+      "layer": 55,
+      "lod": 0,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "prototypeName": "pine04",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ebbdd167be62bdc02bed344913c193d80df8b00fdb30da1dc50ec351da573d4b",
+        "normal": "sha256:e6752109a3c24ce0f4c03d17a4f06bcb7e31414a8c933de7163dd3c5ccb44bb9",
+        "orm": "sha256:5e2b7dab31872567b65d6ff5bb5ee94c11f6994852c116cb97dcce0c98c9651e"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.pine04",
+      "family": "pine",
+      "layer": 56,
+      "lod": 0,
+      "materialFamily": "needle-pine-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "prototypeName": "pine04",
+      "sourceImageSha256": {
+        "basecolor": "sha256:3a4e11621ec19b78267fdd2ecc4d4585849bbbb011d230ac4e2a8fa61bc2dc46",
+        "normal": "sha256:8ec2365f0ac98d1cc2a251c1928f423f43c95f91b525215980b2bc439f45e132",
+        "orm": "sha256:bd46e74739f411cff3a2df656f3cdda0938dbe5aa8ee7b082c9f42ae9b3230e2"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine04",
+      "family": "pine",
+      "layer": 37,
+      "lod": 1,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "prototypeName": "pine04",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ca813d25996f7919cc3bd587b1d907539975aea2e1841e21c1199a324ec00ad3",
+        "normal": "sha256:10304009e86e438ef24e9b0ba2dc4c3abc322bc09aaff9a02640cb42246ada79",
+        "orm": "sha256:f3dfed4af79f1994e263d463db35d2b4d79f0140bb81deb233cf117d3a1bf95d"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine04",
+      "family": "pine",
+      "layer": 38,
+      "lod": 1,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "prototypeName": "pine04",
+      "sourceImageSha256": {
+        "basecolor": "sha256:bce1519cce11daade3d168c0653aa6546341c5dfbb941afb36e8810e3e2b9ac7",
+        "normal": "sha256:fa1317cc8e0b600c8ad3abcc29fe9f42e500fa7d02372fceb8013851ee771df3",
+        "orm": "sha256:621591494fa21913f84d5c44c7fec1377e9722214f1c6b1245d4e0829065b1ce"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine04",
+      "family": "pine",
+      "layer": 37,
+      "lod": 2,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "prototypeName": "pine04",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d89a1325d3154bdc79584ffbd1aa09740ee5826dc0d320dedb9191ab799f753d",
+        "normal": "sha256:e4b2b29f648134859a3109ba2680b80eb7e2578dc815dbc23a50bcaa942f41c4",
+        "orm": "sha256:fc797528c683cc81da5ebd1bb06828e0e2ad38cc1f565c515eb51cf9f34154da"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine04",
+      "family": "pine",
+      "layer": 38,
+      "lod": 2,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "prototypeName": "pine04",
+      "sourceImageSha256": {
+        "basecolor": "sha256:bff225bdb722f939d6ebce54f1e2ba0ef8a5e7ef54bae74aacd6128bc0f4fbd6",
+        "normal": "sha256:860327a195bde350c4ca68674f7a71e573bb83f04aa5541a464d796ceb68ce71",
+        "orm": "sha256:f14d49519059d040ef29627eb8c83f916a5fe0cdfbd79c1c15e360dd646f7082"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine05",
+      "family": "pine",
+      "layer": 57,
+      "lod": 0,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "prototypeName": "pine05",
+      "sourceImageSha256": {
+        "basecolor": "sha256:6377396aede3db8a3e21511846a18db13b7311d057e9caea8edbd19665081612",
+        "normal": "sha256:3cf22eb030d7c0131983984e4144f7b659a62ad4803e350780f36fb9cdc82461",
+        "orm": "sha256:0749d1c6df7ea02b776f748f458a96f1cd53f7f4d0c51fd0e84c64b9608355b7"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine05",
+      "family": "pine",
+      "layer": 58,
+      "lod": 0,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "prototypeName": "pine05",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ddd759297afb80b9e1ab2c588fe662aa1eafd9f494e5708c21b95062496f0c85",
+        "normal": "sha256:688553be2b8443c31416b319fa8ed3c789437c0c148040d1366a23b3b53175c7",
+        "orm": "sha256:44e7a8b3b5cb8d5bc5b941dd5b4c78786d902693ebd72835aefaf00bddb2d187"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.pine05",
+      "family": "pine",
+      "layer": 59,
+      "lod": 0,
+      "materialFamily": "needle-pine-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "prototypeName": "pine05",
+      "sourceImageSha256": {
+        "basecolor": "sha256:82e7a17e8e133e76c31bb9d4fc9f6ee7fc5e9766ecbb1108139de370d0baf95f",
+        "normal": "sha256:851fb5ebefc9c96594ca321058a8306960f2f9ba8e521b92540a26c7a71e817f",
+        "orm": "sha256:8c01c6e5ad854aa6875096ee72cacbf539b863b6efb15e79115604f3af4bbb0d"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine05",
+      "family": "pine",
+      "layer": 39,
+      "lod": 1,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "prototypeName": "pine05",
+      "sourceImageSha256": {
+        "basecolor": "sha256:cd9a7cb25bc05f339237ea890b5ee460ff92023a3b97ba2bbce366bd9301902d",
+        "normal": "sha256:c963a64c8a3636948c80638e311cf650a5a285a54e5b3a843e1109f0afe5cedf",
+        "orm": "sha256:f02e9d10664a10ec2997b0a6c1e5a08ac8ea72c08309cb269abc3d8d291649d5"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine05",
+      "family": "pine",
+      "layer": 40,
+      "lod": 1,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "prototypeName": "pine05",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8a5ef742499f7a67cea69e45a758a2e873448824287c2fbced4ccdfe71e14eab",
+        "normal": "sha256:fb2f330d1beb117f4016000517a2abf9ff65a855bfc058a593ddf6f17fd66c9f",
+        "orm": "sha256:2aca7060697145a6e2d7990e2e7cc7a9de2aa3e1adb565eed773a17218bfb807"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine05",
+      "family": "pine",
+      "layer": 39,
+      "lod": 2,
+      "materialFamily": "bark-pine",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "prototypeName": "pine05",
+      "sourceImageSha256": {
+        "basecolor": "sha256:400dab45c935716e1c3d3c1a5197ad6fdf395bc265c339667fab2881baed3334",
+        "normal": "sha256:5da337aae92d0b5637b7c0e3e84948ad80b9218a251449e27a0ceae4d1ff192f",
+        "orm": "sha256:a99d54af9524b88ac00ea02b50653fb697dc0d2ab780cadc4d4bde4b76978a9a"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.pine05",
+      "family": "pine",
+      "layer": 40,
+      "lod": 2,
+      "materialFamily": "needle-pine",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "prototypeName": "pine05",
+      "sourceImageSha256": {
+        "basecolor": "sha256:3e353224205d6049e2a897cc014d42116fd1e86121da3211f025d4f192d386e7",
+        "normal": "sha256:0496f2458df44be68ce3efb19d84a713b35729f9112a2c5768fdefb69a78896f",
+        "orm": "sha256:20c0263051870909e64f1638cdc816eb16d84b22ca7f1f2d14aa1ff94811b3b7"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf01",
+      "family": "ground-plant",
+      "layer": 60,
+      "lod": 0,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "prototypeName": "plant_wolf01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d48e7ef7671843214c92cbb17968b67fc9efc8d277bda101e2fe45de46ec3ab8",
+        "normal": "sha256:12cc9f1fa7d42ea0b3b13430fe0e021e60f1f0800b15c2376d789daefceaf835",
+        "orm": "sha256:5fa7ac614569a6e555308ee5375a0b15abe3fc28f7aa5fbc39ec0ceae62098c7"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf01",
+      "family": "ground-plant",
+      "layer": 61,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "plant_wolf01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:db19886ddfe74a2d150543abc09af3a6af3277393e0c8ca36542bdd889fdd7fd",
+        "normal": "sha256:2b83fcd0e74f53af1d65892284478ba42aa4e1fcc4ee397342d961f9858e4865",
+        "orm": "sha256:3ce432aa81f6f475f7d834dbb21e79bae6eb36f28997ab2a37fefe1c4fa124ae"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf01",
+      "family": "ground-plant",
+      "layer": 41,
+      "lod": 1,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "prototypeName": "plant_wolf01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:14076d4977ec23c00b8db2a0e916e6ac15037c6db8d5e74145a5944ec23a7d8f",
+        "normal": "sha256:7673a9c2dfb6c31af493b1664711b1e6dc5f60ae3813463914f417d2f38558d2",
+        "orm": "sha256:47700e59f5badd22ade8827890f2873f98d1aac11435205d7db1e0ba4237ffde"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf01",
+      "family": "ground-plant",
+      "layer": 41,
+      "lod": 2,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "prototypeName": "plant_wolf01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:44c9c3a7211d554a292a2cdc8ced985949f77a3ad8c2ec677b1a14a259d6aa52",
+        "normal": "sha256:69ef8f18b9a10220dfe4654e5ba405120cd5172a6d5d807ed0ee95b5294b89bd",
+        "orm": "sha256:5a71bf10297de8cf84d0b23be5c23aff30ca90ed7a04fad4faa22c1cddc6f644"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf02",
+      "family": "ground-plant",
+      "layer": 62,
+      "lod": 0,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "prototypeName": "plant_wolf02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:7fccd460c7786b91224b56cf03be16a9cb86d125afac972868264e13a9b1b21e",
+        "normal": "sha256:f270aac5b9a9daf0421166dd668b77aee61074015324f8c1e4bf2a19353096b3",
+        "orm": "sha256:c601a3c779a591819acd29920ab429666ebbd02a7459750f03d1793dbdcfb174"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf02",
+      "family": "ground-plant",
+      "layer": 63,
+      "lod": 0,
+      "materialFamily": "twig",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "prototypeName": "plant_wolf02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b9eb27f19885dd81db9f84480b5c8407fd5718bb0911b3144c5a7074c8535806",
+        "normal": "sha256:d58f9be17d6e7355e1e31044c351014de0bfb8ed0550ad1e1677aba72aa9739d",
+        "orm": "sha256:c5ac628c9eedd58c1f1442fdaf04af707ca124409cd4a1a22d512fed7e5ba771"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf02",
+      "family": "ground-plant",
+      "layer": 42,
+      "lod": 1,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "prototypeName": "plant_wolf02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:1e0e02983f187acd8890d61b6702977a007932ecbb4b3cbd52ded82f31fc97a4",
+        "normal": "sha256:dda0178bf72f1eee519826c35f6e7b3bf60c7e079eaaf3ab1b101f1a72deb169",
+        "orm": "sha256:3a0c7c7152c9c7927b162cd854f38f6e031ba3d3a69f74e594b8778075c893f9"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.plant_wolf02",
+      "family": "ground-plant",
+      "layer": 42,
+      "lod": 2,
+      "materialFamily": "ground-green",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "prototypeName": "plant_wolf02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b6026b94547cc0043b45c0321e148c79aeeb9f1b0a226cf507b38669092e07b1",
+        "normal": "sha256:68d6a3c41604d37dee9506e438f5da0e4926b5620d5dcad69639992c7c6e1e2b",
+        "orm": "sha256:17165311a354ab4eb3bf112e757a1156080eadab546d14f626ce80201adaf030"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump01_update",
+      "family": "stump",
+      "layer": 64,
+      "lod": 0,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "prototypeName": "Stump01_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4df164120ff48e07c9fa4b9ee25a288008596ac36214b684246c614404f0c5d7",
+        "normal": "sha256:572ab11b85a59cb831e251b10d6838a76f1e97bb1e3846e1a151dcecd4432c67",
+        "orm": "sha256:7f3f9fca63f3e2850fc6e35478a1129e28885047168bb42560404b6ecc075a5b"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump01_update",
+      "family": "stump",
+      "layer": 65,
+      "lod": 0,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "prototypeName": "Stump01_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:68d65d47081060ced5e156d46a78a24297134b71a12c337ed1458d9efbb98997",
+        "normal": "sha256:511bb03369f21b10b8d675dd63bdad7c85f5944abadea3630ff1274a717b9d5d",
+        "orm": "sha256:cc5b69a19559fe2f2867bb97a4bd52825332d178dabb5c93214b55ac6273cc92"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump01_update",
+      "family": "stump",
+      "layer": 66,
+      "lod": 0,
+      "materialFamily": "moss",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "prototypeName": "Stump01_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:d78702de27b75d3f7c41e1a61a86e9bc97079e44c82b86935b2d969bfdcc3a63",
+        "normal": "sha256:87b82c125f0b92192193d12dc3554ab364a0c3deddf70f0f02a25f2dedf58337",
+        "orm": "sha256:580d7ae3eb6b1b09851bc5f023460ca14ed613a2ca8543312364cb108067d348"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump01_update",
+      "family": "stump",
+      "layer": 43,
+      "lod": 1,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "prototypeName": "Stump01_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:3815d5b960c44ff0635085b4e141fbde625f8855ca403da8f526598979c5e7f8",
+        "normal": "sha256:08963236860835d561deccc831788e102bb13bf8f8c94aa3c65579cea313159d",
+        "orm": "sha256:f2fc1aab8a1f39529b50323c42e733b1758c52fcb4c653f6dec00489ec354dc2"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump01_update",
+      "family": "stump",
+      "layer": 44,
+      "lod": 1,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "prototypeName": "Stump01_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9654aeafdad2d0326bb3c9649466dcd42a69998aef7c2c3c3fd2aab199c5cd74",
+        "normal": "sha256:f9463d243d51d6ac2077b961852ce5e9cd5587c4572d6041d2ba41d450cab344",
+        "orm": "sha256:2f656671c95d6d285c01794726b83c56608334bdb958725014b64ac10a160040"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump01_update",
+      "family": "stump",
+      "layer": 43,
+      "lod": 2,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "prototypeName": "Stump01_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:7bf9e9f289147db80964202f4578d40881a54a4b4efbc3f6febd9df6b935b7d0",
+        "normal": "sha256:f19580c24b1595ebd3cecc5ca17911d6aa9b1b711588deb5ab25c099c6b4029f",
+        "orm": "sha256:a4b712230cf5996c9d92f7bcaf09e5f6b99f4dabe24af50f011d3a111a57aa6f"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump01_update",
+      "family": "stump",
+      "layer": 44,
+      "lod": 2,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "prototypeName": "Stump01_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:311106b609d69fe2662df6d8e90a2a450b52efb67833d7a551a93ca7d7d41ac1",
+        "normal": "sha256:f0eed4082d0f0c5371a4361c4c9a7c15983666a023fcf26e968f2f6d3a16d160",
+        "orm": "sha256:da76fae5b87b27305f1c7ba6a185e01b38fc7d14564c7d98c287dae3364f7520"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump02_update",
+      "family": "stump",
+      "layer": 67,
+      "lod": 0,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "prototypeName": "Stump02_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:47dc64f5f8206f88b5891277f62b28e840fa78c94d53b0934053941e5df365a3",
+        "normal": "sha256:0e5c67bc0a8a0a45332126a27f5c3025c17f48b2c3276c2638f2a4ca5e56867e",
+        "orm": "sha256:5b1ae75a835421aa8b6a4fcf1195aac093d4ca7876e80764523478854d18ec52"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump02_update",
+      "family": "stump",
+      "layer": 68,
+      "lod": 0,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "prototypeName": "Stump02_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:6500595fa7380c0ad88c922ce0b8ead1f2862e6b117d48deec5e76cf023562d2",
+        "normal": "sha256:9efd65798b674f07921adc722d58f041ea1d379c45712deb0af7f1f480ecd0f0",
+        "orm": "sha256:1367607a0b01f70fedb7399745bc794d2576602c12863fb8e80f8f991d1fdc7f"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump02_update",
+      "family": "stump",
+      "layer": 69,
+      "lod": 0,
+      "materialFamily": "moss",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "prototypeName": "Stump02_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:f86fb90cbe49daca968a3aba208faf3e23f9bc2a9174d6e79f51be7742c05543",
+        "normal": "sha256:d3fe2b790cd5a03f5c915441f302e48a2859fb63a885ae078273b02998b24d63",
+        "orm": "sha256:65c7687ab5460730ffed7d85b2295a0248479f6223c09b50a04725aafa23e74e"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump02_update",
+      "family": "stump",
+      "layer": 45,
+      "lod": 1,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "prototypeName": "Stump02_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:34b7d48344a702d240385e7f425286cb4e71b70a902fb3e82e9fc184620db315",
+        "normal": "sha256:7380d6dee55f9c066f7bce9567b3991a13beee809788571b1eff00e8b6aff00e",
+        "orm": "sha256:cd9dea942f4dbc8a87acf8c24969713ea4a090e145abb8c5b3d656a729eef16e"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump02_update",
+      "family": "stump",
+      "layer": 46,
+      "lod": 1,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "prototypeName": "Stump02_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:47bec345a08a39a7501f62e3e4de5b75da471341c93cbc2fa4289ad2137cff3b",
+        "normal": "sha256:9b189eeb633521c3170816328f9554e3e72c6238c785f6c3999396749681d604",
+        "orm": "sha256:47a24c78f68affbe3c11dbec3a6d25c08a91afc03ba09691db581a41d071da6f"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump02_update",
+      "family": "stump",
+      "layer": 45,
+      "lod": 2,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "prototypeName": "Stump02_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:982278fb67988b2c583238b50ba01e62b04961637ad2504c88728b10d730a025",
+        "normal": "sha256:8193e1654400ae0e1cc440b3b36e5b3930553659889b723c2cca8b9811fb02b1",
+        "orm": "sha256:4f14cb2a7e4c82eefc1a49a223fcf76faaf43718495b780b3a7e2ddb519047f4"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump02_update",
+      "family": "stump",
+      "layer": 46,
+      "lod": 2,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "prototypeName": "Stump02_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:0c9b4d50f9a60080ddb763895f8324cf38b053181fd36591e371a26c6d1dc7e3",
+        "normal": "sha256:f33826643bfefb093569493959621ddbda86d6e240aec3de5969892ca81404c2",
+        "orm": "sha256:efd8d987e19b137bffc70c310953709b040937973603391b298d7de354c4ffec"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump03_update",
+      "family": "stump",
+      "layer": 70,
+      "lod": 0,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "prototypeName": "Stump03_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:54dbf77e3ef12daa910f74705031c42461b2bb157fc6bac65fcb58bb90f3b1a5",
+        "normal": "sha256:0a6477ef8abd343dd1cc4cab2e029453820819fba8f72e00857a8cda74ac4f4c",
+        "orm": "sha256:7dcf00e117b00e81f98d0accc3507e106e6e176e3f06d9179c611b16a2fddc24"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump03_update",
+      "family": "stump",
+      "layer": 71,
+      "lod": 0,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "prototypeName": "Stump03_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:24b15138afbd5e3b8bfdc481f1d469f8b89284e8720a2711023f13e0c7397b92",
+        "normal": "sha256:2abc1d32d42ca53ad949bf3db91a21bb5cf4d64c6bc8c13fee333b231c2c3c1b",
+        "orm": "sha256:d518fcc08486653db87fce9ba4ad03fc4b4ddd3beacd62f78fb7f7579e77d19c"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump03_update",
+      "family": "stump",
+      "layer": 72,
+      "lod": 0,
+      "materialFamily": "moss",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "prototypeName": "Stump03_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:c5151301eb53a7e377a88a8aa32cc503475f2de41280fda25002181dfdc29f65",
+        "normal": "sha256:4fca9fb0abc943b18ec9f46b878dff98cc4064b381f57ede596b6c3fb85ab47a",
+        "orm": "sha256:f4f8abbabfbcdb97ce217ea89c52d1b6cb2220ff627f95003de325b25f1d251b"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump03_update",
+      "family": "stump",
+      "layer": 47,
+      "lod": 1,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "prototypeName": "Stump03_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:83d9de77bd3dd17b9d9bb017e28c43f506777087caaa0e7800806b1a7ab162cc",
+        "normal": "sha256:6b134c5bd525fdd742e42565f6f9d41049e075351441fe87100724f5fc9a9060",
+        "orm": "sha256:dcae8cb76e632c3143a54631323ea4cfbf96586f5e9d52d88a77a6ddbc358671"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump03_update",
+      "family": "stump",
+      "layer": 48,
+      "lod": 1,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "prototypeName": "Stump03_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:93737a5a5b44fda039e75b34d9384360127dadcb56d2ba31ed8aac1d6d630acc",
+        "normal": "sha256:ea5785d3344112581ff38c2fc8bcbf5ad88854edd11441d591b1b4ba0978150e",
+        "orm": "sha256:e5f5acfde301663cfca8ff5badeaaf270c455b8f69f668eff830f56a907fc509"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump03_update",
+      "family": "stump",
+      "layer": 47,
+      "lod": 2,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "prototypeName": "Stump03_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:e118adecf14c7c198274e71c1d2a1f951d42c82351cac310898f327b784ba91d",
+        "normal": "sha256:3b94ed037c695a28d72d317a8cd02b416abbf1d6a6281bfb2579a35ab3935cc8",
+        "orm": "sha256:0f9709f35952efa8039f23701e6cac7b28ec86fc74fc9bfef3106656a2956679"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump03_update",
+      "family": "stump",
+      "layer": 48,
+      "lod": 2,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "prototypeName": "Stump03_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:bed5fc97ccf554066bef949de9aaa46ccd33aa82a985b9200b2f368048e0feb8",
+        "normal": "sha256:af53ef5f50160573e6a28e8665e400035dc7abeaec7dad0ae097b643cb2794fa",
+        "orm": "sha256:d24b5eb6711f05018ce1f311d0a39e7d0b2b254a14b075bf34541c4fe5311573"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump04_update",
+      "family": "stump",
+      "layer": 73,
+      "lod": 0,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "prototypeName": "Stump04_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:dbbbdfb259e8bef06f71e55d699bcea4813fe75fbad8ee84db5eed72c7eb96b7",
+        "normal": "sha256:aafbc7158feab79b02d06042f721f5c029c342a5aca6e81a481317646b051380",
+        "orm": "sha256:a5b44924ed920cf57ea59835e7411aff049b867097b2deef25f495b813a688a6"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump04_update",
+      "family": "stump",
+      "layer": 74,
+      "lod": 0,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "prototypeName": "Stump04_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b1a7055b2a1375b9fbcabb768f8ed98cf6195e4e53af78a26e676ac2d4278d58",
+        "normal": "sha256:8ad7b83e53e33cd99d7bbc2225cf69d4e767fd6c24d6ceae7d005421c257f3b8",
+        "orm": "sha256:6d86630b7d837f8d40c79816435797738088254197d0e48e2ea04de2be6b5c11"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump04_update",
+      "family": "stump",
+      "layer": 75,
+      "lod": 0,
+      "materialFamily": "moss",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "prototypeName": "Stump04_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:127bc622f6d4d3c46e38c0f5693e03bc541455375ab771d387138be978cd153f",
+        "normal": "sha256:4e028944566187a33a467c357d90578623126315da271aa3f5af29e5b3bd353d",
+        "orm": "sha256:5aa903f303b2bfa61f8171807e42afd181c447a00501838409573efe58bfb77f"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump04_update",
+      "family": "stump",
+      "layer": 49,
+      "lod": 1,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "prototypeName": "Stump04_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:48c78a81bbad0afba3a266fd94c1ba001cf009f0df6e37a6a31dec841af98938",
+        "normal": "sha256:72627ac4eb0addda648993ba18c2476eb11936977e347bb574a83015f2857148",
+        "orm": "sha256:0bc2d627795fca933b6a43aede753c4f8c9565e1c942ea77edf45a5ecd07f4b2"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump04_update",
+      "family": "stump",
+      "layer": 50,
+      "lod": 1,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "prototypeName": "Stump04_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:31181aa572e53552e8b5ccf71b54b12019d3b1b22abec0b2779a2000fa4938ba",
+        "normal": "sha256:e775ae06c7f8002d7d014cfcd965d9418047d2d8a63157938b5ccdee72a6d108",
+        "orm": "sha256:8479badd82a8f1a2fe27c2b3857fd97e39aeb936e7fdea1419a93275b18f9dd6"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump04_update",
+      "family": "stump",
+      "layer": 49,
+      "lod": 2,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "prototypeName": "Stump04_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8d59ee35a57b915f8455beb3ba628dfd9ca78fc877716c6442cfa9fc83f1ab6b",
+        "normal": "sha256:9a842c34ae833c376914c99bde0eb45dcb4d789d80c7737654749b050481c270",
+        "orm": "sha256:41d5f095328b9c3a16845a045c606b4126246ab2bda59b9148a6443a598f901a"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.stump04_update",
+      "family": "stump",
+      "layer": 50,
+      "lod": 2,
+      "materialFamily": "cut-wood",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "prototypeName": "Stump04_update",
+      "sourceImageSha256": {
+        "basecolor": "sha256:337a235948cc6c38184d3d943581d3c13ed3ec6ed1e20aa7c8d9b8b8f1826ff7",
+        "normal": "sha256:68659d0dc6fd1ead06fd156f023b96e814ff5493bef989d53537e4c976eebef1",
+        "orm": "sha256:c931af5a60c14ac1627e500a2436a685275a9380ea1fffba0698505591fdaa07"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree01",
+      "family": "deciduous-broadleaf",
+      "layer": 76,
+      "lod": 0,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "prototypeName": "tree01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b3b1f386941a7e6480ecf65d76c4fd6f06ae33bc00eb6d6b24b29f4d689e3307",
+        "normal": "sha256:06400d5aa13f724c7d95de3a92142364318d64b7e043e7755bca78d43ec78ceb",
+        "orm": "sha256:5d95ddd69d1e85e1df9b361043d1b73138c5a8c8927b579cdc7a9abfafa9704d"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree01",
+      "family": "deciduous-broadleaf",
+      "layer": 77,
+      "lod": 0,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L0",
+      "prototypeName": "tree01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:9f056d6720cefa93f81ece9a2784aef961bcce7ae95b255ee7582c09395aa057",
+        "normal": "sha256:3366db73dad2972fc623bdbdad8d2781fbcd03090889b5d61bd0158a64495bac",
+        "orm": "sha256:b9b03e27a1f7134cb5204503c23143f559a4d40f928b74503ea95ca553e9bb01"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.tree01",
+      "family": "deciduous-broadleaf",
+      "layer": 78,
+      "lod": 0,
+      "materialFamily": "leaf-broadleaf-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_broadleaf_card_PBR_L0",
+      "prototypeName": "tree01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:fdbea3360954d4c7685a95399473b5350b199d4815743321bbb310d5de1570f8",
+        "normal": "sha256:e01985cd1fb420c07b4ce27863d7e8f0d15915e822ab8f1fcff5b2e1976530c9",
+        "orm": "sha256:fd5869711f61b0ce628c2bf2303a6c300080118ba07ce3ce3a1828b97f7a4984"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree01",
+      "family": "deciduous-broadleaf",
+      "layer": 51,
+      "lod": 1,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "prototypeName": "tree01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:1d27ac9cea2a7fa933d6f6429fbf5d404078175a43f3897c192d4210d27a77ca",
+        "normal": "sha256:3ec5b72602809552ef9d2826a5fcaa10d4b365bfb6133db203b59aa9da43328a",
+        "orm": "sha256:413c5c6554a792de3775d21b624fe7859569a983794956d4f69b15674502eee0"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree01",
+      "family": "deciduous-broadleaf",
+      "layer": 52,
+      "lod": 1,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L1",
+      "prototypeName": "tree01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:fa5162b17bb5359ad351dc70a3543f3b8678fd4a5ab9cb4ea185a25163c5ff48",
+        "normal": "sha256:39b59fa49557e266ac56ce16082105a7317a36ae346da9b14c1b7e831f6fa1bf",
+        "orm": "sha256:363afebd76e476eade8e5d05076c10191aa020f1f4fea90372d0168e6111a6af"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree01",
+      "family": "deciduous-broadleaf",
+      "layer": 51,
+      "lod": 2,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "prototypeName": "tree01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:8206db437d54eb9f27b0b2ae49ee717b40adfb66e99d592e4d15cf9c5b9eeb67",
+        "normal": "sha256:f992be83c3cb920697703b7f461680ed5b2fbc4d9420ba212499bb7485dbd62f",
+        "orm": "sha256:73a06425e5b917c2e663c1725b422950bc1b2753a59bcbea7494adb65dcbf81f"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree01",
+      "family": "deciduous-broadleaf",
+      "layer": 52,
+      "lod": 2,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L2",
+      "prototypeName": "tree01",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a12158970042f4c25990a4f6728e576c8ef0191d1d6e9eac15f614efd6a88d83",
+        "normal": "sha256:5d754c379c0236327d52ff0b4d9b32914639f07b4689eb40fe4a45a8a0576511",
+        "orm": "sha256:b472f7dd175520a5b1244e2657dd4aa172895e20c1ade4c3a6bf5c045801f8e9"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree02",
+      "family": "deciduous-broadleaf",
+      "layer": 79,
+      "lod": 0,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "prototypeName": "tree02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:45f3170701a2d97db9e0480fb9855ecee4da42cbce3954bf324af9d88bb07f7c",
+        "normal": "sha256:cb34b62b2dfcf49298225a362c5e39ccae03db879c50619534b6252bbf4092d3",
+        "orm": "sha256:c6a05b06d2950597e4ebd7ebe48bb1e927177eefb1028972ce9338611a2dd8d4"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree02",
+      "family": "deciduous-broadleaf",
+      "layer": 80,
+      "lod": 0,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L0",
+      "prototypeName": "tree02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:a9a065b17debaab4288ee33475a5a0ebde01d712b2a79eedda705d1b1a0c4400",
+        "normal": "sha256:463a6e7e6cd65480b9c86992f043ee6fe36a192f10400dcdad371e83f790e79c",
+        "orm": "sha256:599a4c3b92a382145be64233cdd5d58fd47956a8c7169036c3c9331f4c5f0169"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.tree02",
+      "family": "deciduous-broadleaf",
+      "layer": 81,
+      "lod": 0,
+      "materialFamily": "leaf-broadleaf-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_broadleaf_card_PBR_L0",
+      "prototypeName": "tree02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:27d384db77f8ac993041b727701da012c9e84b130d1af09bd279a330333f44a8",
+        "normal": "sha256:28ca0836affbeb3467480e4a61d8dd7a8749bab456df0f3f9b987b3edf1c9261",
+        "orm": "sha256:927302deaed301d32f3818eedfb258b40f16f3f56db5aa20297320568c16ce12"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree02",
+      "family": "deciduous-broadleaf",
+      "layer": 53,
+      "lod": 1,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "prototypeName": "tree02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:eee0831c8bf876f50d7ea9abce9b1b582cbfcd4035c0ced077075f226c685018",
+        "normal": "sha256:897564c597d69532411937ffa3f4ee758058055259d000e967201e1095e55de9",
+        "orm": "sha256:2d38f3891a199b36acd2b285f1fd8adac842048888c3a0b2a74436de702523fa"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree02",
+      "family": "deciduous-broadleaf",
+      "layer": 54,
+      "lod": 1,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L1",
+      "prototypeName": "tree02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:464f8d78a22c46d484b1159981d24b7a3a0365db341145780cad9a92ab18e3ae",
+        "normal": "sha256:ab919f6be9364e7ac060bcd7f6b4eca807cb816ad914edd1e80fd1401dde8ee4",
+        "orm": "sha256:1d0f530eae8ee840154c58b9b8d4fe687ffbc08eea10f10e60e1bd7e76eb9973"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree02",
+      "family": "deciduous-broadleaf",
+      "layer": 53,
+      "lod": 2,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "prototypeName": "tree02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:e89f168be7c2572fa119617df0e6846f460a27c4d9de807c7c170dff05365ece",
+        "normal": "sha256:14d302d7fdaa80ceec0e63a09d27df1ef749ba125c2f2ff2b85dbcfbe96e2219",
+        "orm": "sha256:8b7b9238b76a28d84faf8a93422c1649f356ece302288657862308fba177efc6"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree02",
+      "family": "deciduous-broadleaf",
+      "layer": 54,
+      "lod": 2,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L2",
+      "prototypeName": "tree02",
+      "sourceImageSha256": {
+        "basecolor": "sha256:b7e94a111769712987be44b4dac7a5eaafcb44a0e87d229968fe11a0863992cf",
+        "normal": "sha256:1630caf1d244c2184a9bdb7b5ba03acf2ac92c9eec5ab2db23ef0499fc16171d",
+        "orm": "sha256:2fa8618412016e9d92f9b99f142b969faf9a909859f6caff4ecc133c56506b92"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree03",
+      "family": "deciduous-broadleaf",
+      "layer": 82,
+      "lod": 0,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "prototypeName": "tree03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4cdcc89a81ef2d40fe76e4436c80cfa1c7b481c279ba1d362429490ee3e463b4",
+        "normal": "sha256:997bd416ccc4ac5b15999380da91cfcea78e4d6688136911786341ad2131edbf",
+        "orm": "sha256:bc72c71856ff0b273f997ba19eb114eabf65042af2888a4837fedb96c344a7ad"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree03",
+      "family": "deciduous-broadleaf",
+      "layer": 83,
+      "lod": 0,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L0",
+      "prototypeName": "tree03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:84f523afdb3ad4fbf505bc116273f623f369d7f64f58c46ed7760f913140836c",
+        "normal": "sha256:2a4909c296eb7dfb18347d2797238fc3524ae1da5fa8c0765148760952a7a3ae",
+        "orm": "sha256:5a83070345e0f03691d9956a6d465630e60b1d97f20aedddbc1059b01ba2c16d"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": 0.485,
+      "alphaMode": "MASK",
+      "assetId": "customs.vegetation.tree03",
+      "family": "deciduous-broadleaf",
+      "layer": 84,
+      "lod": 0,
+      "materialFamily": "leaf-broadleaf-card",
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_broadleaf_card_PBR_L0",
+      "prototypeName": "tree03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:0796729c4f086d86dc8e27dd7089b7785189f9ebff4eadc13a4c54b87738b4ff",
+        "normal": "sha256:e29e45ae20f2d6d129c926c930fd6b22d67e0ab2c5adcb2ee897bc5417b3b075",
+        "orm": "sha256:7d889ba4bf07ddf45319981273a91615d9fd5c02574f913ffdb48178964228fb"
+      },
+      "textureResolution": 128
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree03",
+      "family": "deciduous-broadleaf",
+      "layer": 55,
+      "lod": 1,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "prototypeName": "tree03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:33de96f42b3e809ca7ce6fbbf17cdc9c4f1dac4136349e92ac033560a6b7f5c9",
+        "normal": "sha256:81ab2a5e5f416b2944a25348f2cb3f8650e9837c823a4ce71ee6a1828a82f420",
+        "orm": "sha256:b79af3996e7483b43b5a49962a1da6245a347d942930b9657dab2c167d35716d"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree03",
+      "family": "deciduous-broadleaf",
+      "layer": 56,
+      "lod": 1,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L1",
+      "prototypeName": "tree03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:ab2e0c83e616ea73021a2f5f9d4d86490c5c867c678e697529864426c228f5e9",
+        "normal": "sha256:3bf4de99ad1d5d37cbc3acdd493fe700251ddaa264317fd7f4cac09b58447c58",
+        "orm": "sha256:94b7a24c335a021b174684a945fdcce3841be1a5efe4d319f1b8064b56c42ff5"
+      },
+      "textureResolution": 64
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree03",
+      "family": "deciduous-broadleaf",
+      "layer": 55,
+      "lod": 2,
+      "materialFamily": "bark-broadleaf",
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "prototypeName": "tree03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:89889b10f807401a04e77d5886f2e5a73b8671a41d1c81f74d06afb13f9092f0",
+        "normal": "sha256:4989c2856e21fe51e2ad166f55907e34a7bd9415fc3b952875ede2d8c70ccb97",
+        "orm": "sha256:3771558576d2ab67457e0d4e218b10bd7343374484718ffd24df0dcb450809dc"
+      },
+      "textureResolution": 32
+    },
+    {
+      "alphaCutoff": null,
+      "alphaMode": "OPAQUE",
+      "assetId": "customs.vegetation.tree03",
+      "family": "deciduous-broadleaf",
+      "layer": 56,
+      "lod": 2,
+      "materialFamily": "leaf-broadleaf",
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L2",
+      "prototypeName": "tree03",
+      "sourceImageSha256": {
+        "basecolor": "sha256:4a62a1e5ee932b89cecf522e50d4e6e2185142c6d43c09c2d7d9c3cc66647787",
+        "normal": "sha256:cd8e4ec6906f55bd22fb42f2c6067c2b02fd88370d8b38cd4cd2d7ac170837c0",
+        "orm": "sha256:e24bf2075c07a29f411ce88c94380015647b95bb1b8305d484021e1ab41cb353"
+      },
+      "textureResolution": 32
+    }
+  ],
+  "primitives": [
+    {
+      "assetId": "customs.vegetation.birch01",
+      "layer": 0,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch01",
+      "layer": 1,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch01",
+      "layer": 2,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_birch_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch01",
+      "layer": 0,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch01",
+      "layer": 1,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch01",
+      "layer": 0,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch01",
+      "layer": 1,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "layer": 3,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "layer": 4,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "layer": 5,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_birch_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "layer": 2,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "layer": 3,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "layer": 2,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch02",
+      "layer": 3,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "layer": 6,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "layer": 7,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "layer": 8,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_birch_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "layer": 4,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "layer": 5,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "layer": 4,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_birch_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.birch03",
+      "layer": 5,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_birch_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "layer": 9,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "layer": 10,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "layer": 11,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "layer": 6,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "layer": 7,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "layer": 6,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry01",
+      "layer": 7,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "layer": 12,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "layer": 13,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "layer": 14,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "layer": 8,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "layer": 9,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "layer": 8,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.brush_dry02",
+      "layer": 9,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.fern01",
+      "layer": 15,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.fern01",
+      "layer": 10,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.fern01",
+      "layer": 10,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.fern02",
+      "layer": 16,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.fern02",
+      "layer": 11,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.fern02",
+      "layer": 11,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "layer": 17,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "layer": 18,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "layer": 19,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "layer": 12,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "layer": 13,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "layer": 12,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_01",
+      "layer": 13,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "layer": 20,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "layer": 21,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "layer": 22,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "layer": 14,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "layer": 15,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "layer": 14,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big01",
+      "layer": 15,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "layer": 23,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "layer": 24,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "layer": 25,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "layer": 16,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "layer": 17,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "layer": 16,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big02",
+      "layer": 17,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "layer": 26,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "layer": 27,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "layer": 28,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "layer": 18,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "layer": 19,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "layer": 18,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_big03",
+      "layer": 19,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "layer": 29,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "layer": 30,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "layer": 31,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "layer": 20,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "layer": 21,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "layer": 20,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry01",
+      "layer": 21,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "layer": 32,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "layer": 33,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_dry_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "layer": 34,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "layer": 22,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "layer": 23,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "layer": 22,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_dry_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_dry03",
+      "layer": 23,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "layer": 35,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "layer": 36,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "layer": 37,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "layer": 24,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "layer": 25,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "layer": 24,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small01",
+      "layer": 25,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "layer": 38,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "layer": 39,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "layer": 40,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "layer": 26,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "layer": 27,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "layer": 26,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small02",
+      "layer": 27,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "layer": 41,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "layer": 42,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_shrub_card_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "layer": 43,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "layer": 28,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "layer": 29,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "layer": 28,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_leaf_shrub_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.filbert_small03",
+      "layer": 29,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.grass_dry3",
+      "layer": 44,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_dry_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.grass_dry3",
+      "layer": 30,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_dry_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.grass_dry3",
+      "layer": 30,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_dry_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "layer": 45,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "layer": 46,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "layer": 47,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "layer": 31,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "layer": 32,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "layer": 31,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine01",
+      "layer": 32,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "layer": 48,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "layer": 49,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "layer": 50,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "layer": 33,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "layer": 34,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "layer": 33,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine02",
+      "layer": 34,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "layer": 51,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "layer": 52,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "layer": 53,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "layer": 35,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "layer": 36,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "layer": 35,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine03",
+      "layer": 36,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "layer": 54,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "layer": 55,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "layer": 56,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "layer": 37,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "layer": 38,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "layer": 37,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine04",
+      "layer": 38,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "layer": 57,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "layer": 58,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "layer": 59,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_needle_pine_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "layer": 39,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "layer": 40,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "layer": 39,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_pine_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.pine05",
+      "layer": 40,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_needle_pine_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf01",
+      "layer": 60,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf01",
+      "layer": 61,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf01",
+      "layer": 41,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf01",
+      "layer": 41,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf02",
+      "layer": 62,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf02",
+      "layer": 63,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_twig_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf02",
+      "layer": 42,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.plant_wolf02",
+      "layer": 42,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_ground_green_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "layer": 64,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "layer": 65,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "layer": 66,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "layer": 43,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "layer": 44,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "layer": 43,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump01_update",
+      "layer": 44,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "layer": 67,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "layer": 68,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "layer": 69,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "layer": 45,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "layer": 46,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "layer": 45,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump02_update",
+      "layer": 46,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "layer": 70,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "layer": 71,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "layer": 72,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "layer": 47,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "layer": 48,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "layer": 47,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump03_update",
+      "layer": 48,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "layer": 73,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "layer": 74,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "layer": 75,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_moss_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "layer": 49,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "layer": 50,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "layer": 49,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.stump04_update",
+      "layer": 50,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_cut_wood_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "layer": 76,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "layer": 77,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "layer": 78,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_broadleaf_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "layer": 51,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "layer": 52,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "layer": 51,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree01",
+      "layer": 52,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "layer": 79,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "layer": 80,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "layer": 81,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_broadleaf_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "layer": 53,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "layer": 54,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "layer": 53,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree02",
+      "layer": 54,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "layer": 82,
+      "lod": 0,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L0",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "layer": 83,
+      "lod": 0,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L0",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "layer": 84,
+      "lod": 0,
+      "materialIndex": 2,
+      "materialName": "TZ_VEG_leaf_broadleaf_card_PBR_L0",
+      "meshIndex": 2,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "layer": 55,
+      "lod": 1,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L1",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "layer": 56,
+      "lod": 1,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L1",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "layer": 55,
+      "lod": 2,
+      "materialIndex": 0,
+      "materialName": "TZ_VEG_bark_broadleaf_PBR_L2",
+      "meshIndex": 0,
+      "primitiveIndex": 0
+    },
+    {
+      "assetId": "customs.vegetation.tree03",
+      "layer": 56,
+      "lod": 2,
+      "materialIndex": 1,
+      "materialName": "TZ_VEG_leaf_broadleaf_PBR_L2",
+      "meshIndex": 1,
+      "primitiveIndex": 0
+    }
+  ]
+}

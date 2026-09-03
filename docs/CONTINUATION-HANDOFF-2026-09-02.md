@@ -61,10 +61,125 @@ When something must be *true* rather than *self-consistent*, that is the instrum
 
 | | production (tarkovzero.com) | localhost |
 | --- | --- | --- |
-| terrain | public heightfield (`public/data/customs-3d.json`, from SPT spawns + loot + survey logs) | exact local tiles from `.local-game-derived/` |
-| vegetation | public `data.trees` positions, procedural | 31 authored families, 8,805 exact placements |
+| terrain | **exact tiles, PROMOTED 2026-09-02** — `public/assets/3d/customs/terrain/`, 8 surfaces, 10.7 MiB | exact local tiles from `.local-game-derived/` (identical bytes) |
+| vegetation | **31 authored families, 8,805 placements, PROMOTED 2026-09-02** — `public/assets/3d/customs/authored/vegetation/`, 105 files, 41.0 MiB | the same 31 families from `.local-candidates/` (identical GLB and array bytes); placements read from the raw Unity dump instead of the derived table |
 | walls / gates | authored geometry (public props + fences) | same |
 | terrain PBR, Fortress | shipped | same |
+
+**The terrain row changed on 2026-09-02.** The founder opened production and said "this is far from
+what we worked on. not even the floor ground correct" — production was drawing the heightfield fitted
+from SPT spawns and loot points while the reviewed local build drew the exact Unity tiles. He approved
+promoting the terrain HEIGHT and CONTROL surfaces, twice. They now ship as ordinary public assets, the
+way `public/assets/3d/customs/authored/fortress/` already did:
+
+- `scripts/promote-terrain-surfaces.mjs` (`npm run promote:terrain`) copies the 8 files into
+  `public/assets/3d/customs/terrain/`, writes the public `terrain-manifest.json` (`localOnly: false`,
+  no vegetation reference), and writes the 8 rows of `asset-promotion-manifest.json`. `--check` fails
+  if the three artifacts have drifted apart.
+- `loadCustomsPromotedTerrainPackage()` in `src/customs-local-terrain-loader.js` loads them with no
+  gate. `loadCustomsLocalTerrainPackage()` is unchanged and still refuses any non-loopback origin.
+  Neither loader accepts the other's package: one requires `localOnly: true`, the other `false`.
+- **`canLoadLocalGameDerivedAssets()` did not move.** It is still dev + loopback, and still governs
+  the raw Unity vegetation dumps, the authored vegetation packs, the bridge corrections and the scalar
+  facts. The terrain simply stopped being one of the things it governs.
+- The receipt for the terrain rows is WEAK and says so in the manifest: its only provenance document
+  is `scripts/extract-customs-terrain-local.py`, an EXTRACTOR, not a factory + catalog pair that
+  regenerates the bytes from committed inputs. What authorises the promotion is the founder's ruling
+  (`approvedBy`), recorded as such. The receipt proves the extractor is unchanged since approval and
+  nothing more.
+- `terrain-NNN-vegetation.json` sits in the same directory and is a RAW CAPTURE. It is not nameable
+  by the terrain source key, is refused by `classifyLocalPath`, is refused by the promoted loader if a
+  manifest ever references it, and its digest is in the committed capture inventory.
+- Cost, measured: dist +11,265,697 bytes; over the wire 6.29 MB transferred / 10.74 MiB decoded across
+  9 requests; median first frame 4,640 ms vs 4,414 ms without it (+226 ms, +5.1%, SwiftShader, three
+  runs each, `gpuFrameMs` still null); terrain triangles 547,438 → 2,884,476.
+
+**The vegetation row changed on 2026-09-02 too, and it is the last delta between production and the
+build the founder reviewed.** Production drew 2,348 procedural proxies over public tree positions;
+the reviewed local build draws 8,805 authored placements across 31 families. He approved promoting
+it. The pack now ships as ordinary public assets under
+`public/assets/3d/customs/authored/vegetation/`:
+
+- `scripts/promote-authored-vegetation.mjs` (`npm run promote:vegetation`) copies the 93 GLBs
+  (`assets/<family>/<family>-lod{0,1,2}.glb`, 15.4 MB) and the 9 shared texture-array blobs
+  (`arrays/veg-l{0,1,2}-{basecolor,orm,normal}.bin`, 26.9 MB), writes the public
+  `vegetation-manifest.json` (`localOnly: false`, `distribution: promoted-public`), the regenerated
+  public array index `arrays/veg-arrays.json`, the derived `veg-placements.bin`, and the 102 rows of
+  `asset-promotion-manifest.json` — all from one read. `--check` fails if any of them has drifted.
+- `loadCustomsPromotedVegetationPackage()` in `src/customs-promoted-vegetation-loader.js` loads them
+  with **no origin gate**. `loadCustomsLocalVegetation()` is unchanged and still requires the fixed
+  loopback manifest URL and `localOnly: true` tile payloads. Neither accepts the other's package.
+  Both feed the SAME `buildCustomsLocalVegetationRenderPlan()`, so the promoted forest is the
+  reviewed forest by construction rather than by resemblance.
+- **`canLoadLocalGameDerivedAssets()` did not move.** Vegetation simply stopped being one of the
+  things it governs, exactly as terrain did.
+- **Two receipts, not one, and the manifest keeps them apart.** The GEOMETRY and the TEXTURE ARRAYS
+  have the STRONG receipt terrain never had: all 31 families report `geometryEvidence: "original
+  approximation from scalar prototype identity and fallback envelope"`, and
+  `validation/factory-provenance-report.json` hashes the pack against the git-tracked
+  `vegetation_factory.py` + `prototype_catalog.json` (both currently matching, `sha256:0749080c…` /
+  `sha256:0fcbca39…`). Re-running the committed factory regenerates those bytes.
+  The **PLACEMENTS do not have that receipt.** `pack-index.json`'s placement mirror carries identity
+  only; the 8,805 coordinates exist solely in `terrain-{000,001}-vegetation.json`, which is a
+  registered RAW CAPTURE and never ships. `veg-placements.bin` is a derived scalar EXTRACT of that
+  capture written by the promotion script — position, rotation, the two scale factors, the instance
+  colour, the prototype binding, and nothing else (it drops `positionNormalized`, `lightmapColor`,
+  every prototype record and the document structure). Its receipt is therefore the TERRAIN class: a
+  measurement promoted on the founder's ruling. That is recorded in the public manifest's
+  `provenance.placements` block, separately from `provenance.geometry`, so the two cannot be read as
+  one chain. This is exactly the "transformed capture" the boundary states it cannot detect — the
+  control for it is the closed registry plus review of the pipeline that writes `public/`, which is
+  that one script.
+- The capture itself is refused four ways: no registry key is rooted at it, `classifyLocalPath`
+  still returns `raw-capture` (asserted), the promotion script re-checks that tier before reading
+  it, and the promoted loader walks the whole manifest refusing any string shaped like
+  `terrain-NNN-vegetation.json` — keys included.
+- **The banner tells the truth per subsystem, and a fallback now reads as degraded.** The code
+  `authored-unavailable-in-release` is gone; `promoted-vegetation-missing` replaces it. Its state is
+  `degraded` in every environment, because the pack ships and its absence is a failed load. See
+  `docs/LOCAL-THREE-POC.md` § "What a production frame says about itself".
+- Cost, measured (same build, same server, same camera; the WITHOUT arm parks
+  `vegetation-manifest.json` so the package is unreachable — `dist/` is on drvfs and will not rename
+  a directory the preview server has open):
+
+  | | bytes |
+  | --- | --- |
+  | 93 GLBs (`assets/`) | 15,396,212 |
+  | 9 array blobs (`arrays/`) | 26,950,884 |
+  | `arrays/veg-arrays.json` | 186,394 |
+  | `vegetation-manifest.json` | 57,522 |
+  | `veg-placements.bin` (8,805 rows × 48 B + 48 B header) | 422,688 |
+  | **dist delta** | **43,013,700 (105 files, 41.02 MiB)** |
+
+  Over the wire on `vite preview` (which compresses nothing): 105 requests, 42,839,562 transferred /
+  43,013,700 decoded. Median first frame **5,615 ms with vs 6,349 ms without** (3 runs each,
+  SwiftShader, `gpuFrameMs` still null) — the arm carrying the pack was *faster*, so the difference
+  is noise and there is **no measurable first-paint cost**. That is structural, not luck: the mount
+  is `void mountAuthoredVegetation()`, never awaited, so only the manifest + placement table
+  (480,210 B) are on the critical path and the other 42.53 MB arrives after the map is interactive.
+  Cold mount over HTTP: 93/93 GLBs in 9,385 ms, then 31 families / 93 buckets / 31 live buckets /
+  **31 draw calls**, `materialMode: shared-array-texture`, 7,104 visible + 4 frustum-rejected =
+  7,108 authored placements, `accountedPlacements` 8,805 (the conservation sum balances), 29,983,984
+  resident bytes.
+- **The 42.5 MB is still the biggest single asset in the deploy, and there are two cheap, measured
+  reductions if it needs to come down.** Neither is done, both are contained:
+  1. **Serve it compressed.** `gzip -6` over the whole subtree: 43,013,700 → 19,807,318 (46%); the
+     array blobs alone 26,950,884 → 8,028,369 (30%). Vercel does not compress `application/octet-stream`,
+     so today the wire cost is the raw cost. Worth ~23 MB for zero asset change.
+  2. **Stop shipping mip levels the runtime never uploads.** `veg-arrays.json` declares
+     `totalBytes: 26,950,884` against `uploadBytesLevel0: 20,213,760`: the loader uploads level 0
+     only and sets `generateMipmaps = true` (three 0.185.1 forces this — see the header of
+     `src/customs-vegetation-texture-arrays.js`), so 6,737,124 bytes of offline mip chain are pure
+     wire cost today. Worth 6.7 MB of both dist and wire, with no visual change.
+  The Stage B atlas / KTX2 work in §5.1 is the larger win and still needs a real-GPU frame first.
+
+**The CI fail-open in the capture check, closed the same day.** `verify:build-boundary` built its
+capture index by WALKING `.local-game-derived/` and `.local-candidates/`. Vercel builds from a clean
+checkout where both are absent, so on the deployment that matters the index was empty and a raw capture
+renamed under `public/assets/` shipped clean — measured against the verifier at 58f7fd8: `"pass": true`,
+exit 0. `capture-digest-inventory.json` (74 rows, 21 KB, digests and sizes only, EFT screenshot names
+redacted to a digest stem) is committed and loaded on every run; missing, unparseable or malformed is a
+build failure, never a skipped check. Regenerate with `npm run build:capture-inventory`.
 
 `src/renderer-gate.js` (renamed from `local-renderer-gate.js`) now separates two questions that were
 previously conflated:
@@ -101,6 +216,51 @@ every graphql call. With Basic auth gone there is no credential on the wire to l
 
 ---
 
+## 3b. What the live page offers, and what it says about itself (2026-09-02, late)
+
+Two founder instructions, both about the live page rather than the renderer.
+
+**One map opens; all eleven are listed.** *"on the live page for now on the maps tab put all the maps but lock
+them. even the woods/reserve. so rn customs is what avalible."* Reserve and Woods work — that is the point: beside
+a finished Customs they would draw as the older map, and he would rather show them as coming.
+
+- `src/map-availability.js` is THE list. `EFT_MAPS` (eleven rows, the picker), `AVAILABLE_MAP_KEYS` (`['customs']`),
+  `LOCKED_MAP_KEYS` (derived), `MAPPED_MAP_KEYS` (the three with render data — **data coverage, not availability**).
+- `assistant-contract.js`'s `SITE_MAPS` **is** that array (identity, not a copy — asserted), and `OTHER_MAP_LABELS`
+  is built from `LOCKED_MAP_KEYS`. Locking a map therefore moves it, in one edit, out of the switchMap vocabulary
+  and into the "TarkovZero cannot open that map yet" vocabulary. `crossMapFor()` can no longer mint a handoff for
+  ANY of the 517 quests, proven through the real handler, not just the client.
+- Reserve and Woods keep everything else: `MAPS` configs, `LABELS`, `<map>-3d.json`, quest zones, `siteMaps` rows in
+  quests.json (filtered on READ, so unlocking needs no rebuild), and every test that covers them.
+- A locked row carries a `SOON` badge, `aria-disabled`, and the accessible name "<Map> — not available yet".
+  Clicking it toasts instead of navigating. `?map=woods` resolves to Customs with `status:'locked'` and toasts
+  which map it wanted; `> map woods` refuses by name rather than "no map called woods".
+- **There is no saved map preference and never was** — asserted in `scripts/map-availability.test.mjs`. The URL is
+  the whole memory. The one place a map is written down is the assistant's `tz:askPending` sessionStorage handoff,
+  which compares its `map` to the tab's on arrival and drops itself when they differ (and clears either way).
+- To unlock: add the key to `AVAILABLE_MAP_KEYS`. `npm run test:map-availability`, e2e step 13.
+
+**The build notices are off the live page.** *"also remove the notification boxes in the middle about the build."*
+The CUSTOMS TRUTH strip and the vegetation notice are instruments — the orange box is exactly what would have told
+the founder the exact terrain silently failed and he was back on the fitted heightfield (§6.3). A visitor cannot
+act on either.
+
+- They are **hidden in a release build, drawn on dev + loopback**: question (c) of `src/renderer-gate.js`,
+  `canShowDiagnosticReadouts({dev, hostname})`, published as `gate.diagnosticReadouts`. It is a SEPARATE predicate
+  from the boundary (b) even though they agree today — one is licensing, one is presentation, and fusing them is
+  how a UI decision silently widens the thing that keeps game-derived assets off Vercel.
+- **Hiding is not deleting.** Both nodes are still built and repainted on the same 400 ms tick everywhere, and
+  `renderStats().truth` / `diagnostics().truth` publish the last painted `customsTruthStripCopy()` plus `shown`.
+  A degraded production load is still detectable: `truth.title` becomes `CUSTOMS PUBLIC DATA` and `truth.state`
+  becomes `degraded`. No e2e assertion ever read the DOM banner, so none had to move — the new ones read `truth`.
+- e2e step 12 asserts absent-in-release with the state intact; **step 14 starts a real `vite dev`** and asserts the
+  strip is on screen and its title/detail/state equal `renderStats().truth` field for field. That arm exists
+  because a rule that hid the banner *everywhere* would pass step 12 and quietly take the instrument away.
+  `npm run e2e -- --skip-dev-arm` skips it; Vite dev startup on /mnt/c is ~60 s (§7).
+- The hover label (`.tz-three-hover`) is not a build notice and stays mounted unconditionally.
+
+---
+
 ## 4. Standing decisions — do not re-open these
 
 Recorded with full cost in **`docs/DECISIONS-2026-09-01.md`**. Summary:
@@ -122,13 +282,16 @@ Recorded with full cost in **`docs/DECISIONS-2026-09-01.md`**. Summary:
 
 ## 5. Where each lane actually stands
 
-### 5.1 Vegetation — done, and the best-verified thing here
+### 5.1 Vegetation — done, promoted, and the best-verified thing here
 31/31 authored families, 8,805/8,805 placements bind, Khronos-clean, byte-reproducible. One array-texture
 material instead of 199 → **31 draw calls at the default orbit** (was 57 on the fallback path, 1,333 for the
 naive cell-grid design that was never built). Cold mount ~6 s, down from 71.5 s.
 
-Local only. The 8,805 placements are game-derived; production falls back to public tree positions. **That
-fallback is correct behaviour, not a bug.**
+**PROMOTED 2026-09-02** — see §3. Production loads the same 93 GLBs and the same 9 array blobs from
+`public/assets/3d/customs/authored/vegetation/`, and the same 8,805 placements from a derived scalar
+table beside them. The old sentence here — "production falls back to public tree positions, and that
+fallback is correct behaviour" — is **no longer true**: that fallback is now a defect, and the
+banner says so.
 
 Deferred by decision: **Stage B atlases** — deletes opaque foliage blobs, raises pine LOD1 552 → 2,712
 triangles. Correct in principle; needs a real-GPU frame first.

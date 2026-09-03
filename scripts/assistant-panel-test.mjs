@@ -23,7 +23,7 @@ import { mountDocument } from './lib/fake-dom.mjs';
 import {
   answerView, actionButtons, sourceView, mdLite, safeHttps, createAskPanel,
 } from '../src/assistant-panel.js';
-import { validateEnvelope, PROTOCOL_VERSION } from '../src/assistant-contract.js';
+import { validateEnvelope, PROTOCOL_VERSION, SITE_MAPS } from '../src/assistant-contract.js';
 
 /* ---------------------------------------------------------------- fixtures -- */
 
@@ -69,12 +69,12 @@ const SWITCH_TO_WOODS = {
 /* ------------------------------------------------------------------- DOM ---- */
 
 function mountPanel({ mapKey = 'customs', chips = [] } = {}) {
+  // No composer: the omnibox at the top of the panel is the app's ONE text field (2026-09-02), and
+  // mounting an #ask-input here would let a regression that re-added one pass unnoticed.
   const doc = mountDocument([
     ['section', 'panel-ask'],
     ['div', 'ask-log'],
     ['div', 'ask-chips'],
-    ['form', 'ask-form'],
-    ['input', 'ask-input'],
   ]);
   globalThis.document = doc;
   const open = new Set();
@@ -82,6 +82,7 @@ function mountPanel({ mapKey = 'customs', chips = [] } = {}) {
   const shell = {
     isOpen: (n) => open.has(n),
     setOpen: (n, on) => { calls.push(['setOpen', n, !!on]); if (on) open.add(n); else open.delete(n); },
+    reveal: (n, opts) => { calls.push(['reveal', n, opts?.focus === true]); open.add(n); },
   };
   const panel = createAskPanel({
     mapKey, shell, chips,
@@ -106,13 +107,29 @@ test('prose that promises a map switch, with NO actions, produces zero buttons',
   assert.match(view.answerHtml, /want to move to that map/);
 });
 
-test('the same prose WITH a switchMap action produces exactly one, labelled from the action', () => {
+test('a switchMap action naming a LOCKED map produces no button either', () => {
+  // The founder's rule, client-side. The server cannot mint this action any more (see
+  // scripts/test-assistant.mjs and the handler test), so the only way one arrives is a forged or
+  // stale body — and the contract's shape gate refuses it because `woods` is not an open map.
+  // A button that reloads the page onto a map the picker will not open is the dead click this
+  // whole pass is about.
   const view = answerView(envelope({ answer: PROSE_PROMISING_A_SWITCH, actions: [SWITCH_TO_WOODS] }), { map: 'customs' });
-  assert.equal(view.buttons.length, 1);
-  assert.equal(view.buttons[0].kind, 'map');
-  assert.equal(view.buttons[0].label, 'Switch to Woods');
-  assert.equal(view.buttons[0].action, SWITCH_TO_WOODS);
-  assert.match(view.buttons[0].title, /The Punisher - Part 4/);
+  assert.equal(view.buttons.length, 0, `offered: ${JSON.stringify(view.buttons.map((b) => b.label))}`);
+  assert.match(view.answerHtml, /want to move to that map/, 'the prose is still rendered in full');
+});
+
+test('the switchMap button machinery is intact for the day a second map unlocks', () => {
+  // `actionButtons()` is pure and takes an already-validated envelope, so the rendering half can be
+  // exercised without the contract's availability gate. This is the half that would rot silently
+  // while every switchMap is filtered out upstream.
+  const out = actionButtons({
+    ...envelope(), stale: false, images: [],
+    actions: [{ ...SWITCH_TO_WOODS }],
+  }, { map: 'customs' });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].kind, 'map');
+  assert.equal(out[0].label, 'Switch to Woods');
+  assert.match(out[0].title, /The Punisher - Part 4/);
 });
 
 test('an action the prose never mentions still gets its button — the two are unrelated', () => {
@@ -127,16 +144,23 @@ test('the DOM agrees: zero <button> under an answer whose prose begs for one', (
   const { panel, log } = mountPanel();
   panel.answer(envelope({ answer: PROSE_PROMISING_A_SWITCH, actions: [] }));
   assert.equal(buttonsIn(log).length, 0, `rendered: ${JSON.stringify(labelsIn(log))}`);
+  // …and the same prose carrying a switchMap to a LOCKED map draws nothing either.
   panel.answer(envelope({ answer: PROSE_PROMISING_A_SWITCH, actions: [SWITCH_TO_WOODS] }));
-  assert.deepEqual(labelsIn(log), ['Switch to Woods']);
+  assert.deepEqual(labelsIn(log), [], `a locked-map switch reached the DOM: ${JSON.stringify(labelsIn(log))}`);
+  // A real action still renders, so the emptiness above is the gate and not a broken renderer.
+  panel.answer(envelope({ actions: [{ type: 'selectQuest', slug: 'abandoned-cargo', name: 'Abandoned Cargo' }] }));
+  assert.deepEqual(labelsIn(log), ['Show Abandoned Cargo']);
 });
 
-test('a switchMap button never performs itself — it only calls back on a click', () => {
+test('an action button never performs itself — it only calls back on a click', () => {
   const { panel, log, calls } = mountPanel();
-  panel.answer(envelope({ answer: PROSE_PROMISING_A_SWITCH, actions: [SWITCH_TO_WOODS] }));
+  panel.answer(envelope({
+    answer: PROSE_PROMISING_A_SWITCH,
+    actions: [{ type: 'selectQuest', slug: 'abandoned-cargo', name: 'Abandoned Cargo' }],
+  }));
   assert.equal(calls.filter((c) => c[0] === 'act').length, 0, 'rendering an answer performed an action');
   buttonsIn(log)[0].onclick();
-  assert.deepEqual(calls.filter((c) => c[0] === 'act').map((c) => c[1].type), ['switchMap']);
+  assert.deepEqual(calls.filter((c) => c[0] === 'act').map((c) => c[1].type), ['selectQuest']);
 });
 
 test('the omnibox’s Restore button is not an action button', () => {
@@ -169,10 +193,12 @@ test('the full vocabulary maps to buttons, and nothing outside it does', () => {
     ],
     images: [image(0)],
   }), { map: 'customs' });
+  // Three, not four: the contract dropped the switchMap because Woods is not an open map. The
+  // `map` kind is exercised on its own above, past the availability gate.
   const out = actionButtons(env, { map: 'customs' });
-  assert.deepEqual(out.map((b) => b.kind), ['quest', 'fly', 'map', 'shots']);
+  assert.deepEqual(out.map((b) => b.kind), ['quest', 'fly', 'shots']);
   // `showImages` toggles the strip and is the only one that never reaches window.tz.
-  assert.equal(out[3].toggles, 'images');
+  assert.equal(out.at(-1).toggles, 'images');
   // An invented type is dropped by the contract before it ever reaches a button.
   const bogus = validateEnvelope(envelope({ actions: [{ type: 'openBrowser', url: 'https://x.test' }] }), { map: 'customs' });
   assert.equal(actionButtons(bogus, { map: 'customs' }).length, 0);
@@ -349,7 +375,7 @@ test('a quest on a map we do not ship gets no buttons and an honest source line'
   assert.equal(view.sources.length, 1);
   assert.equal(view.sources[0].drawable, false);
   assert.match(view.sources[0].coverage, /Shoreline/);
-  assert.match(view.sources[0].coverage, /does not draw/i);
+  assert.match(view.sources[0].coverage, /cannot open/i);
 });
 
 test('a quest with no marked location anywhere says so, rather than nothing', () => {
@@ -364,9 +390,24 @@ test('a source on the current map reads as "marked on <this map>"', () => {
   assert.equal(s.coverage, 'marked on Customs');
 });
 
-test('a source only on another SITE map names that map', () => {
+test('a source only on a LOCKED map names it and says we cannot open it', () => {
+  // quests.json still says this quest is drawable on Woods — the file did not change when Woods was
+  // locked. What changed is that `siteMaps` is filtered through the availability list on read, so
+  // the panel reports "Woods, and we cannot open it" instead of offering to take the player there.
   const s = sourceView({ slug: 'q', name: 'Q', maps: ['woods'], siteMaps: ['woods'] }, { map: 'customs' });
-  assert.equal(s.coverage, 'marked on Woods');
+  assert.equal(s.drawable, false, 'a locked map is not somewhere we can draw this for the player');
+  assert.match(s.coverage, /Woods/);
+  assert.match(s.coverage, /cannot open/i);
+});
+
+test('a source on another OPEN map still names that map', () => {
+  // Guards the other side of the same line: the moment a second map unlocks, this branch is what
+  // says "marked on <that map>" instead of "cannot open".
+  if (SITE_MAPS.length < 2) return;
+  const other = SITE_MAPS.find((m) => m !== 'customs');
+  const s = sourceView({ slug: 'q', name: 'Q', maps: [other], siteMaps: [other] }, { map: 'customs' });
+  assert.equal(s.drawable, true);
+  assert.match(s.coverage, /^marked on /);
 });
 
 test('the DOM renders sources with their wiki link, and only https ones', () => {
@@ -419,21 +460,33 @@ test('mdLite escapes the model’s prose and keeps only its own markup', () => {
   assert.equal(safeHttps('https://x.test'), 'https://x.test');
 });
 
-test('the composer and the starter chips route back out through the omnibox', () => {
+test('the panel owns NO text field — the starter chips route out through the omnibox', () => {
+  // 2026-09-02: the bar at the bottom of the screen went away and the omnibox became the first
+  // element of this panel ("omni bar should be first"). The panel's own composer went with the
+  // bar, on purpose: two inputs feeding one router is the parallel system that removal prevents,
+  // and the one that skipped `route()` would have asked the model "> 3d" instead of running it.
+  // The chips are the only thing that starts a question from in here, and they take the same road.
   const { panel, doc, calls } = mountPanel({ chips: ['Which quests are on this map?'] });
   panel.init();
   const chip = doc.getElementById('ask-chips').children[0];
   assert.equal(chip.textContent, 'Which quests are on this map?');
   chip.onclick();
   assert.deepEqual(calls.at(-1), ['onAsk', 'Which quests are on this map?']);
-  doc.getElementById('ask-input').value = '  where is the cargo  ';
-  doc.getElementById('ask-form').onsubmit({ preventDefault() {} });
-  assert.deepEqual(calls.at(-1), ['onAsk', '  where is the cargo  ']);
-  // An empty composer must not send a request.
-  const before = calls.length;
-  doc.getElementById('ask-input').value = '   ';
-  doc.getElementById('ask-form').onsubmit({ preventDefault() {} });
-  assert.equal(calls.length, before);
+
+  // Nothing in the panel is an input, and nothing binds a second composer into existence.
+  const inputs = doc.getElementById('panel-ask').querySelectorAll('input, form, textarea');
+  assert.equal(inputs.length, 0, `the panel grew its own composer back: ${inputs.map((n) => n.tagName).join(', ')}`);
+  assert.equal(typeof panel.clearInput, 'undefined', 'a composer-clearing hook survived the composer');
+});
+
+test('focus() reveals the panel — a minimised one is one keystroke from the omnibox', () => {
+  // The omnibox lives in this panel, so "focus the search field" has to open AND uncollapse it.
+  // shell.reveal() is the only call that does both; setOpen() alone leaves a collapsed title bar
+  // with the keyboard pointed at a field nobody can see.
+  const { panel, calls } = mountPanel();
+  panel.focus();
+  assert.deepEqual(calls.at(-1), ['reveal', 'ask', true],
+    `focus() did not reveal the panel: ${JSON.stringify(calls)}`);
 });
 
 test('opening and closing goes through the shell, so the pin model is the panel system’s', () => {

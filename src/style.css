@@ -1,7 +1,9 @@
 /* ---------------------------------------------------------------------------
    TarkovZero — floating HUD. The map is edge-to-edge; every control floats.
    Chips (top-left id/status, top-right view), a right icon toolbar with a dock
-   column of panels beside it, an omnibox bottom-centre, telemetry bottom-left.
+   column of panels beside it, the floating Ask panel (omnibox + conversation)
+   on the left, telemetry bottom-left. The bottom of the screen is empty: the
+   omnibox bar that lived there moved into the Ask panel on 2026-09-02.
    Type: IBM Plex Sans Condensed (display) / Barlow (body) / JetBrains Mono (numbers).
    Desktop only — mobile was dropped 2026-08-29.
 --------------------------------------------------------------------------- */
@@ -189,15 +191,26 @@ body.view-3d .tb-btn.only-3d{display:grid}
 .map-title-text{white-space:nowrap}
 .map-chev{flex:none;color:var(--text-mute);transition:transform var(--t-fast),color var(--t-fast)}
 #map-switcher:hover .map-chev,#map-switcher[aria-expanded=true] .map-chev{color:var(--text);transform:translateY(1px)}
-.map-menu{position:absolute;z-index:30;top:44px;left:-6px;width:176px;padding:4px;background:var(--panel-2);border:1px solid var(--line);
+/* Eleven rows since 2026-09-02 (all eleven EFT maps, one of them open — see src/map-availability.js),
+   so the menu is wider and can scroll on a short window rather than running off the bottom. */
+.map-menu{position:absolute;z-index:30;top:44px;left:-6px;width:206px;max-height:min(62vh,392px);overflow-y:auto;
+  padding:4px;background:var(--panel-2);border:1px solid var(--line);
   border-radius:var(--r-md);box-shadow:var(--shadow-panel)}
-.map-option{display:grid;grid-template-columns:14px 1fr;align-items:center;gap:7px;width:100%;height:32px;padding:0 7px;
+.map-option{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:7px;width:100%;height:32px;padding:0 7px;
   appearance:none;background:transparent;border:0;border-radius:var(--r-sm);color:var(--text-dim);cursor:pointer;text-align:left;
   font:600 13px/1 var(--f-display);letter-spacing:.055em;text-transform:uppercase}
 .map-option:hover,.map-option:focus-visible{background:var(--panel-hi);color:var(--text);outline:0}
 .map-option[aria-checked=true]{color:var(--cream)}
 .map-option .map-check{color:transparent;font:700 12px/1 var(--f-mono)}
 .map-option[aria-checked=true] .map-check{color:var(--acc)}
+/* A LOCKED row. It reads as unavailable before it is clicked — dimmed, no pointer, and carrying a
+   badge that says so — because the alternative is a click that does nothing and explains nothing.
+   It stays focusable (aria-disabled, not `disabled`) so a keyboard reader hears the same fact. */
+.map-option.locked{color:var(--text-mute);cursor:default;opacity:.72}
+.map-option.locked:hover{background:transparent;color:var(--text-mute)}
+.map-option.locked:focus-visible{background:var(--panel-hi);outline:0}
+.map-soon{justify-self:end;padding:2px 5px;border:1px solid var(--line);border-radius:3px;
+  font:700 8.5px/1 var(--f-mono);letter-spacing:.12em;color:var(--text-mute);text-transform:uppercase}
 
 /* raid read-out: ⏱ 40 MIN | 👤 10–12 PMC | ☠ 30% PARTISAN, as icon-value chunks.
    One sentence made the eye read; three chunks let it glance. The glyph says which fact, the mono
@@ -241,7 +254,10 @@ body.view-3d .tb-btn.only-3d{display:grid}
 /* ---------- right icon toolbar ---------- */
 #toolbar{position:absolute;right:var(--edge);top:var(--dock-top);z-index:600;
   display:flex;flex-direction:column;align-items:flex-end;gap:12px;pointer-events:none}
-#toolbar > *{pointer-events:auto}
+/* Only the BUTTONS take the pointer — see the note beside `.tb-item{pointer-events:none}` further
+   down. `#toolbar > *` used to re-enable it here, and an id beats the class rule down there, so the
+   group boxes went on swallowing clicks aimed at whatever floated underneath them. */
+#toolbar .tb-btn{pointer-events:auto}
 .tb-group{display:flex;flex-direction:column;align-items:flex-end;gap:var(--tb-gap)}
 /* Label + icon are ONE control, not two.
    A detached text pill beside a button reads as a second button — "is the word clickable?"
@@ -259,11 +275,13 @@ body.view-3d .tb-btn.only-3d{display:grid}
 .tb-item:hover .tb-tip,.tb-item:focus-within .tb-tip,.tb-item.unseen .tb-tip{opacity:1;transform:none}
 .tb-item:hover,.tb-item:focus-within,.tb-item.unseen{--tbl:0}
 .tb-item.unseen .tb-tip{color:var(--text)}
-/* a docked panel owns that strip — the standing labels stand down, hover still answers */
-body.dock-open .tb-item.unseen .tb-tip{opacity:0;transform:translateX(6px)}
-body.dock-open .tb-item.unseen{--tbl:1}
-body.dock-open .tb-item:hover .tb-tip,body.dock-open .tb-item:focus-within .tb-tip{opacity:1;transform:none}
-body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
+/* A docked panel owns that strip — the standing labels stand down, hover still answers. The RIGHT
+   column only: the Ask panel floats on the other side of the map and opens by default (2026-09-02),
+   so keying this off `dock-open` would have deleted the first-run captions for every new visitor. */
+body.dock-open-right .tb-item.unseen .tb-tip{opacity:0;transform:translateX(6px)}
+body.dock-open-right .tb-item.unseen{--tbl:1}
+body.dock-open-right .tb-item:hover .tb-tip,body.dock-open-right .tb-item:focus-within .tb-tip{opacity:1;transform:none}
+body.dock-open-right .tb-item:hover,body.dock-open-right .tb-item:focus-within{--tbl:0}
 /* the seam: while the pill is joined the button squares off its left corners and the shared border
    between the two halves becomes the divider inside one control */
 .tb-item .tb-btn{border-top-left-radius:calc(var(--r-md) * var(--tbl));
@@ -295,29 +313,46 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
   width:min(var(--dock-w),calc(100vw - 140px));z-index:590;display:flex;flex-direction:column;align-items:stretch;
   gap:8px;pointer-events:none}
 #dock > .panel{pointer-events:auto}
-/* The LEFT column (2026-09-02): the assistant, in the upper-left of the map where the founder drew
-   it. Same top as the right dock — i.e. clear of the id/status chip band — and the same bottom, so
-   it never reaches the coords/scale chips. shell.js insets avoidRect()'s LEFT edge while anything
-   here is open, which is what keeps place labels, the quest card and every fly-to out from behind
-   it (the mirror image of what the right dock already gets). */
-#dock-left{position:absolute;left:var(--edge);top:var(--dock-top);bottom:var(--dock-bottom);
-  width:min(var(--dock-w),calc(100vw - 160px));z-index:590;display:flex;flex-direction:column;align-items:stretch;
-  gap:8px;pointer-events:none}
-#dock-left > .panel{pointer-events:auto}
+/* The LEFT column (2026-09-02): the Ask panel — the omnibox and the conversation it produced — in
+   the upper-left of the map where the founder drew it. It FLOATS: shell.js writes left/top/width/
+   height here from `tz:askpanel` as it is dragged and resized, so these values are only the
+   first-visit fallback ("start small", clear of the id/status chip band). What moves is the column,
+   not the panel inside it, which is what keeps `#dock-left > .panel` and avoidRect() measuring the
+   same node they always did. shell.js subtracts wherever it lands from avoidRect(), so place
+   labels, the quest card and every fly-to step around it. */
+#dock-left{position:absolute;left:var(--edge);top:var(--dock-top);width:var(--dock-w);height:430px;
+  z-index:590;display:flex;flex-direction:column;align-items:stretch;gap:8px;pointer-events:none}
+#dock-left > .panel{pointer-events:auto;height:100%}
+/* Minimised: the panel is its own title bar and the column shrinks to it. */
+#dock-left.is-min{height:auto}
+#dock-left.is-min > .panel{height:auto}
+.panel.is-min > #omnibox,.panel.is-min > .panel-body,.panel.is-min > .ask-foot,.panel.is-min > .panel-resize{display:none}
+.panel-hd{cursor:grab;user-select:none}
+#dock .panel-hd{cursor:default;user-select:auto}
+body.is-dragging{user-select:none}
+body.is-dragging .panel-hd{cursor:grabbing}
+/* The corner grip. A 16 px target in the panel's own bottom-right, over the footer's dead space. */
+.panel-resize{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;touch-action:none;
+  background:linear-gradient(135deg,transparent 0 46%,var(--text-ghost) 46% 54%,transparent 54% 70%,var(--text-ghost) 70% 78%,transparent 78%);
+  opacity:.55;border-bottom-right-radius:var(--r-lg)}
+.panel-resize:hover{opacity:1}
+#panel-ask{position:relative}
 .panel{display:flex;flex-direction:column;min-height:0;flex:0 1 auto;overflow:hidden;
   background:var(--panel-flat);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel)}
 .panel-hd{display:flex;align-items:center;gap:8px;height:32px;flex:none;padding:0 6px 0 11px;
   border-bottom:1px solid var(--line-soft);background:var(--panel-tint)}
 .panel-name{font:600 var(--fs-cap)/1 var(--f-display);text-transform:uppercase;letter-spacing:var(--ls-cap);color:var(--text-dim)}
 .panel-hd .ghosts{margin-left:auto}
-.panel-pin,.panel-x{appearance:none;background:none;border:0;cursor:pointer;width:22px;height:22px;flex:none;
+.panel-pin,.panel-x,.panel-min{appearance:none;background:none;border:0;cursor:pointer;width:22px;height:22px;flex:none;
   display:grid;place-items:center;border-radius:var(--r-sm);color:var(--text-ghost);font-size:12px;line-height:1;
   transition:color var(--t-fast),background var(--t-fast)}
 .panel-pin{margin-left:auto}
 .panel-hd .ghosts + .panel-pin{margin-left:0}
-.panel-pin svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}
-.panel-pin:hover,.panel-x:hover{color:var(--text);background:var(--panel-hi)}
+.panel-pin svg,.panel-min svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.panel-pin:hover,.panel-x:hover,.panel-min:hover{color:var(--text);background:var(--panel-hi)}
 .panel-pin.on{color:var(--acc)}
+/* Minimised is a STATE, not a close: the button stays lit so the collapsed bar says why it is one line. */
+.panel-min[aria-pressed=true]{color:var(--acc)}
 .panel.is-pinned{border-color:rgba(30,138,78,.45)}
 .panel-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding:9px var(--gutter) 11px;
   scrollbar-color:var(--line) transparent;scrollbar-width:thin}
@@ -357,27 +392,23 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .keys dt b{color:var(--text);background:var(--panel-hi);border:1px solid var(--line);border-radius:3px;padding:0 4px;font-weight:500}
 .keys dd{margin:0;font-size:12.5px;color:var(--text-dim)}
 
-/* ---------- omnibox (bottom-centre) ---------- */
-#omnibox{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;z-index:600;
-  width:min(560px,calc(100vw - 160px));display:flex;flex-direction:column;justify-content:flex-end}
-/* no backdrop-filter: the field and the results list stacked above it are one surface, and only
-   one of them was frosted — the seam showed as soon as anything bright was underneath (QA D10) */
-#omnibox .find{height:42px;background:var(--panel-flat);
-  box-shadow:var(--shadow-panel);border-radius:var(--r-lg);padding-left:11px}
-#omnibox .find input{font-size:14px}
+/* ---------- omnibox (first element of the Ask panel) ----------
+   It was a permanent bar across the bottom of the screen until 2026-09-02 ("lets remove the bar
+   from the bottom" / "omni bar should be first"). It is now the panel's own header field: results
+   drop DOWN from it, into the same column the answer they produce will render in. */
+#omnibox{flex:none;display:flex;flex-direction:column;padding:8px var(--gutter) 0}
+#omnibox .find{height:34px;background:var(--panel-2);border-radius:var(--r-md);padding-left:9px}
+#omnibox .find input{font-size:13px}
 .find-ico{flex:none;color:var(--text-mute)}
 #omnibox .find:focus-within .find-ico{color:var(--acc)}
-/* Focus: a lift, not a rule. The shared .find keeps its 1 px green keyline inside a panel, where a
-   field sits on a flat surface among other fields; the omnibox floats over the map at the centre
-   of the screen, and a hyper-saturated 1 px outline there is the loudest thing in the UI for the
-   least information (Gemini, 2026-08-29). Same signal, delivered as an inner glow and a background
-   lift in --focus at low alpha — the box gets brighter, not outlined. */
+/* Focus: a lift, not a rule — an inner glow and a background lift in --focus at low alpha, so the
+   box gets brighter rather than outlined (Gemini, 2026-08-29). */
 #omnibox .find:focus-within{border-color:rgba(127,227,176,.22);
-  background:linear-gradient(rgba(127,227,176,.055),rgba(127,227,176,.055)),var(--panel-flat);
-  box-shadow:inset 0 0 0 1px rgba(127,227,176,.10),inset 0 2px 16px rgba(127,227,176,.10),var(--shadow-panel)}
-/* results open upward, above the box */
-#find-results{margin:0 0 7px;max-height:min(46vh,360px);overflow:auto;box-shadow:var(--shadow-panel);
-  background:var(--panel-flat);scrollbar-color:var(--line) transparent;scrollbar-width:thin}
+  background:linear-gradient(rgba(127,227,176,.055),rgba(127,227,176,.055)),var(--panel-2);
+  box-shadow:inset 0 0 0 1px rgba(127,227,176,.10),inset 0 2px 16px rgba(127,227,176,.10)}
+/* results open downward, under the field and above the conversation */
+#find-results{margin:6px 0 0;max-height:min(42vh,300px);overflow:auto;
+  background:var(--panel-2);scrollbar-color:var(--line) transparent;scrollbar-width:thin}
 #find-results::-webkit-scrollbar{width:8px}
 #find-results::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 #omnibox.busy .find{opacity:.65;pointer-events:none}
@@ -560,7 +591,7 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
 .scale-line i::before{left:0}
 .scale-line i::after{right:0}
 
-/* toast — clears the omnibox */
+/* toast — sits above the telemetry chips (the omnibox bar it used to clear is gone) */
 .toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:900;display:flex;align-items:center;gap:10px;
   height:32px;padding:0 12px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-md);
   box-shadow:var(--shadow-panel);font:400 12.5px var(--f-body);color:var(--text-dim)}
@@ -856,20 +887,13 @@ body.dock-open .tb-item:hover,body.dock-open .tb-item:focus-within{--tbl:0}
    question, prose, the wiki's photographs, the buttons the ENVELOPE's actions
    earn, and the quests the answer was read out of.
 --------------------------------------------------------------------------- */
-/* sizes to the conversation and stops at the column: an empty panel is a small one */
-#panel-ask{flex:0 1 auto;max-height:100%}
+/* fills the floating column shell.js sized: header, omnibox, log, credit line */
+#panel-ask{flex:1 1 auto;min-height:0}
 .ask-ico{color:var(--acc);flex:none}
-.panel-body.ask-body{display:flex;flex-direction:column;gap:0;padding-bottom:8px}
+.panel-body.ask-body{display:flex;flex-direction:column;gap:0;padding-bottom:8px;flex:1 1 auto;min-height:0}
 .ask-log{max-height:min(46vh,340px);overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:6px;
   padding-right:2px;scrollbar-color:var(--line) transparent;scrollbar-width:thin}
 #panel-ask .ask-log{max-height:none;flex:1 1 auto;min-height:0}
-/* the composer sits under the scrolling log, on the panel's own surface */
-#panel-ask .find-ask{flex:none;margin:0 var(--gutter) 0;height:34px}
-#panel-ask .find-ask input{font-size:13px}
-.ask-send{appearance:none;background:none;border:0;cursor:pointer;width:26px;height:26px;margin-right:3px;flex:none;
-  display:grid;place-items:center;border-radius:var(--r-sm);color:var(--text-mute);transition:color var(--t-fast),background var(--t-fast)}
-.ask-send:hover{color:var(--acc);background:var(--panel-hi)}
-.find-ask.busy{opacity:.6;pointer-events:none}
 #panel-ask .ask-foot{flex:none;padding:7px var(--gutter) 9px
   ;margin-top:6px;border-top:1px solid var(--line-soft)}
 #panel-ask .ask-foot a{color:var(--text-mute);text-decoration:none}
@@ -940,10 +964,10 @@ a.ask-src-name:hover{color:var(--acc);border-bottom-color:rgba(45,190,108,.35)}
 .ask-src-where{margin-left:auto;color:var(--text-ghost);font:400 10px/1.4 var(--f-mono);white-space:nowrap}
 .ask-src.is-elsewhere .ask-src-where{color:#B98A52}
 
-/* narrow desktops: keep the dock and omnibox from meeting */
+/* narrow desktops: a slimmer right dock. The Ask panel is clamped into the stage by shell.js
+   (`clampPanelBox`), which is what keeps a remembered size usable when the window shrinks. */
 @media (max-width:1100px){
   :root{--dock-w:320px}
-  #omnibox{width:min(460px,calc(100vw - 140px))}
 }
 
 /* ==========================================================================
@@ -999,9 +1023,16 @@ a.ask-src-name:hover{color:var(--acc);border-bottom-color:rgba(45,190,108,.35)}
    grows to fit its (often-invisible) .tb-tip — wide enough at some states to reach over the dock panel
    and silently eat clicks meant for it. .tb-tip was already pointer-events:none; extending that to the
    whole item (button excepted) lets a click pass through to the panel underneath, whichever toolbar
-   item it belongs to. Hover-to-reveal is unaffected: hovering the visible .tb-btn still hovers .tb-item. */
-.tb-item{pointer-events:none}
-.tb-item .tb-btn{pointer-events:auto}
+   item it belongs to. Hover-to-reveal is unaffected: hovering the visible .tb-btn still hovers .tb-item.
+
+   The GROUP box needed the same treatment (2026-09-02): #toolbar's flex containers are as wide as
+   their widest item, so the transparent column to the LEFT of the icons went on swallowing clicks
+   even after .tb-item stopped — measured with the floating Ask panel dragged under the toolbar, its
+   minimise button at x1259 hit `DIV.tb-group`, and the same shadow had been sitting over the right
+   dock's panels all along. Every button opts back in by id, `.tb-hud`'s included (they are not
+   inside a .tb-item, so the old `.tb-item .tb-btn` rule never reached them). */
+#toolbar,.tb-group,.tb-item{pointer-events:none}
+#toolbar .tb-btn{pointer-events:auto}
 
 /* ===========================================================================
    markers — step 4: zoom LOD (dot / icon / full), spawn clusters, extract

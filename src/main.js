@@ -1,5 +1,9 @@
 import L from 'leaflet';
-import { MAPS, selectMap } from './mapdata.js';
+import { MAPS, resolveMapRequest } from './mapdata.js';
+import {
+  AVAILABLE_MAP_KEYS, EFT_MAPS, LOCKED_BADGE, LOCKED_MAP_KEYS, LOCKED_NOTE,
+  isAvailableMap, mapName,
+} from './map-availability.js';
 import { getCRS, pos, toLatLngBounds } from './crs.js';
 import { loadMapData } from './api.js';
 import { roadmapLayer } from './roadmap.js';
@@ -17,7 +21,9 @@ import { createQuests } from './quests.js';
 import { createAssistant } from './assistant.js';
 import { createShell } from './shell.js';
 import { createOmnibox } from './omnibox.js';
-import { resolveRendererMode } from './renderer-gate.js';
+import {
+  RENDERER_REQUESTS, THREE_RENDERER_MAPS, isKnownRendererRequest, normalizeRendererRequest, resolveRendererMode,
+} from './renderer-gate.js';
 import { loadSurveyTargets, surveyColor } from './customs-survey-targets.js';
 // zOff() is the 2D↔3D zoom relation. It is this MAP's CRS scale and nothing else, so the two views
 // always report the same metres per pixel — see the note in camera.js.
@@ -46,8 +52,9 @@ let booted = false;   // the map exists and the HUD can be measured
 const shell = createShell({ store, onLayout: () => { if (booted) updateHud(); } });
 const stageEl = $('#stage');
 /**
- * The rect a FIT frames into: the full stage width minus the top chip band and the omnibox band.
- * A docked panel floats OVER the map and is deliberately not an inset here (QA H4, shell.js).
+ * The rect a FIT frames into: the full stage width minus the top chip band. A panel floats OVER
+ * the map and is deliberately not an inset here (QA H4, shell.js). The omnibox band that used to
+ * take the bottom went with the bottom bar on 2026-09-02.
  */
 const safeRect = () => shell.safeRect();
 /** The rect nothing floats over — fly-to targets, the quest card and the label seating pass. */
@@ -63,23 +70,33 @@ const safeOffset = () => offsetOf(safeRect());
 const avoidOffset = () => offsetOf(avoidRect());
 
 const requestedMap = new URLSearchParams(location.search).get('map');
-const mapData = selectMap(requestedMap);
-// The Three renderer is opt-in and Customs-only, in every environment including production. It is
-// NOT the default: deck.gl stays the renderer every visitor gets unless they ask for the other one
-// by name. See `docs/LOCAL-THREE-POC.md` § "Reaching the renderer" for the argument — briefly, the
-// Three path is Customs-only, drops the Relief and Fog controls, discards the persisted look
-// preference, and needs WebGPU-or-WebGL2 breadth this project has not measured across visitor GPUs,
-// so making it the silent default would change the product for everyone on the busiest map on the
-// strength of one machine's frames.
+// `?map=` is a documented entry point and `?map=woods` was a working one until Woods was locked
+// (2026-09-02). It still resolves — to Customs — and `mapRequest.status` carries WHY, so the page
+// can say so once it has a toast to say it with (see the boot tail). A silent substitution is the
+// same class of lie as a button that goes nowhere.
+const mapRequest = resolveMapRequest(requestedMap);
+const mapData = mapRequest.map;
+// The Three renderer is what a CUSTOMS visitor gets by default, in every environment including
+// production (changed 2026-09-02 — the founder opened tarkovzero.com and found deck.gl's older
+// geometry there while the detailed buildings, bridge structure and cooling towers were reachable
+// only by typing `?renderer=three`). deck.gl is one `?renderer=deck` away and is still the renderer
+// for every other map: Reserve and Woods have no Three data path at all.
+//
+// The costs the old default was protecting against have not gone away — the Three path drops the
+// Relief and Fog controls, forces the realistic look over a persisted preference, and its
+// WebGPU-or-WebGL2 breadth across visitor GPUs is unmeasured. They are now an accepted risk on the
+// one map the founder and his friends actually read, with the escape hatch a URL away.
 //
 // What this gate does NOT decide is whether local game-derived data may load. That is a separate,
 // unchanged question (`canLoadLocalGameDerivedAssets`, dev + loopback only), asked inside the
-// renderer — see src/renderer-gate.js.
+// renderer — see src/renderer-gate.js. In production Three runs on the PUBLIC heightfield and
+// PUBLIC tree positions and says so (`renderStats().gate.localEnhancementReason === 'release-build'`).
 const rendererRequest = new URLSearchParams(location.search).get('renderer');
 const rendererMode = resolveRendererMode({ mapKey: mapData.key, rendererRequest });
-if (rendererRequest === 'three' && rendererMode !== 'three') console.warn('The Three renderer is Customs-only; using deck.gl');
+if (normalizeRendererRequest(rendererRequest) === 'three' && rendererMode !== 'three') console.warn(`The Three renderer is ${THREE_RENDERER_MAPS.join('/')}-only; using deck.gl`);
+if (!isKnownRendererRequest(rendererRequest)) console.warn(`Unknown ?renderer=${rendererRequest} — the values are ${RENDERER_REQUESTS.join(' | ')}; using ${rendererMode}`);
 // Renderer-specific chrome is CSS-gated by this class. resolveRendererMode() guarantees it can only
-// appear for a Customs ?renderer=three request; Reserve/Woods and the default view keep their UI.
+// appear on a Customs page that did not opt out; Reserve/Woods and ?renderer=deck keep the full UI.
 document.body.classList.toggle('renderer-three', rendererMode === 'three');
 if (rendererMode === 'three') {
   // Customs truth mode has one visual contract: no fog and fixed 2x terrain relief.
@@ -98,24 +115,51 @@ $('.map-title-text').textContent = mapData.name;
 const mapSwitcher = $('#map-switcher');
 const mapMenu = $('#map-menu');
 mapSwitcher.value = mapData.key;
-mapMenu.innerHTML = Object.values(MAPS).map((m) => `<button type="button" class="map-option" role="menuitemradio" aria-checked="${m.key === mapData.key}" data-map="${m.key}"><span class="map-check" aria-hidden="true">✓</span><span>${m.name}</span></button>`).join('');
+// The picker lists ALL ELEVEN EFT maps and opens the ones in AVAILABLE_MAP_KEYS — one list, read
+// from src/map-availability.js, the same list the assistant's SITE_MAPS is. A locked row is not a
+// dead click: it carries a SOON badge, an aria-disabled state and an accessible name that says
+// "not available yet", so the reason is on screen instead of in a shrug.
+//
+// Locked rows stay FOCUSABLE (aria-disabled, not the `disabled` attribute) so a keyboard reader
+// can arrow onto them and hear why. The click handler is what refuses; the attribute is what says.
+mapMenu.innerHTML = EFT_MAPS.map((m) => {
+  const locked = !isAvailableMap(m.key);
+  const label = locked ? ` aria-label="${m.name} — ${LOCKED_NOTE}" title="${LOCKED_NOTE}"` : '';
+  return `<button type="button" class="map-option${locked ? ' locked' : ''}" role="menuitemradio"`
+    + ` aria-checked="${m.key === mapData.key}"${locked ? ' aria-disabled="true" data-locked="1"' : ''}`
+    + ` data-map="${m.key}"${label}>`
+    + `<span class="map-check" aria-hidden="true">✓</span><span class="map-option-name">${m.name}</span>`
+    + `${locked ? `<span class="map-soon" aria-hidden="true">${LOCKED_BADGE}</span>` : ''}</button>`;
+}).join('');
 const mapOptions = $$('.map-option', mapMenu);
+/** Rows that navigate. A locked row is in `mapOptions` (it is focusable) and never in here. */
+const openableOptions = mapOptions.filter((b) => !b.dataset.locked);
 const goMap = (key) => {
+  // Last gate before a full page reload: navigation asks the availability list, not the caller.
+  // Every path into here — the picker, `> map`, the raid toast, the assistant's switchMap — is
+  // already supposed to have checked; this is what makes a missed check a no-op, not a dead page.
+  if (!isAvailableMap(key)) return false;
   const url = new URL(location.href);
   url.searchParams.set('map', key);
   url.hash = '';
   location.assign(url);
+  return true;
 };
 function setMapMenu(open, focus = false) {
   mapMenu.hidden = !open;
   mapSwitcher.setAttribute('aria-expanded', String(open));
-  if (open && focus) (mapOptions.find((b) => b.dataset.map === mapData.key) ?? mapOptions[0])?.focus();
+  if (open && focus) (mapOptions.find((b) => b.dataset.map === mapData.key) ?? openableOptions[0] ?? mapOptions[0])?.focus();
 }
 mapSwitcher.onclick = (e) => { e.stopPropagation(); setMapMenu(mapMenu.hidden); };
 mapSwitcher.onkeydown = (e) => {
   if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); setMapMenu(true, true); }
 };
-mapOptions.forEach((b) => { b.onclick = () => goMap(b.dataset.map); });
+mapOptions.forEach((b) => {
+  b.onclick = () => {
+    if (b.dataset.locked) { toast(`${mapName(b.dataset.map)} is ${LOCKED_NOTE}.`); return; }
+    goMap(b.dataset.map);
+  };
+});
 mapMenu.onkeydown = (e) => {
   const i = mapOptions.indexOf(document.activeElement);
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -1183,7 +1227,7 @@ function ageSuffix(ms) {
 }
 /** Per-row status text: a map mismatch always wins (it explains why the dot isn't green here). */
 function rowStatus(s) {
-  if (s.map && s.map !== mapData.key) return `on ${MAPS[s.map]?.name ?? s.map}`;
+  if (s.map && s.map !== mapData.key) return `on ${mapName(s.map)}`;
   if (s.state === 'connecting') return 'connecting…';
   const age = ageSuffix(s.ageMs);
   return `${s.state}${age ? ' · ' + age : ''}`;
@@ -1200,10 +1244,10 @@ function updateTelemetry(st) {
   const p = (st.state === 'streaming' || st.state === 'stale') ? live.primary() : null;
   if (p?.last) {
     const hdg = Math.round(((p.last.yaw ?? 0) % 360 + 360) % 360);
-    const mapName = MAPS[p.map]?.name ?? mapData.name;
+    const liveMapName = p.map ? mapName(p.map) : mapData.name;
     const age = ageSuffix(p.ageMs) || 'just now';
     coordsEl.classList.remove('idle');
-    coordsEl.innerHTML = `X <b>${num(p.last.x)}</b>&nbsp;&nbsp; Z <b>${num(p.last.z)}</b> · HDG <b>${hdg}°</b> · ${esc(mapName)} · ` +
+    coordsEl.innerHTML = `X <b>${num(p.last.x)}</b>&nbsp;&nbsp; Z <b>${num(p.last.z)}</b> · HDG <b>${hdg}°</b> · ${esc(liveMapName)} · ` +
       `<span class="tele-age${p.state === 'stale' ? ' stale' : ''}">${esc(age)}</span>`;
     liveTelemetryActive = true;
     // QA M9: the streaming read-out is ~350 px wide and the strip was one ROW, so it shoved the
@@ -1223,8 +1267,11 @@ function checkRaidSwitch() {
   if (!p || !p.map || p.map === mapData.key) { raidToastFor = null; return; }
   if (raidToastFor === p.map) return;
   raidToastFor = p.map;
-  const target = MAPS[p.map];
+  // Availability, not the registry: MAPS still holds Reserve and Woods and neither will open, so
+  // offering a Switch button for them would be the dead button this pass exists to delete.
+  const target = isAvailableMap(p.map) ? MAPS[p.map] : null;
   if (target) toast(`Companion is on ${target.name} — switch?`, { label: 'Switch', run: () => goMap(target.key), sticky: true });
+  else if (LOCKED_MAP_KEYS.includes(p.map)) toast(`Companion is on ${mapName(p.map)} — ${LOCKED_NOTE} on TarkovZero`);
   else toast(`Companion is on ${p.map} — not on TarkovZero yet`);
 }
 function playerRowHtml(s, primaryCode) {
@@ -1569,7 +1616,15 @@ window.tz = {
     total: [...onKinds].reduce((n, k) => n + (countOf.get(k) ?? 0), 0),
     byKind: Object.fromEntries([...countOf].sort()),
   }),
-  panel: { open: (n) => shell.open(n), close: (n) => shell.close(n), isOpen: (n) => shell.isOpen(n), isPinned: (n) => shell.isPinned(n) },
+  panel: {
+    open: (n) => shell.open(n), close: (n) => shell.close(n),
+    isOpen: (n) => shell.isOpen(n), isPinned: (n) => shell.isPinned(n),
+    /** The floating Ask panel: collapse to its title bar, and the geometry that is remembered. */
+    reveal: (n) => shell.reveal(n), setPinned: (n, on) => shell.setPinned(n, on),
+    minimize: (n, on = true) => shell.setMinimized(n, on),
+    isMinimized: (n) => shell.isMinimized(n),
+    box: () => shell.panelBox(),
+  },
   live: {
     /** {state:'disconnected'|'connecting'|'streaming'|'stale', lastAt, ageMs, players:[{code,name,map,lastAt}]} */
     state: () => live.state(),
@@ -1636,6 +1691,9 @@ omni = createOmnibox({
   assistant,
   flyTo,
   toast: (m) => toast(m),
+  // The field lives inside the Ask panel now, so every route to it has to open (and uncollapse)
+  // that panel first — otherwise the keystrokes land on the document's own shortcuts instead.
+  ensureOpen: () => shell.reveal('ask'),
   onLayout: () => { if (booted) updateHud(); },
   camera: {
     get: () => (is3d() ? { mode: '3d', v3: { ...v3 } } : { mode: '2d', center: map.getCenter(), zoom: map.getZoom() }),
@@ -1668,7 +1726,10 @@ omni = createOmnibox({
     clearTrails: () => live.clearTrails(),
     help: () => { shell.open('view'); closePops(); togglePop($('#hint3d'), $('#help-btn')); },
     goMap,
-    mapKeys: () => Object.keys(MAPS),
+    // The two halves of the same list. `mapKeys` is what `> map` will navigate to; `lockedMapKeys`
+    // is what it can NAME and refuse, so `> map woods` says why instead of "no map called woods".
+    mapKeys: () => [...AVAILABLE_MAP_KEYS],
+    lockedMapKeys: () => [...LOCKED_MAP_KEYS],
   },
 });
 
@@ -1680,6 +1741,17 @@ booted = true;
 updateHud();
 setView(starts3d ? '3d' : '2d');
 omni.applyQaQuery();
+
+// `?map=` named a map this build will not open. Customs is on screen; say why, once, rather than
+// letting the URL and the title disagree in silence. This also covers the stale-preference case:
+// the only place a map choice is ever REMEMBERED is the assistant's `tz:askPending` sessionStorage
+// handoff, and that one drops itself on arrival because its `map` no longer matches this tab (see
+// src/assistant.js `init`). There is no `tz:map` and never has been — the URL is the whole memory.
+if (mapRequest.status === 'locked') {
+  toast(`${mapName(mapRequest.requested)} is ${LOCKED_NOTE} — showing ${mapData.name}.`);
+} else if (mapRequest.status === 'unknown') {
+  toast(`No map called “${mapRequest.requested}” — showing ${mapData.name}.`);
+}
 
 /* ------------------------------------------------------------ survey targets --- */
 /**

@@ -15,12 +15,58 @@ import {
   verifyBuildBoundary,
 } from './verify-build-boundary.mjs';
 import {
+  CAPTURE_INVENTORY_DOCUMENT_TYPE,
+  CAPTURE_INVENTORY_SCHEMA_VERSION,
   CAPTURE_SUBTREES,
   INTERMEDIATE_SUBTREES,
   PROMOTABLE_SOURCES,
+  captureInventoryPathFor,
   classifyLocalPath,
+  validateCaptureInventory,
   validatePromotionManifest,
 } from './lib/asset-promotion.mjs';
+
+/**
+ * Write a valid `capture-digest-inventory.json` into a fixture repository.
+ *
+ * Every fixture needs one, because the inventory is FAIL-CLOSED: a build with no inventory is a
+ * failed build, by design. `rows` are `{ subtreeId, name, bytes }` entries; the digest is supplied
+ * by the caller so a test can declare a capture's digest without a capture on disk — which is
+ * exactly the clean-CI-checkout case the inventory exists to cover.
+ */
+async function writeCaptureInventory(root, rows = []) {
+  const bySubtree = new Map(CAPTURE_SUBTREES.map((entry) => [entry.id, []]));
+  for (const row of rows) {
+    const subtree = CAPTURE_SUBTREES.find((entry) => entry.id === row.subtreeId);
+    assert.ok(subtree, `unknown capture subtree ${row.subtreeId}`);
+    const { path, nameRedacted } = captureInventoryPathFor(subtree.path, row.name, row.sha256);
+    bySubtree.get(row.subtreeId).push({
+      subtree: row.subtreeId,
+      path,
+      bytes: row.bytes,
+      sha256: `sha256:${row.sha256}`,
+      ...(nameRedacted ? { nameRedacted: true } : {}),
+    });
+  }
+  const document = {
+    schemaVersion: CAPTURE_INVENTORY_SCHEMA_VERSION,
+    documentType: CAPTURE_INVENTORY_DOCUMENT_TYPE,
+    generatedBy: 'scripts/build-capture-inventory.mjs',
+    notes: 'fixture',
+    subtrees: CAPTURE_SUBTREES.map((entry) => ({
+      id: entry.id,
+      path: entry.path,
+      fileCount: bySubtree.get(entry.id).length,
+      totalBytes: bySubtree.get(entry.id).reduce((sum, entry2) => sum + entry2.bytes, 0),
+    })),
+    captures: CAPTURE_SUBTREES.flatMap((entry) => bySubtree.get(entry.id)),
+  };
+  // The fixture writer is itself held to the validator, so a test can never accidentally assert
+  // against a document the build would have rejected for an unrelated reason.
+  assert.deepEqual(validateCaptureInventory(document).errors, []);
+  await writeFile(join(root, 'capture-digest-inventory.json'), `${JSON.stringify(document, null, 2)}\n`);
+  return document;
+}
 
 const run = promisify(execFile);
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -117,6 +163,7 @@ async function fixture({ localPackage = true } = {}) {
       tiles: [{ id: 'west', heightSha256: HEIGHT_SHA256 }],
     }));
   }
+  await writeCaptureInventory(root);
   return { root, distDir, localRoot };
 }
 
@@ -676,11 +723,33 @@ async function shipPromotedGlb(distDir, bytes = VEGETATION_LOD_BYTES) {
   await writeFile(join(distDir, ...PROMOTED_DIST_PATH.split('/')), bytes);
 }
 
-async function promotionFixture() {
+const FACTS_SHA256 = createHash('sha256').update(FACTS_BYTES).digest('hex');
+const PHOTO_SHA256 = createHash('sha256').update(PHOTO_BYTES).digest('hex');
+
+/** The inventory rows that describe `captureFixture()`'s captures, digest for digest. */
+const CAPTURE_FIXTURE_ROWS = Object.freeze([
+  Object.freeze({
+    subtreeId: 'unity-facts',
+    name: 'customs-unity-facts.json',
+    bytes: FACTS_BYTES.byteLength,
+    sha256: FACTS_SHA256,
+  }),
+  Object.freeze({
+    subtreeId: 'survey-photographs',
+    name: SCREENSHOT_NAME,
+    bytes: PHOTO_BYTES.byteLength,
+    sha256: PHOTO_SHA256,
+  }),
+]);
+
+async function promotionFixture({ captures = true } = {}) {
   const base = await fixture();
   const { vegetationRoot } = await vegetationFixture(base.root);
-  await captureFixture(base.root);
+  if (captures) await captureFixture(base.root);
   await receiptFixture(base.root);
+  // The inventory must describe whatever `captureFixture()` just laid down, or the staleness
+  // reconciliation fails the build — which is itself one of the behaviours under test below.
+  await writeCaptureInventory(base.root, captures ? CAPTURE_FIXTURE_ROWS : []);
   return { ...base, vegetationRoot };
 }
 
@@ -884,6 +953,303 @@ test('THE GAP THIS CLOSES: a survey photograph renamed into dist used to pass ev
   assert.match(checks(report, 'capture')[0].detail, /survey-2026-09-01/);
 });
 
+// ---------------------------------------------------------------------------
+// THE CI FAIL-OPEN. The headline of this pass.
+//
+// Every capture test above stands the captures up ON DISK. Vercel does not: `.local-game-derived/`
+// and `.local-candidates/` are git-ignored and `.vercelignore`d, so the deployment that matters
+// builds from a checkout where both roots are ABSENT. `collectSubtreeHashes()` then returned an
+// empty map, the capture check had nothing to compare against, and a raw capture renamed and
+// committed under `public/assets/` shipped clean. Measured against the verifier at 58f7fd8, on a
+// fixture with no local roots and a real 5.2 MB survey photograph renamed to
+// `assets/3d/customs/ground-detail-atlas.png`: `"pass": true`, exit 0.
+//
+// These tests are that scenario. They pass only because the digests now live in a COMMITTED
+// inventory the verifier loads whether or not any capture root exists.
+
+/** A fixture repository shaped like a clean CI checkout: no `.local-*` roots at all. */
+async function cleanCheckoutFixture(rows = CAPTURE_FIXTURE_ROWS) {
+  const root = await mkdtemp(join(tmpdir(), 'tz-ci-checkout-'));
+  const distDir = join(root, 'dist');
+  await mkdir(join(distDir, 'assets', '3d', 'customs'), { recursive: true });
+  await writeFile(join(distDir, 'index.html'), '<!doctype html><title>TarkovZero</title>');
+  await writePromotionManifest(root, []);
+  await writeCaptureInventory(root, rows);
+  return { root, distDir };
+}
+
+function verifyCleanCheckout({ root, distDir }) {
+  return verifyBuildBoundary({
+    distDir,
+    // Point every local root at a path that does not exist — the CI condition, stated explicitly
+    // rather than relied upon.
+    localRoots: [
+      join(root, '.local-game-derived'),
+      join(root, '.local-candidates', 'vegetation-full-v2'),
+      join(root, '.local-candidates', 'vegetation-arraytex-v1'),
+    ],
+    repositoryRoot: root,
+  });
+}
+
+test('THE CI FAIL-OPEN, CLOSED: with NO local roots on disk, a renamed byte-identical capture in dist is still rejected', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  // The renamed capture. Nothing about its path or name betrays it; only its bytes do.
+  await writeFile(join(scenario.distDir, 'assets', '3d', 'customs', 'ground-detail-atlas.png'), PHOTO_BYTES);
+
+  const report = await verifyCleanCheckout(scenario);
+  // The precondition that made the old verifier fail open, asserted rather than assumed.
+  assert.equal(report.localPackagePresent, false);
+  assert.deepEqual(report.capture.subtreesPresent, []);
+  assert.equal(report.capture.filesSeen, 0);
+  assert.equal(report.capture.filesHashed, 0);
+  // ...and the check still has every digest.
+  assert.equal(report.capture.inventoryLoaded, true);
+  assert.equal(report.capture.inventoryDigests, CAPTURE_FIXTURE_ROWS.length);
+
+  assert.equal(report.pass, false);
+  const captureHits = checks(report, 'capture');
+  assert.deepEqual(captureHits.map((entry) => entry.file), ['assets/3d/customs/ground-detail-atlas.png']);
+  assert.match(captureHits[0].detail, /matches raw capture .*survey-photographs, inventory/);
+});
+
+test('CONTROL: the same clean checkout with a benign asset passes, so the rejection above is the capture and not the fixture', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await writeFile(join(scenario.distDir, 'assets', '3d', 'customs', 'ground-detail-atlas.png'), Buffer.from('not a capture'));
+
+  const report = await verifyCleanCheckout(scenario);
+  assert.deepEqual(report.violations, []);
+  assert.equal(report.pass, true);
+});
+
+test('DISCRIMINATION: drop the row from the inventory and the identical capture ships — the inventory IS the check', async (t) => {
+  // The mutation is in the DATA, not the code: an inventory that omits the photograph is exactly
+  // the state the old verifier was permanently in on CI.
+  const scenario = await cleanCheckoutFixture(
+    CAPTURE_FIXTURE_ROWS.filter((row) => row.subtreeId !== 'survey-photographs'),
+  );
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await writeFile(join(scenario.distDir, 'assets', '3d', 'customs', 'ground-detail-atlas.png'), PHOTO_BYTES);
+
+  const report = await verifyCleanCheckout(scenario);
+  assert.equal(report.pass, true);
+  assert.deepEqual(checks(report, 'capture'), []);
+});
+
+test('FAIL CLOSED: a missing capture inventory fails the build instead of skipping the check', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await rm(join(scenario.root, 'capture-digest-inventory.json'));
+
+  const report = await verifyCleanCheckout(scenario);
+  assert.equal(report.pass, false);
+  assert.equal(report.capture.inventoryLoaded, false);
+  assert.equal(report.capture.inventoryDigests, 0);
+  const hits = checks(report, 'capture');
+  assert.deepEqual(hits.map((entry) => entry.file), ['capture-digest-inventory.json']);
+  assert.match(hits[0].detail, /is missing; without it the capture check cannot run/);
+});
+
+test('FAIL CLOSED: an unparseable capture inventory fails the build', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await writeFile(join(scenario.root, 'capture-digest-inventory.json'), '{ "captures": [');
+
+  const report = await verifyCleanCheckout(scenario);
+  assert.equal(report.pass, false);
+  assert.equal(report.capture.inventoryLoaded, false);
+  assert.match(checks(report, 'capture')[0].detail, /is not valid JSON/);
+});
+
+test('FAIL CLOSED: an inventory that drops a registered capture subtree fails, so the check cannot be narrowed silently', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  const document = JSON.parse(await readFile(join(scenario.root, 'capture-digest-inventory.json'), 'utf8'));
+  document.subtrees = document.subtrees.filter((entry) => entry.id !== 'survey-photographs');
+  document.captures = document.captures.filter((entry) => entry.subtree !== 'survey-photographs');
+  await writeFile(join(scenario.root, 'capture-digest-inventory.json'), JSON.stringify(document, null, 2));
+
+  const report = await verifyCleanCheckout(scenario);
+  assert.equal(report.pass, false);
+  assert.equal(report.capture.inventoryLoaded, false);
+  assert.match(
+    checks(report, 'capture')[0].detail,
+    /is missing a record for capture subtree survey-photographs/,
+  );
+});
+
+test('FAIL CLOSED: an inventory whose row totals do not add up fails', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  const document = JSON.parse(await readFile(join(scenario.root, 'capture-digest-inventory.json'), 'utf8'));
+  document.subtrees.find((entry) => entry.id === 'survey-photographs').totalBytes += 1;
+  await writeFile(join(scenario.root, 'capture-digest-inventory.json'), JSON.stringify(document, null, 2));
+
+  const report = await verifyCleanCheckout(scenario);
+  assert.equal(report.pass, false);
+  assert.match(checks(report, 'capture')[0].detail, /but its captures sum to/);
+});
+
+test('STALENESS: a capture added to a root without regenerating the inventory fails the build', async (t) => {
+  // The complement of the CI case. Here the roots ARE present, so the inventory can be checked
+  // against them — by file count and size multiset, stat only, no digests.
+  const scenario = await promotionFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await writePromotionManifest(scenario.root, []);
+  await writeFile(
+    join(scenario.root, '.local-candidates', 'survey-2026-09-01', '2026-09-01[09-01]_1.0, 2.0, 3.0_0,0,0,1_1.0 (0).png'),
+    Buffer.from('a second photograph the inventory has never seen'),
+  );
+
+  const report = await verifyPromotionScenario(scenario);
+  assert.equal(report.pass, false);
+  const hits = checks(report, 'capture');
+  assert.deepEqual(hits.map((entry) => entry.file), ['capture-digest-inventory.json']);
+  assert.match(hits[0].detail, /is stale against capture root survey-photographs: the inventory declares 1 file\(s\) but 2 are on disk/);
+});
+
+test('STALENESS: a capture replaced with different bytes of a different size fails the build', async (t) => {
+  const scenario = await promotionFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await writePromotionManifest(scenario.root, []);
+  await writeFile(
+    join(scenario.root, '.local-game-derived', 'unity-facts', 'customs-unity-facts.json'),
+    Buffer.concat([FACTS_BYTES, Buffer.from('   ')]),
+  );
+
+  const report = await verifyPromotionScenario(scenario);
+  assert.equal(report.pass, false);
+  assert.match(checks(report, 'capture')[0].detail, /is stale against capture root unity-facts: capture sizes differ/);
+});
+
+test('the inventory never carries a raid coordinate: EFT screenshot names are redacted to a digest stem', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  const raw = await readFile(join(scenario.root, 'capture-digest-inventory.json'), 'utf8');
+  assert.ok(!raw.includes(SCREENSHOT_NAME), 'the screenshot name must not reach the committed inventory');
+  assert.ok(!raw.includes('164.35'), 'no position from the screenshot name may reach the inventory');
+  const document = JSON.parse(raw);
+  const photo = document.captures.find((entry) => entry.subtree === 'survey-photographs');
+  assert.equal(photo.nameRedacted, true);
+  assert.equal(photo.path, `.local-candidates/survey-2026-09-01/redacted-${PHOTO_SHA256.slice(0, 16)}.png`);
+  // And the digest — the thing the check actually uses — is intact.
+  assert.equal(photo.sha256, `sha256:${PHOTO_SHA256}`);
+  // The name is not the only thing kept out: the inventory has no payload at all. 74 real captures
+  // occupy 764 MB on disk and 21 KB here.
+  assert.ok(raw.length < 8 * 1024, `inventory should be an index, not a payload (${raw.length} bytes)`);
+});
+
+// ---------------------------------------------------------------------------
+// Containment: a registered path is not the same thing as a contained one.
+
+test('a promotion SOURCE that is a symlink is refused, not silently followed', async (t) => {
+  const scenario = await promotionFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  const outside = await mkdtemp(join(tmpdir(), 'tz-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await writeFile(join(outside, 'planted.glb'), VEGETATION_LOD_BYTES);
+  // The registered root, the registered pattern, the right bytes — and a link out of the repo.
+  const linked = join(scenario.vegetationRoot, 'assets', 'birch01', 'birch01-lod1.glb');
+  await symlink(join(outside, 'planted.glb'), linked);
+  await shipPromotedGlb(scenario.distDir);
+  await writePromotionManifest(scenario.root, [vegetationPromotion({
+    id: 'customs.vegetation.birch01.lod1',
+    sourcePath: 'birch01/birch01-lod1.glb',
+  })]);
+
+  const report = await verifyPromotionScenario(scenario);
+  assert.equal(report.pass, false);
+  const promotionHits = checks(report, 'promotion');
+  assert.ok(
+    promotionHits.some((entry) => /is a symbolic link; a promotion source must be a real file/.test(entry.detail)),
+    JSON.stringify(promotionHits, null, 2),
+  );
+});
+
+test('a receipt document that is a symlink out of the repository is refused', async (t) => {
+  const scenario = await promotionFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  const outside = await mkdtemp(join(tmpdir(), 'tz-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await writeFile(join(outside, 'catalog.json'), CATALOG_BYTES);
+  await rm(join(scenario.root, ...CATALOG_REPO_PATH.split('/')));
+  await symlink(join(outside, 'catalog.json'), join(scenario.root, ...CATALOG_REPO_PATH.split('/')));
+  await shipPromotedGlb(scenario.distDir);
+  await writePromotionManifest(scenario.root, [vegetationPromotion()]);
+
+  const report = await verifyPromotionScenario(scenario);
+  assert.equal(report.pass, false);
+  const promotionHits = checks(report, 'promotion');
+  assert.ok(
+    promotionHits.some((entry) => /is a symbolic link; a receipt document must be a real file/.test(entry.detail)),
+    JSON.stringify(promotionHits, null, 2),
+  );
+  // ...and because the receipt did not verify, the artifact is no longer cleared either.
+  assert.ok(checks(report, 'hash').some((entry) => entry.file === PROMOTED_DIST_PATH));
+});
+
+test('DISCRIMINATION: the same promotion with the receipt document as a REAL file passes', async (t) => {
+  const scenario = await promotionFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await shipPromotedGlb(scenario.distDir);
+  await writePromotionManifest(scenario.root, [vegetationPromotion()]);
+
+  const report = await verifyPromotionScenario(scenario);
+  assert.deepEqual(report.violations, []);
+  assert.equal(report.pass, true);
+});
+
+test('a symlink inside a capture root is reported, never followed', async (t) => {
+  const scenario = await promotionFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  await writePromotionManifest(scenario.root, []);
+  const outside = await mkdtemp(join(tmpdir(), 'tz-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await writeFile(join(outside, 'elsewhere.json'), FACTS_BYTES);
+  await symlink(
+    join(outside, 'elsewhere.json'),
+    join(scenario.root, '.local-game-derived', 'unity-facts', 'linked-facts.json'),
+  );
+
+  const report = await verifyPromotionScenario(scenario);
+  assert.equal(report.pass, false);
+  const hits = checks(report, 'capture');
+  assert.ok(
+    hits.some((entry) => entry.detail === 'capture root unity-facts: is a symbolic link and is never followed'),
+    JSON.stringify(hits, null, 2),
+  );
+});
+
+test('the report states what the boundary does NOT prove, so a reader cannot overclaim it', async (t) => {
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  const report = await verifyCleanCheckout(scenario);
+  assert.ok(Array.isArray(report.coverage.proves) && report.coverage.proves.length >= 4);
+  assert.ok(Array.isArray(report.coverage.doesNotProve) && report.coverage.doesNotProve.length >= 2);
+  assert.ok(report.coverage.doesNotProve.some((line) => /AUTHORSHIP/.test(line)));
+  assert.ok(report.coverage.doesNotProve.some((line) => /TRANSFORMED OR RE-ENCODED CAPTURE/.test(line)));
+});
+
+test('HONEST LIMIT, asserted rather than hoped for: a RE-ENCODED capture is NOT detected', async (t) => {
+  // This test passes when the leak passes. It exists so that the day someone claims this verifier
+  // proves nothing in dist/ is game-derived, a test says otherwise in their own suite. The control
+  // for this class is the closed PROMOTABLE_SOURCES registry and review of whatever writes
+  // public/ — never a heuristic here.
+  const scenario = await cleanCheckoutFixture();
+  t.after(() => rm(scenario.root, { recursive: true, force: true }));
+  // One byte appended: same picture, different digest, invisible to every hash check.
+  await writeFile(
+    join(scenario.distDir, 'assets', '3d', 'customs', 'ground-detail-atlas.png'),
+    Buffer.concat([PHOTO_BYTES, Buffer.from([0x00])]),
+  );
+
+  const report = await verifyCleanCheckout(scenario);
+  assert.equal(report.pass, true, 'documented limit: byte identity is the whole mechanism');
+  assert.deepEqual(checks(report, 'capture'), []);
+});
+
 test('a capture FAILS EVEN WHEN LISTED: there is no source key that reaches one', async (t) => {
   const scenario = await promotionFixture();
   t.after(() => rm(scenario.root, { recursive: true, force: true }));
@@ -1053,11 +1419,68 @@ test('no promotable source is rooted inside a capture or intermediate subtree', 
   assert.equal(classifyLocalPath('.local-candidates/vegetation-full-v2/pack-index.json').tier, 'other');
 });
 
-test('THE SHIPPED TREE: the real manifest validates, is empty, and the real build has 0 violations', async (t) => {
+test('THE SHIPPED TREE: the real manifest validates and the real build has 0 violations', async (t) => {
   const shipped = JSON.parse(await readFile(resolve(SCRIPT_DIR, '..', 'asset-promotion-manifest.json'), 'utf8'));
   const validation = validatePromotionManifest(shipped);
   assert.deepEqual(validation.errors, []);
-  assert.deepEqual(validation.entries, [], 'the manifest ships empty: promotion is a mechanism, not a state');
+
+  // The manifest is no longer empty (2026-09-02): the founder approved promoting the Customs
+  // terrain height and control surfaces, then the authored vegetation. Assert the SHAPE of what is
+  // promoted rather than a count, so a future promotion has to be a deliberate registry decision
+  // and not a number nobody re-read.
+  const sources = [...new Set(validation.entries.map((entry) => entry.source))].sort();
+  assert.deepEqual(
+    sources,
+    ['customs-authored-vegetation-v2', 'customs-local-terrain-surfaces', 'customs-vegetation-arraytex-v1'],
+    'three promoted sources today; anything else here is an unreviewed promotion',
+  );
+
+  const bySource = (key) => validation.entries.filter((entry) => entry.source === key);
+  const terrain = bySource('customs-local-terrain-surfaces');
+  assert.equal(terrain.length, 8, 'two tiles: one height surface and three control maps each');
+  for (const entry of terrain) {
+    assert.match(entry.sourcePath, /^terrain-\d{3}-(height-world-y\.f32le|control-[0-2]\.png)$/);
+    assert.equal(entry.distPath, `assets/3d/customs/terrain/${entry.sourcePath}`);
+    assert.doesNotMatch(entry.sourcePath, /vegetation/, 'the Unity vegetation dump is a capture');
+    // The receipt's weakness is DECLARED, not glossed. See the note in the promotion script.
+    assert.match(entry.notes ?? '', /founder's ruling, not on a generative provenance chain/);
+    assert.match(entry.notes ?? '', /integrity seal on the tool, not as evidence of authorship/);
+  }
+
+  // The vegetation rows carry the OPPOSITE claim, and the two notes must not be interchangeable:
+  // the terrain rows say the receipt proves only that a tool is unchanged, the vegetation rows say
+  // the committed factory regenerates the bytes. A reader who cannot tell them apart on the page
+  // has one receipt where there are two.
+  const pack = bySource('customs-authored-vegetation-v2');
+  assert.equal(pack.length, 93, '31 families at three LODs');
+  for (const entry of pack) {
+    assert.match(entry.sourcePath, /^[a-z0-9_]+\/[a-z0-9_]+-lod[0-2]\.glb$/);
+    assert.equal(entry.distPath, `assets/3d/customs/authored/vegetation/assets/${entry.sourcePath}`);
+    assert.equal(entry.receipt.kind, 'vegetation-factory');
+    assert.deepEqual(
+      entry.receipt.documents.map((document) => document.repoPath),
+      ['scripts/vegetation-asset-factory/vegetation_factory.py', 'scripts/vegetation-asset-factory/prototype_catalog.json'],
+    );
+    assert.match(entry.notes ?? '', /GENERATIVE provenance chain, not only on a ruling/);
+    assert.match(entry.notes ?? '', /Re-running the committed factory regenerates these bytes/);
+    // ...and the placements are explicitly carved OUT of this receipt.
+    assert.match(entry.notes ?? '', /8,805 PLACEMENTS these families are drawn at are NOT covered by/);
+    assert.doesNotMatch(entry.notes ?? '', /integrity seal on the tool/, 'that is the terrain claim');
+  }
+
+  const arrays = bySource('customs-vegetation-arraytex-v1');
+  assert.equal(arrays.length, 9, 'three LOD tiers x basecolor/orm/normal');
+  for (const entry of arrays) {
+    assert.match(entry.sourcePath, /^veg-l[0-2]-(basecolor|orm|normal)\.bin$/);
+    assert.equal(entry.distPath, `assets/3d/customs/authored/vegetation/arrays/${entry.sourcePath}`);
+    assert.equal(entry.receipt.kind, 'vegetation-texture-array');
+  }
+
+  // No promoted row anywhere may name the raw Unity dump, whatever its source key.
+  for (const entry of validation.entries) {
+    assert.doesNotMatch(entry.sourceRepoPath, /terrain-\d{3}-vegetation\.json/);
+    assert.doesNotMatch(entry.distPath, /terrain-\d{3}-vegetation\.json/);
+  }
 
   // The live build output, when there is one. Skipped rather than failed on a tree that has not
   // been built, so `npm run test:local-boundary` stands alone.
@@ -1072,6 +1495,83 @@ test('THE SHIPPED TREE: the real manifest validates, is empty, and the real buil
   assert.deepEqual(report.violations, []);
   assert.equal(report.pass, true);
   assert.equal(report.promotion.manifestPresent, true);
-  assert.equal(report.promotion.entries, 0);
-  assert.equal(report.capture.filesHashed, 0, 'the size filter must keep the 460 MB dump unread');
+  assert.equal(report.promotion.entries, 110, '8 terrain surfaces + 93 GLBs + 9 array blobs');
+  assert.equal(report.promotion.verified, 110);
+  assert.equal(report.promotion.appliedInDist, 110, 'every promoted artifact is in the build');
+  assert.equal(report.capture.inventoryLoaded, true);
+  assert.ok(report.capture.inventoryDigests >= 74, 'the committed inventory is what CI compares against');
+});
+
+test('the promoted terrain surfaces are in public/ and hash to what the manifest declares', async () => {
+  // The three artifacts that have to agree — the bytes in public/, the promotion manifest, and the
+  // public terrain manifest the browser reads — checked against each other by the script that
+  // writes all three. On a machine with the local package it also re-reads the source.
+  const { stdout } = await run(process.execPath, [
+    resolve(SCRIPT_DIR, 'promote-terrain-surfaces.mjs'), '--check',
+  ], { cwd: resolve(SCRIPT_DIR, '..') });
+  assert.match(stdout, /"agreed": true/);
+});
+
+test('the promoted vegetation pack is in public/ and hashes to what the manifest declares', async () => {
+  // Same property, the other promotion: 93 GLBs, 9 array blobs, the public vegetation manifest and
+  // the derived placement table, all checked against each other by the script that writes them.
+  //
+  // Running BOTH `--check` modes in one suite is what pins the property that made them disagree in
+  // the first place: the two scripts share one document and must not report each other stale.
+  const { stdout } = await run(process.execPath, [
+    resolve(SCRIPT_DIR, 'promote-authored-vegetation.mjs'), '--check',
+  ], { cwd: resolve(SCRIPT_DIR, '..') });
+  assert.match(stdout, /"agreed": true/);
+  assert.match(stdout, /"placements": 8805/);
+});
+
+test('THE CAPTURE IN THE SAME DIRECTORY: terrain-NNN-vegetation.json cannot be promoted, by any route', async (t) => {
+  // `.local-game-derived/customs/` is the one MIXED directory: approved terrain surfaces sit
+  // beside the raw Unity TerrainData vegetation dump they were extracted next to. The dump is the
+  // acquisition-layer read, not an authored output, and the founder's terrain ruling does not
+  // reach it.
+  const source = PROMOTABLE_SOURCES['customs-local-terrain-surfaces'];
+  for (const name of ['terrain-000-vegetation.json', 'terrain-001-vegetation.json', 'terrain-999-vegetation.json']) {
+    assert.ok(!source.filePattern.test(name), `the terrain source key must not be able to name ${name}`);
+    assert.equal(classifyLocalPath(`${source.root}/${name}`).tier, 'raw-capture');
+  }
+  // ...and the manifest validator refuses it even when someone writes it in by hand with the
+  // right source key, the right receipt shape and a real digest.
+  const { errors, entries } = validatePromotionManifest({
+    schemaVersion: 1,
+    documentType: 'tarkovzero-asset-promotion-manifest',
+    promotions: [{
+      id: 'customs.terrain.vegetation',
+      source: 'customs-local-terrain-surfaces',
+      sourcePath: 'terrain-000-vegetation.json',
+      distPath: 'assets/3d/customs/terrain/terrain-000-vegetation.json',
+      sha256: `sha256:${'a'.repeat(64)}`,
+      bytes: 2623804,
+      approvedBy: 'founder',
+      approvedOn: '2026-09-02',
+      receipt: {
+        kind: 'terrain-extraction',
+        documents: [{
+          role: 'extractor',
+          repoPath: 'scripts/extract-customs-terrain-local.py',
+          sha256: `sha256:${'b'.repeat(64)}`,
+        }],
+      },
+    }],
+  });
+  assert.deepEqual(entries, []);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].code, 'ERR_PROMOTION_SOURCE_PATH');
+  assert.match(errors[0].message, /is not a file customs-local-terrain-surfaces may promote/);
+
+  // Belt and braces on the dist side: the real vegetation dump's own digest is in the committed
+  // inventory, so the same bytes renamed into dist/ fail the non-clearable capture check even on a
+  // checkout with no local roots at all.
+  const inventory = JSON.parse(
+    await readFile(resolve(SCRIPT_DIR, '..', 'capture-digest-inventory.json'), 'utf8'),
+  );
+  const dumps = inventory.captures.filter((entry) => entry.subtree === 'unity-vegetation-instances');
+  assert.equal(dumps.length, 2, 'both Unity vegetation dumps are inventoried');
+  for (const dump of dumps) assert.match(dump.path, /terrain-\d{3}-vegetation\.json$/);
+  t.diagnostic(`inventoried vegetation dumps: ${dumps.map((entry) => entry.path).join(', ')}`);
 });

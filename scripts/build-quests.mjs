@@ -18,6 +18,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { MAPPED_MAP_KEYS } from '../src/map-availability.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const DATA = path.join(ROOT, 'scripts/data/tasks');
@@ -60,9 +61,14 @@ for (const t of tasks) {
   for (const o of t.objectives ?? []) for (const m of o.maps ?? []) if (m.id && m.normalizedName) MAP_NAME[m.id] = m.normalizedName;
 }
 const zoneMapName = (z) => z?.map?.normalizedName ?? MAP_NAME[z?.map?.id] ?? null;
-// Maps the site actually renders. Everything else is kept in the file (for the list/search) but
-// carries no geometry we can draw.
-const SITE_MAPS = ['customs', 'reserve', 'woods'];
+// Maps this repo ships render data for. Everything else is kept in the file (for the list/search)
+// but carries no geometry we can draw.
+//
+// This is DATA coverage, not availability: `q.siteMaps` records which maps a quest has drawable
+// zones on, and `src/map-availability.js` decides separately which of those a visitor may open.
+// Reserve and Woods keep their zones and their `siteMaps` entries while they are locked, so
+// unlocking one needs no rebuild of quests.json — the reader filters, the file does not.
+const SITE_MAPS = MAPPED_MAP_KEYS;
 // A few tarkov.dev maps are variants of one physical location.
 const CANON = { 'night-factory': 'factory', 'ground-zero-21': 'ground-zero', 'ground-zero-tutorial': 'ground-zero', 'the-lab-dark': 'the-lab' };
 const canon = (m) => CANON[m] ?? m;

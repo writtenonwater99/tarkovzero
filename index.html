@@ -85,12 +85,12 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="2.4" class="fillN"/></svg>
               </button>
             </div>
-            <!-- The assistant is a dock panel again (2026-09-02) — upper-LEFT, in #dock-left. The
-                 omnibox (`?` / A) still routes into it; this button is how a closed conversation is
-                 reopened without typing. -->
+            <!-- The Ask panel (2026-09-02) — a floating panel in #dock-left that carries the
+                 omnibox AND the conversation. This button reopens it, and un-minimises it, without
+                 typing; Ctrl K / `/` / `A` do the same from the keyboard. -->
             <div class="tb-item" data-tb="ask">
-              <span class="tb-tip" aria-hidden="true">Assistant</span>
-              <button type="button" class="tb-btn" id="tb-ask" data-panel-btn="ask" aria-expanded="false" aria-controls="panel-ask" aria-label="Assistant">
+              <span class="tb-tip" aria-hidden="true">Find &amp; ask</span>
+              <button type="button" class="tb-btn" id="tb-ask" data-panel-btn="ask" aria-expanded="false" aria-controls="panel-ask" aria-label="Find and ask">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11h-8l-4.5 3.5V16.5H4z"/><circle cx="9" cy="11" r="1.05" class="fillN"/><circle cx="12" cy="11" r="1.05" class="fillN"/><circle cx="15" cy="11" r="1.05" class="fillN"/></svg>
               </button>
             </div>
@@ -259,7 +259,7 @@
                     <dt><b>F</b></dt><dd>Fit map</dd>
                     <dt><b>N</b></dt><dd>Reset north (3D)</dd>
                     <dt><b>Q</b></dt><dd>Quests panel</dd>
-                    <dt><b>/</b></dt><dd>Omnibox: find a place or a quest</dd>
+                    <dt><b>Ctrl K</b> / <b>/</b></dt><dd>The omnibox at the top of the Ask panel — find a place or a quest</dd>
                     <dt><b>&gt;</b></dt><dd>Omnibox: commands (<b>&gt;</b> layers scav, <b>&gt;</b> 3d, <b>&gt;</b> fit)</dd>
                     <dt><b>A</b></dt><dd>Ask the assistant (same as typing <b>?</b>)</dd>
                     <dt><b>Esc</b></dt><dd>Clear the omnibox, then close the open panel</dd>
@@ -289,48 +289,49 @@
 
         </div>
 
-        <!-- ------------------------------------------------ left dock: the assistant -- -->
-        <!-- Founder, 2026-09-02: "move the AI chat to there", boxed in the upper-left of the map.
-             It is a dock panel like the four on the right — same .panel chrome, same shell pin
-             model, same avoidRect contract (shell.js insets the left edge while it is open, so
-             labels, the quest card and every fly-to step around it). One conversation lives here:
-             the omnibox's `?` and the A key both route INTO this log. -->
+        <!-- --------------------------------------- the Ask panel: omnibox + conversation -- -->
+        <!-- Founder, 2026-09-02: "move the AI chat to there" (a box drawn in the upper-left), then
+             "lets remove the bar from the bottom … keep the side active, able it to be moved around
+             and pinned … ability to minimize. it can also start small", and finally, over a
+             mock-up: "omni bar should be first".
+             So the ONE text field in this app is the omnibox at the TOP of this panel — plain text
+             looks a place or a quest up, `>` runs a command, `?` asks the AI — and the answer it
+             produced, with its buttons and its photographs, renders directly underneath it. There
+             is no bar at the bottom of the screen and no second composer: two entry points to one
+             input is the parallel system this layout exists to avoid.
+             The panel floats: `#dock-left` is dragged, resized and minimised by shell.js, which
+             also subtracts wherever it ends up from avoidRect() so labels, the quest card and every
+             fly-to step around it. -->
         <div id="dock-left" class="dock dock-left">
-          <section class="panel panel-work" id="panel-ask" data-panel="ask" aria-label="Assistant" hidden>
-            <header class="panel-hd">
+          <section class="panel panel-work" id="panel-ask" data-panel="ask" aria-label="Find and ask" hidden>
+            <header class="panel-hd" title="Drag to move · double-click to minimise">
               <svg class="ask-ico" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M4 5.5h16v11h-8l-4.5 3.5V16.5H4z"/><circle cx="9" cy="11" r="1" fill="currentColor"/><circle cx="12" cy="11" r="1" fill="currentColor"/><circle cx="15" cy="11" r="1" fill="currentColor"/></svg>
-              <span class="panel-name">Assistant</span>
-              <button type="button" class="panel-pin" data-pin="ask" aria-pressed="false" title="Keep this panel open" aria-label="Pin Assistant panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l-1 6 4 3v2H6v-2l4-3-1-6Z"/><path d="M12 14v7"/></svg></button>
-              <button type="button" class="panel-x" data-close="ask" aria-label="Close Assistant panel">✕</button>
+              <span class="panel-name">Ask</span>
+              <button type="button" class="panel-pin" data-pin="ask" aria-pressed="false" title="Keep this panel open" aria-label="Pin the Ask panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l-1 6 4 3v2H6v-2l4-3-1-6Z"/><path d="M12 14v7"/></svg></button>
+              <button type="button" class="panel-min" data-min="ask" aria-pressed="false" title="Minimise to the title bar" aria-label="Minimise the Ask panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17h12"/></svg></button>
+              <button type="button" class="panel-x" data-close="ask" aria-label="Close the Ask panel">✕</button>
             </header>
+
+            <!-- The omnibox, first (src/omnibox.js). Results render under the field and above the
+                 conversation, so the row you pick and the answer it produces are one column. -->
+            <div id="omnibox">
+              <div class="find">
+                <svg class="find-ico" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <input id="find" type="text" data-focus placeholder="Find a place, a quest — or ask anything…" autocomplete="off" spellcheck="false" aria-label="Search, command or question" />
+                <kbd class="kbd" id="find-kbd">⌘K</kbd>
+              </div>
+              <div id="find-results" class="results" hidden role="listbox" aria-label="Search results"></div>
+            </div>
+
             <div class="panel-body ask-body">
               <div id="ask-log" class="ask-log" role="log" aria-live="polite" aria-label="Assistant conversation">
-                <div class="ask-msg ask-bot ask-note"><p>Ask about a quest and I'll put its objectives on the map — with the wiki's screenshots, and a way over to another map when the quest lives there.</p></div>
+                <div class="ask-msg ask-bot ask-note"><p>Type to find a place or a quest, <b>&gt;</b> for a command, or <b>?</b> to ask about a quest — I'll put its objectives on the map, with the wiki's screenshots and a way over to another map when the quest lives there.</p></div>
               </div>
               <div id="ask-chips" class="ask-chips"></div>
             </div>
-            <form id="ask-form" class="find find-ask" autocomplete="off">
-              <input id="ask-input" type="text" maxlength="2000" spellcheck="false" placeholder="Ask about a quest…" aria-label="Ask the quest assistant" />
-              <button type="submit" class="ask-send" id="ask-send" aria-label="Send">
-                <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h13M12 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </button>
-            </form>
             <div class="ask-foot">Answers by DeepSeek · locations from tarkov.dev / SPT · screenshots <a href="https://escapefromtarkov.fandom.com" target="_blank" rel="noopener">EFT Wiki</a></div>
+            <div class="panel-resize" data-grip="ask" title="Drag to resize" aria-hidden="true"></div>
           </section>
-        </div>
-
-        <!-- ------------------------------------------------------- omnibox ---- -->
-        <!-- One field: text = lookup, `>` = command, `?` = the assistant (src/omnibox.js). The
-             results list grows upward, inside #omnibox so the shell's safe rect shrinks with it.
-             The assistant's card that used to sit here is gone: `?` now answers into #panel-ask in
-             the upper-left dock, so there is ONE conversation and one place answers live. -->
-        <div id="omnibox">
-          <div id="find-results" class="results" hidden role="listbox" aria-label="Search results"></div>
-          <div class="find">
-            <svg class="find-ico" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            <input id="find" type="text" placeholder="Find a place, a quest — or ask anything…" autocomplete="off" spellcheck="false" aria-label="Search, command or question" />
-            <kbd class="kbd" id="find-kbd">⌘K</kbd>
-          </div>
         </div>
 
         <!-- ---------------------------------------------------- telemetry ----- -->

@@ -14,8 +14,9 @@ import {
 } from '../api/assistant.js';
 import {
   isValidAction, isValidImageRef, isAllowedImageUrl, validateEnvelope,
-  PROTOCOL_VERSION, MAX_IMAGES,
+  PROTOCOL_VERSION, MAX_IMAGES, SITE_MAPS, MAP_LABELS, OTHER_MAP_LABELS,
 } from '../src/assistant-contract.js';
+import { AVAILABLE_MAP_KEYS, EFT_MAP_KEYS, LOCKED_MAP_KEYS } from '../src/map-availability.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const quests = JSON.parse(readFileSync(join(root, 'public/data/quests.json'), 'utf8'));
@@ -144,11 +145,14 @@ console.log('\n# action validation');
   out = buildActions(hits, parseReply('{"answer":"x","actions":[{"type":"switchMap","map":"../../etc"}],"quests":["abandoned-cargo"]}'), 'customs');
   ok(out.actions.every((a) => a.type !== 'switchMap'), 'a bogus switchMap never survives', JSON.stringify(out));
 
-  // a quest whose markers are on another site map -> switchMap, never a flyTo
+  // A quest whose markers are only on WOODS. Woods still has all its zones in quests.json and is
+  // still in that quest's `siteMaps` — and it is LOCKED (src/map-availability.js), so the answer is
+  // prose: no flyTo (nothing here) and no switchMap (nowhere to go).
   const woodsOnly = quests.find((q) => (q.siteMaps ?? []).length === 1 && q.siteMaps[0] === 'woods');
   out = buildActions([{ q: woodsOnly }], { answer: '', actions: [], quests: [woodsOnly.slug] }, 'customs');
-  ok(out.actions.some((a) => a.type === 'switchMap' && a.map === 'woods'), 'off-map quest asks for a map switch', JSON.stringify(out));
+  ok(!out.actions.some((a) => a.type === 'switchMap'), 'a locked map is never offered as a switch', JSON.stringify(out));
   ok(!out.actions.some((a) => a.type === 'flyTo'), 'no flyTo when nothing is on this map');
+  ok(out.actions.every((a) => a.type === 'selectQuest'), 'the quest can still be selected, and that is all', JSON.stringify(out));
 
   out = buildActions(hits, { answer: '', actions: [], quests: [] }, 'customs');
   ok(out.actions.length === 0, 'no quest identified -> no actions');
@@ -156,68 +160,78 @@ console.log('\n# action validation');
 
 /* --------------------------------------------------------------- map awareness */
 // The map the tab is on is not decoration: it decides what the model is told about coverage and
-// what the cross-map handoff offers. quests.json covers all eleven EFT maps; this site draws three.
+// what the cross-map handoff offers. quests.json covers all eleven EFT maps; this repo ships render
+// data for three; the site OPENS the ones in AVAILABLE_MAP_KEYS, which is Customs alone since
+// 2026-09-02. Availability, not data coverage, is what the assistant is allowed to act on.
 
 console.log('\n# map awareness');
 const woodsOnly = quests.find((q) => (q.siteMaps ?? []).length === 1 && q.siteMaps[0] === 'woods');
 const offSiteOnly = quests.find((q) => !(q.siteMaps ?? []).length
   && (q.objectives ?? []).some((o) => (o.zones ?? []).length));
+
+// The one list. Every assertion below about what is offerable derives from it, so unlocking a map
+// changes this file's expectations with it instead of leaving a literal behind that says otherwise.
+ok(SITE_MAPS.length >= 1, 'at least one map is open', SITE_MAPS.join(','));
+ok(SITE_MAPS.every((m) => !LOCKED_MAP_KEYS.includes(m)), 'no map is both open and locked');
+ok(EFT_MAP_KEYS.length === SITE_MAPS.length + LOCKED_MAP_KEYS.length,
+  'open + locked accounts for every EFT map the picker lists', String(EFT_MAP_KEYS.length));
+ok(LOCKED_MAP_KEYS.every((m) => m in OTHER_MAP_LABELS),
+  'every locked map has a display name for the "we cannot open that" sentence');
+ok(Object.keys(MAP_LABELS).join(',') === SITE_MAPS.join(','),
+  'MAP_LABELS names exactly the open maps', Object.keys(MAP_LABELS).join(','));
 {
   const cov = mapCoverage(woodsOnly, 'customs');
-  ok(!cov.here && cov.elsewhere.includes('woods'), 'a woods quest reads as "not here, drawable on woods"', JSON.stringify(cov));
-  ok(mapCoverage(woodsOnly, 'woods').here, 'the same quest reads as "here" from the woods tab');
+  ok(!cov.here, 'a woods quest is not on the customs tab', JSON.stringify(cov));
+  ok(!cov.elsewhere.length, 'and there is no other OPEN map to send the player to', JSON.stringify(cov.elsewhere));
+  ok(cov.offSite.includes('woods'), 'woods reads as an unopenable map, exactly like shoreline', JSON.stringify(cov.offSite));
 
   const g = groundingFor(rank(entries, `where is ${woodsOnly.name}`, 'customs'), 'customs');
   ok(g.includes('NOTHING TO DRAW ON customs'), 'the prompt says outright that the quest is not on this map');
-  ok(g.includes('drawable here instead: woods'), 'and names the map it IS on');
-  ok(groundingFor(rank(entries, `where is ${woodsOnly.name}`, 'woods'), 'woods').includes('HAS MARKERS ON woods'),
-    'from the woods tab the same quest reads as present');
+  ok(!g.includes('openable here instead'), 'and never names a locked map as somewhere to go', g.slice(0, 400));
+  ok(g.includes('also on woods - MAPS TARKOVZERO CANNOT OPEN'),
+    'a locked map is described the way Shoreline is', g.split('\n').find((l) => l.includes('woods')));
   ok(g.includes('CURRENT MAP') === false, 'the CURRENT MAP line belongs to the handler, not the block');
 }
 {
   // Off-site quests (Shoreline, Streets, …) must never be offered as a switch — there is no map
-  // to switch to. 110 of the 517 quests are in exactly this state.
+  // to switch to. 110 of the 517 quests are in exactly this state; the locked maps join them.
   const g = groundingFor(rank(entries, `where is ${offSiteOnly.name}`, 'customs'), 'customs');
-  ok(g.includes('MAPS THIS SITE DOES NOT HAVE'), 'a quest on an unshipped map is flagged as such to the model', offSiteOnly.name);
+  ok(g.includes('MAPS TARKOVZERO CANNOT OPEN'), 'a quest on an unshipped map is flagged as such to the model', offSiteOnly.name);
   ok(crossMapFor(offSiteOnly, 'customs') === null, 'and it produces no switchMap action');
 }
 
-console.log('\n# cross-map handoff');
+console.log('\n# cross-map handoff — unreachable while one map is open');
 {
-  const jump = crossMapFor(woodsOnly, 'customs');
-  ok(jump?.type === 'switchMap' && jump.map === 'woods', 'a woods quest asked about from customs offers woods', JSON.stringify(jump));
-  ok(jump?.label === 'Woods', 'the button gets a human map name', jump?.label);
-  ok(jump?.slug === woodsOnly.slug && jump?.name === woodsOnly.name, 'and carries what to select on arrival');
-  const landing = (woodsOnly.objectives ?? []).find((o) => o.id === jump.objectiveId);
-  ok(!!landing && (landing.zones ?? []).some((z) => z.map === 'woods'),
-    'the fly-to it hands over is marked ON THE TARGET MAP, not on the map we left', jump?.objectiveId);
-  ok(crossMapFor(woodsOnly, 'woods') === null, 'no switch offered when the player is already there');
-  ok(crossMapFor(woodsOnly, 'customs', 'reserve')?.map === 'woods', 'the data overrules a map the model asked for');
-  ok(crossMapFor(woodsOnly, 'customs', 'atlantis')?.map === 'woods', 'an invented map key never becomes the target');
+  // The handoff is not deleted; it is starved. `crossMapFor` filters the quest's maps through
+  // SITE_MAPS, so with one open map there is never a target — for ANY quest in the file, which is
+  // the claim that matters (the founder's ask was "lock reserve and woods", and this is what makes
+  // it true server-side rather than in the picker only).
+  ok(crossMapFor(woodsOnly, 'customs') === null, 'a woods quest offers no switch from customs');
   ok(crossMapFor(null, 'customs') === null, 'no quest, no switch');
+  for (const wanted of ['woods', 'reserve', 'shoreline', 'atlantis', null]) {
+    ok(crossMapFor(woodsOnly, 'customs', wanted) === null,
+      `the model asking for "${wanted}" cannot conjure a target`, JSON.stringify(crossMapFor(woodsOnly, 'customs', wanted)));
+  }
+  const offered = quests.filter((q) => crossMapFor(q, 'customs') !== null);
+  ok(offered.length === 0, 'NO quest in quests.json can produce a switchMap from customs', String(offered.length));
 
-  // …and end to end, from a model reply, which is what the client actually receives
+  // …and end to end, from a model reply, which is what the client actually receives.
   const hits = rank(entries, `where is ${woodsOnly.name}`, 'customs');
-  ok(hits[0]?.q.slug === woodsOnly.slug, 'the woods quest is the lead hit from the customs tab', hits[0]?.q.slug);
-  const built = buildActions(hits, parseReply(JSON.stringify({
-    answer: 'x', actions: [{ type: 'switchMap', map: 'woods' }], quests: [woodsOnly.slug],
-  })), 'customs');
-  const sw = built.actions.find((a) => a.type === 'switchMap');
-  ok(sw?.map === 'woods' && sw?.objectiveId === jump.objectiveId, 'the built envelope carries the same handoff', JSON.stringify(sw));
-  ok(!built.actions.some((a) => a.type === 'flyTo'), 'and never a flyTo for a map we are not on');
+  ok(hits[0]?.q.slug === woodsOnly.slug, 'the woods quest is still the lead hit from the customs tab', hits[0]?.q.slug);
+  for (const asked of ['woods', 'reserve', 'shoreline', 'streets-of-tarkov', 'customs', '../../etc', '', null, 42]) {
+    const built = buildActions(hits, parseReply(JSON.stringify({
+      answer: 'x', actions: [{ type: 'switchMap', map: asked }], quests: [woodsOnly.slug],
+    })), 'customs');
+    ok(!built.actions.some((a) => a.type === 'switchMap'),
+      `a model-asked switchMap "${asked}" never leaves the server`, JSON.stringify(built.actions));
+    ok(!built.actions.some((a) => a.type === 'flyTo'), 'and never a flyTo for a map we are not on');
+  }
 }
 {
-  // an action naming a map key that does not exist must be DROPPED, not forwarded
-  const hits = rank(entries, `where is ${woodsOnly.name}`, 'customs');
-  for (const bogus of ['shoreline', 'streets-of-tarkov', 'customs', '../../etc', '', null, 42]) {
-    const built = buildActions(hits, parseReply(JSON.stringify({
-      answer: 'x', actions: [{ type: 'switchMap', map: bogus }], quests: [woodsOnly.slug],
-    })), 'customs');
-    const got = built.actions.find((a) => a.type === 'switchMap')?.map ?? null;
-    ok(got === 'woods', `switchMap "${bogus}" never survives (data says woods)`, String(got));
+  for (const locked of LOCKED_MAP_KEYS) {
+    ok(!isValidAction({ type: 'switchMap', map: locked, slug: 'x', objectiveId: null }, { map: 'customs' }),
+      `the contract rejects a switch to ${locked}, which this site will not open`);
   }
-  ok(!isValidAction({ type: 'switchMap', map: 'shoreline', slug: 'x', objectiveId: null }, { map: 'customs' }),
-    'the contract rejects a switch to a map this site does not draw');
   ok(!isValidAction({ type: 'switchMap', map: 'customs', slug: 'x', objectiveId: null }, { map: 'customs' }),
     'the contract rejects a switch to the map we are already on');
   ok(!isValidAction({ type: 'flyTo', objectiveId: 'a'.repeat(24), slug: 'x', map: 'woods' }, { map: 'customs' }),
@@ -307,7 +321,15 @@ console.log('\n# envelope (what the UI is handed)');
     images: [{ id: 'img1', url: 'https://evil.example/x.png', depicts: 'x', questSlug: 'a', objectiveId: null }],
     quests: ['abandoned-cargo', 'NOT A SLUG'],
   }, { map: 'customs' });
-  ok(e.stale === true, 'an answer for another map is reported stale, not replayed');
+  // Staleness is judged on the RAW echo. `normalizeMapKey` folds `woods` onto `customs` now that
+  // Woods is locked, and if `stale` were read off the folded value this envelope would look like a
+  // Customs answer and its map-less `selectQuest` would have drawn a button on a map the answer
+  // was never about. `echoedMap` is what the body said; `map` is what it normalizes to.
+  ok(e.stale === true, 'an answer for another map is reported stale, not replayed', JSON.stringify([e.map, e.echoedMap]));
+  ok(e.echoedMap === 'woods', 'the envelope remembers the map it was actually computed for', e.echoedMap);
+  ok(e.map === 'customs', 'while `map` still normalizes to an openable key', e.map);
+  ok(validateEnvelope({ protocol: PROTOCOL_VERSION, map: 'customs', answer: 'x' }, { map: 'customs' }).stale === false,
+    'and an answer for the map we are on is not stale');
   ok(e.images.length === 0, 'an image ref on a foreign host is dropped client-side too');
   ok(!e.actions.some((a) => a.type === 'switchMap'), 'a switch to an unshipped map is dropped client-side too');
   ok(!e.actions.some((a) => a.type === 'showImages'), 'a showImages naming no surviving ref is dropped');

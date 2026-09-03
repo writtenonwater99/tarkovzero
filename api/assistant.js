@@ -360,8 +360,11 @@ export function groundingFor(hits, map, catalog = null) {
   const cov = (q) => {
     const { here, elsewhere, offSite } = mapCoverage(q, map);
     const bits = [here ? `HAS MARKERS ON ${map}` : `NOTHING TO DRAW ON ${map}`];
-    if (elsewhere.length) bits.push(`drawable here instead: ${elsewhere.join(', ')}`);
-    if (offSite.length) bits.push(`also on ${offSite.join(', ')} - MAPS THIS SITE DOES NOT HAVE`);
+    if (elsewhere.length) bits.push(`openable here instead: ${elsewhere.join(', ')}`);
+    // "CANNOT OPEN", not "DOES NOT HAVE". Since 2026-09-02 this list carries Reserve and Woods,
+    // which the site DOES have and will not open — telling the model we do not have them would put
+    // a false sentence in front of a player who can see them greyed out in the picker.
+    if (offSite.length) bits.push(`also on ${offSite.join(', ')} - MAPS TARKOVZERO CANNOT OPEN`);
     return bits.join(' | ');
   };
   const blocks = hits.map(({ q }, i) => {
@@ -399,19 +402,37 @@ export function groundingFor(hits, map, catalog = null) {
   return blocks.join('\n');
 }
 
+/**
+ * How the switchMap line reads, and whether it is offered at all.
+ *
+ * Derived from SITE_MAPS rather than written down, because SITE_MAPS is the availability list and
+ * it can be one entry long — it is, since 2026-09-02. With one open map a cross-map handoff is
+ * impossible: `crossMapFor()` can never return one and `isValidAction()` would reject it. Teaching
+ * the model a verb the server will always refuse is how "want to move to that map?" prose ends up
+ * beside no button, so the vocabulary shrinks with the availability list.
+ */
+const SWITCH_MAP_LINE = SITE_MAPS.length > 1
+  ? `  {"type":"switchMap","map":"${SITE_MAPS.join('|')}"} the quest's objectives are on one of the other maps this site opens.
+                                                     The site offers it as a button; the player decides, so word the answer as an offer
+                                                     ("that one is on Woods - want to move there?"), not as something already done.\n`
+  : '';
+
 const SYSTEM = (map, selected, activeNames = []) => `You are the quest assistant built into TarkovZero, an interactive Escape from Tarkov map.
 
 THE MAP THE PLAYER IS ON RIGHT NOW: ${map} (${mapLabel(map)}). Answer for THIS map first.
-TarkovZero can draw exactly three maps: ${SITE_MAPS.map((m) => `${m} (${MAP_LABELS[m]})`).join(', ')}.
+TarkovZero can open ${SITE_MAPS.length === 1 ? 'exactly one map' : `exactly ${SITE_MAPS.length} maps`}: ${SITE_MAPS.map((m) => `${m} (${MAP_LABELS[m]})`).join(', ')}.
 Every other Tarkov map (${Object.values(OTHER_MAP_LABELS).join(', ')}) exists in the quest data but CANNOT be
-opened here - for those you may describe and show photos, and you must say the site does not have that map yet.${
+opened here - for those you may describe and show photos, and you must say the site does not have that map yet.
+Some of those are drawn but locked while the map is being rebuilt; either way they cannot be opened, so never
+offer to take the player to one and never imply a button exists.${
   selected.length ? `\nAlready on their map: ${selected.join(', ')}.` : ''}${
   activeNames.length ? `\nTheir game reports these quests as ACTIVE right now: ${activeNames.join(', ')}. Prefer them when the question is vague ("what next?", "where do I go?"), but never claim a quest is active or finished beyond this list.` : ''}
 
 Rules:
 - Use ONLY the QUEST DATA block for anything factual: objectives, where they are, trader, level, items, photos.
 - NEVER invent coordinates, zone names, objective ids, slugs, quest names or image URLs. If the data does not answer the question, say so in one line.
-- If the quest the player is asking about is on a DIFFERENT map from ${map}, say which map it is on in the first sentence and offer to move there. Do not pretend it is here.
+- If the quest the player is asking about is on a DIFFERENT map from ${map}, say which map it is on in the first sentence${
+  SITE_MAPS.length > 1 ? ' and offer to move there' : ' and say TarkovZero cannot open that map yet'}. Do not pretend it is here.
 - Be concise and practical, in English: 2-5 short sentences, or up to 5 bullets. Markdown-lite only (**bold**, \`code\`, "- " bullets). No headings, no tables.
 - You never move the map yourself - you return actions and the site performs them.
 
@@ -421,10 +442,7 @@ Reply with ONE JSON object and nothing else:
 Allowed actions (use slugs and ids exactly as they appear in the data):
   {"type":"selectQuest","slug":"<slug>"}             put that quest's objectives on the map
   {"type":"flyTo","objectiveId":"<objective id>"}    centre the map on that objective - only if it has marked locations on ${map}
-  {"type":"switchMap","map":"${SITE_MAPS.join('|')}"} the quest's objectives are on one of the other two maps this site has.
-                                                     The site offers it as a button; the player decides, so word the answer as an offer
-                                                     ("that one is on Woods - want to move there?"), not as something already done.
-  {"type":"showImages","imageIds":["img1", ...]}     show screenshots from the PHOTOS list. Ids only - the site owns the URLs.
+${SWITCH_MAP_LINE}  {"type":"showImages","imageIds":["img1", ...]}     show screenshots from the PHOTOS list. Ids only - the site owns the URLs.
                                                      Pick at most ${MAX_IMAGES}, only ones that actually help ("this is the building"). Omit the
                                                      action entirely when the PHOTOS list is empty or nothing there is relevant.
 Put selectQuest before flyTo. At most ${MAX_QUESTS} quests. Use an empty actions array when the question is not about a specific quest.`;

@@ -36,10 +36,47 @@
 //     passed every check.
 //
 // Nothing here moves, copies, or deletes a file. It reads.
+//
+// ---------------------------------------------------------------------------
+// WHAT THIS BOUNDARY DETECTS, AND WHAT IT DOES NOT (read before quoting it)
+//
+// It is a BYTE-IDENTITY boundary plus a set of path/name/content tripwires. Stated precisely:
+//
+//   DETECTED
+//     * a raw capture copied into `dist/` unchanged, under any name, at any depth — matched by
+//       sha256 against the committed capture-digest inventory, which is loaded whether or not the
+//       `.local-*` roots exist on the build machine (this is the CI case: Vercel builds from a
+//       clean checkout where those roots are absent);
+//     * a capture package directory name, or an EFT screenshot file name, appearing in `dist/`;
+//     * any local-package file copied into `dist/` unchanged, unless the promotion manifest names
+//       that exact dist path with that exact digest and a receipt that verifies;
+//     * an absolute EFT-install path or a local root name embedded in a build artifact, UTF-8 or
+//       UTF-16LE — never clearable by a promotion;
+//     * a symlink anywhere in `dist/`, and a symlink used as a promotion source or receipt;
+//     * a promotion whose declared digest IS a capture's digest;
+//     * an inventory that has gone stale against the capture roots present on this machine
+//       (file count or size multiset drift), so "add a capture, skip the regenerate" fails here.
+//
+//   NOT DETECTED — and no heuristic in this repo pretends otherwise
+//     * AUTHORSHIP. The verifier proves that bytes in `dist/` are or are not identical to bytes in
+//       a known local file. It cannot prove who made those bytes or what they were derived from.
+//       A promotion entry is an ASSERTION by the founder, recorded with a receipt; the receipt
+//       proves the cited provenance documents have not changed since approval, not that they
+//       generated the artifact.
+//     * A TRANSFORMED OR RE-ENCODED CAPTURE. Re-save a screenshot as JPEG, resample a height
+//       field, re-quantise a control map, wrap a capture in a container — the digest changes and
+//       every hash check goes quiet. Nothing here does perceptual, structural or statistical
+//       comparison, and building such a heuristic would trade a deterministic guarantee for a
+//       guess. The control for this class is the CLOSED REGISTRY in `PROMOTABLE_SOURCES` plus
+//       code review of the pipeline that writes `public/`, not the verifier.
+//
+// So the honest one-liner: this boundary makes an accidental or lazy leak impossible and a
+// deliberate, transforming one no easier than it already was. Do not describe it as proof that
+// nothing in `dist/` is game-derived.
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -53,6 +90,78 @@ export const PROMOTION_MANIFEST_PATH = resolve(REPOSITORY_ROOT, 'asset-promotion
 
 export const PROMOTION_MANIFEST_DOCUMENT_TYPE = 'tarkovzero-asset-promotion-manifest';
 export const PROMOTION_MANIFEST_SCHEMA_VERSION = 1;
+
+/**
+ * The manifest's own explanation of itself, in ONE place.
+ *
+ * More than one promotion script writes this document — `promote-terrain-surfaces.mjs` owns the
+ * terrain rows, `promote-authored-vegetation.mjs` owns the two vegetation keys — and each preserves
+ * the other's rows untouched. When each script also carried its own copy of the notes and its own
+ * row ORDER, running them in the opposite order produced a byte-different file, so whichever ran
+ * second left the other's `--check` reporting a stale manifest. That is a self-inflicted false
+ * alarm on a check whose whole value is that it only fires for real drift.
+ */
+export const PROMOTION_MANIFEST_NOTES =
+  'The single explicit allow-list of local-package artifacts that may reach dist/. An entry names a '
+  + 'SOURCE KEY from PROMOTABLE_SOURCES in scripts/lib/asset-promotion.mjs -- never a path -- and '
+  + 'must cite that source\'s required provenance documents by role and repo path, with the sha256 '
+  + 'each one currently hashes to. Editing a path here promotes nothing: the receipt documents, the '
+  + 'source bytes and the bytes in dist/ must all hash to the declared values. Raw captures '
+  + '(unity-facts, the raw Unity vegetation dumps, the scalar facts file, the survey photographs) '
+  + 'have no source key at all and are refused even when listed. Regenerate the terrain rows with '
+  + '`npm run promote:terrain` and the vegetation rows with `npm run promote:vegetation`; both '
+  + 'scripts write this whole document through promotionManifestDocument(), so the row order does '
+  + 'not depend on which of them ran last. See scripts/verify-build-boundary.mjs and '
+  + 'docs/CONTINUATION-HANDOFF-2026-09-02.md section 9.';
+
+/**
+ * Assemble the manifest document from a set of entries, in a canonical order.
+ *
+ * Sorted by (source key, sourcePath) rather than by insertion, so the file a script writes is a
+ * function of WHAT is promoted and never of the order the promotion scripts happened to run in.
+ */
+export function promotionManifestDocument(entries) {
+  const promotions = [...entries].sort((left, right) => {
+    if (left.source !== right.source) return left.source < right.source ? -1 : 1;
+    if (left.sourcePath !== right.sourcePath) return left.sourcePath < right.sourcePath ? -1 : 1;
+    return 0;
+  });
+  return {
+    schemaVersion: PROMOTION_MANIFEST_SCHEMA_VERSION,
+    documentType: PROMOTION_MANIFEST_DOCUMENT_TYPE,
+    notes: PROMOTION_MANIFEST_NOTES,
+    promotions,
+  };
+}
+
+/** The one serialization both promotion scripts and every `--check` compare against. */
+export function serializePromotionManifest(document) {
+  return `${JSON.stringify(document, null, 2)}\n`;
+}
+
+/**
+ * The committed capture-digest inventory: sha256 + size of every raw capture, and NO payload.
+ *
+ * WHY IT EXISTS. `collectSubtreeHashes()` can only index captures that are ON THIS MACHINE. Vercel
+ * builds from a clean checkout in which every `.local-*` root is absent (they are git-ignored and
+ * `.vercelignore`d), so on the deployment that actually matters the capture index came back EMPTY
+ * and the capture check had nothing to compare against: a raw capture renamed and committed under
+ * `public/assets/` shipped clean. That is the CI fail-open, and it was exploitable in the intended
+ * deployment topology.
+ *
+ * The inventory closes it by moving the capture digests into the repository, where the verifier
+ * always has them. It carries hashes and byte counts only — reproducing a capture from it is
+ * exactly as hard as inverting SHA-256 — and EFT screenshot names are redacted to a digest stem so
+ * the founder's raid coordinates do not enter a public repo (`.gitignore` already states that
+ * policy for `companion/survey-*.jsonl`).
+ *
+ * It is FAIL-CLOSED: absent, unparseable, or malformed is a build failure, never a skipped check.
+ * Regenerate with `npm run build:capture-inventory` (`scripts/build-capture-inventory.mjs`).
+ */
+export const CAPTURE_INVENTORY_PATH = resolve(REPOSITORY_ROOT, 'capture-digest-inventory.json');
+
+export const CAPTURE_INVENTORY_DOCUMENT_TYPE = 'tarkovzero-capture-digest-inventory';
+export const CAPTURE_INVENTORY_SCHEMA_VERSION = 1;
 
 /**
  * The one directory prefix a promoted artifact may occupy inside `dist/`.
@@ -125,14 +234,42 @@ export const CAPTURE_PATH_SEGMENTS = Object.freeze([
  */
 export const CAPTURE_FILE_NAME_PATTERNS = Object.freeze([
   Object.freeze({
+    id: 'eft-screenshot',
     pattern: /^\d{4}-\d{2}-\d{2}\[\d{2}-\d{2}\]_.*\(\d+\)\.png$/,
     detail: 'is an in-game screenshot file name (position + quaternion written by EFT)',
   }),
   Object.freeze({
+    id: 'unity-facts-dump',
     pattern: /^customs-unity-facts\.json$/,
     detail: 'is the scalar facts dump',
   }),
 ]);
+
+/**
+ * Capture file names that carry first-party raid coordinates and must be REDACTED before their
+ * digest is committed to the inventory. The screenshot name is the coordinate: EFT writes world
+ * position and camera quaternion into it. `.gitignore` already refuses `companion/survey-*.jsonl`
+ * on exactly this ground; the inventory follows the same policy rather than inventing a new one.
+ */
+const REDACTED_CAPTURE_NAME_IDS = Object.freeze(new Set(['eft-screenshot']));
+
+/**
+ * The inventory path for a capture file: its real repo path, or a digest stem under the same
+ * subtree when the NAME itself is sensitive. Pure, and shared by the generator and the validator
+ * so the two cannot disagree about what a redacted row is allowed to look like.
+ */
+export function captureInventoryPathFor(subtreePath, relativeInSubtree, digestHex) {
+  const segments = relativeInSubtree.split('/');
+  const baseName = segments[segments.length - 1];
+  const directory = segments.slice(0, -1).join('/');
+  const prefix = directory === '' ? subtreePath : `${subtreePath}/${directory}`;
+  const redacted = CAPTURE_FILE_NAME_PATTERNS.some(
+    (entry) => REDACTED_CAPTURE_NAME_IDS.has(entry.id) && entry.pattern.test(baseName),
+  );
+  if (!redacted) return { path: `${prefix}/${baseName}`, nameRedacted: false };
+  const extension = /\.[A-Za-z0-9]{1,8}$/.exec(baseName)?.[0]?.toLowerCase() ?? '';
+  return { path: `${prefix}/redacted-${digestHex.slice(0, 16)}${extension}`, nameRedacted: true };
+}
 
 // ---------------------------------------------------------------------------
 // tier 2: build intermediates and QA artifacts. Not captures; still not promotable.
@@ -228,6 +365,56 @@ export function repoRelativePosix(rootDir, absolutePath) {
     return null;
   }
   return relation.split(sep).join('/');
+}
+
+/**
+ * Errors that mean "this path is not there", as opposed to "this path could not be read".
+ *
+ * Everything OUTSIDE this set is a fail-closed condition. A `stat()` that comes back EACCES, EIO,
+ * or ELOOP used to be swallowed by a bare `catch {}` and reported as absence — which is the same
+ * shape of bug as `warnings: []` while the pack had failed to mount (handoff §6): a check that
+ * cannot fail. A path we could not read is a path we cannot vouch for, and the build says so.
+ */
+const ABSENCE_CODES = Object.freeze(new Set(['ENOENT', 'ENOTDIR']));
+
+export function isAbsenceError(error) {
+  return ABSENCE_CODES.has(error?.code);
+}
+
+/**
+ * `lstat` a path and prove it resolves inside `rootDir` without traversing a symlink.
+ *
+ * Returns `{ state: 'absent' | 'ok' | 'symlink' | 'escapes' | 'error', stats, realPath, error }`.
+ * `lstat`, not `stat`, is what makes the symlink case observable at all: `stat` follows the link
+ * and reports the TARGET, so a registered source path that is a symlink to
+ * `/home/.../.ssh/id_ed25519` (or to any file outside the repo) read as an ordinary file.
+ */
+export async function containedLstat(rootDir, absolutePath) {
+  let stats;
+  try {
+    stats = await lstat(absolutePath);
+  } catch (error) {
+    if (isAbsenceError(error)) return { state: 'absent', stats: null, realPath: null, error: null };
+    return { state: 'error', stats: null, realPath: null, error };
+  }
+  if (stats.isSymbolicLink()) return { state: 'symlink', stats, realPath: null, error: null };
+  let realPath;
+  try {
+    realPath = await realpath(absolutePath);
+  } catch (error) {
+    if (isAbsenceError(error)) return { state: 'absent', stats: null, realPath: null, error: null };
+    return { state: 'error', stats: null, realPath: null, error };
+  }
+  let realRoot;
+  try {
+    realRoot = await realpath(rootDir);
+  } catch {
+    realRoot = rootDir;
+  }
+  if (realPath !== realRoot && repoRelativePosix(realRoot, realPath) === null) {
+    return { state: 'escapes', stats, realPath, error: null };
+  }
+  return { state: 'ok', stats, realPath, error: null };
 }
 
 function matchesSubtree(entry, repoRelative) {
@@ -493,21 +680,35 @@ export async function sha256File(absolutePath) {
   return hash.digest('hex');
 }
 
-async function walkFiles(dir, prefix, out) {
+/**
+ * Depth-first walk that records what it could NOT account for instead of dropping it.
+ *
+ * A symlink inside a capture root is never followed (that would let a link out of the root decide
+ * what the capture index contains) and is recorded as an issue, because a capture subtree has no
+ * legitimate reason to hold one.
+ */
+async function walkFiles(dir, prefix, out, issues) {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (error) {
-    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return;
-    throw error;
+    if (isAbsenceError(error)) return;
+    issues.push({ relativePath: prefix, reason: `directory is unreadable (${error?.code ?? error})` });
+    return;
   }
   for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : 1))) {
     const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
     const absolutePath = join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      issues.push({ relativePath, reason: 'is a symbolic link and is never followed' });
+      continue;
+    }
     if (entry.isDirectory()) {
-      await walkFiles(absolutePath, relativePath, out);
+      await walkFiles(absolutePath, relativePath, out, issues);
     } else if (entry.isFile()) {
       out.push({ relativePath, absolutePath });
+    } else {
+      issues.push({ relativePath, reason: 'is neither a regular file nor a directory' });
     }
   }
 }
@@ -530,42 +731,84 @@ export async function collectSubtreeHashes(subtrees, { baseDir, candidateSizes =
   let filesSeen = 0;
   let bytesRead = 0;
   const present = [];
+  const files = new Map();
+  // Every file the sweep saw but could not vouch for. The caller turns these into violations —
+  // "unreadable" must never be recorded as "clean".
+  const issues = [];
 
   for (const subtree of subtrees) {
     const absoluteBase = resolve(baseDir, ...subtree.path.split('/'));
-    let baseStat;
-    try {
-      baseStat = await stat(absoluteBase);
-    } catch {
+    const base = await containedLstat(baseDir, absoluteBase);
+    if (base.state === 'absent') continue;
+    if (base.state !== 'ok') {
+      issues.push({
+        subtree: subtree.id,
+        path: subtree.path,
+        reason: base.state === 'symlink'
+          ? 'the subtree root is a symbolic link; a capture root may not be redirected'
+          : base.state === 'escapes'
+            ? `the subtree root resolves outside ${baseDir}`
+            : `the subtree root is unreadable (${base.error?.code ?? base.error})`,
+      });
+      present.push(subtree.id);
       continue;
     }
     present.push(subtree.id);
-    const files = [];
-    if (baseStat.isFile()) {
-      files.push({ relativePath: '', absolutePath: absoluteBase });
-    } else if (baseStat.isDirectory()) {
-      await walkFiles(absoluteBase, '', files);
+    const found = [];
+    const walkIssues = [];
+    if (base.stats.isFile()) {
+      found.push({ relativePath: '', absolutePath: absoluteBase });
+    } else if (base.stats.isDirectory()) {
+      await walkFiles(absoluteBase, '', found, walkIssues);
     } else {
+      issues.push({
+        subtree: subtree.id,
+        path: subtree.path,
+        reason: 'the subtree root is neither a regular file nor a directory',
+      });
       continue;
     }
-    for (const file of files) {
+    for (const issue of walkIssues) {
+      issues.push({
+        subtree: subtree.id,
+        path: `${subtree.path}/${issue.relativePath}`,
+        reason: issue.reason,
+      });
+    }
+    for (const file of found) {
       const repoRelative = file.relativePath === ''
         ? subtree.path
         : `${subtree.path}/${file.relativePath}`;
       // `filePattern` narrows a mixed directory; a file it does not name belongs to another tier.
       if (!matchesSubtree(subtree, repoRelative)) continue;
       filesSeen += 1;
-      let size;
-      try {
-        size = (await stat(file.absolutePath)).size;
-      } catch {
+      const entry = await containedLstat(baseDir, file.absolutePath);
+      if (entry.state !== 'ok' || !entry.stats.isFile()) {
+        issues.push({
+          subtree: subtree.id,
+          path: repoRelative,
+          reason: entry.state === 'absent'
+            ? 'disappeared while the sweep was running'
+            : entry.state === 'symlink'
+              ? 'is a symbolic link and is never followed'
+              : entry.state === 'escapes'
+                ? `resolves outside ${baseDir}`
+                : `is unreadable (${entry.error?.code ?? entry.error})`,
+        });
         continue;
       }
+      const size = entry.stats.size;
+      files.set(repoRelative, { subtree: subtree.id, relativePath: file.relativePath, bytes: size });
       if (candidateSizes !== null && !candidateSizes.has(size)) continue;
       let digest;
       try {
         digest = await sha256File(file.absolutePath);
-      } catch {
+      } catch (error) {
+        issues.push({
+          subtree: subtree.id,
+          path: repoRelative,
+          reason: `could not be digested (${error?.code ?? error})`,
+        });
         continue;
       }
       filesIndexed += 1;
@@ -574,7 +817,7 @@ export async function collectSubtreeHashes(subtrees, { baseDir, candidateSizes =
     }
   }
 
-  return { hashes, filesIndexed, filesSeen, bytesRead, present };
+  return { hashes, files, issues, filesIndexed, filesSeen, bytesRead, present };
 }
 
 /** Read the promotion manifest. An absent file means "nothing promoted", which is safe. */
@@ -591,6 +834,242 @@ export async function readPromotionManifest(manifestPath = PROMOTION_MANIFEST_PA
   } catch (error) {
     return { present: true, value: null, parseError: error?.message ?? String(error) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// the committed capture-digest inventory
+
+/**
+ * Build the inventory document from the capture roots on THIS machine.
+ *
+ * Deterministic by construction: subtrees in registry order, rows sorted by inventory path, one
+ * JSON shape, two-space indent, trailing newline. Running it twice on unchanged roots produces
+ * byte-identical output, which is what makes "regenerate and diff" a usable review step.
+ *
+ * `candidateSizes: null` forces a full digest of every capture — the generator must read all of
+ * them exactly once, unlike the build, which only reads the ones a dist artifact could match.
+ */
+export async function buildCaptureInventory({ baseDir = REPOSITORY_ROOT } = {}) {
+  const subtrees = [];
+  const captures = [];
+  const missing = [];
+  for (const subtree of CAPTURE_SUBTREES) {
+    const swept = await collectSubtreeHashes([subtree], { baseDir, candidateSizes: null });
+    if (swept.issues.length > 0) {
+      throw new Error(
+        `capture subtree ${subtree.id} could not be fully read: `
+        + swept.issues.map((issue) => `${issue.path} ${issue.reason}`).join('; '),
+      );
+    }
+    if (swept.present.length === 0) {
+      missing.push(subtree.id);
+      subtrees.push({ id: subtree.id, path: subtree.path, fileCount: 0, totalBytes: 0 });
+      continue;
+    }
+    const rows = [];
+    for (const [repoRelative, file] of swept.files) {
+      const absolute = resolve(baseDir, ...repoRelative.split('/'));
+      const digest = await sha256File(absolute);
+      const { path, nameRedacted } = captureInventoryPathFor(
+        subtree.path,
+        file.relativePath === '' ? repoRelative.split('/').pop() : file.relativePath,
+        digest,
+      );
+      rows.push({
+        subtree: subtree.id,
+        path,
+        bytes: file.bytes,
+        sha256: `sha256:${digest}`,
+        ...(nameRedacted ? { nameRedacted: true } : {}),
+      });
+    }
+    rows.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+    subtrees.push({
+      id: subtree.id,
+      path: subtree.path,
+      fileCount: rows.length,
+      totalBytes: rows.reduce((sum, row) => sum + row.bytes, 0),
+    });
+    captures.push(...rows);
+  }
+  return {
+    document: {
+      schemaVersion: CAPTURE_INVENTORY_SCHEMA_VERSION,
+      documentType: CAPTURE_INVENTORY_DOCUMENT_TYPE,
+      generatedBy: 'scripts/build-capture-inventory.mjs',
+      notes: 'sha256 digests and byte counts of every raw capture, and nothing else. The verifier '
+        + 'loads this whether or not the .local-* roots exist, so the capture check works on a '
+        + 'clean CI checkout. EFT screenshot names are redacted to a digest stem because the name '
+        + 'IS a raid coordinate. Regenerate with `npm run build:capture-inventory`; a missing or '
+        + 'malformed file fails the build closed.',
+      subtrees,
+      captures,
+    },
+    missing,
+  };
+}
+
+/** Serialize the inventory the one way the generator and any diff both expect. */
+export function serializeCaptureInventory(document) {
+  return `${JSON.stringify(document, null, 2)}\n`;
+}
+
+/**
+ * Validate the inventory document. Pure. Returns `{ value, errors }`; a non-empty `errors` is a
+ * build failure, never a downgrade to "check skipped".
+ */
+export function validateCaptureInventory(value, { path = 'capture-digest-inventory.json' } = {}) {
+  const errors = [];
+  const fail = (message, at = path) => { errors.push({ path: at, message }); };
+
+  if (!isPlainObject(value)) {
+    return { value: null, errors: [{ path, message: 'must be an object' }] };
+  }
+  const allowed = new Set(['schemaVersion', 'documentType', 'generatedBy', 'notes', 'subtrees', 'captures']);
+  const extra = Object.keys(value).filter((key) => !allowed.has(key));
+  if (extra.length > 0) fail(`has unsupported field(s): ${extra.join(', ')}`);
+  if (value.schemaVersion !== CAPTURE_INVENTORY_SCHEMA_VERSION) {
+    fail(`schemaVersion must be ${CAPTURE_INVENTORY_SCHEMA_VERSION}`, `${path}.schemaVersion`);
+  }
+  if (value.documentType !== CAPTURE_INVENTORY_DOCUMENT_TYPE) {
+    fail(`documentType must be ${CAPTURE_INVENTORY_DOCUMENT_TYPE}`, `${path}.documentType`);
+  }
+  if (!Array.isArray(value.subtrees)) fail('subtrees must be an array', `${path}.subtrees`);
+  if (!Array.isArray(value.captures)) fail('captures must be an array', `${path}.captures`);
+  if (errors.length > 0) return { value: null, errors };
+
+  const byId = new Map();
+  value.subtrees.forEach((raw, index) => {
+    const at = `${path}.subtrees[${index}]`;
+    if (!isPlainObject(raw)) return fail('must be an object', at);
+    const registered = CAPTURE_SUBTREES.find((entry) => entry.id === raw.id);
+    if (!registered) return fail(`${JSON.stringify(raw.id)} is not a registered capture subtree`, at);
+    if (raw.path !== registered.path) {
+      return fail(`path must be ${registered.path} for ${raw.id}`, `${at}.path`);
+    }
+    if (!Number.isSafeInteger(raw.fileCount) || raw.fileCount < 0) {
+      return fail('fileCount must be a non-negative safe integer', `${at}.fileCount`);
+    }
+    if (!Number.isSafeInteger(raw.totalBytes) || raw.totalBytes < 0) {
+      return fail('totalBytes must be a non-negative safe integer', `${at}.totalBytes`);
+    }
+    if (byId.has(raw.id)) return fail(`duplicates subtree ${raw.id}`, at);
+    byId.set(raw.id, { ...raw, rows: [] });
+    return undefined;
+  });
+  // EVERY registered capture subtree must have a record. Without this, dropping a subtree from the
+  // inventory would silently drop it from the check — the same fail-open, one indirection away.
+  for (const registered of CAPTURE_SUBTREES) {
+    if (!byId.has(registered.id)) {
+      fail(`is missing a record for capture subtree ${registered.id}`, `${path}.subtrees`);
+    }
+  }
+
+  const digests = new Map();
+  value.captures.forEach((raw, index) => {
+    const at = `${path}.captures[${index}]`;
+    if (!isPlainObject(raw)) return fail('must be an object', at);
+    const rowKeys = new Set(['subtree', 'path', 'bytes', 'sha256', 'nameRedacted']);
+    const rowExtra = Object.keys(raw).filter((key) => !rowKeys.has(key));
+    if (rowExtra.length > 0) fail(`has unsupported field(s): ${rowExtra.join(', ')}`, at);
+    const record = byId.get(raw.subtree);
+    if (!record) return fail(`${JSON.stringify(raw.subtree)} is not a listed capture subtree`, `${at}.subtree`);
+    if (typeof raw.path !== 'string' || !raw.path.startsWith(`${record.path}/`)) {
+      return fail(`path must live under ${record.path}/`, `${at}.path`);
+    }
+    if (!Number.isSafeInteger(raw.bytes) || raw.bytes < 0) {
+      return fail('bytes must be a non-negative safe integer', `${at}.bytes`);
+    }
+    if (typeof raw.sha256 !== 'string' || !SHA256_DECLARATION.test(raw.sha256)) {
+      return fail('sha256 must be a lowercase sha256:<64 hex> declaration', `${at}.sha256`);
+    }
+    if (raw.nameRedacted !== undefined && raw.nameRedacted !== true) {
+      return fail('nameRedacted, when present, must be true', `${at}.nameRedacted`);
+    }
+    record.rows.push(raw);
+    const bare = raw.sha256.slice('sha256:'.length);
+    if (!digests.has(bare)) digests.set(bare, `${raw.path} (${raw.subtree}, inventory)`);
+    return undefined;
+  });
+
+  for (const record of byId.values()) {
+    if (record.rows.length !== record.fileCount) {
+      fail(
+        `declares fileCount ${record.fileCount} but lists ${record.rows.length} capture(s)`,
+        `${path}.subtrees[${record.id}]`,
+      );
+    }
+    const sum = record.rows.reduce((total, row) => total + row.bytes, 0);
+    if (sum !== record.totalBytes) {
+      fail(
+        `declares totalBytes ${record.totalBytes} but its captures sum to ${sum}`,
+        `${path}.subtrees[${record.id}]`,
+      );
+    }
+  }
+
+  if (errors.length > 0) return { value: null, errors };
+  return {
+    value: Object.freeze({
+      subtrees: Object.freeze([...byId.values()].map((record) => Object.freeze({
+        id: record.id, path: record.path, fileCount: record.fileCount, totalBytes: record.totalBytes,
+        sizes: Object.freeze(record.rows.map((row) => row.bytes).sort((a, b) => a - b)),
+      }))),
+      digests,
+      captureCount: value.captures.length,
+    }),
+    errors: [],
+  };
+}
+
+/** Read the inventory. Absence is reported, never defaulted to an empty index. */
+export async function readCaptureInventory(inventoryPath = CAPTURE_INVENTORY_PATH) {
+  let bytes;
+  try {
+    bytes = await readFile(inventoryPath);
+  } catch (error) {
+    if (isAbsenceError(error)) return { present: false, value: null, parseError: null };
+    return { present: true, value: null, parseError: `unreadable (${error?.code ?? error})` };
+  }
+  try {
+    return { present: true, value: JSON.parse(bytes.toString('utf8')), parseError: null };
+  } catch (error) {
+    return { present: true, value: null, parseError: error?.message ?? String(error) };
+  }
+}
+
+/**
+ * Compare a validated inventory against the capture roots that are actually on this machine.
+ *
+ * By file COUNT and by the sorted multiset of file SIZES — `stat` only, no digests — so it costs
+ * nothing on a build and still catches the case the inventory exists to prevent going stale:
+ * a capture added, removed, or replaced with a different-sized one and the regenerate skipped.
+ * A subtree that is absent (the CI checkout, every subtree) is not reconciled; the inventory is
+ * the whole answer there, which is the point.
+ */
+export function reconcileCaptureInventory(inventory, swept) {
+  const drift = [];
+  for (const record of inventory.subtrees) {
+    if (!swept.present.includes(record.id)) continue;
+    const onDisk = [...swept.files.values()].filter((file) => file.subtree === record.id);
+    if (onDisk.length !== record.fileCount) {
+      drift.push({
+        subtree: record.id,
+        detail: `the inventory declares ${record.fileCount} file(s) but ${onDisk.length} are on disk`,
+      });
+      continue;
+    }
+    const sizes = onDisk.map((file) => file.bytes).sort((a, b) => a - b);
+    const mismatch = sizes.findIndex((size, index) => size !== record.sizes[index]);
+    if (mismatch !== -1) {
+      drift.push({
+        subtree: record.id,
+        detail: `capture sizes differ from the inventory (${sizes[mismatch]} vs `
+          + `${record.sizes[mismatch]} at sorted position ${mismatch})`,
+      });
+    }
+  }
+  return drift;
 }
 
 /**
@@ -629,6 +1108,28 @@ export async function verifyPromotionEntries(entries, {
         });
         continue;
       }
+      // Lexical containment is not containment: `scripts/x.py` can be a symlink to anything on the
+      // machine, and `stat()` would happily hash the target. lstat + realpath is what makes the
+      // receipt a statement about a file IN this repository.
+      const receiptPath = await containedLstat(repositoryRoot, absolute);
+      if (receiptPath.state !== 'ok' || !receiptPath.stats.isFile()) {
+        failures.push({
+          code: receiptPath.state === 'absent'
+            ? 'ERR_PROMOTION_RECEIPT_MISSING'
+            : 'ERR_PROMOTION_RECEIPT_PATH',
+          path: `${entry.id}.receipt.${document.role}`,
+          message: receiptPath.state === 'absent'
+            ? `${document.repoPath} is missing`
+            : receiptPath.state === 'symlink'
+              ? `${document.repoPath} is a symbolic link; a receipt document must be a real file in the repository`
+              : receiptPath.state === 'escapes'
+                ? `${document.repoPath} resolves to ${receiptPath.realPath}, outside the repository root`
+                : receiptPath.state === 'error'
+                  ? `${document.repoPath} is unreadable (${receiptPath.error?.code ?? receiptPath.error})`
+                  : `${document.repoPath} is not a regular file`,
+        });
+        continue;
+      }
       let actual;
       try {
         actual = `sha256:${await sha256File(absolute)}`;
@@ -651,12 +1152,22 @@ export async function verifyPromotionEntries(entries, {
 
     let sourcePresent = false;
     const sourceAbsolute = resolve(repositoryRoot, ...entry.sourceRepoPath.split('/'));
-    let sourceStat = null;
-    try {
-      sourceStat = await stat(sourceAbsolute);
-    } catch {
-      sourceStat = null;
+    // Absent is benign (the clean CI checkout has no local packages). Anything ELSE — a symlink, a
+    // path that realpaths out of the repository, EACCES, EIO — is a source we cannot vouch for,
+    // and used to be indistinguishable from "not on this machine".
+    const sourcePath = await containedLstat(repositoryRoot, sourceAbsolute);
+    if (sourcePath.state !== 'ok' && sourcePath.state !== 'absent') {
+      failures.push({
+        code: 'ERR_PROMOTION_SOURCE_PATH',
+        path: `${entry.id}.sourcePath`,
+        message: sourcePath.state === 'symlink'
+          ? `${entry.sourceRepoPath} is a symbolic link; a promotion source must be a real file inside its registered root`
+          : sourcePath.state === 'escapes'
+            ? `${entry.sourceRepoPath} resolves to ${sourcePath.realPath}, outside the repository root`
+            : `${entry.sourceRepoPath} is unreadable (${sourcePath.error?.code ?? sourcePath.error})`,
+      });
     }
+    const sourceStat = sourcePath.state === 'ok' ? sourcePath.stats : null;
     if (sourceStat?.isFile()) {
       sourcePresent = true;
       if (sourceStat.size !== entry.bytes) {

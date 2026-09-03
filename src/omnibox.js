@@ -1,5 +1,11 @@
 /**
- * TarkovZero — omnibox (bottom-centre): one text field, three deterministic modes.
+ * TarkovZero — omnibox: one text field, three deterministic modes.
+ *
+ * It lives at the TOP of the Ask panel (2026-09-02, founder: "lets remove the bar from the bottom",
+ * then "omni bar should be first" over a mock-up). It used to be a permanent bar across the bottom
+ * of the screen; that bar is gone, this is the same field in the panel that also draws the answers,
+ * so the row you pick and what it produced are one column. The routing below did not change: the
+ * vocabulary, the prefixes and `route()` are exactly what they were.
  *
  * Routing is by PREFIX, never by a classifier guessing what you meant (Codex red team #5):
  *
@@ -15,6 +21,9 @@
  * `route()` is pure and has no DOM in it — scripts/omnibox-routing-test.mjs runs it directly.
  */
 import { iconHtml } from './icons.js';
+// The command row must advertise the maps that actually open, from the same list the picker and
+// the assistant read. It was a hand-typed `customs | reserve | woods` until 2026-09-02.
+import { AVAILABLE_MAP_KEYS, LOCKED_NOTE, mapName } from './map-availability.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -27,7 +36,7 @@ export const COMMANDS = [
   { name: 'hide', arg: 'layer', hint: 'turn a layer off' },
   { name: '3d', hint: 'switch to the 3D view' },
   { name: '2d', hint: 'switch to the 2D view' },
-  { name: 'map', arg: 'customs | reserve | woods', hint: 'load another map' },
+  { name: 'map', arg: AVAILABLE_MAP_KEYS.join(' | '), hint: 'load another map' },
   { name: 'relief', arg: '1 | 2 | 3', hint: 'terrain exaggeration (3D)' },
   { name: 'trees', arg: 'on | off', hint: 'tree cover' },
   { name: 'rocks', arg: 'on | off', hint: 'rocks' },
@@ -77,10 +86,19 @@ export function runCommand(cmd, rawArg, actions = {}) {
       // page reload that drops the camera, the selection, the transcript and the live sockets.
       // `> m` ranks `map` above `my quests`, so this is one keystroke away from being an accident.
       const keys = a.mapKeys?.() ?? [];
+      // The maps the picker shows and will not open. Matched SECOND, so a locked name is refused
+      // BY NAME ("Woods is not available yet") instead of falling through to "No map called
+      // woods" — which would be false, and would read as a typo rather than a lock.
+      const locked = a.lockedMapKeys?.() ?? [];
       if (!q) return `Which map? ${keys.join(', ')}`;
-      const key = keys.find((k) => k.startsWith(q) || q.startsWith(k));
-      if (!key) return `No map called “${arg}”`;
-      a.goMap?.(key); return `Loading ${key}…`;
+      const match = (list) => list.find((k) => k.startsWith(q) || q.startsWith(k));
+      const key = match(keys);
+      if (key) { a.goMap?.(key); return `Loading ${key}…`; }
+      const lockedKey = match(locked);
+      if (lockedKey) {
+        return `${mapName(lockedKey)} is ${LOCKED_NOTE} — ${keys.join(', ')} ${keys.length === 1 ? 'is' : 'are'} live`;
+      }
+      return `No map called “${arg}”`;
     }
     case 'relief': {
       const requested = Number(q) || 3;
@@ -224,7 +242,13 @@ export function createOmnibox(deps = {}) {
   let state = route('');
   let hintAt = 0, hintTimer = 0;
   let undo = null;                      // camera + quest selection from before the last answer
-  let openedForText = null;             // input value at the moment the panel opened — see render()
+
+  /**
+   * The field is inside the Ask panel, so reaching it means the panel must be open and expanded.
+   * Every entry point goes through here — Ctrl K, `/`, `A`, and `?ask=`/`?q=` — because a focus
+   * call into a hidden panel silently sends the keystrokes to the document's own shortcuts.
+   */
+  const ensureOpen = () => deps.ensureOpen?.();
 
   /* ------------------------------------------------------------- lookup --- */
   function questIndex() {
@@ -286,10 +310,7 @@ export function createOmnibox(deps = {}) {
       `${chipFor(row)}<span class="rn">${esc(row.label)}</span><span class="rk">${esc(row.sub ?? '')}</span>${enterKey(on)}</div>`;
   }
   function render() {
-    // The panel, once answering, answers the query it was opened for — the row list above the box
-    // (the "Ask AI: …" row, or leftover lookup hits) is redundant until the input text changes.
-    const staleBehindAnswer = isAskOpen() && el.input.value === openedForText;
-    const show = state.rows.length > 0 && !staleBehindAnswer;
+    const show = state.rows.length > 0;
     el.results.hidden = !show;
     el.results.innerHTML = show ? state.rows.map(rowHtml).join('') : '';
     el.box.classList.toggle('has-results', show);
@@ -344,23 +365,26 @@ export function createOmnibox(deps = {}) {
 
   /* ----------------------------------------------------------- assistant -- */
   /*
-   * The assistant is the docked panel in the upper-left (src/assistant-panel.js), not a card over
-   * this box. The omnibox keeps exactly two jobs here: it is the `?` ROUTE into that panel, and it
-   * takes the camera/selection snapshot the panel's "Restore view" button puts back. Everything
-   * drawn from an answer — buttons, photos, sources — belongs to the panel, built from the
-   * envelope's structured actions.
+   * The conversation is the panel this field sits in (src/assistant-panel.js), not a card of its
+   * own. The omnibox keeps exactly two jobs here: it is the `?` ROUTE into that log, and it takes
+   * the camera/selection snapshot the panel's "Restore view" button puts back. Everything drawn
+   * from an answer — buttons, photos, sources — belongs to the panel, built from the envelope's
+   * structured actions.
    */
   function setAskOpen(on) {
     deps.assistant?.setOpen?.(!!on);
-    openedForText = on ? el.input.value : null;
     render();
   }
   const isAskOpen = () => !!deps.assistant?.isOpen?.();
 
   function sendToAssistant(text) {
     if (!text) return;
+    // The field is the composer now, so it is emptied by the send — a question left sitting in the
+    // box above its own answer reads as unsent.
+    clear();
     undo = { camera: deps.camera?.get?.() ?? null, quests: deps.quests?.selectedSlugs?.() ?? [] };
     deps.assistant?.armUndo?.(restore);
+    ensureOpen();
     setAskOpen(true);
     el.box.classList.add('busy');
     Promise.resolve(deps.assistant?.ask?.(text)).finally(() => el.box.classList.remove('busy'));
@@ -413,6 +437,7 @@ export function createOmnibox(deps = {}) {
   function applyQaQuery() {
     const q = new URLSearchParams(location.search).get('q');
     if (q == null) return;
+    ensureOpen();
     el.input.value = q;
     update();
     if (state.mode === 'ai' && state.query) {
@@ -423,9 +448,9 @@ export function createOmnibox(deps = {}) {
   }
 
   return {
-    focus: () => { el.input.focus(); el.input.select(); update(); },
+    focus: () => { ensureOpen(); el.input.focus(); el.input.select(); update(); },
     /** `A` — the assistant, one keystroke away, with the prefix already typed. */
-    focusAsk: () => { if (!el.input.value.startsWith('?')) el.input.value = '?'; el.input.focus(); update(); },
+    focusAsk: () => { ensureOpen(); if (!el.input.value.startsWith('?')) el.input.value = '?'; el.input.focus(); update(); },
     refresh: () => { if (state.rows.length) update(); },
     /**
      * Esc from the document: peel the omnibox first. Returns true when it consumed the key.

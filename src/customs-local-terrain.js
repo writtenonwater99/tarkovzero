@@ -415,11 +415,39 @@ function assertRectangleCoverage(tileStates, coverage, context, { allowGaps = fa
 }
 
 /**
- * Validate and deep-freeze a strict Customs local-terrain manifest v1.
+ * Validate and deep-freeze a strict Customs terrain manifest v1.
  * Unknown fields are rejected so producer/runtime drift cannot silently alter coordinates.
+ *
+ * `localOnly` used to be pinned to `true` here, because every package this schema described was
+ * local-only. Since 2026-09-02 the founder has approved PROMOTING the height and control surfaces
+ * to `public/`, and the promoted package ships — so a `localOnly: true` on it would be a document
+ * asserting the opposite of what shipping it means.
+ *
+ * The field is therefore still REQUIRED and still a strict boolean, and `expectLocalOnly` says
+ * which value this caller will accept. It defaults to `true`, so every existing call site — the
+ * loopback loader, the extractor's own tests, the audit — is unchanged: a package that claims to
+ * be shippable is still refused where a local package is expected. The promoted loader passes
+ * `false`, and refuses a package that claims to be local-only. Neither loader accepts both, which
+ * is what keeps this a discriminating field rather than a decoration.
  */
-export function validateCustomsLocalTerrainManifest(value) {
-  if (manifestState.has(value)) return value;
+export function validateCustomsLocalTerrainManifest(value, options = {}) {
+  // A manifest that has already been normalized was validated by whoever normalized it, against
+  // THEIR expectation. Re-checking it against this call's DEFAULT would make every downstream
+  // re-validation — `createCustomsLocalTerrainRuntime`, `lookupCustomsTerrainTile`, the mesh
+  // planner — impose a distribution policy none of them owns, and a promoted package would fail
+  // inside the runtime builder rather than at its door. So the memoized path enforces the
+  // expectation only when the caller stated one.
+  if (manifestState.has(value)) {
+    if (options.expectLocalOnly !== undefined && value.localOnly !== options.expectLocalOnly) {
+      fail(
+        'ERR_CUSTOMS_TERRAIN_NON_LOCAL',
+        'manifest.localOnly',
+        `must be ${options.expectLocalOnly} for this consumer`,
+      );
+    }
+    return value;
+  }
+  const expectLocalOnly = options.expectLocalOnly ?? true;
   const root = exactKeys(
     value,
     ['schemaVersion', 'map', 'localOnly', 'sourceFrame', 'reliefOriginYM', 'tiles'],
@@ -430,8 +458,11 @@ export function validateCustomsLocalTerrainManifest(value) {
     fail('ERR_CUSTOMS_TERRAIN_SCHEMA', 'manifest.schemaVersion', `must be ${CUSTOMS_LOCAL_TERRAIN_SCHEMA_VERSION}`);
   }
   if (root.map !== MAP_ID) fail('ERR_CUSTOMS_TERRAIN_SCHEMA', 'manifest.map', `must be ${MAP_ID}`);
-  if (root.localOnly !== true) {
-    fail('ERR_CUSTOMS_TERRAIN_NON_LOCAL', 'manifest.localOnly', 'must be true');
+  if (typeof root.localOnly !== 'boolean') {
+    fail('ERR_CUSTOMS_TERRAIN_SCHEMA', 'manifest.localOnly', 'must be a boolean');
+  }
+  if (root.localOnly !== expectLocalOnly) {
+    fail('ERR_CUSTOMS_TERRAIN_NON_LOCAL', 'manifest.localOnly', `must be ${expectLocalOnly}`);
   }
   if (root.sourceFrame !== CUSTOMS_LOCAL_TERRAIN_SOURCE_FRAME) {
     fail(
@@ -484,7 +515,7 @@ export function validateCustomsLocalTerrainManifest(value) {
   const normalized = deepFreeze({
     schemaVersion: CUSTOMS_LOCAL_TERRAIN_SCHEMA_VERSION,
     map: MAP_ID,
-    localOnly: true,
+    localOnly: root.localOnly,
     sourceFrame: CUSTOMS_LOCAL_TERRAIN_SOURCE_FRAME,
     reliefOriginYM,
     tiles: tileStates.map(({ tile }) => tile),

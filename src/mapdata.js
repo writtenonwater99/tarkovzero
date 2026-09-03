@@ -3,6 +3,14 @@
 // a bundler `import.meta.env` is undefined — same pattern as src/assistant.js.
 const ASSETS = import.meta.env?.DEV ? '/tiles' : 'https://assets.tarkov.dev';
 
+// Availability is decided in ONE place and this registry is not it — see src/map-availability.js.
+// `MAPS` below is the RENDER DATA: three maps, all three complete, all three still under test.
+// Whether a visitor may reach one is a separate question, asked here only by `selectMap` and
+// `resolveMapRequest` at the bottom of the file.
+import {
+  MAPPED_MAP_KEYS, assertAvailabilityIsBuildable, isAvailableMap, isLockedMap, normalizeMapRequestKey,
+} from './map-availability.js';
+
 // Interactive map configs mirrored from tarkov.dev's maps.json (author: Shebuka / the-hideout).
 // bounds and svgBounds stay in tarkov.dev's [[x,z],[x,z]] order; crs.js swaps them for Leaflet.
 //
@@ -42,4 +50,39 @@ export const MAPS = {
 };
 
 export const CUSTOMS = MAPS.customs;
-export const selectMap = (key) => MAPS[String(key || '').toLowerCase()] ?? CUSTOMS;
+
+// An availability list naming a map with no config here would give the picker an entry that opens
+// onto nothing. Checked at module load, against the registry's own keys rather than a literal.
+assertAvailabilityIsBuildable(Object.keys(MAPS));
+if (MAPPED_MAP_KEYS.some((k) => !MAPS[k]) || Object.keys(MAPS).some((k) => !MAPPED_MAP_KEYS.includes(k))) {
+  throw new Error(`MAPS ${Object.keys(MAPS).join(',')} and MAPPED_MAP_KEYS ${MAPPED_MAP_KEYS.join(',')} disagree`);
+}
+
+/**
+ * What a `?map=` value resolves to, and WHY — so the caller can say something instead of silently
+ * showing a different map than the one the URL named.
+ *
+ *   status 'default'    no `?map=` at all
+ *   status 'available'  the map opens; `map` is its config
+ *   status 'locked'     one of the eleven, not open yet (Reserve and Woods since 2026-09-02);
+ *                       `map` is Customs, and `requested` is what was asked for
+ *   status 'unknown'    not a map we have ever named; `map` is Customs
+ *
+ * `?map=woods` is a documented entry point, so it stays a working URL: it lands on Customs rather
+ * than 404ing or showing a blank map, and main.js toasts what happened. It does NOT silently
+ * pretend Customs is what was asked for.
+ */
+export function resolveMapRequest(key) {
+  const requested = normalizeMapRequestKey(key);
+  if (!requested) return { map: CUSTOMS, requested: null, status: 'default' };
+  if (isAvailableMap(requested) && MAPS[requested]) return { map: MAPS[requested], requested, status: 'available' };
+  return { map: CUSTOMS, requested, status: isLockedMap(requested) ? 'locked' : 'unknown' };
+}
+
+/**
+ * The map config for a requested key. Availability is the gate, not the registry: `MAPS` still
+ * carries Reserve and Woods, and `selectMap('woods')` still returns Customs, because Woods is
+ * locked. Every navigation path in the app goes through here or through `resolveMapRequest`, so
+ * there is exactly one way to reach a map: it is in `AVAILABLE_MAP_KEYS`.
+ */
+export const selectMap = (key) => resolveMapRequest(key).map;

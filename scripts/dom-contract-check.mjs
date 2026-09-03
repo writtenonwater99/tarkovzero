@@ -8,7 +8,10 @@
  * So the contract is written down here and asserted against index.html on every `npm run check:dom`.
  *
  * Zero dependencies: a small tag-stream parser builds a tree, and a small matcher understands the
- * subset of CSS we need (tag, #id, .class, [attr], [attr=value], descendant combinators).
+ * subset of CSS we need (tag, #id, .class, [attr], [attr=value], descendant and CHILD `>`
+ * combinators). The child combinator earns its place in the RETIRED table: "the omnibox is not a
+ * bar hanging off #stage any more" is a claim about PARENTAGE, and a descendant selector cannot
+ * make it — #panel-ask is itself inside #stage, so `#stage #omnibox` matches the new home too.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +32,10 @@ export const CONTRACT = {
     '.tb-item[data-tb=layers]', '.tb-item[data-tb=quests]', '.tb-item[data-tb=view]', '.tb-item[data-tb=live]', '.tb-item[data-tb=ask]',
     '[data-pin=layers]', '[data-pin=quests]', '[data-pin=ask]',
     '[data-close=layers]', '[data-close=quests]', '[data-close=view]', '[data-close=live]', '[data-close=ask]',
+    // The Ask panel floats: shell.js drags it by `.panel-hd`, resizes it by `[data-grip]` and
+    // collapses it with `[data-min]`. Lose the grip and the panel can never be made taller again;
+    // lose the minimise button and "minimised" is only reachable by double-click.
+    '#panel-ask .panel-hd', '[data-min=ask]', '[data-grip=ask]',
   ],
   'map chip + status (main.js)': [
     '.head-id', '#map-switcher', '.map-title-text', '#map-menu',
@@ -67,14 +74,22 @@ export const CONTRACT = {
     '#live-block', '#live', '#live-toggle', '#live-sum', '#live-dot', '#tb-live',
     '.tb-item[data-tb=live] .tb-tip',
   ],
-  // The assistant panel (2026-09-02): #ask-log / #ask-chips / #ask-form / #ask-input came back out
-  // of the omnibox card into #panel-ask, which is now a live dock panel in the LEFT column.
-  // src/assistant-panel.js binds every one of these by id; a missing one is a silent no-op.
+  // The assistant panel (2026-09-02): #ask-log / #ask-chips came back out of the omnibox card into
+  // #panel-ask. src/assistant-panel.js binds each by id; a missing one is a silent no-op.
   'assistant panel (assistant-panel.js)': [
-    '#panel-ask', '#tb-ask', '#ask-log', '#ask-chips', '#ask-form', '#ask-input', '#ask-send',
+    '#panel-ask', '#tb-ask', '#ask-log', '#ask-chips',
     '.tb-item[data-tb=ask] .tb-tip',
   ],
-  'omnibox (omnibox.js)': ['#omnibox', '#find', '#find-kbd', '#find-results'],
+  // The omnibox (2026-09-02, founder: "lets remove the bar from the bottom" then "omni bar should
+  // be first"). These selectors are DESCENDANTS of #panel-ask on purpose: an element lives in one
+  // place, so asserting the omnibox is inside the panel is the same assertion as "there is no
+  // persistent bar at the bottom of the screen" — and unlike a `hidden` attribute it cannot be
+  // satisfied by a second copy. `[data-focus]` is what shell.js moves the keyboard to when the
+  // panel is revealed; without it focus lands on the header's pin button.
+  'omnibox, inside the Ask panel (omnibox.js)': [
+    '#panel-ask #omnibox', '#panel-ask #find', '#panel-ask #find-kbd', '#panel-ask #find-results',
+    '#panel-ask #find[data-focus]',
+  ],
   // `#hud-north svg` is the compass needle: main.js binds it at module scope and writes its --rot on
   // every updateHud(), un-guarded, so the inner element is as load-bearing as the button around it.
   'hud (main.js)': [
@@ -107,6 +122,19 @@ export const RETIRED = {
   'omnibox assistant card (retired 2026-09-02)': [
     '#ask-card', '.askcard', '#ask-history', '#ask-card-x', '#ask-acts',
     '#ask-block', '#ask-toggle', '#ask', '.ask-head', '.block-ask',
+  ],
+  // Retired 2026-09-02, founder: "lets remove the bar from the bottom", then (over a mock-up)
+  // "omni bar should be first". The omnibox is now the first element INSIDE #panel-ask, and the
+  // panel's own composer went with the bar: one input, one router. Two entry points to the same
+  // field is the parallel system this removal exists to prevent — and a send button that did not
+  // go through `route()` would have asked the model "> 3d".
+  //
+  // `#panel-ask #omnibox` in the contract above is the positive half of this pair. This half is
+  // what catches a bar being ADDED BACK beside it: #app > #stage > #omnibox is the old bar's
+  // parentage, and a second copy of any of these ids would break both binders at once.
+  'persistent omnibox bar + panel composer (retired 2026-09-02)': [
+    '#app > #stage > #omnibox', '.find-ask',
+    '#ask-form', '#ask-input', '#ask-send',
   ],
 };
 
@@ -172,14 +200,22 @@ const matches = (node, spec) =>
   spec.classes.every((c) => node.classes.has(c)) &&
   spec.attrs.every(([k, v]) => k in node.attrs && (v === null || node.attrs[k] === v));
 
-/** querySelectorAll for the subset above (descendant combinators only). */
+/** querySelectorAll for the subset above (descendant and `>` child combinators). */
 export function queryAll(tree, selector) {
-  const parts = selector.trim().split(/\s+/).map(parsePart);
+  const tokens = selector.trim().split(/\s+/).filter(Boolean);
   let level = [tree];
-  for (const spec of parts) {
+  let child = false;                       // the next spec must match a DIRECT child
+  for (const token of tokens) {
+    if (token === '>') { child = true; continue; }
+    const spec = parsePart(token);
     const next = [];
-    const walk = (n) => { for (const c of n.children) { if (matches(c, spec)) next.push(c); walk(c); } };
-    for (const n of level) walk(n);
+    if (child) {
+      for (const n of level) for (const c of n.children) if (matches(c, spec)) next.push(c);
+    } else {
+      const walk = (n) => { for (const c of n.children) { if (matches(c, spec)) next.push(c); walk(c); } };
+      for (const n of level) walk(n);
+    }
+    child = false;
     level = next;
     if (!level.length) return [];
   }

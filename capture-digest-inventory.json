@@ -1,0 +1,543 @@
+{
+  "schemaVersion": 1,
+  "documentType": "tarkovzero-capture-digest-inventory",
+  "generatedBy": "scripts/build-capture-inventory.mjs",
+  "notes": "sha256 digests and byte counts of every raw capture, and nothing else. The verifier loads this whether or not the .local-* roots exist, so the capture check works on a clean CI checkout. EFT screenshot names are redacted to a digest stem because the name IS a raid coordinate. Regenerate with `npm run build:capture-inventory`; a missing or malformed file fails the build closed.",
+  "subtrees": [
+    {
+      "id": "unity-facts",
+      "path": ".local-game-derived/unity-facts",
+      "fileCount": 6,
+      "totalBytes": 460721845
+    },
+    {
+      "id": "unity-vegetation-instances",
+      "path": ".local-game-derived/customs",
+      "fileCount": 2,
+      "totalBytes": 6381425
+    },
+    {
+      "id": "fortress-structure-scalars",
+      "path": ".local-game-derived/asset-factory",
+      "fileCount": 1,
+      "totalBytes": 129114
+    },
+    {
+      "id": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01",
+      "fileCount": 65,
+      "totalBytes": 297271316
+    }
+  ],
+  "captures": [
+    {
+      "subtree": "unity-facts",
+      "path": ".local-game-derived/unity-facts/README.md",
+      "bytes": 2643,
+      "sha256": "sha256:1662718e5847952dc0e3941059b6455f8b8f619ab8306b7341bb3eaee86c0b26"
+    },
+    {
+      "subtree": "unity-facts",
+      "path": ".local-game-derived/unity-facts/customs-asset-aggregate.json",
+      "bytes": 233260,
+      "sha256": "sha256:3c4af97ea8b954771e5f6b200476ffd6e43975f231ff0b4a550d9bfedc9fdd19"
+    },
+    {
+      "subtree": "unity-facts",
+      "path": ".local-game-derived/unity-facts/customs-asset-family-inventory.md",
+      "bytes": 7927,
+      "sha256": "sha256:3d87c4e2024d2c530f2985b63f421481a55116059b3347a95b6395767a526db5"
+    },
+    {
+      "subtree": "unity-facts",
+      "path": ".local-game-derived/unity-facts/customs-unity-facts.json",
+      "bytes": 460442061,
+      "sha256": "sha256:4149121f35dbd342e2ee39020c3b0196ac5a85ac6fae34af15c5b17d6e11fb9e"
+    },
+    {
+      "subtree": "unity-facts",
+      "path": ".local-game-derived/unity-facts/customs-visual-family-census.json",
+      "bytes": 25457,
+      "sha256": "sha256:f2ecb47dd6d5e5646d1832563bb9de07fcd7135a4663ba454e73f385a4d86cdf"
+    },
+    {
+      "subtree": "unity-facts",
+      "path": ".local-game-derived/unity-facts/survey-targets.json",
+      "bytes": 10497,
+      "sha256": "sha256:18ca4bddf56fa98293acfb803f994d3f130ada87f36abeb5a03e7469ef992a52"
+    },
+    {
+      "subtree": "unity-vegetation-instances",
+      "path": ".local-game-derived/customs/terrain-000-vegetation.json",
+      "bytes": 2623804,
+      "sha256": "sha256:7e18faf44deaa6bf9d66de981be934b9d0634378d752b4c91b01968e653b8441"
+    },
+    {
+      "subtree": "unity-vegetation-instances",
+      "path": ".local-game-derived/customs/terrain-001-vegetation.json",
+      "bytes": 3757621,
+      "sha256": "sha256:61c820306da5c0c5d8194953bf7c6616f85b5570a6f011cbe280f767c1a5a07f"
+    },
+    {
+      "subtree": "fortress-structure-scalars",
+      "path": ".local-game-derived/asset-factory/customs/fortress-structure-scalars-v1.json",
+      "bytes": 129114,
+      "sha256": "sha256:8a59c61be57feac54e6307dad12851699ed9c88bdc30a078f37c233f796c6cd7"
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-03c8b6fbd2808d73.png",
+      "bytes": 3650567,
+      "sha256": "sha256:03c8b6fbd2808d739a3b6acf863e9c420005ef336588b15e244abdcb25a6cd16",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-0532dcc9df7d7578.png",
+      "bytes": 4340710,
+      "sha256": "sha256:0532dcc9df7d75786e28798f963ae3e4a278b3a61640ec8507107958a6896065",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-097b8975fc102db5.png",
+      "bytes": 4772213,
+      "sha256": "sha256:097b8975fc102db590f70ac6ea8b850cd126e6fe1d8e0e3275d603c1ae1d924f",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-0a51a8bd6a5182b5.png",
+      "bytes": 5068889,
+      "sha256": "sha256:0a51a8bd6a5182b57c2e7fccace938e5429c3aec90fd3dcd47a3084499919b13",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-0b75059c3b85524d.png",
+      "bytes": 3983136,
+      "sha256": "sha256:0b75059c3b85524dcd24754a2d0522cbfb9ccd73cbedd3d977caa17bae36708e",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-0c38216c839ebe81.png",
+      "bytes": 4922496,
+      "sha256": "sha256:0c38216c839ebe81e7224339a264eb9ddfc4053bb1ea49d8553b3f913f2ba359",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-0d1d1560304b0a56.png",
+      "bytes": 4671582,
+      "sha256": "sha256:0d1d1560304b0a5646ce896ca632f908bf633263b71a466551bd3c60aa534004",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-18f9f57ac0ec2baf.png",
+      "bytes": 3898325,
+      "sha256": "sha256:18f9f57ac0ec2baf76310f8549b48c2bfc5f6838a0c067eb70d4a78ca26af4ac",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-1bf16a57567de66b.png",
+      "bytes": 5364935,
+      "sha256": "sha256:1bf16a57567de66be401ee5d4942085ce45df7562ed8e2dbfaa741065cb4d31c",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-1f32ec59745c07b0.png",
+      "bytes": 4730747,
+      "sha256": "sha256:1f32ec59745c07b0838695a0fb746839d75e55de37866e673a0d297d9c26d627",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-3b9225daa0a1e937.png",
+      "bytes": 4047368,
+      "sha256": "sha256:3b9225daa0a1e937fe60fe35db695987a2a141d8012c7c27976c92b7fcf1aaaa",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-41230c2deb68ba2a.png",
+      "bytes": 4012315,
+      "sha256": "sha256:41230c2deb68ba2a23d01c28063d7e28ee36430ac2bff6676f3fd20a30cca055",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-490afcf1d91e2083.png",
+      "bytes": 4332473,
+      "sha256": "sha256:490afcf1d91e208338538cdee5a2bd2a8de22452a509f5879c1e8c3c45334842",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-4bf8129996690966.png",
+      "bytes": 4786360,
+      "sha256": "sha256:4bf812999669096687526e5cba566eaf14f9f26910754d73c34c1e0a50801f6f",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-56968bacb31ab196.png",
+      "bytes": 5461578,
+      "sha256": "sha256:56968bacb31ab196c0b6e2dce8284bfb61c1c3b35b8c715a9ef1ddbb44c97afc",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-5a772ae2a5e7ad49.png",
+      "bytes": 4979507,
+      "sha256": "sha256:5a772ae2a5e7ad49c8a5123a845e822bdaf28c06f3d7a73251f55a482b4bab13",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-5b620ad2c9b02024.png",
+      "bytes": 4089768,
+      "sha256": "sha256:5b620ad2c9b02024516bc56b9e08f9372ad35245a67063f1b3e8be8703398ced",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-5e81766956d2f484.png",
+      "bytes": 4376716,
+      "sha256": "sha256:5e81766956d2f48424b92ebea9be423e406d2b3049be9b17bab433c00d7860d9",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-60ac22337edbc99f.png",
+      "bytes": 5503351,
+      "sha256": "sha256:60ac22337edbc99f677a2b2dd901dff4323168f925f8422ac315c3583894b542",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-671d1593076c5c9b.png",
+      "bytes": 4392200,
+      "sha256": "sha256:671d1593076c5c9bde2b1e28bd08c2e69fb4e572bdb0671b4a48753818b355e3",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-672730e3815da495.png",
+      "bytes": 5367675,
+      "sha256": "sha256:672730e3815da495cfc436f2abbb9f299b2122e85ae5af2d8b8e0d2709b5d36e",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-6a20978d74dabc1c.png",
+      "bytes": 4505642,
+      "sha256": "sha256:6a20978d74dabc1c2227137beac41fba03e3118051826b8aff20dcdb191d0a60",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-6f28128aee4c1867.png",
+      "bytes": 3836810,
+      "sha256": "sha256:6f28128aee4c186749a1d34379b2fc63d14dd14d69732369d5cdb4bc8b1d4473",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-73af8c7cdc1a50bb.png",
+      "bytes": 4836727,
+      "sha256": "sha256:73af8c7cdc1a50bb71b0af1787473df1c22acbe281216251b7dd41aabaae0794",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-77438b17cbbd48b0.png",
+      "bytes": 4868543,
+      "sha256": "sha256:77438b17cbbd48b07655568caa800ff28aeebc87fceffd886b953e0c175ae160",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-862f923a39cc355d.png",
+      "bytes": 5104765,
+      "sha256": "sha256:862f923a39cc355d90ce2829a4f62698c89807a3a8898f9b720cd02bf3b3ffdb",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-8764ca07414f529e.png",
+      "bytes": 4515247,
+      "sha256": "sha256:8764ca07414f529e0d36ee71c043f8be2a90b0474ff88a5050ff8938b4ab86d4",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-9057dbf039b56a11.png",
+      "bytes": 5095882,
+      "sha256": "sha256:9057dbf039b56a1121766925e5a0068d489b917bd36533c0f0cd7a616e5cf0b3",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-92b11e080db81ed4.png",
+      "bytes": 3884233,
+      "sha256": "sha256:92b11e080db81ed4c96528063a89668b454aaa1510a74faa6146aeac12363aa4",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-94e76873542fa9dc.png",
+      "bytes": 4366745,
+      "sha256": "sha256:94e76873542fa9dc95aae06ba9980e2fe1b4c9d4d39934a8773ffdde6db390f7",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-9806615046596d12.png",
+      "bytes": 3876548,
+      "sha256": "sha256:9806615046596d127032a62c405d7a00f494298aca432b035c39a8443293b595",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-98887c9faf7b21bb.png",
+      "bytes": 4422899,
+      "sha256": "sha256:98887c9faf7b21bb2b121b3161d94df00d3ec38207ce8a64d52cc927cf671a97",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-98caf1c25bb61875.png",
+      "bytes": 5165118,
+      "sha256": "sha256:98caf1c25bb6187592225301f96fd26ec24f62541e3e40c5de45e1950c7e1bdc",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-9975b4eb5d86d6c0.png",
+      "bytes": 5171020,
+      "sha256": "sha256:9975b4eb5d86d6c09cb02350dd21d5b7cdf01d3995706f78d32cf8b83931f9c7",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-9c434ccd76746e74.png",
+      "bytes": 4476151,
+      "sha256": "sha256:9c434ccd76746e74c3376ac915043daf270ac098ff87e3b4cb8fc80354ec8331",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-9f22894285c1bc2b.png",
+      "bytes": 4918247,
+      "sha256": "sha256:9f22894285c1bc2bbbd00429e56a4d2f0e51c38ba507c4e3e1970f03db002888",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-a06b617555924661.png",
+      "bytes": 3108814,
+      "sha256": "sha256:a06b617555924661a29bfceccf33fdfd882e75d5d5150be5a7ee60000dbd3747",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-a0d923854cdb8875.png",
+      "bytes": 3853292,
+      "sha256": "sha256:a0d923854cdb88754d808009bae793be922ba0bb554aef96ff54c5728b052e6d",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-a5bb65462a1f29aa.png",
+      "bytes": 4155477,
+      "sha256": "sha256:a5bb65462a1f29aa9fc955707989078d1d8ae631834f89365e9bdf0c5f2b66cb",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-a65f026d543dd56d.png",
+      "bytes": 4915530,
+      "sha256": "sha256:a65f026d543dd56dbbc8c7e4df2a587d9ac4a769df7d3d8601f36f8ec91dca96",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-a94fcd5678d597fe.png",
+      "bytes": 5226725,
+      "sha256": "sha256:a94fcd5678d597fe7cfb142f5b1dba3eb46c8f541a35387f3105b92a901aa67d",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-abe9d602ce5f0c86.png",
+      "bytes": 3674059,
+      "sha256": "sha256:abe9d602ce5f0c86e9ffe63ab2bf181091d77d70e1e4f2c0ba0b553aff8c780e",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-b0d5c9e76e61242e.png",
+      "bytes": 4989214,
+      "sha256": "sha256:b0d5c9e76e61242e61a6e2f50a03f0d4767d44658eb10f45558eaea1d5911b99",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-bac83f4a15b6613d.png",
+      "bytes": 4129003,
+      "sha256": "sha256:bac83f4a15b6613d6aa2c9a056243f68242b11541a6fcfdc03e4e8c6479a2d8f",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-bb9f81f427079084.png",
+      "bytes": 4725429,
+      "sha256": "sha256:bb9f81f427079084ad08eff56b52ca2729b87f42663c623ae9178b24522dbcc6",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-bc0fdcf8aa798a15.png",
+      "bytes": 5276929,
+      "sha256": "sha256:bc0fdcf8aa798a15c393df27358f9e6d6259bc2a022ff7ba68c059ec86bebc0a",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-bdd5a3a50ab5f4e1.png",
+      "bytes": 4205950,
+      "sha256": "sha256:bdd5a3a50ab5f4e175fb03ee7631b958e415ef7fa30edbdff3ffb649fc5a777f",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-be3c3501b93e138b.png",
+      "bytes": 3870545,
+      "sha256": "sha256:be3c3501b93e138b4c06c236cea038a59ea3d71ef2e3b7933e544ab88b09e616",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-c42b2d79fa44dc95.png",
+      "bytes": 5626584,
+      "sha256": "sha256:c42b2d79fa44dc953ed62d4854af8ad023d02704e69bf03af37dcd7a5f79be26",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-d1fc5b750f96e902.png",
+      "bytes": 3714328,
+      "sha256": "sha256:d1fc5b750f96e9028f62a3afadccb0f2487245a98d6761b779df96852efd8d82",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-d2b39a7595db840e.png",
+      "bytes": 5252316,
+      "sha256": "sha256:d2b39a7595db840ef1b9b0c11a3190ebf55066e0c441ca96bd9261c41866974e",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-d401397d67ea8ce6.png",
+      "bytes": 4331980,
+      "sha256": "sha256:d401397d67ea8ce6659272e0b6d7a1f4a9cfc227c578b2e20c836b1249f6aa66",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-d7262328f2ef26dd.png",
+      "bytes": 5526885,
+      "sha256": "sha256:d7262328f2ef26ddaeded6d8b9873c2a71ea2710e3656b831815df28c2ebf54d",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-d772a442674b1aa1.png",
+      "bytes": 5182511,
+      "sha256": "sha256:d772a442674b1aa128e30e8181760db9536385503e229f28db6fc5a58d524de0",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-db0b0a98c44e90c1.png",
+      "bytes": 4677948,
+      "sha256": "sha256:db0b0a98c44e90c1e91aac30d00213dfcef327a352d4dfb300adcd27702c0601",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-dedb3cf974c773ff.png",
+      "bytes": 4336072,
+      "sha256": "sha256:dedb3cf974c773ffa81de9a061bc853f39188a1c34b4f832608ebcdaa8d38562",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-e5aa8f63b48def6e.png",
+      "bytes": 4166342,
+      "sha256": "sha256:e5aa8f63b48def6e495ab7a8ab787ad2092784ae36cdfd596adb3abda6d3dfda",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-eeb9606bac77a51f.png",
+      "bytes": 4303375,
+      "sha256": "sha256:eeb9606bac77a51f4d99980375899126f6ece0b8a11f1dcc887c1e5eb6b06927",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-ef708952096f95e3.png",
+      "bytes": 5029137,
+      "sha256": "sha256:ef708952096f95e3f4cd12629d8f81ada99ba4d0c5a1301792460695e778d5a6",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-f2849dfd1455af8c.png",
+      "bytes": 4883077,
+      "sha256": "sha256:f2849dfd1455af8c072dea0dd8f4c57c3ad6a1c2e804f70b6b47c9dfb5b8910c",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-f74bc5151c98c1f8.png",
+      "bytes": 4724164,
+      "sha256": "sha256:f74bc5151c98c1f82dcd1d9063f21e1cc15ecde8e0759a60eeb437212552d8eb",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-fa2a55d4ef045939.png",
+      "bytes": 4514780,
+      "sha256": "sha256:fa2a55d4ef045939a9f3e6591774b46360361627ea8579b194bfd7f2de3a4fdf",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-fc147aee700efe7e.png",
+      "bytes": 4257730,
+      "sha256": "sha256:fc147aee700efe7e4b73b52c2a6552c9e0d77daa37eb71954747eadff770c5fd",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-feac0495bed639ae.png",
+      "bytes": 4519095,
+      "sha256": "sha256:feac0495bed639aeeef8c50b2cb2fd6d136c7a1d0f0ac6b52b488a3262e68fb0",
+      "nameRedacted": true
+    },
+    {
+      "subtree": "survey-photographs",
+      "path": ".local-candidates/survey-2026-09-01/redacted-fff3f4419c0f37b2.png",
+      "bytes": 4296537,
+      "sha256": "sha256:fff3f4419c0f37b2162e4869d68c68bd70edfce9d71395fca8828a64b6bc7f7b",
+      "nameRedacted": true
+    }
+  ]
+}

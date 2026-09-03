@@ -14,8 +14,11 @@ import {
 import { buildOpenFrameBuildingAsset, buildPropAsset, propAssetKind, propDimensions } from '../src/three-prop-assets.js';
 import { BRIDGE_STRUCTURE, bridgeApproachPlan, bridgeStructurePlan, bridgeStructureProfile } from '../src/bridge-structure.js';
 import {
-  assertThreeRenderer, canLoadLocalGameDerivedAssets, canRunThreeRenderer, describeRendererGate,
-  isLoopbackHostname, normalizeHostname, resolveRendererMode,
+  DECK_RENDERER_REQUEST, RENDERER_REQUESTS, THREE_RENDERER_MAPS,
+  assertThreeRenderer, canLoadLocalGameDerivedAssets, canRunThreeRenderer, canShowDiagnosticReadouts,
+  describeRendererGate,
+  isKnownRendererRequest, isLoopbackHostname, normalizeHostname, normalizeRendererRequest,
+  resolveRendererMode,
 } from '../src/renderer-gate.js';
 import { loadCustomsLocalTerrainPackage } from '../src/customs-local-terrain-loader.js';
 import { deckWaterClearance } from '../src/water-surface.js';
@@ -217,7 +220,8 @@ test('the truth strip names the surface that is DRAWING, not the best one that e
   const vegetation = stripVegetation(PLAN_ONLY_SNAPSHOT);
   const pbr = { hasExactTerrain: true, pbrAvailable: true, paletteAvailable: true };
   const live = customsTruthStripCopy({
-    hasExactTerrain: true, surface: customsExactTerrainSurfaceStatus(pbr), vegetation,
+    hasExactTerrain: true, terrainDistribution: 'local-package',
+    surface: customsExactTerrainSurfaceStatus(pbr), vegetation,
   });
   assert.equal(live.title, 'CUSTOMS TRUTH');
   assert.equal(live.detail, 'EXACT LOCAL TERRAIN · 12-LAYER AUTHORED PBR · 7,108 AUTHORED VEGETATION · FIXED RELIEF 2×');
@@ -271,7 +275,7 @@ test('THE MEASURED DEFECT: the strip cannot claim authored vegetation while the 
 });
 
 test('a strip with nothing resolved yet says so, instead of borrowing the healthy wording', () => {
-  const booting = customsTruthStripCopy({ hasExactTerrain: true });
+  const booting = customsTruthStripCopy({ hasExactTerrain: true, terrainDistribution: 'local-package' });
   assert.equal(booting.detail, 'EXACT LOCAL TERRAIN · RESOLVING SURFACE · RESOLVING VEGETATION · FIXED RELIEF 2×');
   assert.equal(booting.state, 'pending');
   assert.doesNotMatch(booting.detail, /12-LAYER|AUTHORED VEGETATION/);
@@ -298,12 +302,19 @@ test('the legacy-terrain strip keeps its own title and still reports vegetation'
 // come from ONE `describeVegetationObservability()` call — the release wording is a code in that
 // module, not a second source of truth in the renderer.
 
-/** A release build: no local package was even requested, so there is no plan and no error. */
+/**
+ * A release build whose PROMOTED vegetation package did not load.
+ *
+ * Before 2026-09-02 this snapshot was the shipped configuration and the readouts were written to
+ * say so calmly. The pack ships now — geometry, texture arrays and the 8,805-row placement table —
+ * so the same snapshot is a failed load, and every assertion below exists to prove the readouts
+ * moved with it instead of keeping the old reassurance.
+ */
 const RELEASE_VEGETATION_SNAPSHOT = Object.freeze({
   mode: 'procedural',
   hasAuthoredPlan: false,
   localEnhancements: false,
-  reason: 'release-build-public-tree-positions',
+  reason: 'promoted-vegetation-unavailable',
   mount: null,
   routing: null,
   runtime: null,
@@ -316,14 +327,29 @@ const RELEASE_VEGETATION_SNAPSHOT = Object.freeze({
   culledOutsideScope: null,
 });
 
-test('a release build names the public heightfield and the public tree positions', () => {
+test('a release build with NEITHER promoted package reads as two failures, not as the design', () => {
+  // NOTE (2026-09-02): this snapshot is a release build with no promoted terrain AND no promoted
+  // vegetation — both defects now. The per-subsystem case (exact ground, missing forest) is the
+  // test immediately below.
   const observability = describeVegetationObservability(RELEASE_VEGETATION_SNAPSHOT);
-  assert.equal(observability.indicator.code, 'authored-unavailable-in-release');
+  assert.equal(observability.indicator.code, 'promoted-vegetation-missing');
   assert.equal(observability.indicator.state, 'procedural');
   assert.equal(observability.indicator.healthy, false, 'no authored vegetation IS on screen');
-  assert.equal(observability.indicator.headline, 'Procedural forest — public tree positions (release build)');
+  assert.equal(
+    observability.indicator.headline,
+    'Procedural forest — the promoted vegetation pack did not load',
+  );
   assert.match(observability.indicator.detail, /public tree position from \/data\/customs-3d\.json/);
-  assert.match(observability.indicator.detail, /the shipped configuration, not a failed load/);
+  assert.match(
+    observability.indicator.detail,
+    /That is a FAILED LOAD, not the shipped configuration/,
+    'the pack ships now, so an absent forest is a defect and must read as one',
+  );
+  assert.doesNotMatch(
+    observability.indicator.detail,
+    /is NOT promoted|still gated to dev \+ loopback/,
+    'the pre-promotion wording described the pack as gated; it ships from public/ now',
+  );
   assert.match(
     observability.indicator.detail,
     /— 2348 of them —/,
@@ -343,11 +369,148 @@ test('a release build names the public heightfield and the public tree positions
   assert.equal(copy.title, 'CUSTOMS PUBLIC DATA');
   assert.equal(
     copy.detail,
-    'PUBLIC HEIGHTFIELD · SEMANTIC GROUND ATLAS · 0 AUTHORED VEGETATION — PUBLIC TREE POSITIONS · FIXED RELIEF 2×',
+    'PUBLIC HEIGHTFIELD — PROMOTED TERRAIN MISSING · SEMANTIC GROUND ATLAS'
+    + ' · 0 AUTHORED VEGETATION — PROMOTED PACK DID NOT LOAD · FIXED RELIEF 2×',
   );
   assert.doesNotMatch(copy.detail, /EXACT LOCAL TERRAIN/, 'the release frame has no exact terrain to claim');
   assert.doesNotMatch(copy.detail, /LOCALHOST|LEGACY/, 'it is neither');
-  assert.equal(copy.state, 'requested', 'the shipped configuration is not a degradation');
+  assert.doesNotMatch(
+    copy.detail,
+    /PUBLIC TREE POSITIONS/,
+    'naming the source let the segment read as a description of the shipped frame',
+  );
+  // Since the two promotions this IS a degradation on both counts: production ships the exact
+  // ground and the authored forest, so drawing neither means neither package loaded.
+  assert.equal(copy.state, 'degraded', 'a release build with neither promoted package is a defect');
+});
+
+// ── The release frame after BOTH 2026-09-02 promotions ─────────────────────────────────────────
+//
+// The founder opened production and said "this is far from what we worked on. not even the floor
+// ground correct." The height and control surfaces were promoted first; the authored vegetation
+// followed the same day. Production now draws the exact ground AND the authored forest, so the
+// release frame still has to describe TWO subsystems that can disagree — but the vegetation half is
+// no longer allowed to describe its own absence as the design.
+
+/** A release build with the promoted ground on screen and the promoted forest missing. */
+const PROMOTED_RELEASE_SNAPSHOT = Object.freeze({
+  ...RELEASE_VEGETATION_SNAPSHOT,
+  terrainDistribution: 'promoted-public',
+});
+
+test('THE PER-SUBSYSTEM NOTICE: exact ground and a missing forest are stated separately', () => {
+  const observability = describeVegetationObservability(PROMOTED_RELEASE_SNAPSHOT);
+  assert.equal(observability.indicator.code, 'promoted-vegetation-missing');
+  const detail = observability.indicator.detail;
+
+  // The ground half: named, sourced, and NOT described as gated.
+  assert.match(detail, /GROUND: the terrain IS exact here/);
+  assert.match(detail, /\/assets\/3d\/customs\/terrain\//);
+  // The vegetation half: promoted, absent, and said so in its own clause.
+  assert.match(detail, /VEGETATION: the authored pack IS promoted/);
+  assert.match(detail, /\/assets\/3d\/customs\/authored\/vegetation\//);
+  assert.match(detail, /2348 of them/);
+  assert.match(detail, /That is a FAILED LOAD, not the shipped configuration/);
+
+  // DISCRIMINATION: neither of the two superseded claims may survive here.
+  assert.doesNotMatch(
+    detail,
+    /local game-derived data is gated to dev \+ loopback, so the authored/,
+    'the pre-terrain-promotion wording described the whole frame as gated; the ground no longer is',
+  );
+  assert.doesNotMatch(
+    detail,
+    /Exact ground, procedural trees: that is the shipped configuration/,
+    'the pre-vegetation-promotion wording called a procedural forest the shipped configuration',
+  );
+
+  // ...and the strip built from that same verdict names the promoted terrain AND the failure.
+  const copy = customsTruthStripCopy({
+    hasExactTerrain: true,
+    terrainDistribution: 'promoted-public',
+    localEnhancements: false,
+    surface: customsExactTerrainSurfaceStatus({
+      hasExactTerrain: true, pbrAvailable: true, paletteAvailable: true,
+    }),
+    vegetation: observability.strip,
+  });
+  assert.equal(copy.title, 'CUSTOMS TRUTH');
+  assert.equal(
+    copy.detail,
+    'EXACT TERRAIN — PROMOTED · 12-LAYER AUTHORED PBR'
+    + ' · 0 AUTHORED VEGETATION — PROMOTED PACK DID NOT LOAD · FIXED RELIEF 2×',
+  );
+  assert.doesNotMatch(copy.detail, /LOCAL/, 'a promoted package that ships is not local');
+  assert.equal(
+    copy.state,
+    'degraded',
+    'a fallback must read as degraded: the promoted forest ships, so its absence is a defect',
+  );
+});
+
+// ── THE SHIPPED release frame: both promotions live ────────────────────────────────────────────
+
+test('THE SHIPPED FRAME: promoted ground and a live authored forest read as fully exact', () => {
+  // The healthy production frame after both promotions. Nothing is gated, nothing fell back, and
+  // this is the ONE arrangement in which the strip is allowed to be green.
+  const observability = describeVegetationObservability({
+    mode: 'authored',
+    hasAuthoredPlan: true,
+    localEnhancements: false,
+    vegetationDistribution: 'promoted-public',
+    terrainDistribution: 'promoted-public',
+    reason: null,
+    mount: { phase: 'mounted', loaded: 93, expected: 93 },
+    routing: { authored: 7108, procedural: 0, rendered: 7108, culled: 1697, source: 8805 },
+    runtime: {
+      materialMode: 'shared-array-texture',
+      drawCalls: 31,
+      liveBuckets: 31,
+      visibleInstances: 5200,
+      frustumCulledInstances: 1908,
+    },
+    arrayTextures: { layers: 199, textures: 9 },
+    arrayTextureFailure: null,
+    proceduralPlacements: 0,
+    declaredInstances: 8805,
+    culledOutsideScope: 1697,
+  });
+  assert.deepEqual(observability.warnings, [], 'a healthy promoted mount has nothing to explain');
+  assert.equal(observability.indicator.state, 'authored');
+  assert.equal(observability.indicator.healthy, true);
+  assert.equal(observability.strip.authoredPlacements, 7108);
+
+  const copy = customsTruthStripCopy({
+    hasExactTerrain: true,
+    terrainDistribution: 'promoted-public',
+    localEnhancements: false,
+    surface: customsExactTerrainSurfaceStatus({
+      hasExactTerrain: true, pbrAvailable: true, paletteAvailable: true,
+    }),
+    vegetation: observability.strip,
+  });
+  assert.equal(
+    copy.detail,
+    'EXACT TERRAIN — PROMOTED · 12-LAYER AUTHORED PBR · 7,108 AUTHORED VEGETATION · FIXED RELIEF 2×',
+  );
+  assert.equal(copy.state, 'exact');
+});
+
+test('DISCRIMINATION: the same release snapshot WITHOUT the promoted ground says the opposite', () => {
+  // Same code, same subsystem split, opposite ground clause — so the ground half of the notice is
+  // driven by measured state and not by a constant.
+  const missing = describeVegetationObservability({
+    ...PROMOTED_RELEASE_SNAPSHOT, terrainDistribution: null,
+  });
+  assert.match(missing.indicator.detail, /the terrain is the public heightfield/);
+  assert.match(missing.indicator.detail, /which is a defect, not the shipped configuration/);
+  assert.doesNotMatch(missing.indicator.detail, /the terrain IS exact here/);
+
+  // And on a dev machine drawing the local package, the ground clause names THAT.
+  const localGround = describeVegetationObservability({
+    ...PROMOTED_RELEASE_SNAPSHOT, terrainDistribution: 'local-package',
+  });
+  assert.match(localGround.indicator.detail, /the terrain is the exact local package/);
 });
 
 test('a release build still reports a ground bake that actually failed', () => {
@@ -363,9 +526,23 @@ test('a release build still reports a ground bake that actually failed', () => {
   const booting = customsTruthStripCopy({ hasExactTerrain: false, localEnhancements: false });
   assert.equal(
     booting.detail,
-    'PUBLIC HEIGHTFIELD · RESOLVING SURFACE · RESOLVING VEGETATION · FIXED RELIEF 2×',
+    'PUBLIC HEIGHTFIELD — PROMOTED TERRAIN MISSING · RESOLVING SURFACE · RESOLVING VEGETATION'
+    + ' · FIXED RELIEF 2×',
   );
-  assert.equal(booting.state, 'pending');
+  // 'degraded' outranks 'pending': the missing promoted terrain is already a known fact here, and
+  // the strip wears the worst thing it is reporting.
+  assert.equal(booting.state, 'degraded');
+
+  // The booting strip for the SHIPPED configuration still says pending, because nothing has gone
+  // wrong yet — the promoted ground is on screen and only the surface/vegetation are unresolved.
+  const bootingPromoted = customsTruthStripCopy({
+    hasExactTerrain: true, terrainDistribution: 'promoted-public', localEnhancements: false,
+  });
+  assert.equal(
+    bootingPromoted.detail,
+    'EXACT TERRAIN — PROMOTED · RESOLVING SURFACE · RESOLVING VEGETATION · FIXED RELIEF 2×',
+  );
+  assert.equal(bootingPromoted.state, 'pending');
 });
 
 test('the release code cannot be reached by an absent plan on a dev machine', () => {
@@ -1507,13 +1684,118 @@ test('(a) the Three renderer runs for Customs on an explicit request, in ANY env
   );
   assert.equal(resolveRendererMode({ ...asked, mapKey: 'woods' }), 'deck', 'Reserve/Woods have no Three path');
   assert.equal(resolveRendererMode({ ...asked, mapKey: 'reserve' }), 'deck');
-  assert.equal(resolveRendererMode({ ...asked, rendererRequest: null }), 'deck', 'deck.gl stays the default');
-  assert.equal(resolveRendererMode({ ...asked, rendererRequest: 'deck' }), 'deck');
-  assert.equal(resolveRendererMode({ ...asked, rendererRequest: 'THREE' }), 'deck', 'the request is exact');
-  assert.equal(resolveRendererMode({}), 'deck');
   assert.doesNotThrow(() => assertThreeRenderer(asked));
-  assert.throws(() => assertThreeRenderer({ ...asked, mapKey: 'woods' }), /explicit \?renderer=three/);
-  assert.throws(() => assertThreeRenderer({ ...asked, rendererRequest: null }), /explicit \?renderer=three/);
+  assert.throws(() => assertThreeRenderer({ ...asked, mapKey: 'woods' }), /\?renderer=deck/);
+  assert.throws(() => assertThreeRenderer({ mapKey: 'customs', rendererRequest: 'deck' }), /\?renderer=deck/);
+});
+
+// ── (a) the default, flipped 2026-09-02 ────────────────────────────────────────────────────────
+//
+// The founder opened tarkovzero.com and got deck.gl's older geometry under today's labels: "is
+// this what i am supposed to see? cause the map we build is not this." Customs is Three now, with
+// deck.gl one `?renderer=deck` away, and Reserve/Woods untouched because they have no Three data.
+
+test('(a) Customs with NO renderer param is Three; every other map is deck.gl', () => {
+  for (const rendererRequest of [null, undefined, '', '   ']) {
+    assert.equal(
+      resolveRendererMode({ mapKey: 'customs', rendererRequest }),
+      'three',
+      `Customs must default to Three (request ${JSON.stringify(rendererRequest)})`,
+    );
+  }
+  assert.equal(resolveRendererMode({ mapKey: 'customs' }), 'three');
+  assert.equal(canRunThreeRenderer({ mapKey: 'customs' }), true);
+  assert.doesNotThrow(() => assertThreeRenderer({ mapKey: 'customs' }));
+
+  // Reserve and Woods have no Three data path, so the default cannot reach them and neither can an
+  // explicit request. This is the assertion that keeps the flip to ONE map.
+  for (const mapKey of ['reserve', 'woods']) {
+    for (const rendererRequest of [null, 'three', 'deck']) {
+      assert.equal(
+        resolveRendererMode({ mapKey, rendererRequest }),
+        'deck',
+        `${mapKey} must stay on deck.gl (request ${rendererRequest})`,
+      );
+    }
+    assert.throws(() => assertThreeRenderer({ mapKey, rendererRequest: 'three' }), /\?renderer=deck/);
+  }
+  // An unknown map key is not a Three map either — the list is a membership test, not a default.
+  assert.equal(resolveRendererMode({}), 'deck');
+  assert.equal(resolveRendererMode({ mapKey: 'shoreline' }), 'deck');
+  assert.deepEqual(THREE_RENDERER_MAPS, ['customs']);
+});
+
+test('(a) ?renderer=deck is the opt-out, and it is read the way a human types it', () => {
+  assert.equal(DECK_RENDERER_REQUEST, 'deck');
+  assert.deepEqual(RENDERER_REQUESTS, ['three', 'deck']);
+  for (const rendererRequest of ['deck', 'DECK', 'Deck', ' deck ', '\tdeck\n']) {
+    assert.equal(
+      resolveRendererMode({ mapKey: 'customs', rendererRequest }),
+      'deck',
+      `?renderer=${JSON.stringify(rendererRequest)} must reach deck.gl — it is the escape hatch`,
+    );
+    assert.equal(canRunThreeRenderer({ mapKey: 'customs', rendererRequest }), false);
+  }
+  assert.equal(normalizeRendererRequest(' DECK '), 'deck');
+  assert.equal(normalizeRendererRequest('  '), null);
+  assert.equal(normalizeRendererRequest(null), null);
+  assert.equal(normalizeRendererRequest(undefined), null);
+
+  // `three` still names the renderer explicitly, in any casing, and is still what Reserve refuses.
+  for (const rendererRequest of ['three', 'THREE', ' Three ']) {
+    assert.equal(resolveRendererMode({ mapKey: 'customs', rendererRequest }), 'three');
+  }
+
+  // A typo is not a silent opt-out: it leaves the map on its default renderer AND is reportable,
+  // so `main.js` can say so on the console instead of a visitor wondering why `?renderer=dekc`
+  // changed nothing.
+  for (const typo of ['dekc', 'deck.gl', 'off', 'webgl', '0']) {
+    assert.equal(isKnownRendererRequest(typo), false, typo);
+    assert.equal(resolveRendererMode({ mapKey: 'customs', rendererRequest: typo }), 'three');
+    assert.equal(resolveRendererMode({ mapKey: 'woods', rendererRequest: typo }), 'deck');
+  }
+  for (const known of [null, '', 'three', 'deck', 'DECK']) assert.equal(isKnownRendererRequest(known), true, String(known));
+});
+
+test('(a) a PRODUCTION Customs load is Three on PUBLIC data, and says which', () => {
+  // The whole point of the gate split, in one assertion: the renderer default moved, the boundary
+  // did not. tarkovzero.com, no query string at all.
+  const production = describeRendererGate({ dev: false, hostname: 'tarkovzero.com', mapKey: 'customs' });
+  assert.equal(production.renderer, 'three');
+  assert.equal(production.localEnhancements, false);
+  assert.equal(production.localEnhancementReason, 'release-build');
+  // `dev` is absent from a production bundle entirely, which is the shape this actually ships in.
+  const bundled = describeRendererGate({ hostname: 'tarkovzero.com', mapKey: 'customs' });
+  assert.equal(bundled.renderer, 'three');
+  assert.equal(bundled.localEnhancements, false);
+  assert.equal(bundled.localEnhancementReason, 'release-build');
+  // …and on the preview host, and on a LAN address, and on loopback with no dev server behind it:
+  // three of them are Three, none of them reach local data, and the reason is never a failure.
+  for (const hostname of ['tarkovzero.vercel.app', '192.168.1.4', 'localhost']) {
+    const gate = describeRendererGate({ dev: false, hostname, mapKey: 'customs' });
+    assert.equal(gate.renderer, 'three', hostname);
+    assert.equal(gate.localEnhancements, false, hostname);
+    assert.equal(gate.localEnhancementReason, 'release-build', hostname);
+  }
+});
+
+test('(a) the default flip did not move the boundary predicate', async () => {
+  // A source-level assertion, deliberately: the risk this diff carries is not that
+  // `canLoadLocalGameDerivedAssets` returns the wrong value today, it is that a later hand widens
+  // it to make the now-default renderer look better. Both halves of the conjunction are pinned to
+  // the text, and (b)'s signature is pinned to environment inputs only.
+  const gate = await readFile(new URL('../src/renderer-gate.js', import.meta.url), 'utf8');
+  assert.match(
+    gate,
+    /export function canLoadLocalGameDerivedAssets\(\{ dev, hostname \} = \{\}\) \{\n\s*return dev === true && isLoopbackHostname\(hostname\);\n\}/,
+    'the boundary predicate must stay `dev === true && isLoopbackHostname(hostname)`, taking nothing else',
+  );
+  assert.doesNotMatch(
+    gate,
+    /canLoadLocalGameDerivedAssets\(\{[^}]*\b(?:mapKey|rendererRequest)\b/,
+    'no renderer or map input may reach the boundary predicate',
+  );
+  assert.match(gate, /const LOOPBACK_HOSTS = new Set\(\['localhost', '127\.0\.0\.1', '::1'\]\);/);
 });
 
 test('(b) local game-derived data stays dev + loopback ONLY — unchanged by the release gate', () => {
@@ -1549,6 +1831,118 @@ test('(b) local game-derived data stays dev + loopback ONLY — unchanged by the
   }
 });
 
+/* ── (c) the build notices come off the live page ────────────────────────────────────────────── */
+//
+// Founder, 2026-09-02: *"also remove the notification boxes in the middle about the build."* The
+// CUSTOMS TRUTH strip and the vegetation notice are instruments — the orange box is what says the
+// exact terrain silently failed and the frame is back on the fitted heightfield. A visitor cannot
+// act on either. So they are drawn on dev + loopback and nowhere else, and NOTHING about the
+// measurement moves: `renderStats().truth` publishes the same composed strip in both places.
+
+test('(c) the diagnostic readouts are drawn on dev + loopback and nowhere else', () => {
+  assert.equal(canShowDiagnosticReadouts({ dev: true, hostname: 'localhost' }), true);
+  for (const hostname of ['localhost', '127.0.0.1', '::1', '[::1]', 'LOCALHOST']) {
+    assert.equal(canShowDiagnosticReadouts({ dev: true, hostname }), true, hostname);
+  }
+  // Every shape a release build actually ships in. `dev` is ABSENT from a production bundle, so
+  // `undefined` must not read as permission — the same identity check the boundary predicate uses.
+  for (const hostname of ['tarkovzero.com', 'tarkovzero.vercel.app', '192.168.1.4', 'localhost']) {
+    assert.equal(canShowDiagnosticReadouts({ dev: false, hostname }), false, hostname);
+    assert.equal(canShowDiagnosticReadouts({ hostname }), false, `undefined dev: ${hostname}`);
+    assert.equal(canShowDiagnosticReadouts({ dev: 'true', hostname }), false, `string dev: ${hostname}`);
+  }
+  // `vite preview` on 127.0.0.1 is a RELEASE build on a loopback host — the exact configuration the
+  // e2e walkthrough runs, and the one a loopback-only rule would have got wrong.
+  assert.equal(canShowDiagnosticReadouts({ dev: false, hostname: '127.0.0.1' }), false);
+  assert.equal(canShowDiagnosticReadouts({}), false);
+});
+
+test('(c) hiding the banner does not move the boundary, and vice versa', async () => {
+  // Two predicates that currently agree, kept apart on purpose: one is a licensing boundary and one
+  // is a presentation choice. Pinned to the source so a later hand cannot collapse them into one
+  // and make a UI decision quietly widen the thing that keeps game-derived assets off Vercel.
+  const gate = await readFile(new URL('../src/renderer-gate.js', import.meta.url), 'utf8');
+  assert.match(
+    gate,
+    /export function canShowDiagnosticReadouts\(\{ dev, hostname \} = \{\}\) \{\n\s*return dev === true && isLoopbackHostname\(hostname\);\n\}/,
+    'the readout predicate must be its own function taking only the environment',
+  );
+  assert.doesNotMatch(gate, /canLoadLocalGameDerivedAssets\s*=\s*canShowDiagnosticReadouts/);
+  assert.doesNotMatch(gate, /canShowDiagnosticReadouts\s*=\s*canLoadLocalGameDerivedAssets/);
+  assert.doesNotMatch(
+    gate,
+    /return canLoadLocalGameDerivedAssets\(\{ dev, hostname \}\);\n\}\n\n\/\*\*\n \* \(c\)/,
+    'the readout question must not be implemented by delegating to the boundary question',
+  );
+});
+
+test('(c) the state behind the hidden banner is still composed, in full, everywhere', () => {
+  // The rule the founder set and the one this file's header is about: hide the pixels, keep the
+  // measurement. `customsTruthStripCopy()` is pure and takes no environment at all — there is no
+  // `localEnhancements`-shaped input that could make a production frame compose a *different*
+  // strip from the one a dev box would read, only a different decision about drawing it.
+  const args = {
+    hasExactTerrain: true,
+    terrainDistribution: 'promoted-public',
+    surface: { available: 'exact-control-mask-12-layer-original-pbr', active: 'exact-control-mask-12-layer-original-pbr' },
+    vegetation: { text: '8,805 AUTHORED VEGETATION', healthy: true, state: 'authored' },
+    relief: 2,
+    localEnhancements: false,
+  };
+  const copy = customsTruthStripCopy(args);
+  assert.equal(copy.title, 'CUSTOMS TRUTH');
+  assert.equal(copy.state, 'exact');
+  assert.match(copy.detail, /EXACT TERRAIN — PROMOTED/);
+  assert.match(copy.detail, /8,805 AUTHORED VEGETATION/);
+  // …and a degraded production load still reads as degraded. This is the assertion that would have
+  // caught "the banner is gone, so nothing says the ground fell back": the composed state, which
+  // renderStats() publishes, is what carries it now.
+  //
+  // ONE subsystem down, the other perfect. This is the isolating case: the vegetation term is
+  // healthy, so the only thing that can carry the degradation is the terrain term. A frame whose
+  // exact ground silently fell back has to read `degraded` here or nothing on the live page — where
+  // the banner is gone — would ever say so.
+  const groundOnly = customsTruthStripCopy({
+    hasExactTerrain: false,
+    localEnhancements: false,
+    publicSurface: 'semantic-ground-atlas',
+    vegetation: { text: '8,805 AUTHORED VEGETATION', healthy: true, state: 'authored' },
+  });
+  assert.equal(groundOnly.state, 'degraded', 'a fallen-back ground with a healthy forest must still read degraded');
+  assert.equal(groundOnly.title, 'CUSTOMS PUBLIC DATA', 'and it must not keep the CUSTOMS TRUTH title');
+  assert.match(groundOnly.detail, /PUBLIC HEIGHTFIELD — PROMOTED TERRAIN MISSING/);
+  assert.notEqual(groundOnly.state, copy.state, 'a healthy and a fallen-back frame must not read alike');
+  // …and the mirror image: the ground is exact and the promoted forest did not arrive.
+  const forestOnly = customsTruthStripCopy({
+    hasExactTerrain: true,
+    terrainDistribution: 'promoted-public',
+    surface: { available: 'exact-control-mask-12-layer-original-pbr', active: 'exact-control-mask-12-layer-original-pbr' },
+    localEnhancements: false,
+    vegetation: { text: '0 AUTHORED VEGETATION — PROMOTED PACK DID NOT LOAD', healthy: false, state: 'fallback', code: 'promoted-vegetation-missing' },
+  });
+  assert.equal(forestOnly.state, 'degraded', 'a missing promoted forest must read degraded in a release build');
+});
+
+test('(c) the renderer attaches the readouts on the gate, and never on anything else', async () => {
+  // The wiring, pinned to source, because there is no DOM here to mount it in — the e2e walkthrough
+  // is what checks the pixels (step 12 release-hidden, step 13 dev-shown). What this asserts is
+  // that BOTH nodes are attached behind the same one flag and that the flag comes from the gate.
+  const view = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  assert.match(view, /const diagnosticReadoutsVisible = rendererGate\.diagnosticReadouts;/);
+  assert.match(view, /if \(diagnosticReadoutsVisible\) overlay\.append\(proofChip\);/);
+  assert.match(view, /if \(diagnosticReadoutsVisible\) overlay\.append\(vegetationChip\);/);
+  // The hover label is NOT a build notice and must keep its unconditional mount.
+  assert.match(view, /hoverChip\.hidden = true;\n\s*overlay\.append\(hoverChip\);/);
+  // The repaint tick is unconditional: a hidden strip that stops being recomputed would publish a
+  // stale `renderStats().truth`, which is the metric-that-cannot-fail all over again.
+  assert.match(view, /const vegetationChipInterval = setInterval\(updateTruthReadouts, 400\);/);
+  assert.doesNotMatch(view, /if \(diagnosticReadoutsVisible\)[^\n]*setInterval/);
+  // …and both readers publish it.
+  assert.match(view, /truth: \{ \.\.\.truthStripCopy, shown: diagnosticReadoutsVisible \}/);
+  assert.equal((view.match(/truth: \{ \.\.\.truthStripCopy, shown: diagnosticReadoutsVisible \}/g) ?? []).length, 2,
+    'renderStats() and diagnostics() must both carry the strip');
+});
+
 test('(b) production cannot reach local data even if the gate were bypassed', async () => {
   // The gate is layer 1 of four. This is layer 2, asserted directly: the loader refuses a
   // non-loopback page origin BEFORE it fetches, with its own hostname set that does not import
@@ -1578,6 +1972,10 @@ test('describeRendererGate names WHY local data is out of reach, so a frame can 
     request: 'three',
     mapKey: 'customs',
     localEnhancements: false,
+    // (c) — the CUSTOMS TRUTH strip and the vegetation notice are not DRAWN on the live page
+    // (founder, 2026-09-02: "remove the notification boxes in the middle about the build").
+    // Their state is still published: `renderStats().truth` carries the same composed strip.
+    diagnosticReadouts: false,
     localEnhancementReason: 'release-build',
   });
   assert.equal(
@@ -1605,6 +2003,14 @@ test('renderer integration consumes the shared contract without untracked outlin
   // main.js asks question (a) ONLY: no environment inputs reach the renderer selector any more.
   assert.match(main, /const rendererMode = resolveRendererMode\(\{ mapKey: mapData\.key, rendererRequest \}\)/);
   assert.doesNotMatch(main, /resolveRendererMode\([\s\S]{0,200}location\.hostname/);
+  // The console has to keep telling the truth after the flip. The Customs-only warning fires on an
+  // explicit `three` that did not get Three (Reserve/Woods) — it must NOT fire for a bare load or
+  // for the opt-out, which are not refusals — and an unrecognised value announces itself instead
+  // of being silently treated as a choice.
+  assert.match(main, /if \(normalizeRendererRequest\(rendererRequest\) === 'three' && rendererMode !== 'three'\) console\.warn\(/);
+  assert.match(main, /if \(!isKnownRendererRequest\(rendererRequest\)\) console\.warn\(/);
+  assert.doesNotMatch(main, /The Three renderer is Customs-only; using deck\.gl/,
+    'the warning may not hard-code a map list that THREE_RENDERER_MAPS owns');
   assert.match(main, /document\.body\.classList\.toggle\('renderer-three', rendererMode === 'three'\)/);
   assert.match(main, /if \(rendererMode === 'three'\) \{[\s\S]*\$\('#relief-row'\)\?\.remove\(\)[\s\S]*\$\('#fx-row \[data-fx="fog"\]'\)\?\.remove\(\)/);
   assert.match(main, /const THREE_FIXED_RELIEF = 2/);
@@ -1639,6 +2045,55 @@ test('renderer integration consumes the shared contract without untracked outlin
     1,
     'exactly one call site may reach the local terrain package, and it is the gated one',
   );
+  // THE PROMOTED PACKAGE, on the other side of the same flag. It is requested exactly when the
+  // local one is NOT, so a production load fetches the exact ground and a dev load does not fetch
+  // 10.7 MiB of the same numbers twice. Both halves asserted on the source, so a future edit that
+  // makes production skip the promoted terrain — or that fetches both — fails here.
+  assert.match(
+    renderer,
+    /const promotedTerrainRequest = localEnhancementsAllowed\n\s*\? Promise\.resolve\(\{ value: null, error: null \}\)\n\s*: loadCustomsPromotedTerrainPackage\(/,
+  );
+  assert.equal(
+    (renderer.match(/loadCustomsPromotedTerrainPackage\(/g) ?? []).length,
+    1,
+    'exactly one call site may reach the promoted terrain package',
+  );
+  assert.match(
+    renderer,
+    /let exactTerrainPackage = localTerrainOutcome\.value \?\? promotedTerrainOutcome\.value;/,
+  );
+  // The readouts read the package's own `distribution`, never the gate. A frame that infers its
+  // ground from an environment flag is one refactor away from lying about it.
+  assert.match(
+    renderer,
+    /const exactTerrainSource = exactTerrainMesh \? \(exactTerrainPackage\?\.distribution \?\? null\) : null;/,
+  );
+  assert.doesNotMatch(
+    renderer,
+    /release-build-public-tree-positions/,
+    'the pre-promotion reason code named the whole frame; it must be gone',
+  );
+  assert.doesNotMatch(
+    renderer,
+    /release-build-vegetation-not-promoted/,
+    'the pre-vegetation-promotion reason code said the pack was not promoted; it ships now',
+  );
+  assert.match(renderer, /promoted-vegetation-unavailable/);
+  // The vegetation loader pair, mirroring the terrain pair above it: the promoted package is
+  // requested exactly when the local one is not, and the readouts read the package's own source.
+  assert.match(
+    renderer,
+    /promotedVegetationPackage = await loadCustomsPromotedVegetationPackage\(/,
+  );
+  assert.equal(
+    (renderer.match(/loadCustomsPromotedVegetationPackage\(/g) ?? []).length,
+    1,
+    'exactly one call site may reach the promoted vegetation package',
+  );
+  assert.match(renderer, /const promotedVegetation = exactVegetationSource === 'promoted-public';/);
+  // The mount's URLs come from that one decision, never from a constant chosen elsewhere.
+  assert.match(renderer, /baseUrl: vegetationRoutes\.pack,/);
+  assert.match(renderer, /baseUrl: vegetationRoutes\.arrays,/);
   // The release path's placement count is MEASURED from the trees it seated, not defaulted to 0.
   assert.match(renderer, /proceduralPlacements: proceduralVegetationPlan\?\.renderedCount \?\? publicTreePlacements/);
   assert.match(renderer, /publicTreePlacements = trees\.length/);

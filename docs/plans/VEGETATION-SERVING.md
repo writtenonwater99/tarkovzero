@@ -1,6 +1,21 @@
 # Vegetation serving path — design
 
-Status: **design only, nothing implemented**. Answers the brief in
+> **SUPERSEDED IN PART, 2026-09-02.** The founder approved PROMOTING the authored vegetation, and it
+> now ships from `public/assets/3d/customs/authored/vegetation/` (105 files, 41.0 MiB) under
+> `asset-promotion-manifest.json` — see `docs/CONTINUATION-HANDOFF-2026-09-02.md` §3 and
+> `scripts/promote-authored-vegetation.mjs`. The constraint below that "`public/` stays exactly as
+> small as it is today for this pack" was explicitly conditioned on "while the founder's
+> localhost-only decision stands"; that decision was replaced by an explicit approval to promote.
+>
+> **What is NOT superseded:** the dev route (`/@vegetation-authored/`, §2 and §4 below) is unchanged
+> and still serves the local pack on loopback, the two authorization stories are still in separate
+> files, and §3's reasoning about why the verifier's suffix check does not gain `.glb` still holds —
+> it holds harder now, because `.glb` legitimately ships. The one thing that changed is that a
+> promoted copy of these bytes in `dist/` is admitted by an explicit manifest row with a receipt,
+> instead of being a boundary violation.
+
+Status: **design only, nothing implemented** (as written; the dev-route half was implemented and the
+promotion above supersedes the production half). Answers the brief in
 `TASK: design the serving path for ~15.3 MB of authored vegetation GLB`.
 
 Constraints this design must hold, unconditionally:

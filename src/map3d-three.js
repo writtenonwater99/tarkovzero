@@ -25,7 +25,10 @@ import {
   CUSTOMS_LOCAL_TERRAIN_SOURCE_FRAME,
   sampleCustomsTerrainElevation,
 } from './customs-local-terrain.js';
-import { loadCustomsLocalTerrainPackage } from './customs-local-terrain-loader.js';
+import {
+  loadCustomsLocalTerrainPackage,
+  loadCustomsPromotedTerrainPackage,
+} from './customs-local-terrain-loader.js';
 import {
   BRIDGE_SEATING,
   bridgeDeckAnchor,
@@ -40,6 +43,11 @@ import {
 } from './water-surface.js';
 import { compileCustomsLocalTerrainMesh } from './customs-local-terrain-mesh.js';
 import { loadCustomsLocalVegetation } from './customs-local-vegetation.js';
+import { loadCustomsPromotedVegetationPackage } from './customs-promoted-vegetation-loader.js';
+import {
+  CUSTOMS_PROMOTED_VEGETATION_ARRAY_BASE_URL,
+  CUSTOMS_PROMOTED_VEGETATION_BASE_URL,
+} from './customs-promoted-vegetation.js';
 import { buildCustomsLocalVegetationRenderPlan } from './customs-local-vegetation-render.js';
 import {
   createCustomsAuthoredVegetationRuntime,
@@ -224,11 +232,16 @@ function vegetationTruthState(vegetation) {
   if (!vegetation) return 'pending';
   if (vegetation.healthy) return 'exact';
   if (vegetation.state === 'loading') return 'pending';
-  // Two codes mean "you are looking at exactly what was asked for", not "something broke": the
-  // query switch, and a release build where local game-derived data is out of reach BY DESIGN.
-  // Painting either amber trains the reader to ignore the one colour that has to mean something.
+  // ONE code means "you are looking at exactly what was asked for" rather than "something broke":
+  // the query switch. Painting that amber trains the reader to ignore the one colour that has to
+  // mean something.
+  //
+  // `promoted-vegetation-missing` used to be the second one, and losing that exemption is the whole
+  // point of this pass. While the pack was gated, a release build with no authored forest WAS the
+  // shipped configuration and amber would have been a false alarm. The pack ships now, so the same
+  // frame is a failed load, and a fallback that reads as the design is exactly the defect handoff
+  // §6 is about. It is degraded, in every environment.
   if (vegetation.code === 'authored-disabled-by-query') return 'requested';
-  if (vegetation.code === 'authored-unavailable-in-release') return 'requested';
   return 'degraded';
 }
 
@@ -261,6 +274,11 @@ export function customsTruthStripCopy({
   relief = THREE_FIXED_RELIEF,
   localEnhancements = true,
   publicSurface = null,
+  // Which terrain package is drawn: `'local-package'`, `'promoted-public'`, or null when the
+  // exact ground is not on screen. Since the terrain promotion, EXACT and LOCAL are different
+  // facts, and a strip that says "EXACT LOCAL TERRAIN" on tarkovzero.com is wrong about the second
+  // one even though it is right about the first.
+  terrainDistribution = null,
 } = {}) {
   const releasePublicData = !hasExactTerrain && !localEnhancements;
   let surfaceCopy;
@@ -280,8 +298,17 @@ export function customsTruthStripCopy({
     surfaceCopy = Object.freeze({ label: 'LOCALHOST', state: 'degraded' });
   }
   const terrainSegment = hasExactTerrain
-    ? 'EXACT LOCAL TERRAIN'
-    : releasePublicData ? 'PUBLIC HEIGHTFIELD' : 'LEGACY TERRAIN FALLBACK';
+    ? (terrainDistribution === 'promoted-public'
+      ? 'EXACT TERRAIN — PROMOTED'
+      : terrainDistribution === 'local-package'
+        ? 'EXACT LOCAL TERRAIN'
+        : 'EXACT TERRAIN')
+    // A release build reaching this branch is no longer the intended configuration. Since the
+    // terrain surfaces were promoted, production SHIPS the exact ground; falling back to the
+    // heightfield fitted from spawn and loot points means the promoted package did not load. The
+    // segment names that, and the state below is degraded — a fallback that reads as "requested"
+    // is the metric-that-cannot-fail this file's own header warns about.
+    : releasePublicData ? 'PUBLIC HEIGHTFIELD — PROMOTED TERRAIN MISSING' : 'LEGACY TERRAIN FALLBACK';
   const segments = [
     terrainSegment,
     surfaceCopy.label,
@@ -293,7 +320,10 @@ export function customsTruthStripCopy({
     detail: segments.join(' · '),
     segments: Object.freeze(segments),
     state: worstTruthState(
-      hasExactTerrain ? 'exact' : releasePublicData ? 'requested' : 'degraded',
+      // No exact terrain is now a degradation in EVERY environment. Before the promotion a release
+      // build had no exact ground by design and 'requested' was the honest colour; now it has one
+      // by design, so its absence is a failure wherever it happens.
+      hasExactTerrain ? 'exact' : 'degraded',
       surfaceCopy.state,
       vegetationTruthState(vegetation),
     ),
@@ -500,9 +530,9 @@ function exactTerrainSampler(localPackage, fallback, elevationField = 'displayYM
   };
 }
 
-async function loadLocalControlPixels(url, signal) {
+async function loadLocalControlPixels(url, signal, cache = 'no-store') {
   const response = await fetch(url, {
-    method: 'GET', mode: 'same-origin', credentials: 'same-origin', cache: 'no-store',
+    method: 'GET', mode: 'same-origin', credentials: 'same-origin', cache,
     redirect: 'error', signal,
   });
   if (!response.ok) throw new Error(`control map HTTP ${response.status}`);
@@ -514,10 +544,13 @@ async function loadExactTerrainSurfaceAssets(localPackage, signal) {
   const tiles = await Promise.all(localPackage.assets.map(async (asset) => {
     const tile = localPackage.manifest.tiles.find((candidate) => candidate.id === asset.tileId);
     if (!tile) throw new Error(`missing exact terrain tile ${asset.tileId}`);
+    // A promoted control map is an immutable public asset: `no-store` would re-download 2.8 MB of
+    // PNG on every navigation for nothing. The local package stays uncached — it is regenerated.
+    const controlCache = localPackage.distribution === 'promoted-public' ? 'default' : 'no-store';
     const controls = await Promise.all(asset.controlMaps.map(async (control, slot) => ({
       id: control.id,
       slot,
-      ...await loadLocalControlPixels(control.url, signal),
+      ...await loadLocalControlPixels(control.url, signal, controlCache),
     })));
     const maxX = tile.origin.x + (tile.resolution.columns - 1) * tile.sampleSpacingM.x;
     const maxZ = tile.origin.z + (tile.resolution.rows - 1) * tile.sampleSpacingM.z;
@@ -1150,6 +1183,14 @@ export async function createView3d(container, mapData, src) {
   // on Vercel), but not asking is what lets the frame say "release build" instead of presenting an
   // unfetched package as a failure. This is layer 1 of four — see src/renderer-gate.js.
   const localEnhancementsAllowed = rendererGate.localEnhancements;
+  // Question (c): may the CUSTOMS TRUTH strip and the vegetation notice be DRAWN? Dev + loopback.
+  // Founder, 2026-09-02: "also remove the notification boxes in the middle about the build."
+  //
+  // This hides two DOM nodes and nothing else. Every number behind them is still computed on the
+  // same tick, still published by `renderStats().truth` / `.vegetation`, and still what the e2e
+  // gate asserts production's ground and forest against. A hidden banner is a presentation choice;
+  // an unmeasured subsystem would be the metric-that-cannot-fail this file's header warns about.
+  const diagnosticReadoutsVisible = rendererGate.diagnosticReadouts;
   const bootAt = performance.now();
   const localTerrainAbort = new AbortController();
   const localTerrainRequest = localEnhancementsAllowed
@@ -1157,6 +1198,21 @@ export async function createView3d(container, mapData, src) {
       .then((value) => ({ value, error: null }))
       .catch((error) => ({ value: null, error }))
     : Promise.resolve({ value: null, error: null });
+  // The PROMOTED terrain surfaces (2026-09-02). Same bytes, shipped: `public/assets/3d/customs/
+  // terrain/`, admitted by `asset-promotion-manifest.json` and re-proved by digest after every
+  // build. This is what makes production draw the exact ground rather than the heightfield fitted
+  // from spawn and loot points — the difference the founder saw when he said "not even the floor
+  // ground correct".
+  //
+  // It is requested only when the local package is NOT allowed, and that is a bandwidth decision,
+  // not a boundary one: on dev + loopback the identical surfaces are already coming from the local
+  // route, and fetching 10.7 MiB of the same numbers twice would help nobody. Production takes
+  // this branch, every time, with no gate involved.
+  const promotedTerrainRequest = localEnhancementsAllowed
+    ? Promise.resolve({ value: null, error: null })
+    : loadCustomsPromotedTerrainPackage({ signal: localTerrainAbort.signal })
+      .then((value) => ({ value, error: null }))
+      .catch((error) => ({ value: null, error }));
   const localBridgeRequest = localEnhancementsAllowed
     ? loadCustomsLocalBridgesPackage({ signal: localTerrainAbort.signal })
       .then((value) => ({ value, error: null }))
@@ -1166,9 +1222,10 @@ export async function createView3d(container, mapData, src) {
   if (!response.ok) throw new Error(`Customs 3D data HTTP ${response.status}`);
   const data = await response.json();
   const localTerrainOutcome = await localTerrainRequest;
-  let exactTerrainPackage = localTerrainOutcome.value;
+  const promotedTerrainOutcome = await promotedTerrainRequest;
+  let exactTerrainPackage = localTerrainOutcome.value ?? promotedTerrainOutcome.value;
   let exactTerrainMesh = null;
-  let exactTerrainError = localTerrainOutcome.error;
+  let exactTerrainError = localTerrainOutcome.error ?? promotedTerrainOutcome.error;
   if (exactTerrainPackage) {
     try {
       exactTerrainMesh = compileCustomsLocalTerrainMesh(
@@ -1185,23 +1242,60 @@ export async function createView3d(container, mapData, src) {
   let exactVegetation = null;
   let exactVegetationPlan = null;
   let exactVegetationError = null;
+  // Which vegetation package the placements came from: `'local-package'`, `'promoted-public'`, or
+  // null when there are none. Read off the package, never inferred from the gate — the same
+  // discipline `exactTerrainSource` follows, and for the same reason.
+  let exactVegetationSource = null;
+  // The promoted package carries its own catalog and array index, so the mount reads them from the
+  // ONE document it already fetched instead of asking a dev route that does not exist in
+  // production. Null on the local path, where the dev routes are the answer.
+  let promotedVegetationPackage = null;
   if (exactTerrainPackage && exactTerrainMesh) {
     try {
-      exactVegetation = await loadCustomsLocalVegetation(exactTerrainPackage, {
-        signal: localTerrainAbort.signal,
-      });
+      if (localEnhancementsAllowed) {
+        // UNCHANGED. Still the loopback route, still the raw Unity dumps, still `localOnly: true`.
+        exactVegetation = await loadCustomsLocalVegetation(exactTerrainPackage, {
+          signal: localTerrainAbort.signal,
+        });
+        exactVegetationSource = 'local-package';
+      } else {
+        // The PROMOTED package (2026-09-02). Ordinary public assets under
+        // `asset-promotion-manifest.json`; no gate is consulted because nothing it fetches is
+        // local. `canLoadLocalGameDerivedAssets()` did not move — vegetation simply stopped being
+        // one of the things it governs.
+        promotedVegetationPackage = await loadCustomsPromotedVegetationPackage({
+          signal: localTerrainAbort.signal,
+        });
+        exactVegetation = promotedVegetationPackage.vegetation;
+        exactVegetationSource = 'promoted-public';
+      }
+      // ONE plan builder, two loaders. Two code paths that each build their own plan drift; a
+      // single builder fed by two loaders cannot, so the promoted forest is the reviewed forest by
+      // construction rather than by resemblance.
       exactVegetationPlan = buildCustomsLocalVegetationRenderPlan(exactVegetation, {
         scope: exactTerrainMesh.scope,
         reliefOriginYM: exactTerrainPackage.manifest.reliefOriginYM,
       });
     } catch (error) {
       exactVegetationError = error;
-      console.warn('[three-poc] exact local Customs vegetation unavailable; retaining reviewed fallback vegetation', error);
+      exactVegetation = null;
+      exactVegetationSource = null;
+      promotedVegetationPackage = null;
+      console.warn(
+        `[three-poc] ${localEnhancementsAllowed ? 'exact local' : 'promoted'} Customs vegetation`
+        + ' unavailable; retaining reviewed fallback vegetation',
+        error,
+      );
     }
   }
   if (exactTerrainError) {
-    console.info('[three-poc] exact local Customs terrain unavailable; using complete legacy terrain', exactTerrainError);
+    console.info('[three-poc] exact Customs terrain unavailable; using complete legacy terrain', exactTerrainError);
   }
+  // WHICH package is on screen, read off the package itself rather than inferred from the gate.
+  // `null` means the exact ground is not drawn at all. Every readout below takes its wording from
+  // this one value, so the strip, `renderStats()` and the vegetation notice cannot disagree about
+  // where the ground came from.
+  const exactTerrainSource = exactTerrainMesh ? (exactTerrainPackage?.distribution ?? null) : null;
 
   // -------------------------------------------------------------------------------------------
   // Local-only bridge corrections.
@@ -1264,21 +1358,32 @@ export async function createView3d(container, mapData, src) {
   // longer show a green claim directly above an amber contradiction. Here at boot neither the
   // control surfaces nor the vegetation mount has resolved, and the strip says exactly that
   // instead of borrowing the healthy wording while it waits.
+  //
+  // It is BUILT and PAINTED in every environment and only ATTACHED on dev + loopback (question (c)
+  // above). Building it unconditionally is what keeps one code path: the composition, the state
+  // ranking and the repaint tick are the same lines in production as on a dev box, so
+  // `renderStats().truth` cannot describe a strip that was assembled differently from the one a
+  // developer is reading. What production loses is the pixels.
   const proofChip = document.createElement('div');
   proofChip.className = 'tz-three-proof-chip';
   const proofChipTitle = document.createElement('b');
   const proofChipDetail = document.createElement('span');
   proofChip.append(proofChipTitle, proofChipDetail);
+  // The last copy `paintTruthStrip` was given, so `renderStats()` publishes exactly what the strip
+  // says (or would say) rather than re-deriving it from a second call that could drift.
+  let truthStripCopy = customsTruthStripCopy({
+    hasExactTerrain: Boolean(exactTerrainMesh),
+    terrainDistribution: exactTerrainSource,
+    localEnhancements: localEnhancementsAllowed,
+  });
   const paintTruthStrip = (copy) => {
+    truthStripCopy = copy;
     proofChip.dataset.state = copy.state;
     proofChipTitle.textContent = copy.title;
     proofChipDetail.textContent = copy.detail;
   };
-  paintTruthStrip(customsTruthStripCopy({
-    hasExactTerrain: Boolean(exactTerrainMesh),
-    localEnhancements: localEnhancementsAllowed,
-  }));
-  overlay.append(proofChip);
+  paintTruthStrip(truthStripCopy);
+  if (diagnosticReadoutsVisible) overlay.append(proofChip);
   const hoverChip = document.createElement('div');
   hoverChip.className = 'tz-three-hover';
   hoverChip.hidden = true;
@@ -1288,13 +1393,17 @@ export async function createView3d(container, mapData, src) {
   // `renderStats().vegetation.warnings` OR with the strip above it. Built here, alongside the rest
   // of the always-on HUD, so it exists on the very first frame rather than appearing only once a
   // mount is in flight.
+  //
+  // Same rule as the strip: built and painted everywhere, attached on dev + loopback only. Its
+  // verdict still reaches `renderStats().vegetation.indicator` in production, which is where the
+  // e2e gate reads it.
   const vegetationChip = document.createElement('div');
   vegetationChip.className = 'tz-veg-chip';
   vegetationChip.hidden = true;
   const vegetationChipHeadline = document.createElement('b');
   const vegetationChipDetail = document.createElement('span');
   vegetationChip.append(vegetationChipHeadline, vegetationChipDetail);
-  overlay.append(vegetationChip);
+  if (diagnosticReadoutsVisible) overlay.append(vegetationChip);
   container.append(overlay);
 
   const scene = new THREE.Scene();
@@ -1719,7 +1828,14 @@ export async function createView3d(container, mapData, src) {
       source: 'shared-realistic-terrain-bake',
     } : null,
     exactTerrain: exactTerrainMesh ? {
-      mode: 'local-exact',
+      // `mode` names the DISTRIBUTION, because after 2026-09-02 "exact" no longer implies "local":
+      // `promoted-public` is the exact ground, shipped, and calling it `local-exact` in production
+      // would be the same class of lie as a strip that says LOCALHOST on tarkovzero.com.
+      mode: exactTerrainSource === 'promoted-public' ? 'promoted-public-exact' : 'local-exact',
+      distribution: exactTerrainSource,
+      source: exactTerrainSource === 'promoted-public'
+        ? '/assets/3d/customs/terrain/terrain-manifest.json'
+        : '/@local-game-derived/customs/manifest.json',
       schemaVersion: exactTerrainPackage.manifest.schemaVersion,
       tiles: exactTerrainPackage.manifest.tiles.length,
       heightBytes: exactTerrainPackage.manifest.tiles.reduce(
@@ -1741,18 +1857,35 @@ export async function createView3d(container, mapData, src) {
       pbrError: exactTerrainPbrError ? String(exactTerrainPbrError?.message ?? exactTerrainPbrError) : null,
     } : localEnhancementsAllowed ? {
       mode: 'legacy-fallback',
+      distribution: null,
       reason: exactTerrainError?.code ?? exactTerrainError?.name ?? 'missing-local-package',
     } : {
-      // A release build never asked for the package, so there is no error to report and calling
-      // this a "fallback" would misname the intended configuration. The public heightfield in
-      // `public/data/customs-3d.json` is the source, and it ships.
+      // A release build with no promoted package on the origin. Since 2026-09-02 that is a real
+      // DEFECT, not the intended configuration: the promoted surfaces ship, so reaching this
+      // branch in production means the fetch failed or the assets are missing from the deploy.
+      // The old wording ('release-build-local-enhancements-gated') described a build that never
+      // asked; this one asked and did not get an answer, and must not borrow the calm phrasing.
       mode: 'public-heightfield',
-      reason: 'release-build-local-enhancements-gated',
+      distribution: null,
+      reason: exactTerrainError?.code ?? exactTerrainError?.name ?? 'promoted-terrain-unavailable',
       source: '/data/customs-3d.json',
       surface: publicSurfaceKind(),
     },
     exactVegetation: exactVegetationPlan ? {
       mode: 'exact-placement-original-procedural-assets',
+      // WHICH package the placements came from, and where it was read. `promoted-public` is the
+      // shipped one; calling it local in production would be the same class of lie as a strip that
+      // says LOCALHOST on tarkovzero.com.
+      distribution: exactVegetationSource,
+      source: exactVegetationSource === 'promoted-public'
+        ? promotedVegetationPackage?.manifestUrl ?? CUSTOMS_PROMOTED_VEGETATION_BASE_URL
+        : '/@local-game-derived/customs/manifest.json',
+      // Whether the promoted placement table's sha256 receipt was actually checked. `crypto.subtle`
+      // is absent on an insecure non-loopback origin, and a check that silently did not run must
+      // not read the same as one that passed.
+      placementsVerified: exactVegetationSource === 'promoted-public'
+        ? promotedVegetationPackage?.placements?.verified ?? false
+        : null,
       declaredInstances: exactVegetationPlan.sourceCount,
       renderedInstances: exactVegetationPlan.renderedCount,
       culledOutsidePlayableBounds: exactVegetationPlan.culledCount,
@@ -1761,8 +1894,11 @@ export async function createView3d(container, mapData, src) {
       geometry: exactVegetationPlan.geometry,
     } : {
       mode: 'reviewed-fallback',
+      distribution: null,
       reason: exactVegetationError?.code ?? exactVegetationError?.name
-        ?? (exactTerrainMesh ? 'missing-local-vegetation' : 'exact-terrain-unavailable'),
+        ?? (exactTerrainMesh
+          ? (localEnhancementsAllowed ? 'missing-local-vegetation' : 'promoted-vegetation-unavailable')
+          : 'exact-terrain-unavailable'),
     },
     firstFrameMs: null,
     dataBytes: Number(response.headers.get('content-length')) || null,
@@ -3459,16 +3595,34 @@ export async function createView3d(container, mapData, src) {
     const requested = new URLSearchParams(location.search).get('vegetation');
     return VALID_VEGETATION_REQUEST.has(requested) ? requested : null;
   })();
+  // Where this mount reads its pack from. Chosen ONCE, off the package that actually loaded, so
+  // the URLs, the catalog and the status can never describe different distributions.
+  const promotedVegetation = exactVegetationSource === 'promoted-public';
+  const vegetationRoutes = promotedVegetation
+    ? { pack: CUSTOMS_PROMOTED_VEGETATION_BASE_URL, arrays: CUSTOMS_PROMOTED_VEGETATION_ARRAY_BASE_URL }
+    : { pack: CUSTOMS_AUTHORED_VEGETATION_ROUTE, arrays: CUSTOMS_VEGETATION_ARRAY_ROUTE };
   const vegetationStatus = {
     mode: 'procedural',
     request: vegetationRequest,
+    // Which package the 8,805 placements came from. `renderStats()` and the on-screen readouts both
+    // take their wording from this one value.
+    distribution: exactVegetationSource,
+    // `promoted-vegetation-unavailable` (2026-09-02, vegetation promotion). Both of the codes it
+    // replaced described a release build with no authored forest as the shipped configuration —
+    // first by naming the symptom (public tree positions), then by naming the pack as not promoted.
+    // The pack IS promoted now: it ships from public/assets/3d/customs/authored/vegetation/ and
+    // production draws it. So a release build without a plan is a DEFECT, and the reason has to
+    // read like one. `three-renderer-test.mjs` asserts both old spellings are gone from this file;
+    // do not reintroduce either, even in a comment.
     reason: exactVegetationPlan
       ? 'pending'
-      : localEnhancementsAllowed ? 'no-exact-vegetation-plan' : 'release-build-public-tree-positions',
-    routes: {
-      pack: CUSTOMS_AUTHORED_VEGETATION_ROUTE,
-      arrays: CUSTOMS_VEGETATION_ARRAY_ROUTE,
-    },
+      // The placements are seated against the exact ground and culled to its scope, so no exact
+      // terrain means no plan for a reason that has nothing to do with the vegetation package.
+      // Naming the vegetation package there would send a reader to the wrong subsystem.
+      : !exactTerrainMesh
+        ? 'requires-exact-terrain'
+        : localEnhancementsAllowed ? 'no-exact-vegetation-plan' : 'promoted-vegetation-unavailable',
+    routes: vegetationRoutes,
     totals: null,
     // Declared, not implied. `warnings` reads both of these, and a field that only exists once
     // something has gone wrong is a field a reader cannot tell "healthy" from "never written".
@@ -3558,8 +3712,8 @@ export async function createView3d(container, mapData, src) {
    * `application/json`, and the SPA fallback sets `text/html`. Checking it turns a missing route
    * into a named, loud failure at the fetch, which is where it is diagnosable.
    */
-  async function fetchLocalVegetationJson(url, { signal = null } = {}) {
-    const response = await fetch(url, { cache: 'no-store', credentials: 'same-origin', signal });
+  async function fetchLocalVegetationJson(url, { signal = null, cache = 'no-store' } = {}) {
+    const response = await fetch(url, { cache, credentials: 'same-origin', signal });
     if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
     const contentType = String(response.headers?.get?.('content-type') ?? '').trim();
     if (!/^application\/json\b/i.test(contentType)) {
@@ -3745,18 +3899,26 @@ export async function createView3d(container, mapData, src) {
     // its own per-primitive materials), so their absence is a reported DEGRADATION and must not
     // abandon the swap — see `arrayTextureFailure` below, which is what makes a 199 -> 3 material
     // collapse that never ran distinguishable from one that did.
-    const arrayIndexUrl = `${CUSTOMS_VEGETATION_ARRAY_ROUTE}veg-layers.json`;
+    // The promoted package's array index is an immutable, digest-pinned public asset, so it is
+    // CACHEABLE — `no-store` there would re-download 186 KB on every navigation for no safety. The
+    // dev route keeps `no-store` because the founder regenerates the pack underneath it.
+    const arrayIndexUrl = promotedVegetation
+      ? promotedVegetationPackage.arrayIndexUrl
+      : `${CUSTOMS_VEGETATION_ARRAY_ROUTE}veg-layers.json`;
     const arrayTask = (async () => {
       const startedAt = clock();
       let indexAt = startedAt;
       try {
         const arrayIndex = validateCustomsVegetationTextureArrayIndex(
-          await fetchLocalVegetationJson(arrayIndexUrl, { signal: mountAbort.signal }),
+          await fetchLocalVegetationJson(arrayIndexUrl, {
+            signal: mountAbort.signal,
+            cache: promotedVegetation ? 'default' : 'no-store',
+          }),
         );
         indexAt = clock();
         const loaded = await loadCustomsVegetationTextureArrays({
           index: arrayIndex,
-          baseUrl: CUSTOMS_VEGETATION_ARRAY_ROUTE,
+          baseUrl: vegetationRoutes.arrays,
           signal: mountAbort.signal,
         });
         return {
@@ -3776,10 +3938,18 @@ export async function createView3d(container, mapData, src) {
     })();
 
     try {
-      const packIndex = await fetchLocalVegetationJson(
-        `${CUSTOMS_AUTHORED_VEGETATION_ROUTE}pack-index.json`,
-        { signal: mountAbort.signal },
-      );
+      // On the promoted path the catalog is ALREADY HERE: the same `vegetation-manifest.json` that
+      // carried the 8,805 placements carries the 31 families and their 58 bindings, under the same
+      // field names `pack-index.json` uses, so `normalizeCustomsAuthoredVegetationCatalog()` below
+      // applies the identical strictness with no adapter and the mount spends zero requests on it.
+      // (Measured on the dev route: 1,003 ms for a 1.85 MB pack index that the promoted package
+      // does not need to fetch at all.)
+      const packIndex = promotedVegetation
+        ? promotedVegetationPackage.catalogSource
+        : await fetchLocalVegetationJson(
+          `${CUSTOMS_AUTHORED_VEGETATION_ROUTE}pack-index.json`,
+          { signal: mountAbort.signal },
+        );
       stamp('packIndexMs');
       const catalog = normalizeCustomsAuthoredVegetationCatalog(packIndex);
       // Founder decision: admit ALL 31 authored families, not a subset. The router still runs —
@@ -3888,7 +4058,7 @@ export async function createView3d(container, mapData, src) {
       runtime = await createCustomsAuthoredVegetationRuntime({
         plan: route.authored,
         catalog,
-        baseUrl: CUSTOMS_AUTHORED_VEGETATION_ROUTE,
+        baseUrl: vegetationRoutes.pack,
         cameraWorldPosition: camera.position.toArray(),
         frustum: cameraFrustumForVegetation(),
         textureArrays: arrays,
@@ -4033,10 +4203,15 @@ export async function createView3d(container, mapData, src) {
       error: vegetationStatus.error,
       disposed: vegetationStatus.disposed,
       hasAuthoredPlan: Boolean(exactVegetationPlan),
-      // The authored packs are built FROM the local game-derived terrain package, so a release
-      // build has no plan by construction, not by failure. The collector needs to know which of
-      // those two it is looking at — see `authored-unavailable-in-release`.
+      // Whether local game-derived data was reachable at all. Since the vegetation promotion this
+      // no longer decides whether an authored plan is EXPECTED — the promoted package supplies one
+      // in production — it only decides WHICH loader was asked, and therefore which failure a
+      // missing plan is. See `promoted-vegetation-missing`.
       localEnhancements: localEnhancementsAllowed,
+      // ...and which ground and which forest it is looking at, so the release notice states the two
+      // subsystems separately instead of describing the whole frame with one sentence.
+      terrainDistribution: exactTerrainSource,
+      vegetationDistribution: exactVegetationSource,
       mount: vegetationStatus.mount,
       routing: vegetationStatus.totals,
       runtime,
@@ -4066,6 +4241,11 @@ export async function createView3d(container, mapData, src) {
       mode: vegetationStatus.mode,
       request: vegetationStatus.request,
       reason: vegetationStatus.reason,
+      // Which package supplied the placements — `promoted-public`, `local-package`, or null — and
+      // the two URLs this mount is actually reading. A frame that cannot name its own source is how
+      // the truth strip came to claim 7,108 authored placements over a procedural forest.
+      distribution: vegetationStatus.distribution,
+      routes: { ...vegetationStatus.routes },
       // What the mount is doing right now, with a count and a clock: `loading` with 41/93 after
       // 38 s is a slow route, `loading` with 41/93 and 90 s since the last file is a wedged one,
       // and `timed-out` is the deadline having said so rather than a promise nobody can see.
@@ -4165,6 +4345,7 @@ export async function createView3d(container, mapData, src) {
     const { indicator, strip } = describeVegetationObservability(vegetationObservabilitySnapshot(runtime));
     paintTruthStrip(customsTruthStripCopy({
       hasExactTerrain: Boolean(exactTerrainMesh),
+      terrainDistribution: exactTerrainSource,
       surface: exactTerrainSurfaceStatus(),
       vegetation: strip,
       relief,
@@ -4364,6 +4545,13 @@ export async function createView3d(container, mapData, src) {
     },
     renderStats: () => ({
       map: 'customs', renderer: 'three', backend: status.backend, scope: status.scope, look, relief, fx: { ...fx }, fps,
+      // WHAT THE FRAME SAYS ABOUT ITSELF, whether or not it is allowed to say it on screen.
+      //
+      // This is the last painted `customsTruthStripCopy()` — the same object `paintTruthStrip`
+      // wrote into the DOM node — plus `shown`, which is question (c) of the renderer gate. In a
+      // release build `shown` is false and every other field is exactly what a dev box would read.
+      // That is the whole contract of hiding the banner: the pixels go, the state does not.
+      truth: { ...truthStripCopy, shown: diagnosticReadoutsVisible },
       // Both halves of the renderer gate, as measured at boot. `gate.localEnhancements === false`
       // is the single field that says "this frame is public data" — every degraded-looking
       // vegetation/terrain field below has to be read against it.
@@ -4401,6 +4589,7 @@ export async function createView3d(container, mapData, src) {
     }),
     diagnostics: () => ({
       scope: THREE_POC_SCOPE, backend: status.backend, gate: { ...rendererGate }, authored: status.manifest,
+      truth: { ...truthStripCopy, shown: diagnosticReadoutsVisible },
       groundAtlas: status.groundAtlas, exactTerrain: status.exactTerrain,
       exactVegetation: status.exactVegetation,
       vegetation: authoredVegetationRenderStats(),

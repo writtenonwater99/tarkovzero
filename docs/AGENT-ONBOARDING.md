@@ -75,9 +75,9 @@ Backlog (highest value first):
    road profiles — needs founder raid-hours with the companion's elevation logging.
 6. More maps (Shoreline, Interchange, Lighthouse, Streets…) via `docs/MAP-BUILD-PLAYBOOK.md`.
 
-Three renderer work is Customs-only. `?renderer=three` runs in **any** environment, production
-included, and falls back to deck.gl for Reserve/Woods and whenever the parameter is absent — deck.gl
-is still the default renderer everywhere. Its LOCAL game-derived enhancements (the exact terrain
+Three renderer work is Customs-only. Since 2026-09-02 it is the **default renderer for Customs** in
+**any** environment, production included; `?renderer=deck` is the opt-out, and Reserve/Woods stay on
+deck.gl no matter what `?renderer=` says. Its LOCAL game-derived enhancements (the exact terrain
 package and the authored vegetation built from it) remain gated to Vite DEV **and** a loopback
 hostname; the two questions are separate predicates in `src/renderer-gate.js` and must stay that
 way. See `docs/LOCAL-THREE-POC.md`.

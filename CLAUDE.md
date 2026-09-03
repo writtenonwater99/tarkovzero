@@ -78,6 +78,29 @@ pairing code) and `.env.local` out of git (already ignored).
 - Codex plugin installed: `codex@openai-codex` (OpenAI official) — /codex:review, /codex:adversarial-review, /codex:rescue. CLI judging still works: `codex exec --skip-git-repo-check -s read-only -i img.png < prompt.txt`.
 - Night rework (2026-08-29, opus design panel → implementers): `src/terrain.js` renders the ground as one SimpleMeshLayer (2.5 m mesh, bicubic sampler assigned to map3d's `H`, baked 2048×1110 texture: hypsometry + hillshade + noise + contours; skirt into the void). Site UI rewritten (left rail: header with 2D/3D segmented control, status strip, Find (Ctrl+K), grouped filters, View (base/labels), collapsible Live, HUD zoom/compass/fit, mobile bottom sheet). Building personality via `detailParts()` in map3d.js (plinths, window bands, parapets, doors, roof clutter, per-style recipes). 3D extract names next to badges. Palette/type tokens in style.css `:root`. Codex second-judge report: scratchpad `codex-report3.md`.
 - Maps phase: Codex (GPT-5.6-Sol) builds Reserve + Woods on branch `codex/maps` (worktree ~/tarkovzero-codex) from `docs/MAP-BUILD-PLAYBOOK.md`; plans/progress under `docs/plans/`. Review + merge, don't redo.
+- **The build notices are dev-only (2026-09-02)** — founder: *"also remove the notification boxes in the middle
+  about the build."* The CUSTOMS TRUTH strip (`.tz-three-proof-chip`) and the vegetation notice (`.tz-veg-chip`)
+  are DRAWN only on dev + loopback. Question (c) of `src/renderer-gate.js`, `canShowDiagnosticReadouts({dev,
+  hostname})` — a separate predicate from the licensing boundary (b) on purpose, and `describeRendererGate()`
+  publishes it as `gate.diagnosticReadouts`. **Nothing about the measurement moved**: both nodes are still built
+  and repainted on the same 400 ms tick in every environment, and `renderStats().truth` / `diagnostics().truth`
+  carry the last painted `customsTruthStripCopy()` plus `shown`. So a production frame still says whether it is on
+  the promoted exact ground and the promoted vegetation — read `truth.state`/`truth.title`, never the DOM. e2e
+  step 12 asserts absent-in-release + state intact; step 14 starts a real `vite dev` and asserts present-on-dev
+  AND that the strip's text equals `renderStats().truth` field for field (`npm run e2e -- --skip-dev-arm` skips it;
+  Vite dev startup on /mnt/c is ~60 s). The hover label is not a build notice and is unconditional.
+- **Map availability (2026-09-02)** — founder: *"on the live page for now on the maps tab put all the maps but lock
+  them. even the woods/reserve. so rn customs is what avalible."* `src/map-availability.js` is the ONE list:
+  `EFT_MAPS` (all eleven, the picker's rows), `AVAILABLE_MAP_KEYS` (`['customs']` — what opens), `LOCKED_MAP_KEYS`
+  (derived), `MAPPED_MAP_KEYS` (the three the repo has render data for — data coverage, NOT availability).
+  `assistant-contract.js`'s `SITE_MAPS` **is** `AVAILABLE_MAP_KEYS` (same frozen array, not a copy), so the picker
+  and the assistant cannot disagree; `OTHER_MAP_LABELS` gains any locked map automatically, which is what makes the
+  assistant talk about Reserve/Woods the way it already talked about Shoreline. `crossMapFor()` filters through it,
+  so a `switchMap` to a locked map cannot be minted; `isValidAction` rejects one that arrives anyway.
+  `?map=woods` resolves to Customs with `status:'locked'` (`resolveMapRequest`) and the page toasts why;
+  `> map woods` refuses by name; the raid toast offers Switch only for an open map. **Unlocking = adding a key to
+  `AVAILABLE_MAP_KEYS`** — nothing else, and no quests.json rebuild (`siteMaps` is filtered on read).
+  `npm run test:map-availability`. Reserve and Woods keep every byte: `MAPS`, `LABELS`, their 3D data and tests.
 - Multi-map (2026-08-29, built by Codex GPT-5.6-Sol): registry in `src/mapdata.js` (`MAPS`, `selectMap`), `?map=customs|reserve|woods`, header title = map picker; per-map data `public/data/<map>.json` + `<map>-3d.json`, `data/<map>-props.json`, `<map>-roads.json`; builders take a map key (`node scripts/build-3d.mjs reserve`). Plans/reports: `docs/plans/` (MULTIMAP, reserve, woods, PROGRESS, REVIEW-1). Customs outputs are a byte-identical regression gate (sha256 in PROGRESS.md). Open playtest questions are listed at the end of PROGRESS.md.
 - **Render realism R1 / Stage 1 (2026-08-29)** — `docs/plans/RENDER-REALISM.md` Stage 1, "atmosphere and anti-diagram reset". Two skins over ONE geometry: **Look: Real | Vector** in the View panel, `?look=realistic|vector`, persisted as `tz:look`, default **realistic**; `window.tz.renderStyle()` reads it, `window.tz.renderStyle('vector')` flips it.
   - `src/render-style.js` is the frozen data contract (palette, light, fog formula, post, 30 materials × 2 variants). `src/atmosphere.js` turns it into deck objects: the light, the world-only fog, the colour tables map3d/terrain/trees draw from, the terrain ground-detail material, the background, and the combined grade.
@@ -100,7 +123,7 @@ pairing code) and `.env.local` out of git (already ignored).
 - **Vector is free (2026-08-30)** — founder: "items like fog take performance without adding fidelity". Vector is the default look and is now the pre-R1 renderer: `fxOn(key)` in map3d.js is the ONE gate, it short-circuits on the look, and `armEffects()` is the only writer of the fog extension / ground-detail extension / grade effect / water-mesh extension. Vector also gets the backdrop as one rectangle instead of `voidGrid()`'s 961 quads (that tessellation exists only to carry a per-vertex fog gradient), and never fetches the R1 asset set — `armAssetsOnce()` waits for the first flip into Real or the first FX toggle that needs it. Measured headless (SwiftShader, `gpuFrameMs` still null): Customs vector 28.2 MB resident / 8.92 ms cpu vs realistic 53.7 MB / 11.82 ms; Woods 36.4 MB / 10.47 ms vs 61.9 MB / 12.99 ms; effects 1 vs 2, `postEffects` 0 vs 1.
   - **`?fx=none|fog,grade,detail|all`** plus an **Effects** row in the View panel (shown only under Real) switch them live; `window.tz.renderFx()` is the console hook and `renderStats()` reports `effects` / `postEffects` / `fx`. `npm run check:fx` (`scripts/render-fx-check.mjs`, needs a build) asserts vector arms nothing, Real arms all three, and the flip is geometry-invariant (layer + model counts identical on both sides). It replaces the `flip.mjs` scratch driver above, which is gone.
 - **Building seating (2026-08-30)** — founder on a real GPU: "buildings have like a foundation that makes it look like a 10 story building when it's 3". Heights are real metres but `H()` multiplies terrain by relief, so a rigid footprint on a 3× cross-slope was seated on the HIGHEST ground under it and the stilt gap was filled with a lit, wall-coloured, 0.25 m-expanded plinth: 19.3 m of apparent building under Dorms 3-Story's 9.5 m roof. `src/buildings.js` (pure, no DOM — that is what makes it testable) now owns seating: walls sit on the ground under the footprint CENTROID and stand exactly `b.height`; the downhill gap goes to the near-black `building-plinths` layer with **`material: false`** (deck lights an `extruded` SolidPolygonLayer, so an unlit layer is the only way a skirt reads as shadow), capped by `skirtCap()`; storey lines and window bands come from `floorLevels()`, a function of height and floors alone. `npm run test:buildings` asserts visible wall height == data height ±0.5 m at relief 1 and 3 for five Customs landmarks, against `buildTerrain()`'s real sampler.
-- **Two rects, not one (2026-08-30, QA H4)** — `shell.js` exports `safeRect()` AND `avoidRect()`. `safeRect()` is the box a FIT frames into: the stage minus the top chip band and the omnibox band only, both of which span the stage, so it is always FULL WIDTH. Panels float over the map; an open dock is not a fit inset, and nothing re-fits on panel open/close/pin (`onLayout` only repaints the HUD). `avoidRect()` is that rect minus the toolbar buttons and the open dock, and owns everything reader-facing: 2D `placeLabels` clipping, `map3d.textLayout()`'s seating, the 3D quest card, and the fly-to recentring (`avoidOffset()`). Applying the dock as a full-span inset to the FIT cost the map two thirds of the window with one 360×285 px panel open. camera-test's SAFE box is 1400 wide with a 0-width CHROME inset; e2e step 7 asserts the invariant.
+- **Two rects, not one (2026-08-30, QA H4; amended 2026-09-02)** — `shell.js` exports `safeRect()` AND `avoidRect()`. `safeRect()` is the box a FIT frames into: the stage minus the top chip band, which spans it, so it is always FULL WIDTH. (It also subtracted an omnibox band along the bottom until the bar was removed on 2026-09-02 — that inset is gone with the bar, and the fit got ~70 px of window back.) Panels float over the map; an open dock is not a fit inset, and nothing re-fits on panel open/close/pin/drag (`onLayout` only repaints the HUD). `avoidRect()` is that rect minus the toolbar buttons, the open right dock, the bottom telemetry chips, and the floating Ask panel *wherever it has been dragged* (`avoidInset()`), and owns everything reader-facing: 2D `placeLabels` clipping, `map3d.textLayout()`'s seating, the 3D quest card, and the fly-to recentring (`avoidOffset()`). Applying the dock as a full-span inset to the FIT cost the map two thirds of the window with one 360×285 px panel open. camera-test's SAFE box is 1400 wide with a 0-width CHROME inset; e2e step 7 asserts the float invariant and step 10 asserts the rect tracks a dragged panel (a left-only rule passes step 9 and fails step 10 — measured).
 - **Screen-space text (map3d `textLayout`)** — the pass needs a viewport, and `deck.getViewports()` is EMPTY on the first layer build (it happens inside `render()`, which feeds the first redraw). `onAfterRender` keeps `lastViewport` and schedules one rebuild the first time a viewport exists; without it a still map keeps the unseated layer set forever and prints names through each other. `renderStats().labels` = `{bail, seated, hidden, rect}` — `bail` non-null means the pass did not run. Label widths are MEASURED with a canvas `measureText` in `LABEL_FONT()` (once per string at a reference size, scaled; keyed on the font epoch), never estimated from `text.length`.
 - **An extract owns its name (QA M1/M3)** — the badge draws the name as a caption, so a place label with the same text renders the POI twice. `ownedByExtract()` in main.js reads the LIVE marker set (**ten** rows collide across the three shipped maps — it was eleven until Reserve's D-2 left with the floor selector on 2026-09-02) and hides the place label in 3D, in 2D (`placeLabelsLayer`'s `hidden` predicate, consulted per clip because the marker data lands after the layer is built) and in the omnibox index.
 - Terrain realism (2026-08-29, Codex fix passes 3–4): heightfield built from samples via `scripts/ingest-elevation.mjs` (SPT spawns + loose-loot positions extracted from the official SPT 4.1.2 release archive + companion `elevation-<map>.jsonl` survey logs; see `docs/plans/ELEVATION.md`), 5 m multi-scale fit, outlier rejection; `TERRAIN_FEATURES` only as sparse-area fallback. Canopy blocks replaced by individual tree crowns (muted, ≥3 m off roads/footprints); Nature toggles (Trees/Rocks, `?trees=0`, `?rocks=0`) in the View section. Marker `level` field (surface/underground/upper) with UNDERGROUND badges/labels. Customs data now changes legitimately per pass — hashes in PROGRESS.md.
@@ -150,16 +173,38 @@ reply that outlived a map switch is recognisable (`validateEnvelope()` reports `
   never a URL, and `buildImages()` reads nothing but the id. Each ref must appear in BOTH quests.json and
   `public/data/quest-images.json` under the same quest id, on `static.wikia.nocookie.net` over https. No photo →
   zero refs, never a placeholder. `imageIndexOk:false` distinguishes "index unreadable" from "none exist".
-- **Coverage reality:** quests.json covers all eleven EFT maps; the site draws three. Quests with zones on a site
-  map: customs 28, reserve 18, woods 29. 110 quests have zones ONLY on maps we do not ship (Shoreline, Streets, …)
-  and 339 have no zones at all — those get prose and photos, never a switchMap button.
-- **The chat panel (2026-09-02, founder: "move the AI chat to there" + a box drawn in the upper-left).**
+- **Coverage reality:** quests.json covers all eleven EFT maps; the repo ships render data for three; the site
+  OPENS one. Quests with zones on a mapped map: customs 28, reserve 18, woods 29. 110 quests have zones ONLY on
+  maps we never shipped (Shoreline, Streets, …) and 339 have no zones at all. Since the 2026-09-02 lock,
+  Reserve and Woods join them for the assistant's purposes: prose and photos, never a switchMap button.
+- **The Ask panel (2026-09-02, founder: "move the AI chat to there" + a box drawn in the upper-left, then "lets
+  remove the bar from the bottom … keep the side active, able it to be moved around and pinned … ability to
+  minimize. it can also start small", then over a mock-up "omni bar should be first").**
   `src/assistant-panel.js` owns the conversation; `#panel-ask` lives in **`#dock-left`**, a second dock column.
   `shell.js` drives both columns from ONE `PANELS` list and one pin model — eviction ("one transient open") is
-  per-column, so a lookup on the right never closes the conversation on the left. **`avoidRect()` now insets the
-  LEFT edge while the panel is open**, which is what keeps place labels, the 3D quest card and every fly-to from
-  landing behind it (the mirror of what the right dock already got in QA H4). `safeRect()` is untouched: panels
-  float, they never shrink the fit.
+  per-column, so a lookup on the right never closes the conversation on the left.
+  - **The omnibox is the FIRST element of this panel and the app's only text field.** The persistent bar across
+    the bottom of the screen is gone; `#omnibox` (`#find`, `#find-results`, `#find-kbd`) moved into
+    `#panel-ask`, above `#ask-log`, and the panel's own composer (`#ask-form`/`#ask-input`/`#ask-send`) went
+    with it — two inputs feeding one router is the parallel system this layout prevents, and the one that
+    skipped `route()` would have asked the model `> 3d`. All three modes are unchanged: plain text = lookup,
+    `>` = command, `?` = the AI, answering into the log directly underneath. Ctrl K / `/` / `A` and the toolbar
+    button go through `shell.reveal('ask')`, which OPENS and UN-MINIMISES before moving the keyboard to
+    `[data-focus]`. `check:dom` asserts `#panel-ask #omnibox` present and `#app > #stage > #omnibox` retired.
+  - **The panel floats.** Drag it by `.panel-hd`, resize it by `[data-grip=ask]`, collapse it to its title bar
+    with `[data-min=ask]` (or a double-click on the header). `shell.js` writes `#dock-left`'s left/top/width/
+    height and persists `{x,y,w,h,min,open}` to **`tz:askpanel`**; `clampPanelBox()` keeps a remembered box on
+    screen when the window shrinks. It opens on a first visit (it carries the only search field) at 360×430 in
+    the upper-left, and that open is deliberately NOT marked `seen` — `body.dock-open-right` (not `dock-open`)
+    is what stands the toolbar's first-run captions down.
+  - **`avoidRect()` follows the panel wherever it is dragged** — `avoidInset()` picks the nearer side on each
+    axis and then the axis that leaves the most map, so the docked default still insets the LEFT edge exactly
+    as the old hard-coded rule did, a panel dragged right insets the RIGHT edge, and a minimised handle costs a
+    shallow strip instead of a column. That rect is what keeps place labels, the 3D quest card and every fly-to
+    from landing behind it. It also insets the bottom telemetry chips now, which the omnibox band used to cover
+    for free. `safeRect()` is untouched *and lost its omnibox inset*: panels float, they never shrink the fit,
+    and the ~70 px the bottom bar reserved is back on the map. Pure geometry + 13 tests:
+    `npm run test:shell-panel`.
   - `answerView(body, {map})` is pure and takes the RAW body — it runs `validateEnvelope()` itself, so the panel
     cannot render a shape the contract did not admit. **Buttons are a `.map()` over `envelope.actions`; nothing
     in the panel reads `answer`.** Prose saying "want to move to that map?" with no `switchMap` action draws

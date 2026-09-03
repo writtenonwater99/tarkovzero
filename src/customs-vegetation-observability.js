@@ -15,8 +15,9 @@
  *
  *   1. the view was disposed — the runtime and its textures are released;
  *   2. there is no exact local vegetation plan, so the authored pack was never routed;
- *  2b. the same absent plan, but on a RELEASE build where local game-derived data is gated off by
- *      design — the shipped configuration, reported as such rather than as a failed load;
+ *  2b. the same absent plan on a RELEASE build — which since the 2026-09-02 vegetation promotion is
+ *      a DEFECT rather than the design: the pack ships from `public/assets/3d/customs/authored/
+ *      vegetation/`, so a release frame without it means the promoted package did not load;
  *   3. `?vegetation=procedural` suppressed the mount by request;
  *   4. the mount is still in flight — procedural proxies are on screen until it swaps;
  *   5. the mount failed or timed out ENTIRELY — the defect above;
@@ -43,7 +44,7 @@ export const VEGETATION_SHARED_MATERIAL_MODE = 'shared-array-texture';
 export const VEGETATION_DEGRADATION_CODES = Object.freeze([
   'runtime-disposed',
   'no-authored-plan',
-  'authored-unavailable-in-release',
+  'promoted-vegetation-missing',
   'authored-disabled-by-query',
   'mount-in-flight',
   'mount-failed',
@@ -144,12 +145,29 @@ export function vegetationDegradations({
   disposed = false,
   hasAuthoredPlan = true,
   // Whether local game-derived data was ALLOWED to load at all (`canLoadLocalGameDerivedAssets()`).
-  // The authored vegetation pack's 8,805 placements are derived from the local terrain package, so
-  // a release build has no plan BY CONSTRUCTION. `no-authored-plan` and
-  // `authored-unavailable-in-release` describe the same absent plan with opposite meanings: one is
-  // a defect on a machine that should have had it, the other is the shipped configuration. Reading
-  // them as one state is what would have made the production strip call itself broken.
+  //
+  // Until 2026-09-02 this decided whether an authored plan was even EXPECTED: the 8,805 placements
+  // were reachable only through the loopback route, so a release build had none by construction and
+  // saying so calmly was the honest thing to do. The pack is promoted now — placements, geometry
+  // and texture arrays all ship — so a release build without a plan is a failed load, and this
+  // input no longer separates "designed" from "broken". It separates WHICH LOADER was asked, and
+  // therefore which of `no-authored-plan` and `promoted-vegetation-missing` names the failure.
+  // Both are defects; they differ only in where to go looking.
   localEnhancements = true,
+  // Which vegetation package supplied the placements: `'promoted-public'`, `'local-package'`, or
+  // null when none did. Named in the mount-failure message so a reader is told which package to
+  // check rather than left to infer it from the environment.
+  vegetationDistribution = null,
+  // Which terrain package the ground is drawn from: `'promoted-public'`, `'local-package'`, or
+  // null when the exact ground is not on screen at all.
+  //
+  // This exists because the release notice used to be one sentence about "local game-derived
+  // data", and by 2026-09-02 that sentence was not true of either half. The terrain height and
+  // control surfaces were promoted first, and the authored vegetation the same day; production now
+  // draws the exact ground AND the authored forest. A notice that describes the whole frame with
+  // one clause misdescribes it whenever the two subsystems disagree, which is precisely the failure
+  // mode handoff §6 is about. The message below states them separately, always.
+  terrainDistribution = null,
   mount = null,
   routing = null,
   runtime = null,
@@ -184,12 +202,24 @@ export function vegetationDegradations({
       + ' (accountedPlacements is null, not a short sum)',
     );
   } else if (!hasAuthoredPlan && localEnhancements === false) {
+    // Per SUBSYSTEM, because the two can fail independently and a single sentence about "the
+    // release build" would describe neither.
+    const ground = terrainDistribution === 'promoted-public'
+      ? 'the terrain IS exact here: the height and control surfaces were promoted and ship from '
+        + '/assets/3d/customs/terrain/, so this is the same ground the local build draws'
+      : terrainDistribution === 'local-package'
+        ? 'the terrain is the exact local package'
+        : 'the terrain is the public heightfield from /data/customs-3d.json, NOT the exact surfaces '
+          + '— the promoted package did not load, which is a defect, not the shipped configuration';
     push(
-      'authored-unavailable-in-release',
-      'this is a release build: local game-derived data is gated to dev + loopback, so the authored'
-      + ` vegetation pack was never routed (${why ?? 'release-build'}). Every tree on screen stands`
-      + ` on a public tree position from /data/customs-3d.json — ${procedural} of them — drawn as a`
-      + ' procedural proxy. This is the shipped configuration, not a failed load',
+      'promoted-vegetation-missing',
+      `this is a release build, and BOTH subsystems are promoted here. GROUND: ${ground}.`
+      + ' VEGETATION: the authored pack IS promoted — 31 families, their shared texture arrays and'
+      + ' the 8,805-row placement table all ship from /assets/3d/customs/authored/vegetation/ — but'
+      + ` this frame has no placements to route (${why ?? 'promoted-vegetation-unavailable'}), so`
+      + ` every tree on screen stands on a public tree position from /data/customs-3d.json —`
+      + ` ${procedural} of them — drawn as a procedural proxy. That is a FAILED LOAD, not the`
+      + ' shipped configuration: production is supposed to draw the authored forest',
     );
   } else if (!hasAuthoredPlan) {
     push(
@@ -216,13 +246,18 @@ export function vegetationDegradations({
         + ` ${procedural} placements are drawn as procedural proxies until it does`,
       );
     } else {
+      const which = vegetationDistribution === 'promoted-public'
+        ? ' the promoted pack under /assets/3d/customs/authored/vegetation/'
+        : vegetationDistribution === 'local-package'
+          ? ' the local pack under /@vegetation-authored/'
+          : '';
       push(
         'mount-failed',
         `the authored vegetation pack did not mount (${why ?? phase ?? 'unknown'}`
         + `${detail ? `: ${detail}` : ''}): the ENTIRE pack is absent — 0 of`
         + ` ${routedSource ?? procedural} placements are authored, all ${procedural} are drawn as`
         + ' procedural proxies, and neither the shared texture arrays nor the (family, LOD)'
-        + ' instanced batching are on screen',
+        + ` instanced batching are on screen.${which ? ` Check${which}.` : ''}`,
       );
     }
   } else if (!runtime) {
@@ -307,7 +342,7 @@ export function vegetationDegradations({
 const PRIMARY_INDICATOR_CODES = new Set([
   'runtime-disposed',
   'no-authored-plan',
-  'authored-unavailable-in-release',
+  'promoted-vegetation-missing',
   'authored-disabled-by-query',
   'mount-in-flight',
   'mount-failed',
@@ -379,14 +414,16 @@ function vegetationIndicatorFromDegradations({ mount, degradations }) {
           state: 'procedural', healthy: false, code: primary.code,
           headline: 'Procedural forest — no authored plan for this map', detail: primary.message,
         });
-      case 'authored-unavailable-in-release':
-        // `healthy: false` stays false — no authored vegetation is on screen, and the chip's job is
-        // to say which forest this is, not whether the operator is happy about it. What changes is
-        // the WORDING and the strip's colour: naming the public source is a statement of fact a
-        // visitor can act on; "failed to mount" would be a lie about a request never made.
+      case 'promoted-vegetation-missing':
+        // The headline changed with the promotion, and the change is the point. It used to read
+        // "public tree positions (release build)" — accurate then, because the pack was gated and a
+        // release visitor was seeing exactly what shipped. The pack ships now, so the same words
+        // would describe a broken frame as the design. `healthy: false` was already correct; what
+        // was wrong was the calm.
         return Object.freeze({
           state: 'procedural', healthy: false, code: primary.code,
-          headline: 'Procedural forest — public tree positions (release build)', detail: primary.message,
+          headline: 'Procedural forest — the promoted vegetation pack did not load',
+          detail: primary.message,
         });
       case 'authored-disabled-by-query':
         return Object.freeze({
@@ -447,7 +484,9 @@ function vegetationIndicatorFromDegradations({ mount, degradations }) {
 const STRIP_QUALIFIER = Object.freeze({
   'runtime-disposed': 'VIEW DISPOSED',
   'no-authored-plan': 'NO AUTHORED PLAN',
-  'authored-unavailable-in-release': 'PUBLIC TREE POSITIONS',
+  // Not `PUBLIC TREE POSITIONS`. That named the source and let the segment read as a description of
+  // the shipped frame; the promoted pack ships, so the segment has to name the FAILURE.
+  'promoted-vegetation-missing': 'PROMOTED PACK DID NOT LOAD',
   'authored-disabled-by-query': 'PROCEDURAL BY REQUEST',
   'mount-in-flight': 'PACK LOADING',
   'mount-failed': 'PACK FAILED TO MOUNT',

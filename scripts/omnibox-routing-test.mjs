@@ -9,6 +9,7 @@
  */
 import { route, matchCommand, runCommand, createOmnibox, COMMANDS, HANDLED } from '../src/omnibox.js';
 import { mountDocument } from './lib/fake-dom.mjs';
+import { AVAILABLE_MAP_KEYS, LOCKED_MAP_KEYS } from '../src/map-availability.js';
 
 /* ------------------------------------------------------------- fixtures -- */
 const INDEX = [
@@ -154,7 +155,10 @@ function stubActions(over = {}) {
     calls,
     setView: rec('setView'), fit: rec('fit'), north: rec('north'), panel: rec('panel'),
     myQuests: rec('myQuests'), help: rec('help'), clearTrails: rec('clearTrails'), pin: rec('pin'),
-    goMap: rec('goMap'), mapKeys: () => ['customs', 'reserve', 'woods'],
+    // The real handles main.js supplies, from the ONE availability list. `mapKeys` is what `> map`
+    // will navigate to; `lockedMapKeys` is what it can name and refuse. A stub that hard-coded
+    // three keys here would have kept passing while the live command refused two of them.
+    goMap: rec('goMap'), mapKeys: () => [...AVAILABLE_MAP_KEYS], lockedMapKeys: () => [...LOCKED_MAP_KEYS],
     setRelief: rec('setRelief'), setNature: rec('setNature'),
     setLabels: rec('setLabels'), setLayers: (...a) => { calls.push(['setLayers', ...a]); return 2; },
     ...over,
@@ -199,15 +203,34 @@ function enter(text, actions) {
 }
 {
   const a = stubActions();
-  const { note } = enter('> map woods', a);
-  check('a named map still loads', a.calls[0]?.[0] === 'goMap' && a.calls[0][1] === 'woods', JSON.stringify(a.calls));
-  check('and the toast names it', /woods/.test(note));
+  const open = AVAILABLE_MAP_KEYS[0];
+  const { note } = enter(`> map ${open}`, a);
+  check('an OPEN map still loads', a.calls[0]?.[0] === 'goMap' && a.calls[0][1] === open, JSON.stringify(a.calls));
+  check('and the toast names it', note.includes(open), String(note));
+}
+{
+  // The founder locked Reserve and Woods on 2026-09-02. `> map woods` must not navigate — and must
+  // not lie either: "No map called woods" would read as a typo when the picker is showing Woods
+  // greyed out three inches away.
+  for (const locked of ['woods', 'reserve', 'shoreline']) {
+    const a = stubActions();
+    const { note } = enter(`> map ${locked}`, a);
+    eq(`\`> map ${locked}\` navigates nowhere`, a.calls.length, 0);
+    check(`…and says ${locked} is not available yet`, /not available yet/i.test(note ?? ''), String(note));
+    check('…naming the map, not calling it unknown', !/no map called/i.test(note ?? ''), String(note));
+  }
 }
 {
   const a = stubActions();
   const { note } = enter('> map atlantis', a);
   eq('an unknown map navigates nowhere', a.calls.length, 0);
   check('…and says so', /no map called/i.test(note), String(note));
+}
+{
+  // The row's own documentation is derived, not typed: it advertises exactly what will load.
+  const row = COMMANDS.find((c) => c.name === 'map');
+  eq('the `map` command advertises the open maps', row.arg, AVAILABLE_MAP_KEYS.join(' | '));
+  check('…and never a locked one', !LOCKED_MAP_KEYS.some((k) => row.arg.includes(k)), row.arg);
 }
 {
   const a = stubActions();
