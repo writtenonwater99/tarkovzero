@@ -108,6 +108,26 @@ button.tz-three-marker{appearance:none;cursor:pointer;pointer-events:auto}
 .tz-three-marker-player{border-color:rgba(56,214,200,.72);color:#83eee5}
 .tz-three-marker-landmark{background:rgba(48,22,16,.86);border-color:rgba(198,88,61,.76);color:#ffb39e;
   box-shadow:0 2px 7px rgba(0,0,0,.48),0 0 0 1px rgba(90,28,18,.34)}
+/* ---------- MARKER BADGES in the Three overlay (src/marker-overlay.js, 2026-09-03)
+   The icon vocabulary IS the mark, so the text pill's chrome comes off the element entirely and
+   moves onto the name chip — which only extracts get. Everything else draws a bare badge and puts
+   its name on the hover title, which is what stopped a hundred "BURIED BARREL CACHE" pills from
+   stacking on each other at fit zoom. `.has-mark` is written by paintMarkerOverlay(); place labels
+   never carry it and keep their leader-line treatment above. */
+.tz-three-marker.has-mark{display:flex;align-items:center;gap:4px;max-width:none;padding:0;
+  background:none;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1}
+.tz-three-marker.has-mark .tz-three-mark{display:block;line-height:0}
+.tz-three-marker.mark-dot{gap:0}
+/* Only the `full` tier takes the pointer. The title is the ONLY place a loot marker's name lives
+   now, so it has to be reachable — but a hundred hoverable badges at fit zoom would eat the drag
+   that orbits the camera, so the hit area arrives with the zoom that means "I am inspecting this".
+   Extracts are `full` at every zoom by the LOD exemption, and are meant to be reachable. */
+.tz-three-marker.has-mark[data-lod-tier="full"]{pointer-events:auto;cursor:help}
+.tz-three-marker .tz-three-mark-name{padding:2px 5px;border-radius:3px;background:rgba(8,12,10,.84);
+  border:1px solid rgba(45,190,108,.55);box-shadow:0 2px 5px rgba(0,0,0,.45);
+  text-shadow:0 1px 2px #000}
+.tz-three-marker-extract.has-mark.focused .tz-three-mark-name{background:rgba(30,138,78,.55);
+  border-color:var(--acc);color:#fff}
 .tz-three-hover{position:absolute;z-index:5;max-width:320px;padding:5px 7px;background:rgba(8,12,10,.94);
   border:1px solid var(--line);border-radius:var(--r-sm);color:var(--text);font:600 11px/1.25 var(--f-body);
   box-shadow:var(--shadow-hud);pointer-events:none}
@@ -1039,10 +1059,15 @@ a.ask-src-name:hover{color:var(--acc);border-bottom-color:rgba(45,190,108,.35)}
    requirement chips. Appended as one block; nothing above is reordered.
    =========================================================================== */
 
-/* dot tier: 6 px, desaturated, no glyph. The hit area is bigger than the ink so a dot is still
-   clickable — a 6 px target with a 6 px box is a target you miss. */
-.mk-dot{box-sizing:border-box;border-radius:50%;border:1px solid rgba(10,14,12,.85);
-  opacity:calc(var(--marker-opacity) + .18);box-shadow:0 1px 2px rgba(0,0,0,.55);transition:transform .12s,opacity .12s}
+/* dot tier: 6 px, desaturated, no glyph — but still the FAMILY's silhouette (icons.js dotHtml
+   draws square / shield / circle / diamond / hexagon as a 12-unit SVG with the badge's own ink
+   keyline). The colour and the keyline live in the SVG now, so this rule is layout + depth only.
+   The hit area is bigger than the ink so a dot is still clickable — a 6 px target with a 6 px box
+   is a target you miss. */
+.mk-dot{box-sizing:border-box;display:block;
+  opacity:calc(var(--marker-opacity) + .18);filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.6));
+  transition:transform .12s,opacity .12s}
+.mk-dot svg{display:block}
 .leaflet-marker-icon:has(.mk-dot){margin:-9px 0 0 -9px !important;width:18px !important;height:18px !important;
   display:flex;align-items:center;justify-content:center}
 .leaflet-marker-icon:hover .mk-dot{opacity:1;transform:scale(1.6)}

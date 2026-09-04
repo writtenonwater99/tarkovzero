@@ -3,14 +3,22 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import * as THREE from 'three/webgpu';
 import {
+  OVERLAY_SCOPE_MARGIN_M,
   RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, alphaCoverageMipChain,
-  buildUnderstoryTuftPlan, cameraPose, centroid,
+  anchorOverlayMark, buildUnderstoryTuftPlan, cameraPose, centroid,
   createAsyncAttachGuard, disposeMaterialResources, drapedLinearSegmentMeshData, gameToWorld, grassTuftMeshData,
   halveCoverageLevel, inRing,
-  makeTerrainSampler, markerOverlaySpec, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView,
-  railwayTrackMeshData, seatOverlayAnchor, terrainMeshData, terrainRelativeDisplayY, updateThreeFx, viewStateFromPose,
-  visibleInteractionData, withinScope, worldToGame,
+  makeTerrainSampler, markerOverlaySpec, overlayScopeFromLimit, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView,
+  railwayTrackMeshData, terrainMeshData, terrainRelativeDisplayY, updateThreeFx, viewStateFromPose,
+  visibleInteractionData, withinOverlayScope, withinScope, worldToGame,
 } from '../src/three-world.js';
+import { CUSTOMS_LABELS } from '../src/labels.js';
+import { FakeDocument } from './lib/fake-dom.mjs';
+import { KINDS, dotHtml, iconHtml } from '../src/icons.js';
+import { tierOf } from '../src/lod.js';
+import {
+  markerOverlayContent, markerTier, paintMarkerOverlay, safeOverlayLevel,
+} from '../src/marker-overlay.js';
 import { buildOpenFrameBuildingAsset, buildPropAsset, propAssetKind, propDimensions } from '../src/three-prop-assets.js';
 import { BRIDGE_STRUCTURE, bridgeApproachPlan, bridgeStructurePlan, bridgeStructureProfile } from '../src/bridge-structure.js';
 import {
@@ -29,11 +37,20 @@ import {
   createAuthoredAssetStreamer,
   customsExactTerrainSurfaceStatus,
   customsTruthStripCopy,
+  proceduralSuppressionKey,
   seatAuthoredInstance,
 } from '../src/map3d-three.js';
 import { describeVegetationObservability } from '../src/customs-vegetation-observability.js';
+import {
+  SHADOW_INVALIDATION_REASONS,
+  createShadowCasterAudit,
+  createShadowController,
+  parseShadowRequest,
+  shadowCasterFingerprint,
+} from '../src/shadow-invalidation.js';
 
 const customs3d = JSON.parse(await readFile(new URL('../public/data/customs-3d.json', import.meta.url), 'utf8'));
+const customs = JSON.parse(await readFile(new URL('../public/data/customs.json', import.meta.url), 'utf8'));
 const close = (actual, expected, epsilon = 1e-9, message = '') => {
   assert.ok(Math.abs(actual - expected) <= epsilon, message || `${actual} != ${expected}`);
 };
@@ -1319,6 +1336,628 @@ test('disposing the authored streamer aborts an in-flight pass before attachment
   assert.equal(streamer.active, false);
 });
 
+/* ═══════════════════════════════════════ the sun's frozen shadow depth map (P1) ═══════════ */
+
+const shadowNode = ({ id, castShadow = false, visible = true, children = [], matrix = null,
+  count = undefined, material = undefined, geometryId = 7, kind = 'trunk-batch' } = {}) => ({
+  id,
+  castShadow,
+  visible,
+  children,
+  userData: { kind },
+  matrixWorld: { elements: matrix ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+  ...(count === undefined ? {} : { count, instanceMatrix: { version: 0 } }),
+  ...(material === undefined ? {} : { material }),
+  geometry: { id: geometryId },
+});
+const fakeSun = () => ({
+  castShadow: true,
+  visible: true,
+  position: { x: -240, y: 340, z: 430 },
+  target: { position: { x: 1, y: 2, z: 0 } },
+  shadow: {
+    autoUpdate: true,
+    needsUpdate: false,
+    mapSize: { width: 2048, height: 2048 },
+    camera: { left: -260, right: 260, top: 260, bottom: -260, near: 20, far: 1100, zoom: 1 },
+  },
+});
+
+test('constructing the shadow controller freezes the depth map and arms exactly one bake', () => {
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow });
+  assert.equal(sun.shadow.autoUpdate, false, 'the whole optimisation is this flag');
+  assert.equal(sun.shadow.needsUpdate, true, 'without the first bake there would be NO shadows at all');
+  assert.equal(controller.live, false);
+  assert.equal(controller.pending, true);
+
+  // three consumes the flag on the frame it renders the depth map.
+  sun.shadow.needsUpdate = false;
+  assert.equal(controller.pending, false);
+  assert.equal(controller.stats().invalidations, 0, 'the boot bake is not an invalidation');
+});
+
+test('?shadows=live leaves three doing exactly what it did before this change', () => {
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow, live: true });
+  assert.equal(sun.shadow.autoUpdate, true);
+  assert.equal(controller.live, true);
+  assert.equal(controller.stats().mode, 'live-every-frame');
+});
+
+test('the invalidation reasons are a CLOSED enum — a typo throws instead of doing nothing', () => {
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow, now: () => 1234 });
+  sun.shadow.needsUpdate = false;
+
+  controller.invalidate('procedural-vegetation');
+  assert.equal(sun.shadow.needsUpdate, true);
+  assert.deepEqual(controller.stats().last, { reason: 'procedural-vegetation', atMs: 1234 });
+  sun.shadow.needsUpdate = false;
+  controller.invalidate('procedural-vegetation');
+  controller.invalidate('world-build');
+  assert.deepEqual(controller.stats().byReason, { 'world-build': 1, 'procedural-vegetation': 2 });
+
+  // The discriminating half: a reason nobody declared is a build-time-visible failure, not a
+  // silent no-op that ships a stale shadow.
+  sun.shadow.needsUpdate = false;
+  assert.throws(() => controller.invalidate('vegetation-swap'), /unknown shadow invalidation reason/);
+  assert.equal(sun.shadow.needsUpdate, false, 'a refused invalidation must not half-apply');
+});
+
+test('parseShadowRequest defaults to OFF and reports a value it did not recognise', () => {
+  assert.deepEqual({ ...parseShadowRequest('') }, { live: false, audit: false, unknown: [] });
+  assert.equal(parseShadowRequest('?shadows=live').live, true);
+  assert.equal(parseShadowRequest('?shadows=LIVE').live, true);
+  assert.equal(parseShadowRequest('?shadows=1').live, true);
+  assert.equal(parseShadowRequest('?shadows=off').live, false);
+  assert.equal(parseShadowRequest('?shadows=frozen').live, false, 'the mode name, not just the falsy vocabulary');
+  assert.equal(parseShadowRequest('?shadowAudit=1').audit, true);
+  // A misspelling must not silently take the default — that is how a control arm ends up being the
+  // arm under test.
+  const typo = parseShadowRequest('?shadows=liv');
+  assert.equal(typo.live, false);
+  assert.deepEqual([...typo.unknown], ['shadows=liv']);
+});
+
+test('a BARE ?shadowAudit arms the audit instead of silently disarming it', () => {
+  // `''` used to be in the falsy set, so `?shadowAudit` typed bare — the way a human types a
+  // switch — read as `false` and produced a session whose only trace was `{ armed: false }`. That
+  // is the one instrument built to catch a dropped invalidation, turned off by the act of asking
+  // for it. A flag that is PRESENT is on.
+  const bare = parseShadowRequest('?shadowAudit');
+  assert.equal(bare.audit, true, 'a bare ?shadowAudit must arm the audit');
+  assert.deepEqual([...bare.unknown], []);
+  assert.equal(parseShadowRequest('?shadowAudit=').audit, true);
+  // ...and it is still switchable OFF without deleting the parameter.
+  assert.equal(parseShadowRequest('?shadowAudit=0').audit, false);
+
+  // `?shadows` names a MODE, so bare names nothing: it is reported rather than guessed in either
+  // direction. Guessing `live` would silently un-ship the optimisation; guessing `frozen` would
+  // silently ignore a request for the control arm.
+  const bareMode = parseShadowRequest('?shadows');
+  assert.equal(bareMode.live, false);
+  assert.deepEqual([...bareMode.unknown], ['shadows= (present with no value)']);
+});
+
+test('the caster fingerprint sees every kind of caster change, and ignores the rest', () => {
+  const sun = fakeSun();
+  const build = () => {
+    const trunk = shadowNode({ id: 1, castShadow: true, count: 900 });
+    const crown = shadowNode({ id: 2, castShadow: true, count: 900 });
+    const trees = shadowNode({ id: 3, children: [trunk, crown] });
+    const tuft = shadowNode({ id: 4, castShadow: false, count: 40_000 });
+    const scene = shadowNode({ id: 0, children: [trees, tuft] });
+    return { scene, trees, trunk, crown, tuft };
+  };
+  const world = build();
+  const base = shadowCasterFingerprint(world.scene, { light: sun });
+  assert.equal(base.casters, 2);
+  assert.equal(shadowCasterFingerprint(build().scene, { light: sun }).hash, base.hash,
+    'the same scene twice must fingerprint the same, or nothing below means anything');
+
+  // 1. a caster leaves — the authored-vegetation swap
+  const removed = build();
+  removed.trees.children = [removed.trunk];
+  assert.notEqual(shadowCasterFingerprint(removed.scene, { light: sun }).hash, base.hash);
+  assert.equal(shadowCasterFingerprint(removed.scene, { light: sun }).casters, 1);
+
+  // 2. a caster group is hidden — applyNature()
+  const hidden = build();
+  hidden.trees.visible = false;
+  assert.notEqual(shadowCasterFingerprint(hidden.scene, { light: sun }).hash, base.hash);
+
+  // 3. an instance count changes — refreshDetailInstances()
+  const fewer = build();
+  fewer.trunk.count = 880;
+  assert.notEqual(shadowCasterFingerprint(fewer.scene, { light: sun }).hash, base.hash);
+
+  // 4. a caster moves
+  const moved = build();
+  moved.crown.matrixWorld.elements[12] = 4;
+  assert.notEqual(shadowCasterFingerprint(moved.scene, { light: sun }).hash, base.hash);
+
+  // 5. the light moves, and so does its target and its frustum
+  for (const mutate of [
+    (s) => { s.position.x += 1; },
+    (s) => { s.target.position.z += 1; },
+    (s) => { s.shadow.camera.far = 1200; },
+    (s) => { s.castShadow = false; },
+  ]) {
+    const light = fakeSun();
+    mutate(light);
+    assert.notEqual(shadowCasterFingerprint(world.scene, { light }).hash, base.hash);
+  }
+
+  // ...and the negative control. A NON-caster changing must NOT move the fingerprint, or the audit
+  // would cry stale on every understory LOD flip and be turned off within the hour.
+  const tuftMoved = build();
+  tuftMoved.tuft.count = 12_000;
+  tuftMoved.tuft.visible = false;
+  assert.equal(shadowCasterFingerprint(tuftMoved.scene, { light: sun }).hash, base.hash);
+});
+
+test('the stale-shadow audit fires on a caster change nobody invalidated for, and only then', () => {
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow });
+  const trunk = shadowNode({ id: 1, castShadow: true, count: 900 });
+  const scene = shadowNode({ id: 0, children: [trunk] });
+  const defects = [];
+  const audit = createShadowCasterAudit({
+    controller,
+    fingerprint: () => shadowCasterFingerprint(scene, { light: sun }),
+    onDefect: (defect) => defects.push(defect),
+  });
+
+  // The boot bake is owed; the audit waits for it rather than baselining a frame that has not drawn.
+  assert.equal(audit.observe().state, 'pending');
+  sun.shadow.needsUpdate = false;                 // three rendered the depth map
+  assert.equal(audit.observe().state, 'baked');
+  assert.equal(audit.observe().state, 'clean');
+  assert.equal(defects.length, 0);
+
+  // A caster mutation WITH its invalidation: declared, so not a defect.
+  scene.children = [];
+  controller.invalidate('procedural-vegetation');
+  assert.equal(audit.observe().state, 'pending');
+  sun.shadow.needsUpdate = false;
+  assert.equal(audit.observe().state, 'baked');
+  assert.equal(defects.length, 0, 'a declared change must never be reported');
+
+  // The same mutation with the invalidation DROPPED — the bug this exists to catch.
+  scene.children = [trunk];
+  const verdict = audit.observe();
+  assert.equal(verdict.state, 'stale');
+  assert.equal(verdict.casterDelta, 1);
+  assert.deepEqual(verdict.byKind, { 'trunk-batch': 1 }, 'a defect names the kind, never just a count');
+  assert.equal(defects.length, 1);
+  assert.equal(audit.stats().defects, 1);
+  assert.equal(audit.stats().firstDefect.lastInvalidation.reason, 'procedural-vegetation',
+    'the audit names the last invalidation, so the missing one can be placed in the sequence');
+});
+
+test('REGRESSION: an invalidate-and-bake inside one frame is not reported as a defect', () => {
+  // The audit's first headless run called the Fortress attach stale. The attach HAD invalidated;
+  // the depth map was re-baked before the next rAF tick (this scene renders at ~0.3 fps under
+  // SwiftShader), so a sampler watching `pending` never saw the window. It watches the invalidation
+  // SEQUENCE instead, which a slow sampler cannot miss. This is that case, at tick resolution.
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow });
+  const scene = shadowNode({ id: 0, children: [shadowNode({ id: 1, castShadow: true })] });
+  const defects = [];
+  const audit = createShadowCasterAudit({
+    controller,
+    fingerprint: () => shadowCasterFingerprint(scene, { light: sun }),
+    onDefect: (d) => defects.push(d),
+  });
+  sun.shadow.needsUpdate = false;
+  assert.equal(audit.observe().state, 'baked');
+
+  // One tick's worth of app activity: a caster attaches, its invalidation fires, three bakes — all
+  // between two observations, so `pending` is false again by the time the audit looks.
+  scene.children = [...scene.children, shadowNode({ id: 2, castShadow: true })];
+  controller.invalidate('authored-asset-attach');
+  sun.shadow.needsUpdate = false;
+  assert.equal(audit.observe().state, 'baked', 'a declared change must re-baseline, not report');
+  assert.equal(defects.length, 0);
+  assert.equal(audit.observe().state, 'clean');
+
+  // ...and the discriminating half: the identical mutation with no invalidation still fires.
+  scene.children = [...scene.children, shadowNode({ id: 3, castShadow: true })];
+  assert.equal(audit.observe().state, 'stale');
+  assert.equal(defects.length, 1);
+});
+
+test('the audit refuses to claim anything while three is rendering the depth map every frame', () => {
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow, live: true });
+  const scene = shadowNode({ id: 0, children: [shadowNode({ id: 1, castShadow: true })] });
+  const audit = createShadowCasterAudit({
+    controller,
+    fingerprint: () => shadowCasterFingerprint(scene, { light: sun }),
+  });
+  assert.equal(audit.observe().state, 'live');
+  scene.children = [];
+  assert.equal(audit.observe().state, 'live');
+  assert.equal(audit.stats().defects, 0);
+});
+
+test('the authored streamer separates a SCENE GRAPH change from a status publish', async () => {
+  // The distinction the frozen shadow map lives on. `onChanged` fires on every camera pass, and
+  // re-baking a 2048² depth map on every pass is most of the cost the freeze removes. Only an
+  // attach or a detach is a caster change, because only those write `castShadow`.
+  const root = new THREE.Group();
+  const status = {};
+  const changed = [];
+  const casters = [];
+  const streamer = createAuthoredAssetStreamer({
+    root,
+    status,
+    guard: createAsyncAttachGuard(),
+    manifestInput: oneCellAuthoredManifest(),
+    baseHref: 'http://localhost/',
+    displayYFor: (_x, _z, y) => y,
+    loadAsset: async () => ({ scene: new THREE.Group() }),
+    syncSuppression: (entries) => ({ applied: entries.map((entry) => entry.featureId), retained: [] }),
+    onChanged: () => changed.push('changed'),
+    onCastersChanged: (kind) => casters.push(kind),
+  });
+
+  await streamer.update({ x: 0, z: 0 });
+  assert.equal(root.children.length, 1);
+  assert.deepEqual(casters, ['attach'], 'exactly one caster change for one attached asset');
+  const changedAfterAttach = changed.length;
+
+  // A camera move that changes nothing in the graph. `onChanged` fires (the frame is invalidated,
+  // which is right); `onCastersChanged` must NOT.
+  await streamer.update({ x: 1, z: 1 });
+  assert.ok(changed.length > changedAfterAttach, 'the frame is still invalidated on a camera pass');
+  assert.deepEqual(casters, ['attach'], 'a camera pass that moved no geometry must not re-bake the shadow map');
+
+  // Leaving the draw distance detaches — a real caster change again.
+  await streamer.update({ x: 75, z: 0 });
+  assert.equal(root.children.length, 0);
+  assert.deepEqual(casters, ['attach', 'detach']);
+  streamer.dispose();
+});
+
+test('the suppression key skips an unchanged set and CANNOT skip a changed one', () => {
+  /*
+   * THE FIX FOR THE BUG THAT MADE P1 NEARLY WORTHLESS.
+   *
+   * `publishState()` runs on every streamer pass — before its own empty-diff early return — and
+   * every camera event runs a pass, so `syncProceduralSuppression()` was re-running the whole
+   * suppression pass on every frame of a drag and calling
+   * `sunShadow.invalidate('procedural-suppression')` each time. Since this app renders ON DEMAND,
+   * frame time only exists while the camera is moving: the freeze was being lifted in exactly the
+   * regime it was bought for, and no A/B could see it (`runPreset()` samples with the camera
+   * parked). Measured on the shipped tree before the gate: six `tz.flyTo` calls, +14 invalidations.
+   *
+   * The dangerous direction is the FALSE SKIP — comparing equal for two sets that differ would
+   * leave a procedural proxy standing under its authored replacement forever. Each property below
+   * is one way that could happen.
+   */
+  const entry = (featureId, kind = 'building', policy = 'hide-mesh') => ({ featureId, kind, policy });
+
+  // 1. The same set, twice, is the same key. This is the whole optimisation.
+  assert.equal(
+    proceduralSuppressionKey([entry('a'), entry('b')]),
+    proceduralSuppressionKey([entry('a'), entry('b')]),
+  );
+  // 2. ...and order is not a change. The ledger's iteration order is not a promise.
+  assert.equal(
+    proceduralSuppressionKey([entry('a'), entry('b')]),
+    proceduralSuppressionKey([entry('b'), entry('a')]),
+  );
+  // 3. A feature ENTERING the set must not skip.
+  assert.notEqual(
+    proceduralSuppressionKey([entry('a')]),
+    proceduralSuppressionKey([entry('a'), entry('b')]),
+  );
+  // 4. A feature LEAVING the set must not skip — this is the direction that resurrects a proxy.
+  assert.notEqual(
+    proceduralSuppressionKey([entry('a'), entry('b')]),
+    proceduralSuppressionKey([entry('b')]),
+  );
+  // 5. The SAME id under a different policy is a different suppression.
+  assert.notEqual(
+    proceduralSuppressionKey([entry('a', 'building', 'hide-mesh')]),
+    proceduralSuppressionKey([entry('a', 'building', 'hide-mesh-and-picking')]),
+  );
+  // 6. ...and under a different kind. `syncProceduralSuppression` branches on `kind`, so a
+  //    prop-turned-building would be routed differently while the key compared equal.
+  assert.notEqual(
+    proceduralSuppressionKey([entry('a', 'building')]),
+    proceduralSuppressionKey([entry('a', 'prop')]),
+  );
+  // 7. Field boundaries cannot be forged. Without this, `{id:'a|b', kind:'c'}` and
+  //    `{id:'a', kind:'b|c'}` would join into one identical string and two different sets would
+  //    silently share a key.
+  assert.notEqual(
+    proceduralSuppressionKey([{ featureId: 'a|building', kind: 'x', policy: 'p' }]),
+    proceduralSuppressionKey([{ featureId: 'a', kind: 'building|x', policy: 'p' }]),
+  );
+  // 8. The empty set has a key of its own and is not confusable with "nothing applied yet"
+  //    (`null`), which is what `rebuildWorld()` resets to.
+  assert.equal(proceduralSuppressionKey([]), '');
+  assert.notEqual(proceduralSuppressionKey([]), null);
+});
+
+test('the suppression pass is gated on the key, and a world rebuild clears it', async () => {
+  // The gate itself lives in the renderer closure and cannot be imported, so its two load-bearing
+  // lines are pinned where they are spelled. The DANGEROUS one is the reset: without it, the first
+  // ledger publish after `rebuildWorld()` compares equal against a set applied to a scene graph that
+  // has since been disposed, and declines to re-hide the new proxies — an authored replacement with
+  // its procedural twin visible through it, permanently.
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  const bodyOf = (name) => {
+    const match = new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}`).exec(renderer);
+    assert.ok(match, `${name}() must exist`);
+    return match[0];
+  };
+  assert.match(
+    bodyOf('syncProceduralSuppression'),
+    /const key = proceduralSuppressionKey\(entries\);\s*\n\s*if \(key === appliedProceduralSuppressionKey\) return proceduralSuppressionResult;/,
+    'an unchanged suppression set must not re-run the pass or re-bake the depth map',
+  );
+  assert.match(bodyOf('rebuildWorld'), /appliedProceduralSuppressionKey = null;/,
+    'a world rebuild disposes every suppressed node, so the applied key describes a graph that is gone');
+  // A skipped pass must publish the SAME answer as the pass it skipped, not an empty one — a status
+  // field that goes blank whenever nothing changed is worse than the cost it saves.
+  assert.match(bodyOf('syncProceduralSuppression'), /proceduralSuppressionResult = Object\.freeze\(\{/);
+});
+
+test('every invalidation point named in the enum is wired, at the site that owns the mutation', async () => {
+  // THE INVALIDATION LIST IS THE DELIVERABLE. A dropped `sunShadow.invalidate(...)` is a silent
+  // stale shadow that no count can see (handoff §7), so each one is pinned to the function whose
+  // mutation it declares. Delete one and this goes red naming it.
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  const bodyOf = (name) => {
+    const match = new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}`).exec(renderer);
+    assert.ok(match, `${name}() must exist`);
+    return match[0];
+  };
+  const expected = [
+    ['rebuildWorld', 'world-build'],
+    ['applyProceduralSuppression', 'procedural-suppression'],
+    ['applyNature', 'nature-visibility'],
+    ['applyLook', 'look'],
+    ['rebuildProceduralVegetation', 'procedural-vegetation'],
+    ['mountAuthoredVegetation', 'authored-vegetation-mount'],
+    ['repackAuthoredVegetationNow', 'authored-vegetation-repack'],
+  ];
+  for (const [fn, reason] of expected) {
+    assert.match(bodyOf(fn), new RegExp(`sunShadow\\.invalidate\\('${reason}'\\)`),
+      `${fn}() must invalidate the shadow map with reason '${reason}'`);
+  }
+  // The two streaming reasons are wired through the streamer's own callback rather than a function
+  // body, so they are pinned where they are actually spelled.
+  // Mapped through a table, not a ternary: an unrecognised kind must reach the closed enum's throw
+  // instead of being absorbed into 'attach' by an else branch, which would quietly mislabel the
+  // `byReason` ledger the audit prints when it reports a defect.
+  assert.match(renderer, /onCastersChanged: \(kind\) => sunShadow\.invalidate\(AUTHORED_ASSET_SHADOW_REASON\[kind\] \?\? kind\)/);
+  assert.match(renderer, /const AUTHORED_ASSET_SHADOW_REASON = Object\.freeze\(\{\s*\n\s*attach: 'authored-asset-attach',\s*\n\s*detach: 'authored-asset-detach',\s*\n\s*\}\);/);
+
+  // Nothing may invent a reason: every string handed to invalidate() is in the closed enum.
+  const used = [...renderer.matchAll(/sunShadow\.invalidate\('([a-z-]+)'\)/g)].map((m) => m[1]);
+  const spelled = [...renderer.matchAll(/'(authored-asset-(?:attach|detach))'/g)].map((m) => m[1]);
+  for (const reason of new Set([...used, ...spelled])) {
+    assert.ok(SHADOW_INVALIDATION_REASONS.includes(reason), `${reason} is not a declared reason`);
+  }
+
+  /*
+   * ...AND THE REVERSE, which is the half that was missing.
+   *
+   * A closed enum's whole value is that its membership IS the coverage claim, so a member with no
+   * call site claims coverage that does not exist — and the forward check above cannot see it, by
+   * construction. `sun` was exactly that: declared, never invoked, and the one function that moves
+   * the light files its invalidation under `look`, so `byReason` could never attribute anything to
+   * it. Reserving a name is legitimate; it now costs a line HERE, which is the point.
+   */
+  const RESERVED_UNUSED_REASONS = new Set([
+    // Nothing moves the sun, its target or the shadow camera today. The name is kept so that the
+    // day something does, it does not get filed under a neighbouring reason.
+    'sun',
+  ]);
+  const declared = new Set([...used, ...spelled]);
+  for (const reason of SHADOW_INVALIDATION_REASONS) {
+    if (RESERVED_UNUSED_REASONS.has(reason)) {
+      assert.ok(!declared.has(reason), `'${reason}' is now invoked — take it out of RESERVED_UNUSED_REASONS`);
+      continue;
+    }
+    assert.ok(declared.has(reason),
+      `'${reason}' is declared in the enum but no call site invokes it; either wire it or add it to`
+      + ' RESERVED_UNUSED_REASONS with a reason');
+  }
+
+  // The repack's invalidation is CONDITIONAL on the policy the RUNTIME actually normalised, not on
+  // the module default and not on a comment. The module constant is only the default the runtime
+  // falls back to; a caller can pass a `shadowPolicy` the renderer's gate would never see, and a
+  // gate reading the constant would then be false while lod-0 buckets cast and changed every 4 m.
+  assert.match(
+    renderer,
+    /const AUTHORED_VEGETATION_CASTS_SHADOWS = CUSTOMS_AUTHORED_VEGETATION_SHADOW_POLICY\.mode !== 'disabled';/,
+  );
+  assert.match(bodyOf('repackAuthoredVegetationNow'), /if \(authoredVegetationCastsShadows\) sunShadow\.invalidate/);
+  assert.match(renderer, /authoredVegetationCastsShadows = effectiveVegetationShadowMode !== 'disabled';/,
+    'the repack gate must be set from the constructed runtime, not from the module default');
+  assert.match(renderer, /runtime\.status\.shadowPolicy\?\.mode/,
+    'the effective policy has to be READ off the runtime for the gate to mean anything');
+});
+
+test('the profiler ablation declares its caster mutation — propGroup/rockGroup are casters', async () => {
+  /*
+   * THE ONE UNCOVERED CASTER MUTATION AN ADVERSARIAL PASS FOUND, and it is not in the streaming or
+   * LOD lanes. `applyAblation()` sets `propGroup.visible = false` / `rockGroup.visible = false`;
+   * both are caster groups; frozen, the depth map then keeps the shadows of geometry that is no
+   * longer drawn. It is reachable on the shipped bundle (`?profile=1` is gated on `profileRequest`
+   * alone, deliberately), so `?profileAblate=props` produced prop shadows on ground with no props —
+   * the literal signature the stale-arm control in the P1 verification produced and called proof.
+   *
+   * Pinned as a PROPERTY of the branch, not as the presence of a string: every `.visible = false`
+   * inside applyAblation must be followed by an invalidation before that branch ends.
+   */
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  const match = /function applyAblation\(ablation\) \{[\s\S]*?\n    \}/.exec(renderer);
+  assert.ok(match, 'applyAblation() must exist');
+  // Comments stripped — this is an assertion about what the CODE does, and a doc block explaining
+  // the invalidation must not be able to satisfy an assertion that the invalidation is there.
+  const body = match[0].replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  // THE PREMISE, CHECKED RATHER THAN ASSUMED, so this test cannot outlive the reason it exists.
+  // If props and rocks ever stop casting, this goes red and the invalidation below can be dropped
+  // on purpose instead of being carried by habit.
+  const propAssets = await readFile(new URL('../src/three-prop-assets.js', import.meta.url), 'utf8');
+  assert.match(propAssets, /castShadow = true/, 'props are casters — three-prop-assets.js sets it');
+  assert.match(renderer, /mesh\.castShadow = mesh\.receiveShadow = true;\n\s*rockGroup\.add\(mesh\);/,
+    'rocks are casters — rockGroup is populated with castShadow meshes');
+
+  const hides = [...body.matchAll(/\.visible = false;/g)];
+  assert.ok(hides.length > 0, 'applyAblation no longer hides a group — this assertion has rotted');
+  for (const hide of hides) {
+    const after = body.slice(hide.index, hide.index + 500);
+    assert.match(after, /sunShadow\.invalidate\('profiler-ablation'\)/,
+      'a group hidden by the ablation must declare the caster change, or the frozen map keeps its shadows');
+  }
+  // The RESTORE edge too: putting the geometry back changes the caster set exactly as much as
+  // taking it away did, and a restored arm drawn against a map baked while it was hidden is the
+  // same defect with the sign flipped.
+  assert.match(body, /restorers\.push\(\(\) => \{\s*group\.visible = before;\s*sunShadow\.invalidate\('profiler-ablation'\);/);
+});
+
+test('the frame loop and the 1 Hz dynamic refresh create no shadow casters', async () => {
+  // Why they are NOT on the invalidation list, checked rather than asserted. `refreshDynamicNow()`
+  // runs on the live-player tick and `updateUnderstoryLod()` runs on every rendered frame;
+  // invalidating from either would hand most of the win back. Both are safe only for as long as
+  // nothing they build casts, so that is the thing pinned.
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  const bodyOf = (name) => {
+    const match = new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}`).exec(renderer);
+    assert.ok(match, `${name}() must exist`);
+    return match[0];
+  };
+  const dynamic = bodyOf('refreshDynamicNow');
+  assert.doesNotMatch(dynamic, /castShadow/,
+    'a quest pin or player cone that cast a shadow would need refreshDynamic() on the invalidation list');
+  assert.doesNotMatch(bodyOf('updateUnderstoryLod'), /castShadow/);
+  assert.match(bodyOf('addUnderstory'), /near\.castShadow = medium\.castShadow = false;/);
+  // ...and the understory tufts the LOD switch toggles are declared non-casters at construction.
+
+  /*
+   * THE PREMISE THE KEYWORD GREP RESTS ON, ASSERTED — because a grep for `castShadow` in one
+   * function body is exactly the "a count cannot detect presence" shape one level up: a quest pin
+   * built through a HELPER that sets the flag itself walks straight past it. Two halves:
+   *
+   *  1. Non-casting is three's default, not something these lines achieve. If a future three ever
+   *     flipped it, dynamicRoot would start casting at 1 Hz with every assertion here still green.
+   *  2. `refreshDynamicNow` builds its meshes INLINE (`new THREE.Mesh(...)`) and calls none of the
+   *     asset builders that do set the flag. That is what makes (1) sufficient.
+   */
+  assert.equal(new THREE.Mesh().castShadow, false,
+    'this whole test assumes three defaults castShadow to false; it does not any more');
+  assert.equal(new THREE.Object3D().castShadow, false);
+  for (const helper of ['buildPropAsset', 'buildOpenFrameBuildingAsset', 'buildSolidWallNode', 'addMesh']) {
+    assert.ok(!dynamic.includes(helper),
+      `refreshDynamicNow() calls ${helper}(), which can set castShadow itself — the grep above cannot`
+      + ' see that, so either declare a reason for the 1 Hz rebuild or keep the helper out');
+  }
+  assert.match(dynamic, /new THREE\.Mesh\(/, 'it builds meshes inline; if it stopped, re-derive this test');
+});
+
+test('the shipped renderer never writes shadow.autoUpdate itself — the controller owns it', async () => {
+  // `src/shadow-invalidation.js` is the single writer on the shipped path. The profiler's ablation
+  // is the only other writer in the codebase and it lives inside `createRenderProfiler()`, which is
+  // built only when `?profile=` armed the run — pinned separately by render-profiler.test.mjs.
+  const [renderer, module_] = await Promise.all([
+    readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/shadow-invalidation.js', import.meta.url), 'utf8'),
+  ]);
+  // Comments stripped: this is an assertion about what the CODE does, and a doc comment naming the
+  // flag is exactly the thing that must stay legal.
+  const code = renderer.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const profilerStart = code.indexOf('function createRenderProfiler()');
+  assert.ok(profilerStart > 0);
+  const writes = [...code.matchAll(/\.autoUpdate\s*=/g)].map((m) => m.index);
+  assert.ok(writes.length > 0, 'the profiler ablation still writes it, so a zero here means the regex rotted');
+  for (const at of writes) {
+    assert.ok(at > profilerStart, `an autoUpdate write at ${at} is on the shipped path`);
+  }
+
+  /*
+   * ...AND `needsUpdate`, WHICH IS THE FLAG THAT ACTUALLY DECIDES WHETHER A BAKE HAPPENS.
+   *
+   * `autoUpdate` only decides whether it happens unconditionally. The test's name claimed ownership
+   * of the pair and checked one of them, so a shipped-path `sun.shadow.needsUpdate = false` — the
+   * single most damaging line anyone could add to this subsystem, a permanent silent freeze — went
+   * straight through green. Only `shadow.`-qualified writes count: `instanceMatrix.needsUpdate` and
+   * the attribute flags are a different thing entirely and are legal everywhere.
+   */
+  const shadowFlagWrites = [...code.matchAll(/shadow\.needsUpdate\s*=/g)].map((m) => m.index);
+  for (const at of shadowFlagWrites) {
+    assert.ok(at > profilerStart,
+      `a shadow.needsUpdate write at ${at} is on the shipped path — only the controller may lower it`);
+  }
+  assert.match(module_, /export function createShadowController\(/);
+  assert.match(module_, /shadow\.autoUpdate = !frozen;/);
+  assert.match(module_, /shadow\.needsUpdate = true;/);
+});
+
+test('the shadow controller refuses to settle over an invalidation it did not see', () => {
+  /*
+   * `armAblation()` has to arm a bake, wait a frame, and then lower the flag. Writing
+   * `sun.shadow.needsUpdate = false` to do that DISCARDS anything the app declared inside the
+   * awaited frame — and the discard is self-certifying: the audit sees `sequence` has moved,
+   * re-baselines, and files the post-mutation fingerprint as `baked`. So the operation is
+   * conditional, and this is the condition.
+   */
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow });
+  sun.shadow.needsUpdate = false;
+
+  // Nothing happened in between: the settle is allowed.
+  controller.invalidate('profiler-ablation');
+  const quiet = controller.sequence;
+  assert.equal(controller.settle(quiet), true);
+  assert.equal(sun.shadow.needsUpdate, false);
+
+  // An invalidation lands inside the awaited frame: the bake is OWED and must survive.
+  const atArm = controller.sequence;
+  controller.invalidate('authored-vegetation-mount');
+  assert.equal(controller.settle(atArm), false, 'a bake the app asked for must not be cancelled');
+  assert.equal(sun.shadow.needsUpdate, true, 'the flag stays raised — this is the whole point');
+
+  // setLive routes the other flag through the same owner.
+  assert.equal(controller.setLive(true), true);
+  assert.equal(sun.shadow.autoUpdate, true);
+  assert.equal(controller.live, true);
+  controller.setLive(false);
+  assert.equal(sun.shadow.autoUpdate, false);
+});
+
+test('a restored GPU context re-bakes the depth map — the one stale path no fingerprint can see', async () => {
+  /*
+   * A context/device loss reallocates the depth texture EMPTY without touching a single caster. Live,
+   * three re-renders it next frame. Frozen, nothing ever does: the scene loses all sun shadows for
+   * the rest of the session while `shadowCasterFingerprint` stays bit-identical and the audit
+   * reports `clean` forever. It is a permanent silent regression the freeze itself introduces, so
+   * the freeze carries the handler.
+   */
+  const sun = fakeSun();
+  const controller = createShadowController({ shadow: sun.shadow });
+  sun.shadow.needsUpdate = false;
+  assert.equal(controller.pending, false);
+  controller.invalidate('renderer-context-restored');
+  assert.equal(controller.pending, true, 'the reason must actually arm a bake');
+  assert.deepEqual(controller.stats().byReason, { 'renderer-context-restored': 1 });
+
+  // ...and it is wired to both backends' loss signals, not merely declared.
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  assert.match(renderer, /addEventListener\?\.\('webglcontextrestored', invalidateShadowOnContextRestore\)/);
+  assert.match(renderer, /renderer\.backend\?\.device\?\.lost\?\.then\?\.\(/,
+    'WebGPU has no webglcontextrestored; the device.lost promise is its equivalent');
+  assert.match(renderer, /sunShadow\.invalidate\('renderer-context-restored'\)/);
+});
+
 test('camera view state survives a pose round-trip', () => {
   const view = { target: [-210, -146, 3], zoom: 2.4, rotationX: 32, rotationOrbit: -20, minZoom: -2, maxZoom: 5 };
   const pose = cameraPose(view, 900, 22);
@@ -1436,7 +2075,10 @@ test('grass tuft meshes stand along world Z and respect the near/medium triangle
   assert.equal(UNDERSTORY_TUFT_BUDGET.maxInstances * medium.indices.length / 3, 24_000);
 });
 
-test('the proof scope is the only thing that filters an overlay, now the floor filter is gone', async () => {
+test('the overlay scope is the only thing that filters an overlay, now the floor filter is gone', async () => {
+  // The PROOF-OF-CONCEPT box is still here, and still behaves as it always did — but as of
+  // 2026-09-03 it gates the RAILWAY MESH ONLY. Overlays are gated by `withinOverlayScope()`
+  // against `overlayScopeFromLimit(data.limit)`; the tests below prove the difference.
   assert.equal(THREE_POC_SCOPE.id, 'customs-industrial-rail-yard');
   assert.equal(withinScope({ x: 230, z: -110 }), true);
   assert.equal(withinScope({ x: 600, z: -110 }), false);
@@ -1465,6 +2107,337 @@ test('the proof scope is the only thing that filters an overlay, now the floor f
   assert.match(underground, /#FFD28A/, 'the underground corner chip is gone');
   assert.doesNotMatch(surface, /stroke-dasharray/, 'a surface marker must not be dashed');
   assert.doesNotMatch(surface, /#FFD28A/, 'a surface marker must not carry the underground chip');
+});
+
+/*
+ * OVERLAY SCOPE — the 2026-09-03 fix.
+ *
+ * Every DOM overlay in the Three renderer (place labels, POI markers, EXTRACTS, quest zones,
+ * quest points, tactical prop callouts) was gated on `THREE_POC_SCOPE`: a 360x300 m cell centred
+ * on (230, -110), accepting x in [50, 410] and z in [-260, 40]. The map is 1024x541 m. The gate
+ * therefore covered ~19% of the ground the terrain, the buildings, the vegetation and the camera
+ * all already drew, and the founder saw exactly that: "all points/icons are in the middle, and
+ * extracts; some extracts are not even showing up."
+ *
+ * These tests are written against the REAL shipped data, not fixtures, and the counts are computed
+ * from the files rather than hardcoded — but the assertions are absolute (zero dropped), because a
+ * count recomputed from the same source it is asserting against cannot fail on its own.
+ */
+const overlayScopeFixture = () => overlayScopeFromLimit(customs3d.limit);
+const extractPoints = () => customs.extracts.map((extract) => ({
+  name: String(extract.name ?? extract.id),
+  x: Number(extract.position.x),
+  z: Number(extract.position.z),
+}));
+
+test('the overlay scope is derived from the playable limit and carries its provenance', () => {
+  const scope = overlayScopeFixture();
+  const xs = customs3d.limit.map((point) => Number(point[0]));
+  const zs = customs3d.limit.map((point) => Number(point[1]));
+  assert.equal(scope.source, 'limit-bbox', 'the scope must say where it came from');
+  assert.equal(scope.marginM, OVERLAY_SCOPE_MARGIN_M);
+  close(scope.minX, Math.min(...xs) - OVERLAY_SCOPE_MARGIN_M, 1e-9);
+  close(scope.maxX, Math.max(...xs) + OVERLAY_SCOPE_MARGIN_M, 1e-9);
+  close(scope.minZ, Math.min(...zs) - OVERLAY_SCOPE_MARGIN_M, 1e-9);
+  close(scope.maxZ, Math.max(...zs) + OVERLAY_SCOPE_MARGIN_M, 1e-9);
+  assert.ok(Object.isFrozen(scope), 'the scope must be frozen — nothing may widen it at runtime');
+  // Not a hollow tautology: this is the bbox of the SHIPPED limit ring, and it is the same ring
+  // `groundExtent` clamps the camera to. If the data changes under us, these move together.
+  close(scope.maxX - scope.minX, 1023.9 + 2 * OVERLAY_SCOPE_MARGIN_M, 1e-6);
+  close(scope.maxZ - scope.minZ, 541.4 + 2 * OVERLAY_SCOPE_MARGIN_M, 1e-6);
+});
+
+test('every shipped Customs extract passes the overlay scope', () => {
+  const scope = overlayScopeFixture();
+  const extracts = extractPoints();
+  assert.ok(extracts.length >= 30, `expected the full extract set, read ${extracts.length}`);
+  const dropped = extracts.filter((point) => !withinOverlayScope([point.x, point.z], scope));
+  assert.deepEqual(
+    dropped.map((point) => `${point.name} (${point.x}, ${point.z})`),
+    [],
+    `${dropped.length} of ${extracts.length} extracts are gated out of the Three overlay`,
+  );
+  // And by the object form the marker path actually passes.
+  const droppedObjects = extracts.filter((point) => !withinOverlayScope(point, scope));
+  assert.equal(droppedObjects.length, 0, 'the {x,z} input shape must gate identically to [x,z]');
+});
+
+test('every shipped Customs place label passes the overlay scope', () => {
+  const scope = overlayScopeFixture();
+  assert.ok(CUSTOMS_LABELS.length >= 30, `expected the full label set, read ${CUSTOMS_LABELS.length}`);
+  const dropped = CUSTOMS_LABELS.filter((label) => !withinOverlayScope(label.position, scope));
+  assert.deepEqual(
+    dropped.map((label) => `${label.text} (${label.position.join(', ')})`),
+    [],
+    `${dropped.length} of ${CUSTOMS_LABELS.length} place labels are gated out of the Three overlay`,
+  );
+});
+
+test('DISCRIMINATION: the old proof-of-concept box drops most of what the new scope admits', () => {
+  // If this test can pass with the OLD gate still wired to the overlays, the two tests above prove
+  // nothing. It measures the gap, states it, and fails if the gap ever closes to nothing.
+  const scope = overlayScopeFixture();
+  const extracts = extractPoints();
+
+  const extractsOld = extracts.filter((point) => withinScope([point.x, point.z])).length;
+  const extractsNew = extracts.filter((point) => withinOverlayScope([point.x, point.z], scope)).length;
+  const labelsOld = CUSTOMS_LABELS.filter((label) => withinScope(label.position)).length;
+  const labelsNew = CUSTOMS_LABELS.filter((label) => withinOverlayScope(label.position, scope)).length;
+  const measured = `extracts old=${extractsOld}/${extracts.length} new=${extractsNew}/${extracts.length}; `
+    + `labels old=${labelsOld}/${CUSTOMS_LABELS.length} new=${labelsNew}/${CUSTOMS_LABELS.length}`;
+
+  assert.equal(extractsNew, extracts.length, `new gate must admit every extract — ${measured}`);
+  assert.equal(labelsNew, CUSTOMS_LABELS.length, `new gate must admit every label — ${measured}`);
+  assert.ok(
+    extracts.length - extractsOld >= 20,
+    `THE OLD GATE MUST BE MEASURABLY WORSE, else these assertions are vacuous — ${measured}`,
+  );
+  assert.ok(
+    CUSTOMS_LABELS.length - labelsOld >= 15,
+    `THE OLD GATE MUST BE MEASURABLY WORSE, else these assertions are vacuous — ${measured}`,
+  );
+  // The three extracts that sit outside the CONCAVE limit polygon, and are the reason the fix is a
+  // padded bbox and not `inRing(point, limit)`. Named so a future polygon rewrite fails here.
+  for (const name of ['Administration Gate', 'Railroad Passage (Flare)', 'Transit to Shoreline']) {
+    const point = extracts.find((candidate) => candidate.name === name);
+    assert.ok(point, `${name} is missing from public/data/customs.json`);
+    assert.equal(withinOverlayScope([point.x, point.z], scope), true,
+      `${name} must draw: it is outside the limit ring, which is why the margin exists`);
+    assert.equal(inRing([point.x, point.z], customs3d.limit), false,
+      `${name} is inside the limit ring now — re-derive the margin rationale before trusting it`);
+  }
+});
+
+test('the overlay scope still discriminates, and a missing limit fails loudly', () => {
+  const scope = overlayScopeFixture();
+  // Far-field garbage must not draw. A gate that admits everything is not a gate.
+  assert.equal(withinOverlayScope([5000, 5000], scope), false);
+  assert.equal(withinOverlayScope({ x: -5000, z: 0 }, scope), false);
+  assert.equal(withinOverlayScope([0, -5000], scope), false);
+  assert.equal(withinOverlayScope([Number.NaN, 0], scope), false, 'NaN must not be read as 0');
+  assert.equal(withinOverlayScope(null, scope), false);
+  // Just inside and just outside each edge.
+  assert.equal(withinOverlayScope([scope.minX + 0.001, scope.minZ + 0.001], scope), true);
+  assert.equal(withinOverlayScope([scope.maxX - 0.001, scope.maxZ - 0.001], scope), true);
+  assert.equal(withinOverlayScope([scope.minX - 0.001, 0], scope), false);
+  assert.equal(withinOverlayScope([0, scope.maxZ + 0.001], scope), false);
+
+  // NO SILENT FALLBACK (handoff §7). A missing or corrupt limit must throw, never quietly hand back
+  // a box — a fallback box is precisely the failure this whole fix is undoing.
+  assert.throws(() => overlayScopeFromLimit([]), TypeError);
+  assert.throws(() => overlayScopeFromLimit(null), TypeError);
+  assert.throws(() => overlayScopeFromLimit(undefined), TypeError);
+  assert.throws(() => overlayScopeFromLimit([[0, 0], [Number.NaN, 10]]), TypeError);
+  assert.throws(() => overlayScopeFromLimit([[0, 0], [10, Number.POSITIVE_INFINITY]]), TypeError);
+  assert.throws(() => overlayScopeFromLimit([[0, 0], ['left', 'right']]), TypeError);
+  assert.throws(() => overlayScopeFromLimit(customs3d.limit, Number.NaN), TypeError);
+  assert.throws(() => overlayScopeFromLimit(customs3d.limit, -1), TypeError);
+  assert.throws(() => withinOverlayScope([0, 0], null), TypeError);
+  assert.throws(() => withinOverlayScope([0, 0], { minX: 0, maxX: Number.NaN, minZ: 0, maxZ: 1 }), TypeError);
+});
+
+test('the renderer gates overlays on the limit-derived scope, not the proof-of-concept box', async () => {
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  assert.match(renderer, /const overlayScope = overlayScopeFromLimit\(data\.limit\)/,
+    'the overlay scope must be derived once, from the map data');
+  assert.doesNotMatch(renderer, /withinScope\(/,
+    'no overlay may be gated on THREE_POC_SCOPE again — use withinOverlayScope(point, overlayScope)');
+  // The remaining four overlay call sites. There were five as of this test's original writing;
+  // the fifth — `!withinOverlayScope(prop, overlayScope)`, the TACTICAL_PROP_CALLOUTS prop lookup
+  // — was deleted whole on 2026-09-03 along with the RED CONTAINER / TRAIN chips it gated
+  // (founder: "idk why they show up"), not re-pointed at a different gate.
+  for (const site of [
+    /withinOverlayScope\(\[x, z\], overlayScope\)/,
+    /!withinOverlayScope\(\[spec\.x, spec\.z\], overlayScope\)/,
+    /withinOverlayScope\(point, overlayScope\)/,
+    /!withinOverlayScope\(pos, overlayScope\)/,
+  ]) assert.match(renderer, site, `an overlay call site is not on the new gate: ${site}`);
+  // The stat must not be able to lie about what is drawn: it reported `THREE_POC_SCOPE.id` while
+  // the renderer drew the whole map and clipped 24 of 32 extracts.
+  assert.doesNotMatch(renderer, /scope: THREE_POC_SCOPE\.id/,
+    'renderStats() must not name the proof-of-concept cell as the scope it drew');
+  assert.match(renderer, /scope: `customs-overlay-\$\{overlayScope\.source\}`/);
+  assert.match(renderer, /overlayScope: \{ \.\.\.overlayScope \}/);
+  assert.match(renderer, /railwayGeometryScope: THREE_POC_SCOPE/,
+    'the railway cell must still be reported, separately and by its own name');
+  // Item 3 of the fix brief: the railway geometry gate is deliberately UNCHANGED.
+  assert.match(renderer, /railwayTrackMeshData\(data\.railway, railSurfaceY, THREE_POC_SCOPE\)/);
+});
+
+test('the RED CONTAINER / TRAIN tactical prop callouts are gone (founder: "idk why they show up")', async () => {
+  // 2026-09-03: the only two `kind: landmark` overlay chips on Customs were the RED CONTAINER and
+  // TRAIN labels, floated above the rail-yard container stack and locomotive props by a lookup
+  // table read in refreshDynamic(). The founder called them noise, not landmarks. The props
+  // themselves still draw as 3D geometry — only the always-on text chip is removed. Asserted on
+  // the concrete declaration/usage forms (not a bare identifier) so this test cannot be tripped by
+  // a prose comment that merely mentions the removed feature.
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(renderer, /const TACTICAL_PROP_CALLOUTS = Object\.freeze/,
+    'the tactical prop callout table must not be declared in the Three renderer');
+  assert.doesNotMatch(renderer, /for \(const callout of TACTICAL_PROP_CALLOUTS\)/,
+    'refreshDynamic() must not loop over a tactical prop callout table');
+  assert.doesNotMatch(renderer, /label: 'RED CONTAINER'/);
+  assert.doesNotMatch(renderer, /label: 'TRAIN'/);
+  assert.doesNotMatch(renderer, /kind: 'landmark'/,
+    'no overlay item may be built with kind: landmark — that kind existed only for these two chips');
+});
+
+/*
+ * THE MARKER BADGES — the 2026-09-03 fix.
+ *
+ * `makeOverlayItem()` did `element.textContent = safeText(label)` and nothing else, so the Three
+ * renderer — the DEFAULT for Customs — never called the icon system at all. Every one of ~200
+ * markers was an identical dark text pill, and the live view was roughly a hundred chips reading
+ * "BURIED BARREL CACHE" stacked on each other with the extracts lost inside them.
+ *
+ * These assertions are written against a REAL DOM (scripts/lib/fake-dom.mjs) rather than against
+ * the source text, because handoff §7 is explicit that a count is not evidence: counting overlay
+ * nodes could not tell a badge from a text pill, which is exactly how the defect survived. What is
+ * asserted is the markup that lands in the element and the text that does or does not come with it.
+ * `fake-dom` STORES innerHTML without parsing, so `element.textContent` is the name chip's text and
+ * nothing else — the badge's own SVG letter cannot leak into it and flatter the assertion.
+ */
+const overlaySpec = (markerKind, label, level = 'surface') => ({
+  markerKind, label, title: label, level,
+});
+/** Paint one marker into a throwaway element and hand back both the element and the content. */
+function paintInto(spec, tier) {
+  const doc = new FakeDocument();
+  const element = doc.createElement('div');
+  element.className = 'tz-three-marker tz-three-marker-marker';
+  element.textContent = spec.label;      // the OLD behaviour, so the repaint has something to clear
+  const content = paintMarkerOverlay(element, spec, tier, doc);
+  return { doc, element, content, markHtml: element.children.map((c) => c.innerHTML).join('') };
+}
+
+test('a LOOT marker draws the real icons.js badge and NO name text', () => {
+  const { element, content, markHtml } = paintInto(overlaySpec('loot-valuables', 'Buried barrel cache'), 'icon');
+  assert.equal(content.mark, 'badge');
+  // The badge markup is icons.js's, byte for byte — not a lookalike this module drew.
+  assert.equal(markHtml, iconHtml('loot-valuables', 22, null, 'surface', null, null));
+  assert.match(markHtml, /<svg viewBox="0 0 24 24"/, 'a badge must be an SVG, not a styled box');
+  assert.match(markHtml, /class="mk ci level-surface"/, 'the loot family circle must be drawn');
+  assert.match(markHtml, new RegExp(`fill='${KINDS['loot-valuables'].color}'`), 'the kind colour is missing');
+  // THE COLLISION FIX. The name is on the title, and nowhere on the map face.
+  assert.equal(content.name, null);
+  assert.equal(element.textContent, '', 'a loot marker must carry no name text — this is the bug');
+  assert.doesNotMatch(element.textContent, /Buried barrel cache/);
+  assert.equal(element.dataset.markerKind, 'loot-valuables');
+  assert.equal(element.dataset.mark, 'badge');
+  assert.ok(element.classList.contains('has-mark') && element.classList.contains('mark-badge'));
+});
+
+test('an EXTRACT keeps its letter badge AND its name, at every tier', () => {
+  for (const tier of ['dot', 'icon', 'full']) {
+    const { element, content, markHtml } = paintInto(overlaySpec('extract-pmc', 'Dorms V-Ex'), tier);
+    // LOD-exempt by the rule in src/lod.js: an extract is never dimmed to a dot.
+    assert.equal(content.tier, 'full', `an extract must ignore the ${tier} tier`);
+    assert.equal(content.mark, 'badge');
+    assert.match(markHtml, />D<\/text>/, `the extract letter is missing at ${tier}`);
+    // Dorms V-Ex costs 20k roubles, so its badge carries the `cash` corner chip — the extract's
+    // requirement CLASS rides the badge in 3D exactly as it does in 2D.
+    assert.equal(markHtml, iconHtml('extract-pmc', 26, 'D', 'surface', null, 'cash'));
+    assert.equal(content.name, 'Dorms V-Ex');
+    assert.equal(element.textContent, 'Dorms V-Ex', `the extract name is missing at ${tier}`);
+    assert.equal(element.children.length, 2, 'an extract draws a mark AND a name chip');
+    assert.equal(element.children[1].className, 'tz-three-mark-name');
+  }
+  // …and its requirement corner-chip still rides along, from the same EXTRACT_REQ table.
+  const flare = paintInto(overlaySpec('extract-scav', 'Old Gas Station'), 'full');
+  assert.match(flare.markHtml, />OG<\/text>/);
+  assert.match(flare.markHtml, /textLength='12\.6'/, 'the letter pin must survive the 3D path');
+  assert.match(flare.markHtml, /M5\.8 15\.5v5\.4/, 'the REQ: GREEN FLARE corner chip is missing');
+});
+
+test('the LOD TIER decides which of dot / icon / full a marker draws', () => {
+  const spec = overlaySpec('spawn-pmc', 'PMC spawn');
+  const dot = paintInto(spec, 'dot');
+  assert.equal(dot.content.mark, 'dot');
+  assert.equal(dot.markHtml, dotHtml('spawn-pmc', 6));
+  assert.match(dot.markHtml, /class="mk-dot mk-dot-sh"/, 'the dot must still carry its family shape');
+  assert.doesNotMatch(dot.markHtml, /class="mk /, 'a dot-tier marker must not draw a badge');
+  assert.ok(dot.element.classList.contains('mark-dot'));
+  assert.equal(dot.element.dataset.lodTier, 'dot');
+
+  for (const tier of ['icon', 'full']) {
+    const badge = paintInto(spec, tier);
+    assert.equal(badge.content.mark, 'badge', `${tier} must draw a badge`);
+    assert.equal(badge.markHtml, iconHtml('spawn-pmc', 22, null, 'surface', null, null));
+    assert.equal(badge.element.dataset.lodTier, tier);
+    assert.ok(!badge.element.classList.contains('mark-dot'));
+  }
+  // The ladder is src/lod.js's, not a second one invented here: the same m/px the renderer folds in
+  // has to produce the same answer. Customs cover-fit is 0.55 m/px, one zoom in is 0.276.
+  assert.equal(markerTier('spawn-pmc', tierOf(0.55)), 'dot');
+  assert.equal(markerTier('spawn-pmc', tierOf(0.276)), 'icon');
+  assert.equal(markerTier('spawn-pmc', tierOf(0.138)), 'full');
+  // Repainting in place is what a camera move does — it must REPLACE the mark, not append to it.
+  const doc = new FakeDocument();
+  const element = doc.createElement('div');
+  paintMarkerOverlay(element, spec, 'full', doc);
+  paintMarkerOverlay(element, spec, 'dot', doc);
+  assert.equal(element.children.length, 1);
+  assert.equal(element.children[0].innerHTML, dotHtml('spawn-pmc', 6));
+  assert.equal(element.dataset.lodTier, 'dot');
+});
+
+test('an unknown kind keeps its text pill instead of inventing a badge', () => {
+  // `quest`, `player` and place labels have no `markerKind`, and a data row could carry a kind this
+  // build does not know. None of them may be drawn as a badge we made up.
+  const doc = new FakeDocument();
+  const element = doc.createElement('div');
+  element.textContent = 'QUEST';
+  assert.equal(paintMarkerOverlay(element, overlaySpec('a-kind-that-never-shipped', 'x'), 'icon', doc), null);
+  assert.equal(element.textContent, 'QUEST', 'the caller\'s text fallback must survive untouched');
+  assert.ok(!element.classList.contains('has-mark'));
+  assert.equal(markerOverlayContent({ markerKind: null }, 'icon'), null);
+  assert.equal(markerOverlayContent(null, 'icon'), null);
+});
+
+test('no data string can reach innerHTML — only the icons.js vocabulary does', () => {
+  // The badge SVG is trusted because every byte of it is looked up in icons.js. The two data-derived
+  // fields that reach `iconHtml` are the LEVEL (interpolated into a class name) and the NAME (used
+  // only as a key into the hand-written EXTRACT_LETTER / EXTRACT_REQ tables).
+  const hostile = '" onload="alert(1)';
+  const level = paintInto(overlaySpec('lock', 'Padlock', hostile), 'icon');
+  assert.match(level.markHtml, /class="mk dia level-surface"/, 'an unknown level must fall back to surface');
+  assert.doesNotMatch(level.markHtml, /onload/);
+  const name = paintInto(overlaySpec('extract-pmc', `<img src=x onerror=alert(1)>`), 'full');
+  assert.doesNotMatch(name.markHtml, /<img/, 'a marker name must never be interpolated into the badge');
+  assert.doesNotMatch(name.markHtml, /onerror/);
+  // …and the name that IS drawn goes in as text, on its own element.
+  assert.equal(name.element.children[1].innerHTML, '', 'the name chip must be written with textContent');
+  assert.equal(name.element.textContent, '<img src=x onerror=alert(1)>');
+  for (const level2 of ['surface', 'underground', 'rooftop', 'upper']) {
+    assert.equal(safeOverlayLevel(level2), level2, 'the four real levels must survive the whitelist');
+  }
+});
+
+test('the Three renderer wires the badge path in, and repaints it on a camera move', async () => {
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  // The overlay must go THROUGH the shared module — a second badge implementation in this file is
+  // how the two views drifted apart in the first place.
+  assert.match(renderer, /import \{ paintMarkerOverlay \} from '\.\/marker-overlay\.js'/);
+  assert.match(renderer, /paintMarkerOverlay\(item\.element, item\.spec, tier\)/);
+  assert.match(renderer, /if \(item\.spec && !tier\) paintMarker\(item, overlayMarkerTier\)/,
+    'a marker must be painted when it is created, and a place label must not be');
+  // `level` has to survive markerOverlaySpec() -> makeOverlayItem(), or every underground badge
+  // silently becomes a surface one.
+  assert.match(renderer, /function makeOverlayItem\(\{[^}]*, level = 'surface',/);
+  assert.match(renderer, /spec: markerKind \? \{ markerKind, label: safeText\(label\), title: safeText\(title \|\| label\), level \} : null/);
+  // The ladder is the SHARED one, folded in from the camera rather than re-derived.
+  assert.match(renderer, /import \{ currentTier as currentMarkerTier, updateTier as updateMarkerTier \} from '\.\/lod\.js'/);
+  assert.match(renderer, /updateMarkerTier\(1 \/ Math\.pow\(2, overlayCameraZoom\)\)/);
+  assert.doesNotMatch(renderer, /const (BOUNDS|TIERS|HYSTERESIS) =/,
+    'the marker LOD ladder must not be re-declared in the renderer — src/lod.js owns it');
+  // Both camera paths raise it: applyView() (permalinks, fit, resize) and the OrbitControls echo.
+  assert.equal((renderer.match(/noteCameraZoom\(viewState\.zoom\)/g) ?? []).length, 2,
+    'both the applyView and the controls-change paths must fold the camera into the marker tier');
+  // The repaint is gated on the tier CHANGING, not on the camera moving.
+  assert.match(renderer, /if \(!force && t === overlayMarkerTier\) return t;/);
+  // focusExtract() used to compare `element.textContent === name`; an extract element now contains
+  // its badge's SVG letter as well, so that comparison would silently stop matching.
+  assert.doesNotMatch(renderer, /item\.element\.textContent === name/);
 });
 
 test('point props preserve the canonical length axis and positive authored yaw', () => {
@@ -1651,19 +2624,187 @@ test('generic filtered markers and quest zones have renderable callback specs', 
   assert.equal(questZoneSpec({ outline: [[1, 2], [3, 4]] }), null);
 });
 
-test('DOM overlay anchors stay wholly inside the moving safe rectangle', () => {
-  const options = {
-    safeRect: { left: 100, top: 70, right: 900, bottom: 600 },
-    containerWidth: 1000,
-    containerHeight: 700,
-    elementWidth: 100,
-    elementHeight: 20,
-    padding: 4,
+/*
+ * ═══ THE OVERLAY ANCHOR ═══════════════════════════════════════════════════════════════════════
+ *
+ * Founder, 2026-09-03: "the icons doesnt stay where they belong, they dont go out of screen, they
+ * comes with the screen movement." The cause was `seatOverlayAnchor`, which CLAMPED a projected
+ * point into the safe rect: a mark whose world position was off-frame was pinned to the frame edge
+ * and then slid along it with the camera. Measured at his own #3.92/257.9/-22.1 on a 1920x1080
+ * frame, under a 70 m pan that moved the world origin 205 px: 24 marks held a `dy` of EXACTLY 0.0
+ * on the clamp bound, and 13 more did not move at all.
+ *
+ * These assertions are positional, never counts (handoff §7): a count of anchored marks cannot see
+ * whether any of them is in the right place, which is the entire bug.
+ */
+test('an overlay mark is drawn where it projects or not at all — never moved', () => {
+  const box = { elementWidth: 100, elementHeight: 20, containerWidth: 1000, containerHeight: 700 };
+  const px = (a) => (a === null ? null : a.map((n) => Math.round(n * 1e6) / 1e6));
+  assert.deepEqual(px(anchorOverlayMark({ ...box, ndc: [0, 0, 0] })), [500, 350],
+    'a point at the middle of the frame lands at the middle');
+
+  // A mark whose anchor is off the left/top of the frame but whose BOX still overlaps it draws at
+  // its true position, with negative/small coordinates. The old clamp moved these to [154, 94].
+  assert.deepEqual(px(anchorOverlayMark({ ...box, ndc: [-0.96, 0.94, 0] })), [20, 21]);
+  // And one off the right/bottom keeps its true position instead of being pulled to [846, 596].
+  assert.deepEqual(px(anchorOverlayMark({ ...box, ndc: [0.96, -0.94, 0] })), [980, 679]);
+
+  // Wholly outside the frame: hidden, not repositioned. The 100 px element is 50 px either side of
+  // its anchor, so it leaves the frame for good just past x = -50 and x = 1050.
+  assert.equal(anchorOverlayMark({ ...box, ndc: [-1.11, 0, 0] }), null, 'off the left edge');
+  assert.equal(anchorOverlayMark({ ...box, ndc: [1.11, 0, 0] }), null, 'off the right edge');
+  assert.equal(anchorOverlayMark({ ...box, ndc: [0, 1.01, 0] }), null, 'off the top edge');
+  assert.equal(anchorOverlayMark({ ...box, ndc: [0, -1.06, 0] }), null, 'off the bottom edge');
+  // The old test's ±1.15 NDC slop is what let these through to the clamp in the first place.
+  assert.equal(anchorOverlayMark({ ...box, ndc: [1.14, 1.14, 0] }), null, 'inside the old 1.15 slop');
+
+  // Depth. `project()` mirrors a point behind the camera through the origin and hands back a
+  // plausible on-screen x/y; only z says so.
+  assert.equal(anchorOverlayMark({ ...box, ndc: [0, 0, 1.0029] }), null, 'behind the camera');
+  assert.equal(anchorOverlayMark({ ...box, ndc: [0, 0, -1.2] }), null, 'in front of the near plane');
+  assert.equal(anchorOverlayMark({ ...box, ndc: [NaN, 0, 0] }), null, 'not a number');
+  assert.equal(anchorOverlayMark({ ...box, ndc: null }), null, 'no projection at all');
+});
+
+test('an overlay mark tracks its WORLD position across a camera move', () => {
+  // A real camera at the renderer's oblique default, and three real world points.
+  const camera = new THREE.PerspectiveCamera(45, 1920 / 1080, 0.5, 20000);
+  camera.up.set(0, 0, 1);
+  const look = (at) => {
+    camera.position.set(at[0], at[1] - 260, 190);
+    camera.lookAt(at[0], at[1], 0);
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
   };
-  assert.deepEqual(seatOverlayAnchor({ ...options, x: 20, y: 30 }), [154, 94]);
-  assert.deepEqual(seatOverlayAnchor({ ...options, x: 980, y: 680 }), [846, 596]);
-  assert.deepEqual(seatOverlayAnchor({ ...options, x: 400, y: 300 }), [400, 300]);
-  assert.equal(seatOverlayAnchor({ ...options, x: NaN, y: 300 }), null);
+  const box = { elementWidth: 22, elementHeight: 22, containerWidth: 1920, containerHeight: 1080 };
+  const anchorOf = (world) => {
+    const v = new THREE.Vector3(...world).project(camera);
+    return anchorOverlayMark({ ...box, ndc: [v.x, v.y, v.z] });
+  };
+  const near = [0, 0, 0];          // in frame at both camera positions
+  const wide = [-200, 40, 0];      // in frame at the first, off the left edge at the second
+  const behind = [0, -700, 190];   // behind the camera at both
+
+  look([0, 0]);
+  const a = { near: anchorOf(near), wide: anchorOf(wide), behind: anchorOf(behind) };
+  look([120, 0]);                  // pan 120 m east
+  const b = { near: anchorOf(near), wide: anchorOf(wide), behind: anchorOf(behind) };
+
+  assert.ok(a.near && b.near, 'the near point is on screen at both camera positions');
+  // It must MOVE, and move the way the world does: the camera went east, so the ground goes west.
+  assert.ok(b.near[0] < a.near[0] - 100,
+    `a world-anchored mark travels with the ground: ${a.near[0]} -> ${b.near[0]}`);
+  // A clamped mark's giveaway was a delta of exactly zero on one axis while the world moved.
+  assert.notEqual(b.near[0], a.near[0]);
+
+  assert.ok(a.wide, 'the wide point starts on screen');
+  assert.equal(b.wide, null, 'and is HIDDEN once the camera moves past it, not pinned to the edge');
+
+  assert.equal(a.behind, null, 'a point behind the camera never draws');
+  assert.equal(b.behind, null, 'and still does not after the camera moves');
+});
+
+/*
+ * ═══ P2: THE OVERLAY PASS IS TWO PHASES AND READS NO LAYOUT ═══════════════════════════════════
+ *
+ * Measured on the founder's 5080 (docs/PROFILING.md, 2026-09-03): `phases.overlay` at `ground-close`
+ * with 1,304 items was 10.60 ms median / 13.80 p95 inside a 20.90 ms frame — the only configuration
+ * in the baseline over the 16.67 ms 60 Hz budget. Codex red team cxt-20260903-210116-trjd found the
+ * shape: only 186 of the 1,304 elements were on screen and layout was read for all 1,304, because
+ * the anchoring fix earlier that day moved the `offsetWidth` read ABOVE the on-screen test.
+ *
+ * These are source assertions because the loop lives inside a closure that needs a DOM and a WebGPU
+ * device to run at all — the same reason every other renderer-shape test in this file reads text.
+ * Each one was mutated and watched go red before it was kept; a green assertion nobody has seen fail
+ * is exactly the "system reports success" shape handoff §7 is about.
+ */
+const overlayLoopSource = (renderer) => {
+  const loop = /\n  function updateOverlayPositions\(\) \{\n([\s\S]*?)\n  \}\n/.exec(renderer);
+  assert.ok(loop, 'updateOverlayPositions() must exist');
+  return loop[1];
+};
+
+test('P2 — the overlay frame loop reads NO element geometry', async () => {
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  const loop = overlayLoopSource(renderer);
+  // The regression this exists to stop: one forced synchronous layout per item per frame, paid for
+  // 1,304 items to place 186 of them.
+  assert.doesNotMatch(loop, /offsetWidth|offsetHeight|getBoundingClientRect|getComputedStyle|offsetTop|offsetLeft|clientTop/,
+    'no layout read may appear inside updateOverlayPositions()');
+  // The two container reads that were always there and are per FRAME, not per item, stay legal.
+  assert.match(loop, /container\.clientWidth/);
+  // …and they must sit before the loop, not inside it.
+  const firstItemLoop = loop.indexOf('for (const item of overlayItems)');
+  assert.ok(firstItemLoop > loop.indexOf('container.clientWidth'),
+    'the container size is read once per frame, above the per-item loops');
+
+  // The dimensions come from the cache instead, and the cache is filled OFF the frame loop.
+  assert.match(loop, /item\.hiddenNow \? 0 : item\.width/);
+  assert.match(loop, /item\.hiddenNow \? 0 : item\.height/);
+  assert.match(renderer, /function measureOverlayItem\(item\) \{[\s\S]*?if \(item\.element\.hidden\) return;\n\s*const width = item\.element\.offsetWidth, height = item\.element\.offsetHeight;[\s\S]*?if \(width === 0 && height === 0\) return;\n\s*item\.width = width;\n\s*item\.height = height;\n\s*\}/,
+    'measureOverlayItem() is the one place that reads a box, and it refuses a hidden element');
+  // A 0x0 is what EVERY overlay element measures while the stage is display:none — the 2D view,
+  // where syncMarkerTier() still runs. Caching it would hand the first 3D frame after the switch a
+  // 0x0 box for every mark. Both readers refuse the pair.
+  assert.equal((renderer.match(/if \(width === 0 && height === 0\) (?:return|continue);/g) ?? []).length, 2,
+    'both the batch measure and the ResizeObserver must refuse a 0x0 box');
+});
+
+test('P2 — the loop allocates nothing per item: one Vector3, one ndc array, one args object', async () => {
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  const loop = overlayLoopSource(renderer);
+  assert.doesNotMatch(loop, /new THREE\.Vector3/,
+    'a Vector3 per item per frame is ~1,300 allocations a frame — reuse the hoisted one');
+  assert.doesNotMatch(loop, /gameToWorld\(/,
+    'the world point is resolved once at creation; calling gameToWorld() per frame re-allocates an array per item');
+  assert.doesNotMatch(loop, /anchorOverlayMark\(\{/,
+    'the arguments object is hoisted too — a fresh literal per item is a fresh allocation per item');
+  assert.match(loop, /overlayProjection\.set\(item\.wx, item\.wy, item\.wz\)\.project\(camera\)/);
+  assert.match(loop, /item\.anchor = anchorOverlayMark\(overlayAnchorArgs\)/);
+  // The hoisted scratch is created once, outside any function that runs per frame.
+  assert.match(renderer, /const overlayProjection = new THREE\.Vector3\(\);\n\s*const overlayNdc = \[0, 0, 0\];/);
+  // And the world scalars really are computed at creation, from the same expression the loop used.
+  assert.match(renderer, /const \[wx, wy, wz\] = gameToWorld\(gx, gz, gy \?\? H\(gx, gz\) \+ 1\.2\);/);
+});
+
+test('P2 — a write that would not change the DOM is skipped', async () => {
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  const loop = overlayLoopSource(renderer);
+  assert.match(loop, /if \(hidden !== item\.hiddenNow\) \{\n\s*item\.element\.hidden = hidden;\n\s*item\.hiddenNow = hidden;\n\s*\}/,
+    '`hidden` is written only when it changes');
+  assert.match(loop, /if \(transform === item\.lastTransform\) continue;\n\s*item\.element\.style\.transform = transform;\n\s*item\.lastTransform = transform;/,
+    'the transform is written only when the string differs from the one already on the element');
+  // The two caches must be seeded with what the element ACTUALLY is at creation — a `hiddenNow`
+  // that started true, or a `lastTransform` that started non-empty, would skip a needed first write.
+  assert.match(renderer, /width: 0, height: 0, hiddenNow: false, lastTransform: '', anchor: null,/);
+});
+
+test('P2 — the dimension cache is refilled on a tier repaint and by a ResizeObserver', async () => {
+  const renderer = await readFile(new URL('../src/map3d-three.js', import.meta.url), 'utf8');
+  // A dot is not the size of a badge: the LOD repaint changes every mark's box, so the cache is
+  // refilled in one read pass right after the write pass that changed them.
+  assert.match(renderer, /for \(const item of overlayItems\) if \(item\.spec && paintMarker\(item, t\)\) repainted \+= 1;\n(?:\s*\/\/[^\n]*\n)*\s*if \(repainted\) \{ measureOverlayItems\(\); invalidateRender\(\); \}/,
+    'syncMarkerTier() must re-measure after a repaint, or a dot would keep a badge\'s box');
+  // …and every other reason a box can change — a web font landing, a class flip, a name edit — is
+  // caught by the observer rather than by a list of assumptions about which paths resize a marker.
+  assert.match(renderer, /new ResizeObserver\(\(entries\) => \{/);
+  assert.match(renderer, /overlayResizeObserver\?\.observe\(element\)/,
+    'every overlay element must be observed as it is built');
+  assert.match(renderer, /overlayResizeObserver\?\.disconnect\(\)/,
+    'clearOverlays() must disconnect, or the observer holds detached nodes');
+  // The observer re-reads offsetWidth rather than trusting entry.borderBoxSize, which is fractional
+  // where offsetWidth is rounded — using it would move the on-screen test by up to half a pixel.
+  assert.match(renderer, /const width = entry\.target\.offsetWidth, height = entry\.target\.offsetHeight;/);
+  assert.doesNotMatch(renderer, /borderBoxSize\s*(?:\?\.)?\[/,
+    'borderBoxSize is fractional; the cache must hold the same integer the old frame read held');
+  // A hidden element reports 0x0. Caching that would shrink the on-screen test for every item that
+  // came back into frame, which is exactly the "appears at the wrong moment" failure.
+  assert.match(renderer, /if \(!item \|\| entry\.target\.hidden\) continue;/);
+  // Guarded: an observer that invalidated on every delivery would feed itself frames forever.
+  assert.match(renderer, /if \(changed\) invalidateRender\(\);/);
+  // And the freshly built overlay is measured in ONE pass, not per item as it is appended.
+  assert.match(renderer, /measureOverlayItems\(\);\n\s*invalidateRender\(\);\n\s*\}/,
+    'refreshDynamicNow() must measure every item once, after the last element is in the document');
 });
 
 // ── The renderer gate: two questions, deliberately not one ────────────────────────────────────
@@ -2121,7 +3262,26 @@ test('renderer integration consumes the shared contract without untracked outlin
   assert.match(renderer, /activeDrawCalls: 0/);
   assert.match(renderer, /for \(const marker of src\.markers\?\.\(\) \|\| \[\]\)/);
   assert.match(renderer, /for \(const sourceZone of questData\.zones \|\| \[\]\)/);
-  assert.match(renderer, /seatOverlayAnchor\(\{/);
+  assert.match(renderer, /anchorOverlayMark\(\{/);
+  // The mark's position comes straight out of the projection and is written unchanged. Nothing
+  // between `project()` and the transform may clamp, inset or otherwise move it, and the safe rect
+  // — the old clamp's target — must not be read on this path at all (founder, 2026-09-03).
+  // The shipped loop became two-phase on 2026-09-03 (P2), so the old single-pass shape
+  // `hidden = !anchor; if (!anchor) continue;` is gone from it. The RULE it pinned is not: `hidden`
+  // is still exactly the negation of the anchor, and the anchor's two numbers still reach the
+  // transform having had nothing done to them.
+  assert.match(renderer, /const hidden = !anchor;\n\s*if \(hidden !== item\.hiddenNow\) \{\n\s*item\.element\.hidden = hidden;/);
+  assert.match(renderer, /translate3d\(\$\{anchor\[0\]\.toFixed\(1\)\}px,\$\{anchor\[1\]\.toFixed\(1\)\}px,0\)/);
+  // The clamp, stated as a prohibition rather than as one shape of loop: no arithmetic and no
+  // Math.min/max may touch an anchor component anywhere in this file.
+  assert.doesNotMatch(renderer, /anchor\[[01]\]\s*[-+*\/]/,
+    'nothing may do arithmetic on an anchor component — that is how the clamp came back last time');
+  assert.doesNotMatch(renderer, /Math\.(?:min|max)\([^)]*anchor\[[01]\]/,
+    'a mark is drawn where it projects or not at all; it is never clamped into a rect');
+  assert.doesNotMatch(renderer, /safeRect/,
+    'the Three overlay must not seat marks against the chrome rect — a mark is a world position');
+  assert.doesNotMatch(renderer, /v\.x > -1\.15/,
+    'the ±1.15 NDC slop admitted off-frame marks for the clamp to pin to the edge');
   assert.match(renderer, /reconcileOrbitView\(\{/);
   assert.match(renderer, /if \(reconciled\.corrected\) writeControlledPose\(reconciled\.pose\)/);
   assert.match(renderer, /if \(suppressControlEvent\) return/);
@@ -2187,7 +3347,6 @@ test('renderer integration consumes the shared contract without untracked outlin
   // Nothing else under it carries a `userData.label`, so fence panels stay silent.
   assert.match(renderer, /\[buildingGroup, propGroup, wallStructureGroup, authoredRoot, dynamicRoot\]/);
   assert.match(renderer, /visibleInteractionData\(hit\.object\)/);
-  assert.match(renderer, /customs\.prop\.industrial_rail_yard\.red_container_stack/);
   assert.match(renderer, /if \(container\.__tz3d === api\) delete container\.__tz3d/);
   assert.match(styles, /\.tz-three-marker-landmark/);
   assert.match(deckRenderer, /createFloorSurfaceResolver\(data\.floorSurfaces, relief\)/);

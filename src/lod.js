@@ -15,12 +15,25 @@
  *
  * Leaflet's zoomDelta is 0.5, so the stops a wheel or a +/- click actually lands on are
  * … 0.552, 0.391, 0.276, 0.195, 0.138 … The boundaries below sit on the geometric midpoints
- * BETWEEN two stops (0.33 = √(0.391·0.276), 0.165 = √(0.195·0.138)), so no ordinary zoom stop
+ * BETWEEN two stops (0.465 = √(0.552·0.391), 0.165 = √(0.195·0.138)), so no ordinary zoom stop
  * lands inside a hysteresis band and the tier never depends on which direction you arrived from:
  *
- *   dot   m/px > 0.33      fit and one half-step in  — 6 px desaturated dots, no glyph
- *   icon  0.165 < m/px ≤ 0.33   one full zoom in     — badge, no label
+ *   dot   m/px > 0.465     cover fit only            — 6 px desaturated dots, no glyph
+ *   icon  0.165 < m/px ≤ 0.465  half a zoom in       — badge, no label
  *   full  m/px ≤ 0.165     two zooms in              — badge + label on hover/selection
+ *
+ * WHY 0.465 AND NOT 0.33 (2026-09-03). The dot|icon boundary was one stop finer, at
+ * 0.33 = √(0.391·0.276), which put the whole of `fit + one half-step` in the dot tier. The founder
+ * read that as a bug rather than a tier: at the permalink #3.48/257.7/-42.3 (0.375 m/px) he got
+ * 6 px dots — "pmc spawns and other icons are hard to see" — and at #3.92/257.9/-22.1
+ * (0.276 m/px) badges — "at this distance they are fine. so bring the same size for the other
+ * one." Moving the boundary out by exactly one zoom stop puts both of his cameras in `icon`, which
+ * is what "the same size" means, and it is the same construction as before, not a new constant:
+ * the geometric midpoint of the next pair of stops. Cover fit is still `dot` on Customs (0.552)
+ * and on Woods (1.005); the tier the map opens at has not changed. Reserve's cover fit (0.423)
+ * moves from `dot` to `icon` — it is a small map and 0.423 m/px is a badge-reading scale by the
+ * same physical rule that decides everything else here. Reserve is not a shipped map today, and if
+ * that ever reads wrong the answer is a Reserve zoom-stop table, not a per-map tier.
  *
  * Hysteresis is ±10% around each boundary: crossing it only changes the tier once you are 10%
  * past it, so panning or a trackpad wheel that dithers across a boundary cannot flicker.
@@ -46,7 +59,7 @@
 /** Coarse to fine. The index in this array is the tier's rank. */
 export const TIERS = ['dot', 'icon', 'full'];
 /** BOUNDS[i] separates TIERS[i] from TIERS[i + 1], in metres per pixel. */
-export const BOUNDS = [0.33, 0.165];
+export const BOUNDS = [0.465, 0.165];
 /** Fraction of a boundary you must overshoot before the tier changes. */
 export const HYSTERESIS = 0.1;
 

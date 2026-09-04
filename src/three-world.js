@@ -6,6 +6,16 @@
  * Keeping this module free of Three.js and the DOM makes that contract testable.
  */
 
+/**
+ * RAILWAY GEOMETRY ONLY. This is NOT the overlay scope and must never be re-wired to one.
+ *
+ * It is the leftover proof-of-concept cell — a 360x300 m box accepting x in [50, 410] and
+ * z in [-260, 40]. Overlays (place labels, POI markers, extracts, quest zones, quest points,
+ * tactical prop callouts) were gated on it until 2026-09-03 while terrain, buildings, vegetation
+ * and the camera all covered the full 1024x541 m playable limit: 24 of 32 Customs extracts and
+ * 20 of 32 place labels were silently dropped. Overlays now use `overlayScopeFromLimit(data.limit)`
+ * plus `withinOverlayScope()` below. The only surviving consumer is `railwayTrackMeshData()`.
+ */
 export const THREE_POC_SCOPE = Object.freeze({
   id: 'customs-industrial-rail-yard',
   label: 'Customs · industrial rail-yard golden cell',
@@ -13,6 +23,65 @@ export const THREE_POC_SCOPE = Object.freeze({
   widthM: 360,
   depthM: 300,
 });
+
+/**
+ * How far past the playable limit's bounding box an overlay may still be drawn.
+ *
+ * Three real Customs extracts sit OUTSIDE the concave limit polygon — Administration Gate
+ * (x 671.1), Railroad Passage (Flare) (z -324.7) and Transit to Shoreline — so a polygon test
+ * (`inRing(point, limit)`) would keep them hidden, which is the bug, not the fix. A padded bbox
+ * admits all 32 while still rejecting far-field garbage coordinates.
+ */
+export const OVERLAY_SCOPE_MARGIN_M = 40;
+
+/**
+ * Derive the DOM-overlay scope from the map's own playable limit ring rather than a constant.
+ *
+ * Throws on an empty or non-finite limit: a missing limit is a data failure and must be loud.
+ * There is deliberately no fallback box — a silent fallback is exactly how the overlay gate came
+ * to disagree with the terrain it was drawn over.
+ */
+export function overlayScopeFromLimit(limit, marginM = OVERLAY_SCOPE_MARGIN_M) {
+  const margin = Number(marginM);
+  if (!Number.isFinite(margin) || margin < 0) {
+    throw new TypeError('overlayScopeFromLimit: marginM must be a finite, non-negative number');
+  }
+  if (!Array.isArray(limit) || limit.length === 0) {
+    throw new TypeError('overlayScopeFromLimit: limit must be a non-empty array of [x, z] points');
+  }
+  const xs = [], zs = [];
+  for (const point of limit) {
+    const x = Array.isArray(point) ? Number(point[0]) : Number(point?.x);
+    const z = Array.isArray(point) ? Number(point[1]) : Number(point?.z);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      throw new TypeError('overlayScopeFromLimit: every limit point must be finite [x, z]');
+    }
+    xs.push(x);
+    zs.push(z);
+  }
+  return Object.freeze({
+    minX: Math.min(...xs) - margin,
+    maxX: Math.max(...xs) + margin,
+    minZ: Math.min(...zs) - margin,
+    maxZ: Math.max(...zs) + margin,
+    source: 'limit-bbox',
+    marginM: margin,
+  });
+}
+
+/**
+ * Overlay gate. Accepts `[x, z]` or `{ x, z }`, mirroring `withinScope()`'s input shapes.
+ * A non-finite coordinate is rejected rather than treated as 0.
+ */
+export function withinOverlayScope(point, scope) {
+  if (!scope || ![scope.minX, scope.maxX, scope.minZ, scope.maxZ].every((v) => Number.isFinite(Number(v)))) {
+    throw new TypeError('withinOverlayScope: scope must carry finite minX/maxX/minZ/maxZ');
+  }
+  const x = Number(Array.isArray(point) ? point[0] : point?.x);
+  const z = Number(Array.isArray(point) ? point[1] : point?.z);
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+  return x >= scope.minX && x <= scope.maxX && z >= scope.minZ && z <= scope.maxZ;
+}
 
 export const RAILWAY_TRACK_PROFILE = Object.freeze({
   trackBedLiftM: 0.18,
@@ -655,6 +724,11 @@ export function terrainMeshData(terrain, limit, relief = 1, surfaceUvFor = null)
   return { positions, uvs, detailUvs, indices: new Uint32Array(indices) };
 }
 
+/**
+ * Centre/extent predicate for `THREE_POC_SCOPE`-shaped boxes. NOT the overlay gate — overlays use
+ * `withinOverlayScope(point, overlayScopeFromLimit(data.limit))`. Kept exported so the
+ * discrimination test in `scripts/three-renderer-test.mjs` can measure what the old gate dropped.
+ */
 export function withinScope(point, scope = THREE_POC_SCOPE) {
   const x = Array.isArray(point) ? point[0] : point?.x;
   const z = Array.isArray(point) ? point[1] : point?.z;
@@ -706,24 +780,53 @@ export function questZoneSpec(zone) {
   return { id: zone.id ?? null, level: zone.level ?? 'surface', outline };
 }
 
-const finiteRect = (rect, width, height) => {
-  const left = Math.max(0, Number(rect?.left) || 0);
-  const top = Math.max(0, Number(rect?.top) || 0);
-  const right = Math.min(width, Number.isFinite(Number(rect?.right)) ? Number(rect.right) : width);
-  const bottom = Math.min(height, Number.isFinite(Number(rect?.bottom)) ? Number(rect.bottom) : height);
-  return right > left && bottom > top ? { left, top, right, bottom } : { left: 0, top: 0, right: width, bottom: height };
-};
-
-/** Seat a bottom-centred DOM marker completely inside the current safe rect. */
-export function seatOverlayAnchor({ x, y, elementWidth = 0, elementHeight = 0, safeRect, containerWidth, containerHeight, padding = 4 }) {
+/**
+ * Where a bottom-centred DOM mark goes for a given projected point — or `null`, meaning hide it.
+ *
+ * THIS FUNCTION NEVER MOVES A MARK. Its predecessor did: `seatOverlayAnchor` clamped the projected
+ * point into the safe rect, and that is the whole of the founder's 2026-09-03 report — "the icons
+ * don't stay where they belong, they don't go out of screen, they come with the screen movement".
+ * A mark is a claim about a place on the ground. Clamping it turns that claim into a lie: the mark
+ * stops meaning "the thing is HERE" and starts meaning "the thing is somewhere off that way",
+ * while sliding along the frame edge as the camera moves. Measured on the founder's own camera
+ * (#3.92/257.9/-22.1, 1920x1080) before the change: under a 70 m pan the world origin moved 205 px
+ * across the screen while 24 marks held a `dy` of exactly 0.0, pinned to
+ * `safeRect.top + padding + elementHeight`, and 13 more did not move at all.
+ *
+ * So there are two outcomes and no third: draw it where it projects, or do not draw it.
+ *
+ * `ndc` is the [x, y, z] a `THREE.Vector3.project()` hands back, and the whole decision lives here
+ * so it can be asserted against a real camera without a DOM (this module stays free of Three.js
+ * and the DOM by design — see the file header).
+ *
+ *   DEPTH.  `project()` divides by the negated view-space z, which mirrors a point BEHIND the
+ *           camera through the origin and returns a plausible-looking on-screen x/y that then
+ *           tracks the camera instead of the ground. z is what gives it away: measured on this
+ *           renderer's camera at the founder's pitch, a point 200 m behind comes back at
+ *           ndc.z = 1.0029 and one 3 km behind at 1.0005 — always outside [-1, 1]. `z > -1`
+ *           catches the mirror case, a point in front of the near plane.
+ *   ON SCREEN.  Decided on the element's own BOX in pixels, not on an NDC slop constant. The
+ *           element is anchored bottom-centre (`translate(-50%,-100%)`), so its box runs
+ *           `[x - w/2, y - h] .. [x + w/2, y]`, and it is drawn iff that box overlaps the
+ *           container. The old test carried `|ndc.x| < 1.15` and `|ndc.y| < 1.15`, a 15% slop that
+ *           admitted marks up to 144 px outside a 1920 px frame — precisely the set the clamp then
+ *           dragged back onto the edge. A hidden element measures 0x0, so a mark returning to
+ *           frame is admitted on its anchor point and picks its real box up on the next frame.
+ *
+ * The safe rect is deliberately NOT an argument any more. Chrome avoidance is a reason to move a
+ * LABEL, which is free to sit anywhere near its subject. It is never a reason to move a MARK.
+ *
+ * @returns {[number, number] | null} stage CSS px, or null if the mark must not be drawn.
+ */
+export function anchorOverlayMark({ ndc, elementWidth = 0, elementHeight = 0, containerWidth, containerHeight }) {
   const width = Math.max(1, Number(containerWidth) || 1), height = Math.max(1, Number(containerHeight) || 1);
-  if (![x, y].every(Number.isFinite)) return null;
-  const rect = finiteRect(safeRect, width, height);
+  const [nx, ny, nz] = Array.isArray(ndc) ? ndc.map(Number) : [NaN, NaN, NaN];
+  if (![nx, ny, nz].every(Number.isFinite)) return null;
+  if (!(nz > -1 && nz < 1)) return null;
+  const x = (nx + 1) * width / 2;
+  const y = (-ny + 1) * height / 2;
   const half = Math.max(0, Number(elementWidth) || 0) / 2;
   const tall = Math.max(0, Number(elementHeight) || 0);
-  const minX = Math.min(rect.right, rect.left + padding + half);
-  const maxX = Math.max(minX, rect.right - padding - half);
-  const minY = Math.min(rect.bottom, rect.top + padding + tall);
-  const maxY = Math.max(minY, rect.bottom - padding);
-  return [Math.max(minX, Math.min(maxX, x)), Math.max(minY, Math.min(maxY, y))];
+  const onScreen = x + half > 0 && x - half < width && y > 0 && y - tall < height;
+  return onScreen ? [x, y] : null;
 }

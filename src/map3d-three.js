@@ -11,7 +11,7 @@ import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { paletteFor } from './atmosphere.js';
 import { BRIDGE_STRUCTURE, bridgeApproachPlan, bridgeStructurePlan } from './bridge-structure.js';
-import { CAM, clampCamera } from './camera.js';
+import { CAM, clampCamera, zoomOffsetFor } from './camera.js';
 import { placeBuildings, plinthColor } from './buildings.js';
 import { MATERIAL_SLOT_INDEX } from './building-detail/contract.js';
 import {
@@ -50,6 +50,7 @@ import {
 } from './customs-promoted-vegetation.js';
 import { buildCustomsLocalVegetationRenderPlan } from './customs-local-vegetation-render.js';
 import {
+  CUSTOMS_AUTHORED_VEGETATION_SHADOW_POLICY,
   createCustomsAuthoredVegetationRuntime,
   normalizeCustomsAuthoredVegetationCatalog,
 } from './customs-authored-vegetation.js';
@@ -72,6 +73,12 @@ import {
   vegetationCameraSignature,
 } from './customs-vegetation-mount-policy.js';
 import { describeVegetationObservability } from './customs-vegetation-observability.js';
+import {
+  createShadowCasterAudit,
+  createShadowController,
+  parseShadowRequest,
+  shadowCasterFingerprint,
+} from './shadow-invalidation.js';
 import {
   EMPTY_RENDER_FRAME_LATCH,
   describeRenderFrame,
@@ -101,6 +108,16 @@ import {
   resolveProceduralSuppression,
 } from './customs-asset-runtime.js';
 import { assertThreeRenderer, describeRendererGate } from './renderer-gate.js';
+// The frame-time instrument (src/render-profiler.js). Its predicate is its own — see that module's
+// header for why `?profile=` is deliberately NOT question (c) of the renderer gate: the two places
+// the baseline has to be taken (a release `vite preview` on loopback, and the live site on the
+// founder's GPU) are exactly the two `canShowDiagnosticReadouts()` answers false for.
+import {
+  PROFILE_PRESETS, PROFILE_SERIES_SCHEMA, buildPresetResult, buildProfileReport, createEventLedger,
+  createPhaseLedger, createWaterfall, describeAblationSeries, describeDisjointObservability,
+  describeGpuTiming, parseAblation, parseProfileRequest, summarizeGpuMemory, summarizeHeap,
+  summarizeOverlayReflow,
+} from './render-profiler.js';
 import { createFloorSurfaceResolver, measuredSurfaceY } from './surfaces.js';
 // The PLACE-LABEL tier contract — the same one the 2D map and the deck diorama draw from. Aliased
 // on import so the four label tiers can never be confused with this file's own scene vocabulary.
@@ -108,16 +125,21 @@ import { styleFor as labelStyleFor, tierOf as labelTierOf } from './label-tier.j
 // …and the shared spelling of it. One definition of the leader's pieces and custom properties for
 // both DOM passes (this overlay and the 2D Leaflet layer) — see src/label-chrome.js.
 import { LEADER_PIECES, labelCssProps } from './label-chrome.js';
+// The MARKER vocabulary — src/icons.js's 17 badges, carried into this overlay by src/marker-overlay.js.
+// Aliased on import for the same reason the label tier is: `tier` here means the MARKER ladder in
+// src/lod.js (dot / icon / full), which is a different ladder from the four place-label tiers.
+import { paintMarkerOverlay } from './marker-overlay.js';
+import { currentTier as currentMarkerTier, updateTier as updateMarkerTier } from './lod.js';
 import { buildTerrain, gameToTerrainTextureUv } from './terrain.js';
 import { buildPropAsset } from './three-prop-assets.js';
 import { DRAPE, drapedPanelMeshData, miteredEdges, planWallStructures, resamplePath } from './wall-runs.js';
 import {
   RAILWAY_TRACK_PROFILE, THREE_POC_SCOPE, UNDERSTORY_TUFT_BUDGET, alphaCoverageMipChain,
-  buildUnderstoryTuftPlan, cameraPose, centroid,
+  anchorOverlayMark, buildUnderstoryTuftPlan, cameraPose, centroid,
   createAsyncAttachGuard, disposeMaterialResources, drapedPrismStripMeshData, gameToWorld,
   grassTuftMeshData, inRing, makeTerrainSampler,
-  markerOverlaySpec, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView, seatOverlayAnchor,
-  railwayTrackMeshData, terrainMeshData, updateThreeFx, withinScope,
+  markerOverlaySpec, parseThreeFx, pointPropPose, questZoneSpec, reconcileOrbitView,
+  overlayScopeFromLimit, railwayTrackMeshData, terrainMeshData, updateThreeFx, withinOverlayScope,
   terrainRelativeDisplayY, visibleInteractionData,
 } from './three-world.js';
 
@@ -143,10 +165,39 @@ const VALID_VEGETATION_REQUEST = new Set(['procedural', 'authored']);
 // worth a full 8,805-instance re-partition, so a slow orbit does not repack every frame. It gates
 // TRANSLATION only — a projection change has no metre-scale equivalent and is never thresholded.
 const AUTHORED_VEGETATION_REPACK_EPSILON_M = VEGETATION_REPACK_EPSILON_M;
-const TACTICAL_PROP_CALLOUTS = Object.freeze([
-  Object.freeze({ featureId: 'customs.prop.industrial_rail_yard.red_container_stack', label: 'RED CONTAINER' }),
-  Object.freeze({ featureId: 'customs.prop.industrial_rail_yard.locomotive_west', label: 'TRAIN' }),
-]);
+/**
+ * Does the authored forest cast into the sun's depth map?
+ *
+ * This is the MODULE DEFAULT only, and that distinction is load-bearing. It reads
+ * `CUSTOMS_AUTHORED_VEGETATION_SHADOW_POLICY`, which is what
+ * `createCustomsAuthoredVegetationRuntime()` falls back to when no `shadowPolicy` is passed — and a
+ * caller CAN pass one. A gate that reads this constant while the meshes read the runtime's
+ * normalised policy is one indirection away from describing two different policies: buckets would
+ * become casters whose `count` and `visible` change on every 4 m repack with the invalidation
+ * compiled out, i.e. a per-camera stale shadow standing under a comment asserting it cannot happen.
+ *
+ * So this is the DEFAULT, and `repackAuthoredVegetationNow()` reads the live runtime instead. The
+ * two are asserted equal at mount, where a divergence is loud.
+ */
+const AUTHORED_VEGETATION_CASTS_SHADOWS = CUSTOMS_AUTHORED_VEGETATION_SHADOW_POLICY.mode !== 'disabled';
+/**
+ * An authored GLB entering or leaving the streaming root -> the enum reason that names it.
+ *
+ * A table rather than a ternary so an unrecognised kind hits `invalidate()`'s closed-enum throw
+ * instead of being silently filed under 'attach'.
+ */
+const AUTHORED_ASSET_SHADOW_REASON = Object.freeze({
+  attach: 'authored-asset-attach',
+  detach: 'authored-asset-detach',
+});
+/*
+ * There used to be a TACTICAL_PROP_CALLOUTS table here: two floating DOM chips, 'RED CONTAINER'
+ * and 'TRAIN', anchored to `customs.prop.industrial_rail_yard.red_container_stack` and
+ * `.locomotive_west`. Removed 2026-09-03 (founder: "idk why they show up" — they read as noise,
+ * not landmarks). The two props themselves still render normally as 3D geometry; only the
+ * always-on text chip above them is gone. Nothing else referenced the constant, so it and its
+ * loop in refreshDynamic() were deleted outright rather than disabled.
+ */
 /**
  * Bridge structure colours, taken from the deck renderer's own table rather than reinvented here.
  *
@@ -869,6 +920,36 @@ function clearAuthoredPickingProxies(node) {
  * here. `dispose()` only aborts this controller; the owning view tears those shared resources
  * down exactly once.
  */
+/**
+ * The resolved procedural-suppression set, reduced to a string that changes iff the set changed.
+ *
+ * WHY A KEY EXISTS AT ALL. The authored streamer calls `publishState()` on EVERY pass — before its
+ * own empty-diff early return — and every OrbitControls 'change' runs a pass. So without a dirty
+ * check the whole suppression pass ran on every frame of a drag: restore-and-re-hide the same nodes,
+ * rewrite 11 `InstancedMesh` buffers with identical matrices, and re-bake the 2048² shadow depth
+ * map. That last one negated P1 in the only regime where frame time exists (this app renders on
+ * demand), and no measurement could see it, because `runPreset()` samples with the camera parked.
+ *
+ * WHAT IT MUST NOT DO is compare equal for two sets that differ, which would leave a procedural
+ * proxy standing under its authored replacement forever. So:
+ *   - `policy` and `kind` are in the key, not just `featureId` — a feature re-attached under a
+ *     different suppression policy IS a different suppression;
+ *   - it is ORDER-INDEPENDENT (`sort()`), because the ledger's iteration order is not a promise and
+ *     a reordering is not a change;
+ *   - the three fields are JSON-encoded rather than joined with a separator. A plain `a|b|c` join
+ *     makes `{id:'a|building', kind:'x'}` and `{id:'a', kind:'building|x'}` the SAME string, and two
+ *     different sets sharing a key is precisely the false skip that would strand a procedural proxy
+ *     under its authored replacement. (Written as a separator join first; the test below caught it.)
+ *
+ * Exported purely so those properties are directly testable rather than argued for in a comment.
+ */
+export function proceduralSuppressionKey(entries = []) {
+  return entries
+    .map(({ featureId, policy, kind }) => JSON.stringify([String(featureId), String(kind), String(policy)]))
+    .sort()
+    .join('\n');
+}
+
 export function createAuthoredAssetStreamer({
   root,
   status,
@@ -884,6 +965,18 @@ export function createAuthoredAssetStreamer({
   fetchImpl = globalThis.fetch,
   loadAsset = null,
   onChanged = () => {},
+  /*
+   * The SCENE GRAPH changed — an authored node entered or left `root` — as opposed to `onChanged`,
+   * which also fires for every status publish and therefore on every camera pass.
+   *
+   * They are separate because the renderer's two listeners want different things. `onChanged`
+   * invalidates the FRAME, which is cheap and correct to do on a camera move. This one invalidates
+   * the sun's frozen SHADOW MAP, and doing that on every camera pass would re-bake the depth map
+   * throughout a pan — which is most of the cost the freeze exists to remove. `seatAuthoredInstance`
+   * writes `castShadow` from the manifest, so an attach or a detach is a real caster change and this
+   * is the only place in the streamer where one happens.
+   */
+  onCastersChanged = () => {},
 } = {}) {
   if (!root?.add || !root?.remove) throw new Error('authored streamer requires a scene root');
   if (!status || typeof status !== 'object') throw new Error('authored streamer requires status');
@@ -945,6 +1038,7 @@ export function createAuthoredAssetStreamer({
     if (!node) return false;
     clearAuthoredPickingProxies(node);
     root.remove(node);
+    onCastersChanged('detach');
     onChanged();
     return true;
   }
@@ -1086,8 +1180,13 @@ export function createAuthoredAssetStreamer({
             // untracked authored double in the same place.
             if (seated.parent === root) root.remove(seated);
             clearAuthoredPickingProxies(seated);
+            // The rollback removed what the hook had already added, so the caster set moved twice
+            // in one synchronous block. Report it anyway: a rollback that failed to restore the
+            // graph must not be the one mutation the shadow map never hears about.
+            onCastersChanged('detach');
             throw error;
           }
+          onCastersChanged('attach');
           onChanged();
         },
         detach: detachInstance,
@@ -1192,6 +1291,27 @@ export async function createView3d(container, mapData, src) {
   // an unmeasured subsystem would be the metric-that-cannot-fail this file's header warns about.
   const diagnosticReadoutsVisible = rendererGate.diagnosticReadouts;
   const bootAt = performance.now();
+  /*
+   * Question (d): was a PROFILING RUN asked for? `?profile=1`, and nothing else — no `dev`, no
+   * hostname, no map key. See src/render-profiler.js's header for why this is its own predicate in
+   * its own module rather than a fourth function beside the gate's three: a run switch a visitor
+   * types is not a boundary, and the gate's environment predicates are false in exactly the two
+   * configurations (release preview on loopback; the live site on the founder's machine) where the
+   * only real GPU in this project can be measured.
+   *
+   * It is read HERE, before the renderer is constructed, because it has to be. three 0.185.1 reads
+   * `trackTimestamp` from the renderer's constructor parameters (`Backend.js:76`) and the WebGPU
+   * backend folds its own feature check in at init, so the GPU timer cannot be switched on later.
+   * A profiler that can only be armed at boot is the price of a GPU number that is real.
+   */
+  const profileRequest = parseProfileRequest(location.search);
+  const profileWaterfall = profileRequest.armed ? createWaterfall() : null;
+  // Bound once each, so the OFF path is an empty function call and not a `performance.now()` that
+  // is computed and thrown away at a dozen mount sites.
+  const wfBegin = profileWaterfall ? (name) => profileWaterfall.begin(name, performance.now() - bootAt) : () => {};
+  const wfEnd = profileWaterfall ? (name) => profileWaterfall.end(name, performance.now() - bootAt) : () => {};
+  const wfMark = profileWaterfall ? (name) => profileWaterfall.mark(name, performance.now() - bootAt) : () => {};
+  wfMark('boot');
   const localTerrainAbort = new AbortController();
   const localTerrainRequest = localEnhancementsAllowed
     ? loadCustomsLocalTerrainPackage({ signal: localTerrainAbort.signal })
@@ -1218,11 +1338,32 @@ export async function createView3d(container, mapData, src) {
       .then((value) => ({ value, error: null }))
       .catch((error) => ({ value: null, error }))
     : Promise.resolve({ value: null, error: null });
+  wfBegin('mapDataFetch');
   const response = await fetch('/data/customs-3d.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`Customs 3D data HTTP ${response.status}`);
+  wfEnd('mapDataFetch');
+  // Split from the fetch on purpose: this is 2.68 MB through a main-thread `JSON.parse`, and a
+  // waterfall that folded it into "download" would send an optimiser after the wire.
+  wfBegin('mapDataParse');
   const data = await response.json();
+  wfEnd('mapDataParse');
+  /*
+   * The DOM-overlay gate, derived ONCE from the map's own playable limit — the same `data.limit`
+   * the terrain, the buildings, the vegetation and `clampCamera()`'s `groundExtent` are built from.
+   *
+   * Until 2026-09-03 every overlay was gated on `THREE_POC_SCOPE`, a 360x300 m proof-of-concept
+   * cell covering ~19% of a 1024x541 m map: 24 of 32 extracts and 20 of 32 place labels never
+   * drew, while `renderStats()` still called the scope `customs-industrial-rail-yard` and reported
+   * nothing that could see the loss. `overlayScopeFromLimit()` throws on a missing or non-finite
+   * limit rather than falling back to a box (handoff §7 — no silent fallbacks).
+   */
+  const overlayScope = overlayScopeFromLimit(data.limit);
+  // These two promises were CREATED before the map JSON was awaited, so this span is only what is
+  // left of them; the waterfall's overlapping intervals are what make that visible.
+  wfBegin('terrainPackage');
   const localTerrainOutcome = await localTerrainRequest;
   const promotedTerrainOutcome = await promotedTerrainRequest;
+  wfEnd('terrainPackage');
   let exactTerrainPackage = localTerrainOutcome.value ?? promotedTerrainOutcome.value;
   let exactTerrainMesh = null;
   let exactTerrainError = localTerrainOutcome.error ?? promotedTerrainOutcome.error;
@@ -1252,6 +1393,7 @@ export async function createView3d(container, mapData, src) {
   let promotedVegetationPackage = null;
   if (exactTerrainPackage && exactTerrainMesh) {
     try {
+      wfBegin('vegetationPlacements');
       if (localEnhancementsAllowed) {
         // UNCHANGED. Still the loopback route, still the raw Unity dumps, still `localOnly: true`.
         exactVegetation = await loadCustomsLocalVegetation(exactTerrainPackage, {
@@ -1276,7 +1418,11 @@ export async function createView3d(container, mapData, src) {
         scope: exactTerrainMesh.scope,
         reliefOriginYM: exactTerrainPackage.manifest.reliefOriginYM,
       });
+      wfEnd('vegetationPlacements');
     } catch (error) {
+      // Closed on the failure path too: an open phase is reported as "still running when the
+      // report was taken", which would describe a load that gave up as one that never finished.
+      wfEnd('vegetationPlacements');
       exactVegetationError = error;
       exactVegetation = null;
       exactVegetationSource = null;
@@ -1338,14 +1484,28 @@ export async function createView3d(container, mapData, src) {
   container.replaceChildren();
   container.classList.add('three-poc');
   const forceWebGL = new URLSearchParams(location.search).get('threeBackend') === 'webgl2';
-  const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL });
+  /*
+   * `trackTimestamp` is the GPU-time switch, and it is a CONSTRUCTOR parameter on both backends.
+   *
+   *   WebGL2  → `EXT_disjoint_timer_query_webgl2`  (three 0.185.1: WebGLBackend.js:270, pool at
+   *             renderers/webgl-fallback/utils/WebGLTimestampQueryPool.js:27)
+   *   WebGPU  → `GPUFeatureName.TimestampQuery`    (webgpu/utils/WebGPUTimestampQueryPool.js)
+   *
+   * `Backend.js:76` reads it from these parameters and never again, so it cannot be turned on at
+   * runtime — which is why `?profile=` has to be parsed at boot. When it is false, three's
+   * `initTimestampQuery()` returns at its first line on every frame, which is exactly what happens
+   * today: passing `false` here costs nothing that the current code does not already cost.
+   */
+  const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL, trackTimestamp: profileRequest.armed });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.93;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.setSize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight));
   try { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; } catch {}
+  wfBegin('rendererInit');
   await renderer.init();
+  wfEnd('rendererInit');
   renderer.domElement.className = 'tz-three-canvas';
   renderer.domElement.setAttribute('aria-label', 'Three.js Customs renderer proof');
   container.append(renderer.domElement);
@@ -1432,6 +1592,47 @@ export async function createView3d(container, mapData, src) {
   sun.shadow.radius = 2.2;
   sun.target.position.set(...gameToWorld(THREE_POC_SCOPE.center.x, THREE_POC_SCOPE.center.z, 0));
   scene.add(sun, sun.target);
+  /*
+   * THE DEPTH MAP IS RENDERED ON CHANGE, NOT ON EVERY FRAME.
+   *
+   * Constructing the controller sets `sun.shadow.autoUpdate = false` and arms one bake. From here
+   * on, every point at which a caster or the light can change calls `sunShadow.invalidate(<reason>)`
+   * from the CLOSED enum in `src/shadow-invalidation.js` — which is where the reasoning, the
+   * measured win, and the list itself live. A reason that is not on that list throws rather than
+   * quietly doing nothing.
+   *
+   * `?shadows=live` puts three's per-frame behaviour back. It is the control arm of the
+   * pixel-identity proof and the escape hatch if a stale shadow is ever seen.
+   */
+  const shadowRequest = parseShadowRequest(location.search);
+  const sunShadow = createShadowController({
+    shadow: sun.shadow,
+    live: shadowRequest.live,
+    now: () => performance.now(),
+  });
+  if (shadowRequest.unknown.length) {
+    console.warn(`[three-poc] unrecognised shadow parameter(s) ignored: ${shadowRequest.unknown.join(', ')}`);
+  }
+  /*
+   * A RESTORED GPU CONTEXT NEEDS A NEW BAKE, AND NOTHING ELSE WOULD ASK FOR ONE.
+   *
+   * This is the one stale path the freeze INTRODUCES and the one no fingerprint can see. On a WebGL2
+   * context loss or a WebGPU device loss the backend reallocates every texture — the depth map
+   * included — empty. Live, three re-renders it on the very next frame and the user never notices.
+   * Frozen, nothing ever re-bakes it: the scene renders with a dead shadow map for the rest of the
+   * session while every counter stays green and `?shadowAudit=1` reports `clean`, because the caster
+   * set never changed. Two lines, and it closes a permanent silent whole-scene regression.
+   */
+  const invalidateShadowOnContextRestore = () => {
+    sunShadow.invalidate('renderer-context-restored');
+    invalidateRender(2);
+  };
+  renderer.domElement?.addEventListener?.('webglcontextrestored', invalidateShadowOnContextRestore);
+  // WebGPU has no `webglcontextrestored`; the device exposes a `lost` promise instead. `?.` all the
+  // way down because the backend may not be initialized yet and neither shape is guaranteed.
+  try {
+    renderer.backend?.device?.lost?.then?.(() => invalidateShadowOnContextRestore());
+  } catch { /* no device on this backend; the WebGL2 listener above is the live path */ }
 
   const worldRoot = new THREE.Group();
   worldRoot.name = exactTerrainMesh ? 'customs-exact-local-world' : 'customs-procedural-fallback';
@@ -1467,13 +1668,16 @@ export async function createView3d(container, mapData, src) {
   let exactControlAtlasSet = null, exactSurfaceError = null;
   if (exactTerrainMesh) {
     try {
+      wfBegin('terrainSurfaces');
       const exactSurfaceAssets = await loadExactTerrainSurfaceAssets(
         exactTerrainPackage,
         localTerrainAbort.signal,
       );
       exactSurfaceCanvasFactory = exactSurfaceAssets.createFallbackCanvases;
       exactControlAtlasSet = exactSurfaceAssets.controlAtlasSet;
+      wfEnd('terrainSurfaces');
     } catch (error) {
+      wfEnd('terrainSurfaces');
       exactSurfaceError = error;
       exactSurfaceCanvasFactory = null;
       exactControlAtlasSet = null;
@@ -1485,11 +1689,13 @@ export async function createView3d(container, mapData, src) {
   if (exactControlAtlasSet) {
     let candidateRuntime = null;
     try {
+      wfBegin('terrainPbr');
       candidateRuntime = await createCustomsTerrainPbrRuntime({
         controlAtlasSet: exactControlAtlasSet,
         renderer,
         signal: localTerrainAbort.signal,
       });
+      wfEnd('terrainPbr');
       if (localTerrainAbort.signal.aborted) {
         candidateRuntime.dispose();
         candidateRuntime = null;
@@ -1510,6 +1716,7 @@ export async function createView3d(container, mapData, src) {
       // `customsExactTerrainSurfaceStatus()` call `renderStats().exactTerrain.surface` reports.
     } catch (error) {
       candidateRuntime?.dispose?.();
+      wfEnd('terrainPbr');
       exactTerrainPbrError = error;
       console.warn('[three-poc] authored 12-layer terrain PBR unavailable; retaining exact-mask fallback', error);
     }
@@ -1740,6 +1947,12 @@ export async function createView3d(container, mapData, src) {
   // mounts — never before, which is what makes the swap atomic.
   let proceduralVegetationPlan = exactVegetationPlan;
   let authoredVegetationRuntime = null;
+  /**
+   * Whether the MOUNTED authored forest casts into the depth map, read off the runtime that was
+   * actually constructed rather than off the module default. `false` until a mount has published a
+   * policy — nothing is in the scene to cast before then.
+   */
+  let authoredVegetationCastsShadows = false;
   let authoredVegetationArrays = null;
   let buildingGroup = null, understoryLod = 'overview';
   let understoryRenderStats = {
@@ -1778,6 +1991,14 @@ export async function createView3d(container, mapData, src) {
   let plinthRenderStats = { buildings: 0, triangles: 0 };
   let buildingRenderStats = null;
   let plinthSuppressionKey = null;
+  /**
+   * The last suppression set actually applied, and the answer that was published for it.
+   *
+   * `null` means "nothing has been applied yet, so nothing can be skipped" — and it is set back to
+   * `null` by `rebuildWorld()`, whose new procedural graph makes every earlier application void.
+   */
+  let appliedProceduralSuppressionKey = null;
+  let proceduralSuppressionResult = Object.freeze({ applied: Object.freeze([]), retained: Object.freeze([]) });
   /** `MATERIAL_SLOTS` index -> the shared map-wide material an instanced family draws with. */
   const DETAIL_SLOT_MATERIAL = Object.freeze({
     [MATERIAL_SLOT_INDEX.trim]: 'detailTrim',
@@ -1794,6 +2015,23 @@ export async function createView3d(container, mapData, src) {
   const wallStructurePlan = () => (wallPlanCache ??= planWallStructures({
     fences: data.fences, props: data.props, roads: data.roads,
   }));
+  /*
+   * The live profiler, or `null`. Declared here — above everything that can be timed — so the OFF
+   * path is one `null` comparison and never a TDZ hazard.
+   *
+   * THE ZERO-COST-WHEN-OFF CONTRACT, in full:
+   *   - `animate()` branches ONCE per rendered frame, between `renderOneFrame()` (the four calls,
+   *     unchanged) and `frameProfiler.renderProfiled()` (the same four calls with marks between).
+   *     No per-item work is added to `updateOverlayPositions()`, which is the loop that would have
+   *     mattered.
+   *   - `refreshDynamic()` and `repackAuthoredVegetation()` branch once per call, on paths that run
+   *     a few times a second at most.
+   *   - the pointermove raycast branches once per pointer event.
+   *   - the waterfall helpers are bound to empty functions when off.
+   *   - `trackTimestamp: false` leaves three's own timestamp path exactly where it is today.
+   * Nothing else in this file consults it. `scripts/render-profiler.test.mjs` pins that by source.
+   */
+  let frameProfiler = null;
   let renderRequested = true, settleFrames = 0;
   const exactTerrainSurfaceStatus = () => customsExactTerrainSurfaceStatus({
     hasExactTerrain: Boolean(exactTerrainMesh),
@@ -1820,7 +2058,11 @@ export async function createView3d(container, mapData, src) {
   };
   const status = {
     backend: renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl2',
-    scope: THREE_POC_SCOPE.id,
+    // What the OVERLAYS are actually gated on. This read `THREE_POC_SCOPE.id` until 2026-09-03,
+    // i.e. the renderer called itself the industrial rail-yard golden cell while drawing the whole
+    // map and clipping 24 of 32 extracts — a stat that could not detect its own failure (§7).
+    scope: `customs-overlay-${overlayScope.source}`,
+    overlayScope: { ...overlayScope },
     manifest: null,
     groundAtlas: groundTextureMapping ? {
       textureSize: [...groundTextureMapping.textureSize],
@@ -3240,6 +3482,11 @@ export async function createView3d(container, mapData, src) {
     // both `rebuildWorld` and `syncProceduralSuppression` funnel through, which is why it is here.
     refreshDetailInstances();
     syncPlinthSuppression();
+    // Buildings and props are casters, and `refreshDetailInstances()` rewrites the roof-plant
+    // instance buffers. Every path that retires or restores a procedural feature funnels through
+    // here — `rebuildWorld`, `syncProceduralSuppression` (the authored ledger) and
+    // `rebuildProceduralVegetation` — so this is the one invalidation the suppression lane needs.
+    sunShadow.invalidate('procedural-suppression');
     invalidateRender();
   }
 
@@ -3251,8 +3498,35 @@ export async function createView3d(container, mapData, src) {
     rebuildPlinths();
   }
 
-  /** Synchronize, rather than append to, the set justified by the attachment ledger. */
+  /**
+   * Synchronize, rather than append to, the set justified by the attachment ledger.
+   *
+   * IT RETURNS EARLY WHEN THE SET DID NOT CHANGE, AND THAT IS THE POINT.
+   *
+   * The authored streamer calls `publishState()` on EVERY pass, before its own empty-diff early
+   * return, and every OrbitControls 'change' runs a pass. Without this gate a camera event —
+   * i.e. every frame of a drag, an orbit or a zoom — ran the whole suppression pass: it restored and
+   * re-hid the same nodes, rewrote 11 `InstancedMesh` buffers and set `instanceMatrix.needsUpdate`
+   * on all of them (a GPU re-upload of 195 identical matrices), and called
+   * `sunShadow.invalidate('procedural-suppression')`, which re-renders the 2048² depth map.
+   *
+   * That last one negated P1 exactly when it is worth having. This app renders ON DEMAND, so frame
+   * time only exists while the camera is moving — which was the one regime in which the freeze was
+   * being lifted every frame. The measured −38% / −31% was taken with the camera parked and did not
+   * describe a drag at all. Measured on the shipped tree before this gate: six `tz.flyTo` calls
+   * produced +14 invalidations, nine of them `procedural-suppression` with an unchanged set.
+   *
+   * WHAT MAKES THE SKIP SAFE, rather than merely cheap. When the key is equal the work below is
+   * already a no-op by construction: the same features are restored and re-hidden to the same
+   * `visible` values, `visibleInstanceIndices` returns the same slots, and `syncPlinthSuppression`
+   * has its own identical early return. The one thing that could make it unsafe is the NODES having
+   * changed underneath while the key did not — which is `rebuildWorld()`, and `rebuildWorld()`
+   * clears the key (and calls `applyProceduralSuppression()` directly on the new graph) for exactly
+   * that reason.
+   */
   function syncProceduralSuppression(entries = []) {
+    const key = proceduralSuppressionKey(entries);
+    if (key === appliedProceduralSuppressionKey) return proceduralSuppressionResult;
     restoreProceduralSuppression();
     suppressedProceduralFeatures.clear();
     const applied = [];
@@ -3279,7 +3553,16 @@ export async function createView3d(container, mapData, src) {
       applied.push(featureId);
     }
     applyProceduralSuppression();
-    return { applied, retained };
+    // Cached with the key, because `publishState()` reads `applied`/`retained` on every pass and a
+    // skipped pass must publish the same answer it published last time — not an empty one. A skip
+    // that quietly emptied `status.manifest.suppressed` would be a status field that goes blank
+    // whenever nothing changed, which is worse than the cost it saves.
+    appliedProceduralSuppressionKey = key;
+    proceduralSuppressionResult = Object.freeze({
+      applied: Object.freeze(applied),
+      retained: Object.freeze(retained),
+    });
+    return proceduralSuppressionResult;
   }
 
   function applyNature() {
@@ -3288,6 +3571,10 @@ export async function createView3d(container, mapData, src) {
     if (understoryGroup) understoryGroup.visible = nature.trees !== false;
     if (understoryTuftGroup) understoryTuftGroup.visible = nature.trees !== false && fx.detail !== false;
     if (rockGroup) rockGroup.visible = nature.rocks !== false;
+    // `treeGroup` (procedural trunks and crowns) and `rockGroup` are both caster groups; hiding one
+    // removes its shadows, and a frozen depth map would keep drawing them over hidden geometry.
+    // `vegetationRoot` is in the list above but casts nothing today — see the repack invalidation.
+    sunShadow.invalidate('nature-visibility');
     invalidateRender();
   }
 
@@ -3333,6 +3620,11 @@ export async function createView3d(container, mapData, src) {
     detailInstanceMeshes = [];
     plinthMesh = null;
     plinthSuppressionKey = null;
+    // Every procedural node the last suppression pass hid has just been disposed, so the set that
+    // was applied describes a graph that no longer exists. Clearing the key is what makes
+    // `syncProceduralSuppression`'s no-op skip safe: without it, the first ledger publish after a
+    // world rebuild would compare equal and decline to re-hide the new proxies.
+    appliedProceduralSuppressionKey = null;
     plinthRenderStats = { buildings: 0, triangles: 0 };
     buildingRenderStats = null;
     buildingDetail = null;
@@ -3350,6 +3642,11 @@ export async function createView3d(container, mapData, src) {
     // `applyProceduralSuppression` re-applies the synchronized suppression map after rebuilding
     // every procedural group, so a world refresh cannot resurrect an authored replacement's proxy.
     updateUnderstoryLod();
+    // Every caster in the frame except the authored GLBs was just disposed and rebuilt: buildings
+    // and their detail instances, props, bridge decks/approaches/piers, rails, walls/fences/gates,
+    // rocks and the procedural tree proxies. This is also the FIRST bake — `rebuildWorld()` is the
+    // initial world build, called once from the boot sequence below.
+    sunShadow.invalidate('world-build');
     invalidateRender();
   }
 
@@ -3400,6 +3697,11 @@ export async function createView3d(container, mapData, src) {
     noteVegetationTransition();
     applyNature();
     updateUnderstoryLod();
+    // `sun.intensity` moved above, and the terrain/understory materials were swapped. Neither of
+    // those is a depth-map input as the scene stands today (terrain and understory do not cast), so
+    // this invalidation is belt-and-braces on a rare user action — a look flip is a click, not a
+    // frame — and it is what keeps "any change to the sun" true rather than merely believed.
+    sunShadow.invalidate('look');
     invalidateRender();
   }
 
@@ -3435,7 +3737,91 @@ export async function createView3d(container, mapData, src) {
     }
   }
 
-  function makeOverlayItem({ label, x, z, y = null, kind = 'place', markerKind = null, onClick = null, title = '', tier = null }) {
+  /*
+   * THE MARKER BADGE, in the HTML overlay (2026-09-03).
+   *
+   * Everything a marker draws — which mark, at which tier, and whether its name comes with it —
+   * lives in src/marker-overlay.js, on top of the same src/icons.js vocabulary the 2D map and the
+   * deck diorama draw. This function only decides WHEN to repaint. `null` back from
+   * paintMarkerOverlay() means the kind is not in the vocabulary, and the plain text pill the
+   * caller already wrote stays: a marker we cannot name must never be drawn as a badge we made up.
+   */
+  const paintMarker = (item, tier) => {
+    const painted = paintMarkerOverlay(item.element, item.spec, tier);
+    if (painted) item.mark = painted.mark;
+    return painted;
+  };
+
+  /*
+   * THE OVERLAY'S ELEMENT BOXES, CACHED — the whole reason `updateOverlayPositions()` can be a pure
+   * computation (P2, 2026-09-03).
+   *
+   * `anchorOverlayMark()` needs the element's width and height to decide whether its BOX overlaps
+   * the frame. Until now the frame loop read `offsetWidth`/`offsetHeight` for that, per item, per
+   * frame, in between two style writes — one forced synchronous layout per item. Worse, the
+   * anchoring fix earlier the same day moved the read ABOVE the on-screen test, so the layout was
+   * forced for all 1,304 items when only 186 of them were on screen at `ground-close`.
+   *
+   * A box changes for exactly three reasons and none of them is "a frame was rendered":
+   *   1. the element was just built           -> measureOverlayItems() at the end of refreshDynamic
+   *   2. the LOD tier repainted its mark      -> measureOverlayItems() at the end of syncMarkerTier
+   *   3. anything else (a web font landing, a class flip, a name change, a stylesheet edit)
+   *                                           -> the ResizeObserver below
+   *
+   * The observer is the honest half of this: it makes the cache self-correcting rather than a list
+   * of assumptions about which code paths resize a marker. It reads `offsetWidth` in its own
+   * callback, which the browser delivers AFTER layout and BEFORE paint — the value is byte-identical
+   * to what the frame loop used to read, and reading it there forces nothing. `borderBoxSize` was
+   * deliberately not used in its place: it is fractional where `offsetWidth` is rounded, so it would
+   * have moved the on-screen test by up to half a pixel and changed which marks draw at the frame
+   * edge. This cache must not change one pixel, so it stores the number the old read stored.
+   *
+   * A HIDDEN element measures 0x0 (`[hidden]{display:none!important}`), and the loop it replaces
+   * read exactly that. So a 0 is never written into the cache — it is applied at USE time, from the
+   * item's own last-written `hidden`, in `updateOverlayPositions()`. That reproduces the shipped
+   * hysteresis exactly: a mark is admitted on its anchor POINT (0x0 box) and kept on its real box.
+   */
+  const overlayItemByElement = new WeakMap();
+  function measureOverlayItem(item) {
+    // A hidden element has no box. Measuring one would cache a 0 and shrink the on-screen test.
+    if (item.element.hidden) return;
+    const width = item.element.offsetWidth, height = item.element.offsetHeight;
+    // Nor does ANY of them while the stage is `display:none` — which is the whole of the 2D view,
+    // and `syncMarkerTier()` runs there (main.js's updateHud drives the ladder in both views). A 0
+    // cached from that would make the first 3D frame after the switch test every mark against a
+    // 0x0 box. A real element is never 0x0, so refusing the pair costs nothing.
+    if (width === 0 && height === 0) return;
+    item.width = width;
+    item.height = height;
+  }
+  /** One read pass over every item — called only after a build or a repaint, never inside a frame. */
+  function measureOverlayItems() {
+    for (const item of overlayItems) measureOverlayItem(item);
+  }
+  const overlayResizeObserver = typeof ResizeObserver === 'function'
+    ? new ResizeObserver((entries) => {
+      let changed = false;
+      for (const entry of entries) {
+        const item = overlayItemByElement.get(entry.target);
+        // The observer fires with a 0x0 box every time an element is hidden. That is the state the
+        // cache deliberately does not hold; the loop applies it from `hidden` instead.
+        if (!item || entry.target.hidden) continue;
+        const width = entry.target.offsetWidth, height = entry.target.offsetHeight;
+        // The stage going `display:none` on a 2D switch delivers a 0x0 for every observed element
+        // with `hidden` still false. Same refusal as measureOverlayItem(), same reason.
+        if (width === 0 && height === 0) continue;
+        if (width === item.width && height === item.height) continue;
+        item.width = width;
+        item.height = height;
+        changed = true;
+      }
+      // A box that changed can change whether its mark is on screen, so the frame has to be redrawn
+      // — but only when something actually moved, or this would be a self-feeding render loop.
+      if (changed) invalidateRender();
+    })
+    : null;
+
+  function makeOverlayItem({ label, x, z, y = null, kind = 'place', markerKind = null, level = 'surface', onClick = null, title = '', tier = null }) {
     if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(z))) return;
     const element = document.createElement(onClick ? 'button' : 'div');
     if (onClick) element.type = 'button';
@@ -3446,30 +3832,90 @@ export async function createView3d(container, mapData, src) {
     if (markerKind) element.dataset.markerKind = markerKind;
     if (onClick) element.addEventListener('click', (event) => { event.stopPropagation(); onClick(); });
     overlay.append(element);
-    overlayItems.push({ element, x: Number(x), z: Number(z), y: Number.isFinite(Number(y)) ? Number(y) : null, kind, tier });
+    const gx = Number(x), gz = Number(z);
+    const gy = Number.isFinite(Number(y)) ? Number(y) : null;
+    // The world point, resolved ONCE. `H` is reassigned only by `rebuildWorld()`, which runs before
+    // the `refreshDynamic()` that builds these items and is never called again, so the height under
+    // a label cannot go stale behind this. Held as three scalars rather than a Vector3 so the frame
+    // loop can `set()` a single reused vector instead of allocating 1,304 of them per frame.
+    const [wx, wy, wz] = gameToWorld(gx, gz, gy ?? H(gx, gz) + 1.2);
+    const item = {
+      element, x: gx, z: gz, y: gy, wx, wy, wz, kind, tier,
+      spec: markerKind ? { markerKind, label: safeText(label), title: safeText(title || label), level } : null,
+      mark: null,
+      // The cached box (see measureOverlayItem above) and the two last-written DOM values. Both
+      // start at what the element actually is right now: appended, visible, no transform written.
+      width: 0, height: 0, hiddenNow: false, lastTransform: '', anchor: null,
+    };
+    // A place label is NOT a marker: it keeps the leader-line chrome above and never gets a badge.
+    if (item.spec && !tier) paintMarker(item, overlayMarkerTier);
+    overlayItemByElement.set(element, item);
+    overlayResizeObserver?.observe(element);
+    overlayItems.push(item);
+  }
+
+  /*
+   * THE MARKER LADDER, live under a moving camera.
+   *
+   * src/lod.js is the one ladder — metres per pixel, ±10% hysteresis, dot / icon / full — and
+   * deck.gl already drives it. Three raises `onViewChange` on every camera move, and main.js's
+   * updateHud() folds that into the same shared tier; this renderer folds the SAME metres-per-pixel
+   * in itself (`1 / 2^zoom`, the definition map3d.js uses) so the overlay cannot be one frame or
+   * one code path behind the number the HUD is printing. `updateTier` is idempotent, so both
+   * callers agreeing costs nothing.
+   *
+   * Repainting is gated on the tier CHANGING, not on the camera moving: a badge that is rebuilt on
+   * every wheel notch is 200 innerHTML writes per frame for no visible difference.
+   */
+  let overlayMarkerTier = currentMarkerTier();
+  // The camera's own zoom, pushed here by every path that moves it. Held separately from
+  // `viewState` because that binding is declared much further down this closure and the first
+  // `refreshDynamic()` runs before it exists — reading it from here would be a TDZ throw, not a
+  // fallback. `null` means "no camera yet": the shared tier is then the only honest answer.
+  let overlayCameraZoom = null;
+  const noteCameraZoom = (zoom) => {
+    if (Number.isFinite(Number(zoom))) overlayCameraZoom = Number(zoom);
+    return syncMarkerTier();
+  };
+  function syncMarkerTier(force = false) {
+    if (overlayCameraZoom == null) return overlayMarkerTier;
+    const t = updateMarkerTier(1 / Math.pow(2, overlayCameraZoom));
+    if (!force && t === overlayMarkerTier) return t;
+    overlayMarkerTier = t;
+    let repainted = 0;
+    for (const item of overlayItems) if (item.spec && paintMarker(item, t)) repainted += 1;
+    // A tier repaint replaces the mark, and a dot is not the size of a badge. Re-measured HERE, in
+    // one read pass after every write, rather than in the frame loop that used to read it back.
+    if (repainted) { measureOverlayItems(); invalidateRender(); }
+    return t;
   }
 
   function clearOverlays() {
+    // Disconnect before the elements go, so the observer is never holding a detached node.
+    overlayResizeObserver?.disconnect();
     for (const item of overlayItems) item.element.remove();
     overlayItems = [];
   }
 
+  /*
+   * The one profiler hook on an EVENT path.
+   *
+   * `refreshDynamic()` is a full overlay + dynamicRoot teardown and rebuild, reached from nine
+   * `main.js` call sites including the 1 Hz live-player tick, so it is real cost that never appears
+   * inside a rendered frame. Timing it by wrapping rather than by editing its body means the
+   * profiled and unprofiled paths run byte-identical code, and the OFF path costs one comparison
+   * against `null` plus one call — on a function that runs at most a few times a second.
+   */
   function refreshDynamic() {
+    if (!frameProfiler) return refreshDynamicNow();
+    const startedAt = performance.now();
+    try { return refreshDynamicNow(); }
+    finally { frameProfiler.event('refreshDynamic', performance.now() - startedAt); }
+  }
+
+  function refreshDynamicNow() {
     clearOverlays();
     disposeTree(dynamicRoot);
-    for (const callout of TACTICAL_PROP_CALLOUTS) {
-      const prop = (data.props || []).find((candidate) => candidate.featureId === callout.featureId);
-      if (!prop || !Number.isFinite(Number(prop.x)) || !Number.isFinite(Number(prop.z))
-        || !withinScope(prop)) continue;
-      makeOverlayItem({
-        label: callout.label,
-        x: prop.x,
-        z: prop.z,
-        y: H(prop.x, prop.z) + Math.max(0.2, Number(prop.h) || 2) + 0.7,
-        kind: 'landmark',
-        title: propInteractionLabel(prop, prop.type),
-      });
-    }
     /*
      * THINNING IS NOT DONE HERE. `src.labels()` is main.js's labelSet(), which has already applied
      * the metres-per-pixel ladder in src/label-tier.js plus the Density override — one ladder for
@@ -3478,7 +3924,7 @@ export async function createView3d(container, mapData, src) {
      */
     for (const label of src.labels?.() || []) {
       const [x, z] = label.position || [];
-      if (withinScope([x, z])) {
+      if (withinOverlayScope([x, z], overlayScope)) {
         // tierOf() THROWS on a row with no valid tier: a label that lost its tier must fail where
         // the bad value is, not quietly inherit one and be believed (handoff §6).
         makeOverlayItem({ label: label.text ?? label.name, x, z, kind: 'place', tier: labelTierOf(label) });
@@ -3486,7 +3932,7 @@ export async function createView3d(container, mapData, src) {
     }
     for (const marker of src.markers?.() || []) {
       const spec = markerOverlaySpec(marker);
-      if (!spec || !withinScope([spec.x, spec.z])) continue;
+      if (!spec || !withinOverlayScope([spec.x, spec.z], overlayScope)) continue;
       makeOverlayItem({
         ...spec,
         y: spec.y == null
@@ -3497,7 +3943,7 @@ export async function createView3d(container, mapData, src) {
     const questData = src.quests?.() || {};
     for (const sourceZone of questData.zones || []) {
       const zone = questZoneSpec(sourceZone);
-      if (!zone || !zone.outline.some((point) => withinScope(point))) continue;
+      if (!zone || !zone.outline.some((point) => withinOverlayScope(point, overlayScope))) continue;
       const shape = shapeFromRing(zone.outline);
       if (!shape) continue;
       const geometry = new THREE.ShapeGeometry(shape);
@@ -3515,7 +3961,7 @@ export async function createView3d(container, mapData, src) {
     }
     for (const point of questData.points || []) {
       const pos = point.pin ?? point.position;
-      if (!pos || !withinScope(pos)) continue;
+      if (!pos || !withinOverlayScope(pos, overlayScope)) continue;
       const canonicalPosition = point.position ?? pos;
       const y = displayCanonicalObjectY(
         canonicalPosition.y,
@@ -3546,35 +3992,153 @@ export async function createView3d(container, mapData, src) {
       dynamicRoot.add(mesh);
       makeOverlayItem({ label: mesh.userData.label || 'LIVE', x: last.x, z: last.z, y: y + 2.4, kind: 'player' });
     }
+    // Every element is in the document and painted; measure them all in ONE read pass. Measuring
+    // inside makeOverlayItem() would have been a forced layout per item — the very cost this change
+    // removes from the frame loop, moved onto a path that runs on the 1 Hz live-player tick.
+    measureOverlayItems();
     invalidateRender();
   }
 
+  /*
+   * The frame loop's scratch, allocated ONCE for the life of the renderer.
+   *
+   * The loop below runs over up to ~1,304 items on every rendered frame. Allocating a `Vector3`, an
+   * ndc array and an options object per item per frame is ~3,900 short-lived objects a frame, which
+   * is what `memory.heap.collectionsObserved` in the profile report is counting. `anchorOverlayMark`
+   * is pure and retains neither argument, so both can safely be the same object every time.
+   */
+  const overlayProjection = new THREE.Vector3();
+  const overlayNdc = [0, 0, 0];
+  const overlayAnchorArgs = {
+    ndc: overlayNdc, elementWidth: 0, elementHeight: 0, containerWidth: 1, containerHeight: 1,
+  };
+
+  /*
+   * WHERE EVERY OVERLAY MARK GOES, once per frame.
+   *
+   * A mark is a claim about a place on the ground, so there are exactly two outcomes: it is drawn
+   * at the pixel its world point projects to, or it is hidden. It is NEVER repositioned. Until
+   * 2026-09-03 this loop admitted anything within 15% of the NDC cube and then ran the survivors
+   * through a clamp into the safe rect, which pinned off-frame marks to the frame edge and slid
+   * them along it as the camera moved (founder: "the icons don't stay where they belong ... they
+   * come with the screen movement"). The whole decision — depth guard included — now lives in
+   * `anchorOverlayMark()`, which is pure and is asserted against a real camera in
+   * scripts/three-renderer-test.mjs; the measurements that killed the clamp are in its doc block.
+   *
+   * TWO PHASES, AND WHY (P2, 2026-09-03). The founder's 5080 measured this pass at 10.60 ms median
+   * / 13.80 p95 at `ground-close` with 1,304 items — over half of a 20.90 ms frame, and the only
+   * configuration in the whole baseline that misses the 16.67 ms 60 Hz budget. A Codex red team
+   * (cxt-20260903-210116-trjd) found the shape: only 186 of those 1,304 elements were on screen,
+   * and the loop read layout for all 1,304 — because the anchoring fix earlier that day moved the
+   * `offsetWidth` read ABOVE the on-screen test. Read, write, read, write, per item: every read
+   * flushes the layout the previous item's write invalidated.
+   *
+   *   PHASE 1 computes. It touches no DOM at all — the world point is three scalars resolved at
+   *           creation, the projection reuses ONE Vector3, the arguments reuse one array and one
+   *           object, and the box comes from the cache above. Nothing here can force a layout,
+   *           because nothing here reads one.
+   *   PHASE 2 writes, and only what changed. A `hidden` that is already right and a transform
+   *           string identical to the one on the element are both skipped; on a still camera that
+   *           is the entire pass reduced to a comparison per item.
+   *
+   * The OUTPUT is byte-for-byte what the interleaved loop produced. Same `anchorOverlayMark()`,
+   * same arguments (including the 0x0 box a hidden element reported), same `toFixed(1)` string.
+   */
   function updateOverlayPositions() {
     const width = Math.max(1, container.clientWidth), height = Math.max(1, container.clientHeight);
-    let safe = null;
-    try { safe = src.safeRect?.() ?? null; } catch {}
+    overlayAnchorArgs.containerWidth = width;
+    overlayAnchorArgs.containerHeight = height;
+    // ── Phase 1: compute. No DOM read, no DOM write, no per-item allocation. ──
     for (const item of overlayItems) {
-      const v = new THREE.Vector3(...gameToWorld(item.x, item.z, item.y ?? H(item.x, item.z) + 1.2)).project(camera);
-      const visible = v.z > -1 && v.z < 1 && v.x > -1.15 && v.x < 1.15 && v.y > -1.15 && v.y < 1.15;
-      item.element.hidden = !visible;
-      if (!visible) continue;
-      const seated = seatOverlayAnchor({
-        x: (v.x + 1) * width / 2,
-        y: (-v.y + 1) * height / 2,
-        elementWidth: item.element.offsetWidth,
-        elementHeight: item.element.offsetHeight,
-        safeRect: safe,
-        containerWidth: width,
-        containerHeight: height,
-      });
-      if (!seated) { item.element.hidden = true; continue; }
-      item.element.style.transform = `translate3d(${seated[0].toFixed(1)}px,${seated[1].toFixed(1)}px,0) translate(-50%,-100%)`;
+      overlayProjection.set(item.wx, item.wy, item.wz).project(camera);
+      overlayNdc[0] = overlayProjection.x;
+      overlayNdc[1] = overlayProjection.y;
+      overlayNdc[2] = overlayProjection.z;
+      // The 0x0 box of a hidden element, applied from the last write rather than read back out of
+      // the DOM. This is what keeps the admit-on-the-point / keep-on-the-box behaviour identical.
+      overlayAnchorArgs.elementWidth = item.hiddenNow ? 0 : item.width;
+      overlayAnchorArgs.elementHeight = item.hiddenNow ? 0 : item.height;
+      item.anchor = anchorOverlayMark(overlayAnchorArgs);
+    }
+    // ── Phase 2: write. Nothing below reads layout, so no write here forces one. ──
+    for (const item of overlayItems) {
+      const anchor = item.anchor;
+      item.anchor = null;
+      const hidden = !anchor;
+      if (hidden !== item.hiddenNow) {
+        item.element.hidden = hidden;
+        item.hiddenNow = hidden;
+      }
+      if (!anchor) continue;
+      const transform = `translate3d(${anchor[0].toFixed(1)}px,${anchor[1].toFixed(1)}px,0) translate(-50%,-100%)`;
+      if (transform === item.lastTransform) continue;
+      item.element.style.transform = transform;
+      item.lastTransform = transform;
     }
   }
 
+  /**
+   * The SAME loop, read/write ordering reversed. Instrument only — never on the render path.
+   *
+   * `updateOverlayPositions()` above reads `offsetWidth`/`offsetHeight` and then writes `hidden`
+   * and `style.transform`, per item, in one pass. A style write invalidates layout for the
+   * document, so the next item's `offsetWidth` read forces the browser to flush it: one forced
+   * synchronous layout per item per rendered frame, on a loop that runs over up to ~1,250 elements.
+   * That is the shape §6.3 of the render map describes and that nothing in this repo has ever
+   * measured.
+   *
+   * A stopwatch around the shipped loop cannot separate the reflow from the projection maths, the
+   * `Vector3` allocation and the transform writes, which all happen in the same pass. So the probe
+   * runs BOTH orderings on alternating frames and reports the difference. This variant reads every
+   * box first (one layout flush for the whole pass, at most), then writes every result. The output
+   * is identical — same `anchorOverlayMark` call, same arguments, same transform string — so the
+   * delta is attributable to the ordering and to nothing else.
+   *
+   * It is deliberately NOT the shipped implementation. Batching costs an array of ~1,250 pairs per
+   * frame and this file is not the place to make that trade; the profiler exists to say what the
+   * trade would be worth, and the founder decides.
+   */
+  const overlayBoxes = [];
+  function updateOverlayPositionsBatched() {
+    const width = Math.max(1, container.clientWidth), height = Math.max(1, container.clientHeight);
+    overlayBoxes.length = 0;
+    // Pass 1 — reads only. Nothing above writes style, so at most one layout flush happens here.
+    for (const item of overlayItems) overlayBoxes.push(item.element.offsetWidth, item.element.offsetHeight);
+    // Pass 2 — writes only. No read follows a write, so no write forces a flush.
+    let i = 0;
+    for (const item of overlayItems) {
+      const v = new THREE.Vector3(...gameToWorld(item.x, item.z, item.y ?? H(item.x, item.z) + 1.2)).project(camera);
+      const anchor = anchorOverlayMark({
+        ndc: [v.x, v.y, v.z],
+        elementWidth: overlayBoxes[i],
+        elementHeight: overlayBoxes[i + 1],
+        containerWidth: width,
+        containerHeight: height,
+      });
+      i += 2;
+      item.element.hidden = !anchor;
+      // The probe writes unconditionally — that is the ordering it exists to measure — but it must
+      // leave the shipped loop's caches describing the DOM it just wrote, or the next interleaved
+      // frame would skip a write the element still needs.
+      item.hiddenNow = !anchor;
+      if (!anchor) continue;
+      const transform = `translate3d(${anchor[0].toFixed(1)}px,${anchor[1].toFixed(1)}px,0) translate(-50%,-100%)`;
+      item.element.style.transform = transform;
+      item.lastTransform = transform;
+    }
+  }
+
+  /** How many overlay marks are on screen right now. Read once per probe, not per frame. */
+  const visibleOverlayCount = () => overlayItems.reduce((n, item) => (item.element.hidden ? n : n + 1), 0);
+
+  // One contiguous synchronous block — there is no yielding anywhere between `addTerrain()` and
+  // the last overlay element, so this interval is a single main-thread task and the waterfall says
+  // so rather than implying it was scheduled work.
+  wfBegin('worldBuild');
   rebuildWorld();
   applyLook();
   refreshDynamic();
+  wfEnd('worldBuild');
   const authoredStreamer = createAuthoredAssetStreamer({
     root: authoredRoot, status, guard: authoredGuard, signal: authoredAbort.signal,
     displayYFor: (x, z, canonicalY) => displayCanonicalObjectY(canonicalY, x, z),
@@ -3582,6 +4146,16 @@ export async function createView3d(container, mapData, src) {
     loaderHost: authoredLoaderHost,
     cache: authoredAssetCache,
     onChanged: () => invalidateRender(1),
+    // An authored GLB entering or leaving the scene. `seatAuthoredInstance()` writes `castShadow`
+    // from the instance's `shadow.mode`, so Fortress and every other streamed asset is a caster the
+    // frozen depth map has to be told about. Deliberately NOT `onChanged`, which also fires on every
+    // status publish — i.e. on every camera pass — and would re-bake the map through a whole pan.
+    // Mapped explicitly, so an unrecognised kind reaches the closed enum's throw instead of being
+    // absorbed into 'attach' by a ternary's else branch. It still invalidates either way, so no
+    // stale shadow was ever possible here — but `stats().byReason` and `stats().last.reason` are the
+    // fields the audit prints so a missing invalidation can be placed in the sequence, and a ledger
+    // that quietly files a detach as an attach degrades exactly that.
+    onCastersChanged: (kind) => sunShadow.invalidate(AUTHORED_ASSET_SHADOW_REASON[kind] ?? kind),
   });
   const updateAuthoredAssetsForTarget = () => {
     // OrbitControls' target is the real focus used by the user, in runtime [-x,-z,y]. The
@@ -3666,6 +4240,14 @@ export async function createView3d(container, mapData, src) {
     return vegetationCameraSignature(camera.position.toArray(), camera.projectionMatrix.elements);
   }
   function repackAuthoredVegetation(reason = 'requested') {
+    if (!frameProfiler) return repackAuthoredVegetationNow(reason);
+    const startedAt = performance.now();
+    try { return repackAuthoredVegetationNow(reason); }
+    finally { frameProfiler.event('vegetationRepack', performance.now() - startedAt); }
+  }
+  // A camera move of 4 m — or ANY projection change — repacks every authored placement inside one
+  // rAF. It is not a per-frame cost and must not be averaged into one, so it is counted per event.
+  function repackAuthoredVegetationNow(reason = 'requested') {
     if (!authoredVegetationRuntime?.active) return null;
     const signature = liveVegetationCameraSignature();
     authoredVegetationRuntime.update({
@@ -3673,6 +4255,15 @@ export async function createView3d(container, mapData, src) {
       frustum: cameraFrustumForVegetation(),
     });
     vegetationPackedFor = signature;
+    // A repack rewrites every authored bucket's instance list and LOD tier. Today that changes no
+    // caster — the pack ships `shadowPolicy.mode: 'disabled'`, so `mesh.castShadow` is false for
+    // every bucket at every LOD (customs-authored-vegetation.js:1589) — and invalidating here
+    // unconditionally would re-bake the depth map every 4 m of camera movement, which is most of
+    // the win. The condition is read from the LIVE RUNTIME's normalised policy (set at the mount
+    // swap), never from the module default, so the gate and the meshes cannot describe two
+    // different policies: the day a pack or a caller supplies `near-lod`, this becomes a real
+    // invalidation with nobody having to remember it exists.
+    if (authoredVegetationCastsShadows) sunShadow.invalidate('authored-vegetation-repack');
     vegetationStatus.lastRepack = {
       reason,
       atMs: Math.round(performance.now()),
@@ -3765,9 +4356,11 @@ export async function createView3d(container, mapData, src) {
    */
   async function mountAuthoredVegetation() {
     if (!exactVegetationPlan) return;
+    wfBegin('vegetationMount');
     if (vegetationRequest === 'procedural') {
       vegetationStatus.reason = 'disabled-by-query';
       noteVegetationTransition();
+      wfEnd('vegetationMount');
       return;
     }
     // A mount of its own, so a deadline can cancel THIS load without aborting the authored-asset
@@ -4100,6 +4693,29 @@ export async function createView3d(container, mapData, src) {
       timings.glbParseMs = Math.round(timings.glbParseMs);
       phaseAt = runtimeReadyAt;
 
+      /*
+       * THE GATE AND THE MESHES MUST DESCRIBE THE SAME POLICY.
+       *
+       * `AUTHORED_VEGETATION_CASTS_SHADOWS` is the MODULE DEFAULT;
+       * `createCustomsAuthoredVegetationRuntime()` accepts a `shadowPolicy` override that the
+       * renderer's repack gate would never see. If the two ever diverge, lod-0 buckets become
+       * casters whose `count` and `visible` change on every 4 m repack while the gate stays false —
+       * a per-camera stale shadow with a source comment asserting it cannot happen. So the effective
+       * policy is read off the constructed runtime and the repack gate is driven by THAT, with the
+       * disagreement made loud rather than left silent.
+       */
+      const effectiveVegetationShadowMode = runtime.status.shadowPolicy?.mode ?? null;
+      if (effectiveVegetationShadowMode === null) {
+        throw new Error('the authored vegetation runtime published no shadowPolicy.mode; the repack'
+          + ' shadow gate has nothing to read and would silently default to "does not cast"');
+      }
+      authoredVegetationCastsShadows = effectiveVegetationShadowMode !== 'disabled';
+      if (authoredVegetationCastsShadows !== AUTHORED_VEGETATION_CASTS_SHADOWS) {
+        console.warn(`[three-poc] the authored vegetation runtime's shadow policy is`
+          + ` "${effectiveVegetationShadowMode}", not the module default`
+          + ` "${CUSTOMS_AUTHORED_VEGETATION_SHADOW_POLICY.mode}". The repack invalidation follows the`
+          + ' RUNTIME, which is the one the meshes were built from.');
+      }
       // Single swap. Everything above this line is reversible by doing nothing.
       authoredVegetationRuntime = runtime;
       authoredVegetationArrays = arrays;
@@ -4122,6 +4738,11 @@ export async function createView3d(container, mapData, src) {
       );
       repackAuthoredVegetation('mount');
       applyNature();
+      // Declared HERE as well as inside `rebuildProceduralVegetation`, because this line is the
+      // swap: 93 authored buckets entered the scene and the procedural proxies left it in the same
+      // synchronous block. Naming the moment separately is what makes the mount a searchable
+      // invalidation rather than one that happens to be covered by a callee.
+      sunShadow.invalidate('authored-vegetation-mount');
       invalidateRender(2);
       stamp('swapMs');
     } catch (error) {
@@ -4163,6 +4784,10 @@ export async function createView3d(container, mapData, src) {
       progress.fraction = settled.fraction;
       progress.timings.totalMs = progress.elapsedMs;
       progress.phase = timeoutFailure ? 'timed-out' : (vegetationStatus.mode === 'authored' ? 'mounted' : 'failed');
+      // The phase the whole baseline hangs on. Every measurement ever recorded in this repo was
+      // taken while this was still open — `.e2e/report.json` says `mount loading` beside its 1,397
+      // draw calls — so it is in the waterfall and in the report header both.
+      wfEnd('vegetationMount');
       // The mount has settled one way or the other — swapped in, failed, or timed out. This is the
       // transition a reviewer is watching for, and the one moment where a stale readout would
       // paint a verdict that is already wrong. Repaint now; the 400 ms timer is the floor.
@@ -4185,6 +4810,11 @@ export async function createView3d(container, mapData, src) {
     treeGroup.userData = exactVegetationGroupUserData(nextPlan);
     addExactVegetationMeshes(nextPlan, treeGroup);
     applyProceduralSuppression();
+    // THE BUG THIS WHOLE CHANGE IS ABOUT. `exact-pine-trunks`, both pine crown layers,
+    // `exact-deciduous-trunks`, `exact-deciduous-crowns` and `exact-stumps` are `castShadow: true`,
+    // and this function has just disposed every one of them and rebuilt a smaller set. A depth map
+    // baked before this call draws the shadows of trees that no longer exist.
+    sunShadow.invalidate('procedural-vegetation');
     invalidateRender();
   }
 
@@ -4414,6 +5044,10 @@ export async function createView3d(container, mapData, src) {
     controls.maxDistance = distanceForZoom(viewState.minZoom ?? -2);
     writeControlledPose(pose);
     updateAuthoredAssetsForTarget();
+    // The marker ladder is a function of the camera, so it is folded in HERE — before the frame is
+    // invalidated — rather than waiting for main.js to call back. A zoom that crosses a tier
+    // boundary must not be able to paint one frame at the old tier.
+    noteCameraZoom(viewState.zoom);
     invalidateRender();
     if (notify) src.onViewChange?.({ ...viewState });
     return { ...viewState };
@@ -4434,6 +5068,7 @@ export async function createView3d(container, mapData, src) {
     // HUD / hidden-2D notification, so all four surfaces describe the camera on the canvas.
     if (reconciled.corrected) writeControlledPose(reconciled.pose);
     updateAuthoredAssetsForTarget();
+    noteCameraZoom(viewState.zoom);
     invalidateRender();
     if (!controlNotify) controlNotify = requestAnimationFrame(() => {
       controlNotify = 0;
@@ -4454,9 +5089,14 @@ export async function createView3d(container, mapData, src) {
     // `wallStructureGroup` joins the pick list for its GATES only: nothing else under it carries a
     // `userData.label`, and `visibleInteractionData` returns null without one, so hovering a fence
     // panel stays silent while a gate can say out loud that its placement was inferred.
+    // Timed only when a profiler exists: this runs on EVERY pointermove, unthrottled, recursively
+    // over five subtrees, so it is main-thread cost that never appears inside a rendered frame and
+    // a per-frame average of it would be a category error. One branch when off.
+    const raycastAt = frameProfiler ? performance.now() : 0;
     const interaction = raycaster.intersectObjects([buildingGroup, propGroup, wallStructureGroup, authoredRoot, dynamicRoot].filter(Boolean), true)
       .map((hit) => ({ hit, user: visibleInteractionData(hit.object) }))
       .find((candidate) => candidate.user);
+    if (frameProfiler) frameProfiler.event('raycast', performance.now() - raycastAt);
     const user = interaction?.user;
     hoverChip.hidden = !user?.label;
     renderer.domElement.style.cursor = user?.label ? 'help' : '';
@@ -4470,6 +5110,1092 @@ export async function createView3d(container, mapData, src) {
     hoverChip.hidden = true;
     renderer.domElement.style.cursor = '';
   });
+
+  /**
+   * The frame, exactly as it was before this file gained a profiler. Four calls, in order.
+   *
+   * `animate()` calls this OR `frameProfiler.renderProfiled()`, never both and never a mixture, so
+   * the shipped path carries no timing statement at all. Kept as its own function purely so the two
+   * arms of that branch can be read side by side and pinned by a source test.
+   */
+  function renderOneFrame() {
+    controls.update();
+    updateUnderstoryLod();
+    updateOverlayPositions();
+    renderer.render(scene, camera);
+  }
+
+  /* --------------------------------------------------------------- render profiler -- */
+
+  /**
+   * The instrument. Built only when `?profile=` asked for it; `null` otherwise, and the whole
+   * on-path cost of it existing is the single `if (frameProfiler)` in `animate()`.
+   *
+   * WHAT IT FORCES, AND WHY THAT IS THE POINT. This app renders on demand — `animate()` returns
+   * early unless something invalidated the frame — so `fps` measures how often the app CHOSE to
+   * submit, not how long a frame takes. A run therefore holds `renderRequested` true for its
+   * duration and renders continuously. The numbers it produces are the COST OF A FRAME. They are
+   * deliberately not a statement about the app's idle behaviour, and the report says so.
+   */
+  function createRenderProfiler() {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    /** How long one GPU timestamp resolve may hang before the channel is declared unusable. */
+    const GPU_RESOLVE_STALL_MS = 3000;
+    let running = false;
+    let collector = null;
+    let overlayVariant = 'interleaved';
+    let overlayProbe = null;
+    let busyMs = 0;
+    let pendingFrames = null;
+
+    // GPU timing. three resolves its timestamp pool asynchronously and, on a disjoint or an
+    // in-flight resolve, RETURNS THE PREVIOUS VALUE rather than nothing (WebGLTimestampQueryPool.js
+    // :187-190, :329-334). That is the failure shape handoff §7 is about, so every resolve is
+    // counted, every accepted sample is compared with the one before it, and both counts ship in
+    // the report beside the milliseconds. `renderer.hasFeature('timestamp-query')` is three's own
+    // mapping of `EXT_disjoint_timer_query_webgl2` on the WebGL2 backend and of
+    // `GPUFeatureName.TimestampQuery` on WebGPU (webgl-fallback/utils/WebGLConstants.js:10).
+    const gpu = {
+      requested: profileRequest.armed,
+      supported: false,
+      method: null,
+      reason: null,
+      inFlight: false,
+      resolveStartedAt: null,
+      resolveCalls: 0,
+      lastValue: null,
+      adjacentDuplicates: 0,
+    };
+    try {
+      gpu.supported = profileRequest.armed && renderer.hasFeature?.('timestamp-query') === true;
+      if (gpu.supported) {
+        gpu.method = status.backend === 'webgpu'
+          ? 'three TimestampQueryPool → WebGPU GPUFeatureName.TimestampQuery'
+          : 'three TimestampQueryPool → EXT_disjoint_timer_query_webgl2';
+      } else {
+        gpu.reason = profileRequest.armed
+          ? `the ${status.backend} backend does not expose a timestamp query on this machine`
+          : 'profiling was not armed at renderer construction';
+      }
+    } catch (error) {
+      gpu.supported = false;
+      gpu.reason = `timestamp-query feature check threw: ${String(error?.message ?? error)}`;
+    }
+    // What the feature check said at boot, kept separately from `gpu.supported`, which the stall
+    // guard can flip to false mid-run.
+    gpu.supportedAtBoot = gpu.supported;
+    /*
+     * Independently: is the backend's own extension handle there? Recorded, never substituted —
+     * a `true` here with `supported: false` would say three declined a timer the browser has.
+     *
+     * `null` on WebGPU, and that is the whole point of the ternary. `renderer.backend.disjoint` is
+     * a WebGLBackend field (`WebGLBackend.js:160`); the WebGPU backend has no such property, so
+     * `Boolean(undefined)` reported a confident `false` — "the disjoint extension is not present" —
+     * about a backend where the extension is not a thing that could be present. That is an
+     * assertion, not a measurement, in a field a reader would use to explain a missing timer.
+     */
+    const disjointExtensionPresent = status.backend === 'webgpu'
+      ? null
+      : Boolean(renderer.backend?.disjoint);
+
+    const measure = (name, start, end) => {
+      try { performance.measure(`tz:${name}`, { start, end }); } catch { /* buffer full or unsupported */ }
+    };
+    const busy = (ms) => { const until = performance.now() + ms; while (performance.now() < until) { /* deliberate */ } };
+
+    /**
+     * One profiled frame: the same four calls `renderOneFrame()` makes, in the same order, with a
+     * `performance.now()` on each side and a `performance.measure()` so a DevTools trace taken at
+     * the same time is annotated with the same phases this report names.
+     */
+    function renderProfiled() {
+      const t0 = performance.now();
+      controls.update();
+      const t1 = performance.now();
+      updateUnderstoryLod();
+      const t2 = performance.now();
+      if (overlayVariant === 'batched') updateOverlayPositionsBatched();
+      else updateOverlayPositions();
+      // The self-test injection point. Declared cost, in the overlay pass, recorded in the report.
+      if (busyMs) busy(busyMs);
+      const t3 = performance.now();
+      renderer.render(scene, camera);
+      const t4 = performance.now();
+
+      measure('frame', t0, t4);
+      measure('controls', t0, t1);
+      measure('lod', t1, t2);
+      measure('overlay', t2, t3);
+      measure('render', t3, t4);
+
+      if (overlayProbe) overlayProbe[overlayVariant].push(t3 - t2);
+
+      if (collector) {
+        collector.ledger.beginFrame();
+        collector.ledger.record('controls', t1 - t0);
+        collector.ledger.record('lod', t2 - t1);
+        collector.ledger.record('overlay', t3 - t2);
+        collector.ledger.record('render', t4 - t3);
+        collector.ledger.endFrame(t4 - t0);
+        const heap = performance.memory?.usedJSHeapSize;
+        if (heap !== undefined) collector.heap.push(heap);
+      }
+
+      /*
+       * Resolve GPU timestamps ONLY inside a sampling window, and only one at a time.
+       *
+       * three's WebGL pool resolves by polling `QUERY_RESULT_AVAILABLE` on a 1 ms `setTimeout`
+       * (WebGLTimestampQueryPool.js:318-322). Firing one of those on every frame from page load —
+       * through a 60-85 s vegetation mount — floods the timer queue with pending polls on any
+       * backend whose queries do not complete promptly, and starves the very rAF loop being
+       * measured. Samples are only wanted from the measured window anyway.
+       *
+       * The stall guard is the other half: a backend that never completes a resolve gets the GPU
+       * channel switched OFF with a stated reason, rather than being allowed to hold `inFlight`
+       * forever and silently produce a run with zero GPU samples and no explanation.
+       */
+      if (collector && gpu.supported && !gpu.inFlight) {
+        gpu.inFlight = true;
+        gpu.resolveStartedAt = t4;
+        gpu.resolveCalls += 1;
+        renderer.resolveTimestampsAsync('render').then((ms) => {
+          gpu.inFlight = false;
+          if (!Number.isFinite(ms)) return;
+          if (gpu.lastValue !== null && ms === gpu.lastValue) gpu.adjacentDuplicates += 1;
+          gpu.lastValue = ms;
+          if (collector) collector.gpu.push(ms);
+        }, () => { gpu.inFlight = false; });
+      } else if (gpu.inFlight && gpu.resolveStartedAt !== null && t4 - gpu.resolveStartedAt > GPU_RESOLVE_STALL_MS) {
+        gpu.supported = false;
+        gpu.reason = `the ${status.backend} backend did not complete a timestamp resolve within ${GPU_RESOLVE_STALL_MS} ms; the GPU channel was switched off mid-run rather than left to report nothing without saying why`;
+      }
+
+      if (pendingFrames) {
+        pendingFrames.seen += 1;
+        if (pendingFrames.seen >= pendingFrames.need) { const done = pendingFrames.resolve; pendingFrames = null; done(); }
+        else pendingFrames.bump();
+      }
+      // Hold the render-on-demand gate open for the duration of the run. Restored by `stop()`.
+      if (running) renderRequested = true;
+    }
+
+    /*
+     * Wait for N RENDERED frames — with a deadline, because the founder gets one shot at this.
+     *
+     * `animate()` stops doing anything at all when the tab is hidden or when the 2D map takes the
+     * viewport, and a run that hit either would otherwise wait forever with the button greyed out
+     * and no explanation. A rejection that names the cause is the difference between "the profiler
+     * is broken" and "come back to the tab".
+     *
+     * It watches the GAP BETWEEN frames, not the total, and the gap timer is reset by every frame
+     * that arrives. A total-time budget would have been a budget on frame time — a false alarm
+     * against the one thing this instrument exists to measure, and one that fires on exactly the
+     * slow hardware a baseline is most worth taking on. Headless Chromium on SwiftShader renders
+     * this scene at ~6 s a frame and must not trip it; a tab that stopped rendering must.
+     */
+    const framesElapsed = (need, stallMs = 25_000) => (need <= 0
+      ? Promise.resolve()
+      : new Promise((resolve, reject) => {
+        const record = { need, seen: 0, resolve: null, bump: null };
+        let timer = 0;
+        const fail = () => {
+          if (pendingFrames === record) pendingFrames = null;
+          reject(new Error(`no frame rendered for ${stallMs} ms (${record.seen}/${need} done); the 3D view must stay visible and in front for the whole run`));
+        };
+        const arm = () => { clearTimeout(timer); timer = setTimeout(fail, stallMs); };
+        record.bump = arm;
+        record.resolve = () => { clearTimeout(timer); resolve(); };
+        arm();
+        pendingFrames = record;
+      }));
+
+    function event(name, ms) { collector?.events.record(name, ms); }
+
+    /* ---------------------------------------------------------------- the ablations -- */
+
+    /**
+     * Switch a named piece of the frame OFF for the duration of a run, and be able to prove it
+     * stayed off.
+     *
+     * The reasoning for the three targets and for the two classes they fall into is in
+     * `src/render-profiler.js` beside `ABLATION_TARGETS`. This is the half that touches the scene.
+     *
+     * WHAT IT REFUSES TO ASSUME. A group that does not exist in this build is recorded as
+     * `found: false` and NOTHING IS ABLATED — never as a silent success, which would produce a run
+     * that reads as "props cost nothing". And `applyNature()` writes `rockGroup.visible` from the
+     * nature toggles; if it fired mid-run it would quietly restore what this switched off, so every
+     * target is re-checked at the end of every preset and the answers ship in the report. A run
+     * whose ablation did not hold gets a note saying so at the top, because its numbers describe
+     * neither arm.
+     *
+     * The shadow target needs one frame of arming. `ShadowNode.updateBefore()` re-renders the depth
+     * map whenever `needsUpdate || autoUpdate` (three 0.185.1, `ShadowNode.js:855`), so the sequence
+     * is: force one update, let one frame render it, then clear BOTH flags. From then on the
+     * lighting samples a depth texture nothing rewrites. The shadow camera is a fixed ortho frustum
+     * aimed at the map centre and does not follow the view, so one render is valid at every preset.
+     *
+     * SINCE 2026-09-03 `autoUpdate` IS ALREADY FALSE on a default load — the freeze shipped
+     * (docs/PROFILING.md §3c). This target therefore removes nothing on a default load and the A/B
+     * will say it attributes nothing, correctly. `?shadows=live` is the arm on which it still has
+     * something to take away, and it is how the probe is re-proved after that change. The one thing
+     * this must NOT do is undo the shipped state on restore, which is why the restorer replays
+     * `before.autoUpdate` rather than assuming `true`.
+     */
+    function applyAblation(ablation) {
+      const restorers = [];
+      const applied = [];
+      const checks = [];
+      for (const target of ablation?.targets ?? []) {
+        if (target === 'shadow') {
+          const wasAlreadyFrozen = sunShadow.live === false;
+          const before = { autoUpdate: sun.shadow.autoUpdate };
+          const bakesAtArm = sunShadow.sequence;
+          restorers.push(() => { sunShadow.setLive(before.autoUpdate); sunShadow.invalidate('profiler-ablation'); });
+          applied.push({
+            target,
+            // A NULL EXPERIMENT IS NOT AN APPLIED ONE. Since the freeze shipped, `autoUpdate` is
+            // already false on a default load: arm A and arm B are then both frozen, the A/B
+            // compares frozen with frozen, and the report would say "attributed 0.0 ms" for a run in
+            // which nothing was ablated. `runSeries` refuses on this flag; it is recorded here as
+            // well so a report that somehow gets written still carries the reason.
+            found: !wasAlreadyFrozen,
+            wasAlreadyFrozen,
+            note: wasAlreadyFrozen
+              ? 'sun.shadow.autoUpdate was ALREADY false (the freeze is the shipped default) — NOTHING WAS ABLATED'
+                + ' and this run compares frozen with frozen. Reload with ?shadows=live&profileAblate=shadow.'
+              : 'sun.shadow.autoUpdate was true; the depth map is rendered once more, then frozen',
+          });
+          // A FLAG CANNOT DETECT THE EVENT. `autoUpdate === false` is true in both arms on a frozen
+          // build, so the old check passed while the comparison was vacuous; and on a live build a
+          // real invalidation firing mid-run silently re-bakes the "frozen" arm with the check still
+          // green. `sequence` is a counter, and a counter cannot be missed by a slow sampler — the
+          // same reasoning `createShadowCasterAudit` is built on.
+          checks.push(() => {
+            const bakesDuringRun = sunShadow.sequence - bakesAtArm;
+            return {
+              target,
+              held: sun.shadow.autoUpdate === false && bakesDuringRun === 0 && !wasAlreadyFrozen,
+              autoUpdate: sun.shadow.autoUpdate,
+              bakesDuringRun,
+              wasAlreadyFrozen,
+              note: wasAlreadyFrozen
+                ? 'never applied — the depth map was already frozen before this run'
+                : (bakesDuringRun > 0
+                  ? `${bakesDuringRun} invalidation(s) re-baked the map inside the run; the arm was not frozen throughout`
+                  : undefined),
+            };
+          });
+          continue;
+        }
+        const group = target === 'props' ? propGroup : (target === 'rocks' ? rockGroup : null);
+        if (!group) {
+          // Stated, not swallowed. A missing group is the one way this could report "free".
+          applied.push({ target, found: false, note: `no ${target} group exists in this build — NOTHING WAS ABLATED for this target and its cost is NOT what this run measured` });
+          checks.push(() => ({ target, held: false, note: 'never applied' }));
+          continue;
+        }
+        const before = group.visible;
+        group.visible = false;
+        /*
+         * BOTH EDGES INVALIDATE. `propGroup` and `rockGroup` are caster groups (`mesh.castShadow =
+         * mesh.receiveShadow = true` where they are built), and since the freeze shipped the depth
+         * map does not re-render on its own. Without these two calls `?profileAblate=props` on a
+         * default load draws prop shadows on ground with no props — the literal stale-shadow
+         * signature, manufactured by the instrument built to measure the freeze — and the restored
+         * arm then draws props against a depth map baked while they were hidden. It is also
+         * reachable in production: `?profile=1` is deliberately not behind
+         * `canShowDiagnosticReadouts()` (evening handoff §5.5).
+         */
+        sunShadow.invalidate('profiler-ablation');
+        restorers.push(() => {
+          group.visible = before;
+          sunShadow.invalidate('profiler-ablation');
+          invalidateRender();
+        });
+        applied.push({ target, found: true, note: `${group.name}.visible set false (was ${before}); the depth map is invalidated on both edges` });
+        checks.push(() => ({ target, held: group.visible === false }));
+      }
+      return {
+        applied: Object.freeze(applied.map(Object.freeze)),
+        verify: () => checks.map((check) => check()),
+        restore: () => { for (const restore of restorers) restore(); },
+      };
+    }
+
+    /**
+     * The one frame of arming the shadow target needs. Separated so `applyAblation` stays sync.
+     *
+     * IT GOES THROUGH THE CONTROLLER, and the settle is conditional. Writing
+     * `sun.shadow.needsUpdate = false` here unconditionally discards any invalidation the app
+     * declared inside the awaited frame — and the discard is silent AND self-certifying: the audit
+     * sees `controller.sequence` has moved, re-baselines, and files the post-mutation fingerprint as
+     * `baked`. `settle()` refuses when the sequence moved, so a bake the app asked for survives the
+     * instrument that was measuring it. The window is the one that matters: the authored-vegetation
+     * swap lands 60-85 s in, and a profiler run is longer than that.
+     */
+    async function armAblation(ablation) {
+      const state = applyAblation(ablation);
+      if (ablation?.targets?.includes('shadow')) {
+        sunShadow.setLive(true);
+        sunShadow.invalidate('profiler-ablation');
+        const atSequence = sunShadow.sequence;
+        await framesElapsed(1);
+        sunShadow.setLive(false);
+        if (!sunShadow.settle(atSequence)) {
+          // Not a failure — the app legitimately wants another bake. Say so rather than dropping it.
+          console.warn('[three-poc] a shadow invalidation landed while the ablation was arming;'
+            + ' the bake it asked for was KEPT and this arm starts one frame later than planned');
+        }
+      }
+      return state;
+    }
+
+    /**
+     * TWO QUESTIONS, TWO NAMED VERDICTS — and one rAF tick per arm.
+     *
+     * This is the probe that returned the founder's `identical` **true, false, true, false**, and
+     * that result was an artefact of the probe, not a reading of the scene. Two independent defects,
+     * both fixed here, and both worth writing down because they are the same shape as everything
+     * else in handoff §7 — an instrument reporting a verdict having measured something other than
+     * what its labels say.
+     *
+     *  1. THE ARM CALLED `live` WAS NOT LIVE. It was captured with whatever `sun.shadow.autoUpdate`
+     *     the page happened to have, and since the freeze shipped that is `false`. So the comparison
+     *     was never live-vs-frozen: it was "the depth map that happens to be resident right now"
+     *     against "a map baked two renders ago". Under those labels `identical === false` reads as
+     *     "the optimisation is unsound", when what it actually detected is THE RESIDENT MAP WAS
+     *     STALE AT THAT MOMENT — the P1 defect signal, correctly seen and wrongly named.
+     *
+     *  2. EVERY ARM SHARED ONE `nodeFrame.frameId`. All five renders ran in one synchronous task,
+     *     and `ShadowNode.updateBefore()` (three 0.185.1, ShadowNode.js:859-866) forces
+     *     `needsUpdate = false` whenever it has already handled this camera on this frame id — which
+     *     three advances only from its own `Animation` loop, once per rAF tick. So which arms could
+     *     bake at all depended on whether `animate()` had rendered in the same tick: nondeterministic,
+     *     and enough on its own to alternate a verdict across repeated runs.
+     *
+     * So each arm now gets its own tick via `framesElapsed(1)`, the live arm is FORCED rather than
+     * inherited, and the two questions are reported separately under names that say which is which:
+     *
+     *   `residentMapWasCurrent`  the frame the page was already showing vs a fresh bake of the same
+     *                            pose. FALSE MEANS A STALE SHADOW WAS ON SCREEN. This is the P1
+     *                            defect check and it is meaningful on the shipped default load.
+     *   `freezeIsPixelFree`      three's per-frame shadow vs the frozen map. This is the original
+     *                            hypothesis, and it only means anything on `?shadows=live`, where
+     *                            there is a real live arm to compare against.
+     *
+     * TWO CONTROLS, BOTH FIRST, both able to void the run:
+     *   - NULL — two consecutive renders with nothing changed at all must hash EQUAL. If they do
+     *     not, the scene is not static (a streaming attach, an LOD repack) and every difference
+     *     below is unattributable. This is the control the old probe lacked, and its absence is the
+     *     most likely mechanical cause of an intermittent `false`.
+     *   - READBACK — a camera nudge must hash DIFFERENTLY, or `toDataURL` is returning something
+     *     constant and an "identical" here would prove nothing.
+     */
+    async function shadowPixelCheck() {
+      const canvas = renderer.domElement;
+      const hash = (text) => {
+        if (typeof text !== 'string' || text.length < 64) return null;
+        let h = 0x811c9dc5;
+        for (let i = 0; i < text.length; i += 1) {
+          h ^= text.charCodeAt(i);
+          h = Math.imul(h, 0x01000193) >>> 0;
+        }
+        return `${h.toString(16).padStart(8, '0')}:${text.length}`;
+      };
+      /*
+       * One arm = one rAF tick.
+       *
+       * three advances `nodeFrame.frameId` only from its own `Animation` loop (once per rAF), and
+       * `ShadowNode.updateBefore()` refuses to bake twice for one camera on one frame id. So a tick
+       * boundary is what makes an arm's shadow state real rather than inherited — which is defect
+       * (2) above, and it is why every arm awaits.
+       *
+       * `invalidateRender()` first because this app renders ON DEMAND: with no run in flight
+       * `animate()` returns early, no frame is produced, and `framesElapsed` would sit until its
+       * 25 s stall deadline and reject. The awaited frame is the app's own profiled frame — the one
+       * that consumes `needsUpdate` and bakes; the `render()` below re-reads that same map into the
+       * canvas for the hash (the frame-id guard means it cannot bake a second time).
+       */
+      const snap = async () => {
+        invalidateRender();
+        await framesElapsed(1);
+        renderer.render(scene, camera);
+        try { return hash(canvas.toDataURL('image/png')); } catch { return null; }
+      };
+      // Read through the controller as well as written through it: `sunShadow.live` and
+      // `sun.shadow.autoUpdate` are the same bit, and having ONE name for it is what stops a report
+      // describing a state the controller did not choose.
+      const wasLive = sunShadow.live;
+      const entryMode = wasLive ? 'live' : 'frozen';
+      const method = 'canvas.toDataURL("image/png") hashed FNV-1a 32 + byte length, one requestAnimationFrame tick per arm; equal hashes are a whole-canvas pixel equality';
+      try {
+        controls.update();
+
+        // ── CONTROL 1 (null): nothing changes between these two.
+        const still1 = await snap();
+        const still2 = await snap();
+
+        // ── CONTROL 2 (readback): a nudge must move the hash.
+        const held = camera.position.clone();
+        camera.position.x += 0.35;
+        camera.updateMatrixWorld(true);
+        const nudged = await snap();
+        camera.position.copy(held);
+        camera.updateMatrixWorld(true);
+
+        // ── ARM: the map the page was already showing, re-rendered with no invalidation.
+        const atEntry = await snap();
+
+        // ── ARM: a FORCED live frame. `setLive(true)` plus a declared invalidation, then a whole
+        //    tick, so three really does re-render the depth map before this is read.
+        sunShadow.setLive(true);
+        sunShadow.invalidate('profiler-ablation');
+        const liveFrame = await snap();
+
+        // ── ARM: frozen against that fresh bake.
+        sunShadow.setLive(false);
+        const freshBake = await snap();
+
+        const readback = [still1, still2, nudged, atEntry, liveFrame, freshBake].every((h) => h !== null);
+        if (!readback) {
+          return Object.freeze({
+            ok: false, method, entryMode,
+            reason: 'the canvas could not be read back (toDataURL returned nothing usable on this backend); nothing was compared',
+            hashes: { still1, still2, nudged, atEntry, liveFrame, freshBake },
+          });
+        }
+        const controls_ = Object.freeze({
+          sceneIsStatic: still1 === still2,
+          readbackDiscriminates: nudged !== still1,
+          note: 'sceneIsStatic: two renders with NOTHING changed must hash equal, or the scene is mutating'
+            + ' under the probe and no difference below is attributable to the shadow policy.'
+            + ' readbackDiscriminates: a 0.35-unit camera nudge must hash differently, or the readback'
+            + ' cannot see a changed frame and an "identical" would prove nothing.',
+        });
+        const ok = controls_.sceneIsStatic && controls_.readbackDiscriminates;
+        const residentMapWasCurrent = ok ? (atEntry === freshBake) : null;
+        const freezeIsPixelFree = ok ? (liveFrame === freshBake) : null;
+        return Object.freeze({
+          ok,
+          method,
+          entryMode,
+          control: controls_,
+          hashes: Object.freeze({ still1, still2, nudged, atEntry, liveFrame, freshBake }),
+          residentMapWasCurrent,
+          freezeIsPixelFree,
+          verdict: !ok
+            ? (controls_.sceneIsStatic
+              ? 'VOID — the canvas readback did not change when the camera moved, so nothing here is a measurement'
+              : 'VOID — two renders with nothing changed hashed DIFFERENTLY: the scene is mutating under the probe'
+                + ' (a streaming attach or an LOD repack), so no difference below can be attributed to the shadow')
+            : `${residentMapWasCurrent
+              ? 'the depth map resident on entry was CURRENT — the frame on screen was not stale'
+              : 'THE DEPTH MAP RESIDENT ON ENTRY WAS STALE — the frame on screen differed from a fresh bake of the same pose'
+              }; ${freezeIsPixelFree
+                ? 'and a frozen map is pixel-identical to a live one at this pose'
+                : 'and a frozen map DIFFERS from a live one at this pose'}`,
+          caveat: entryMode === 'frozen'
+            ? 'On a default (frozen) load `residentMapWasCurrent` is the P1 check and `freezeIsPixelFree` compares'
+              + ' a forced live frame against the bake that immediately follows it — a weaker control arm than'
+              + ' `?shadows=live` gives. One pose, one moment, either way.'
+            : 'On ?shadows=live both verdicts are meaningful, but this is still one pose at one moment.',
+        });
+      } finally {
+        sunShadow.setLive(wasLive);
+        sunShadow.invalidate('profiler-ablation');
+        invalidateRender();
+      }
+    }
+
+    /* ------------------------------------------------------------ what was measured -- */
+
+    /**
+     * The GPU string, from whichever source this backend has.
+     *
+     * On the WebGL2 backend `WEBGL_debug_renderer_info` is on the live context. On WebGPU there is
+     * no WebGL context to ask, so a throwaway 1x1 WebGL2 context is created purely to read the same
+     * two strings — it names the same adapter and costs one context that is immediately lost. The
+     * WebGPU adapter's own `info` is recorded beside it when it is reachable, never instead of it.
+     */
+    function describeGpu() {
+      const out = { gpuVendor: null, gpuRenderer: null, gpuSource: null, adapterInfo: null };
+      const readFrom = (gl, source) => {
+        if (!gl || out.gpuRenderer) return;
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        if (!ext) return;
+        out.gpuVendor = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) ?? null;
+        out.gpuRenderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? null;
+        out.gpuSource = source;
+      };
+      try { readFrom(renderer.backend?.gl, 'live WebGL2 context'); } catch { /* not a WebGL backend */ }
+      if (!out.gpuRenderer) {
+        try {
+          const probe = document.createElement('canvas');
+          readFrom(probe.getContext('webgl2') ?? probe.getContext('webgl'), 'throwaway WebGL2 probe context');
+        } catch { /* no WebGL at all */ }
+      }
+      try {
+        const info = renderer.backend?.adapter?.info ?? renderer.backend?.device?.adapterInfo ?? null;
+        if (info) out.adapterInfo = { vendor: info.vendor ?? null, architecture: info.architecture ?? null, device: info.device ?? null, description: info.description ?? null };
+      } catch { /* WebGPU adapter info not exposed */ }
+      // A run whose GPU is unnamed is still a run, but it must SAY it is unnamed rather than leave
+      // the field out and let a reader assume the machine was the one they had in mind.
+      out.gpuVendor = out.gpuVendor ?? 'unavailable';
+      out.gpuRenderer = out.gpuRenderer ?? 'unavailable';
+      return out;
+    }
+
+    /** Unique geometries, materials and textures actually hanging off the scene, with byte sizes. */
+    function walkSceneMemory() {
+      const geometries = new Set(), materials = new Set(), textures = new Map();
+      let attributeBytes = 0, indexBytes = 0;
+      for (const root of [scene]) {
+        root.traverse((object) => {
+          const geometry = object.geometry;
+          if (geometry && !geometries.has(geometry)) {
+            geometries.add(geometry);
+            for (const attribute of Object.values(geometry.attributes ?? {})) {
+              attributeBytes += attribute?.array?.byteLength ?? 0;
+            }
+            indexBytes += geometry.index?.array?.byteLength ?? 0;
+          }
+          const list = Array.isArray(object.material) ? object.material : (object.material ? [object.material] : []);
+          for (const material of list) {
+            if (!material || materials.has(material)) continue;
+            materials.add(material);
+            for (const value of Object.values(material)) {
+              if (value && value.isTexture && !textures.has(value)) textures.set(value, value);
+            }
+          }
+        });
+      }
+      let textureBytes = 0, compressedTextures = 0;
+      for (const texture of textures.values()) {
+        const image = texture.image ?? {};
+        const width = image.width ?? 0, height = image.height ?? 0, depth = image.depth ?? 1;
+        if (texture.isCompressedTexture) compressedTextures += 1;
+        const base = width * height * Math.max(1, depth) * 4;
+        textureBytes += texture.generateMipmaps ? Math.round(base * 1.3333) : base;
+      }
+      return summarizeGpuMemory({
+        geometries: renderer.info?.memory?.geometries ?? null,
+        textures: renderer.info?.memory?.textures ?? null,
+        attributeBytes, indexBytes, textureBytes, compressedTextures,
+      });
+    }
+
+    function snapshotRenderInfo() {
+      const frame = describeRenderFrame(renderFrameLatch, renderer.info, performance.now());
+      return {
+        drawCalls: frame.drawCalls,
+        triangles: frame.triangles,
+        // `renderer.render()` invocations inside the LAST rAF tick — three resets it per tick, and
+        // the nested `renderer.render(scene, shadow.camera)` a shadow update makes counts as one.
+        // So 2 means the shadow map was re-rendered on that frame and 1 means it was not: the
+        // crispest single check that the `shadow` ablation actually took effect.
+        frameCalls: renderFrameLatch.frameCalls,
+        drawCallsSource: frame.drawCallsSource,
+        drawCallsAgeMs: frame.drawCallsAgeMs,
+        renderedFrames: frame.renderedFrames,
+        // renderer.info.memory — RESIDENT objects, not drawn ones. Named accordingly.
+        residentGeometries: renderer.info?.memory?.geometries ?? null,
+        residentTextures: renderer.info?.memory?.textures ?? null,
+        programs: renderer.info?.memory?.programs ?? null,
+        programsSize: renderer.info?.memory?.programsSize ?? null,
+      };
+    }
+
+    /* ------------------------------------------------------------------- the presets -- */
+
+    const zoomOffset = zoomOffsetFor(mapData);
+    function resolvePreset(preset) {
+      if (preset.fit) {
+        const view = src.fitView?.();
+        if (!view) return { error: 'this build supplies no fitView(); the cover-fit preset cannot be resolved and is NOT substituted' };
+        return { view };
+      }
+      return {
+        view: {
+          target: [-preset.x, -preset.z, 0],
+          zoom: preset.zoom2d - zoomOffset,
+          rotationX: preset.rotationX ?? CAM.rotationX,
+          rotationOrbit: preset.rotationOrbit ?? CAM.rotationOrbit,
+        },
+      };
+    }
+
+    /* ------------------------------------------------------------------------- the run -- */
+
+    async function runPreset(preset, options) {
+      const resolved = resolvePreset(preset);
+      if (resolved.error) return buildPresetResult({ name: preset.name, hash: preset.hash ?? null, note: preset.note ?? null, error: resolved.error });
+
+      // Applied with `notify: true`, so main.js's HUD, permalink and — critically — the label-tier
+      // sync run for this pose. A preset applied without notifying would be measured against an
+      // overlay built for the previous camera.
+      const applied = applyView(resolved.view, true);
+      // Long enough for main.js's `refresh()` and the 4 m-epsilon vegetation repack (one rAF) to
+      // have landed, so the warm-up frames are warming up a settled scene rather than paying for it.
+      await sleep(options.settleMs ?? 500);
+
+      collector = null;
+      await framesElapsed(options.warmupFrames);
+
+      collector = { ledger: createPhaseLedger(), events: createEventLedger(), gpu: [], heap: [] };
+      // Snapshotted per preset: the GPU counters accumulate for the life of the run, and a health
+      // figure that carried the previous preset's resolves would describe the wrong window.
+      const gpuAtStart = { resolveCalls: gpu.resolveCalls, adjacentDuplicates: gpu.adjacentDuplicates };
+      const windowStart = performance.now();
+      await framesElapsed(options.sampleFrames);
+      const windowMs = performance.now() - windowStart;
+      const sampled = collector;
+      collector = null;
+
+      // Did what was switched off STAY off for this preset's window? `applyNature()` writes
+      // `rockGroup.visible` and would silently undo an ablation; asking after the fact is the only
+      // way to know, and the answer ships whether or not it is the one that was hoped for.
+      if (activeAblation) {
+        for (const check of activeAblation.verify()) ablationChecks.push({ preset: preset.name, ...check });
+      }
+
+      const overlayItemsSeen = overlayItems.length;
+      const visibleItems = visibleOverlayCount();
+
+      // The reflow probe: a SEPARATE pass, so its batched frames never enter the numbers above.
+      let overlayReflow = null;
+      if (options.reflowFrames > 0) {
+        overlayProbe = { interleaved: [], batched: [] };
+        for (let i = 0; i < options.reflowFrames; i += 1) {
+          overlayVariant = 'interleaved';
+          await framesElapsed(1);
+          overlayVariant = 'batched';
+          await framesElapsed(1);
+        }
+        overlayVariant = 'interleaved';
+        overlayReflow = summarizeOverlayReflow({ ...overlayProbe, visibleItems });
+        overlayProbe = null;
+      }
+
+      return buildPresetResult({
+        name: preset.name,
+        hash: preset.hash ?? null,
+        note: preset.note ?? null,
+        view: { ...applied, zoom2d: (applied.zoom ?? 0) + zoomOffset },
+        warmupFrames: options.warmupFrames,
+        phaseSummary: sampled.ledger.summarize(),
+        events: sampled.events.summarize(windowMs),
+        windowMs,
+        overlayItems: overlayItemsSeen,
+        gpu: describeGpuTiming({
+          method: gpu.method,
+          available: gpu.supported,
+          reason: gpu.reason,
+          backend: status.backend,
+          values: sampled.gpu,
+          resolveCalls: gpu.resolveCalls - gpuAtStart.resolveCalls,
+          // NOT a count of zero — nothing here counts disjoints, and a `0` in a field named
+          // `disjointObserved` reads as proof that none occurred. `describeDisjointObservability`
+          // answers, per backend, whether the condition can be counted at all: WebGPU has no such
+          // flag, and on the WebGL2 fallback reading GPU_DISJOINT_EXT CLEARS it out from under
+          // three's own correctness check. The report gets `null` plus the reason.
+          disjoint: describeDisjointObservability(status.backend),
+          adjacentDuplicates: gpu.adjacentDuplicates - gpuAtStart.adjacentDuplicates,
+        }),
+        renderInfo: snapshotRenderInfo(),
+        memory: { heap: summarizeHeap(sampled.heap), gpuEstimate: walkSceneMemory() },
+        overlayReflow,
+      });
+    }
+
+    let lastReport = null;
+    let lastSeries = null;
+    let inFlight = null;
+    let onProgress = null;
+    /** The ablation in force for the run currently executing, and every held/not-held answer taken. */
+    let activeAblation = null;
+    let ablationChecks = [];
+    /** `'props,rocks'` or an already-parsed spec, both accepted. `null`/absent means no ablation. */
+    const asAblation = (value) => (typeof value === 'string' ? parseAblation(value) : (value ?? null));
+
+    async function run(overrides = {}) {
+      if (inFlight) return inFlight;
+      if (!document.body.classList.contains('view-3d')) {
+        throw new Error('the render profiler measures the 3D frame; switch to the 3D view first');
+      }
+      const options = {
+        warmupFrames: profileRequest.warmupFrames,
+        sampleFrames: profileRequest.sampleFrames,
+        reflowFrames: profileRequest.reflowFrames,
+        presets: profileRequest.presets,
+        settleMs: 500,
+        ...overrides,
+      };
+      inFlight = (async () => {
+        const restoreView = { ...viewState };
+        const selfTest = overrides.selfTest !== undefined ? overrides.selfTest : profileRequest.selfTest;
+        // `overrides.ablate` is how the A/B series alternates arms without reloading: arm A passes
+        // `null` even when the URL asked for one, so a single page load can produce both. A STRING
+        // is accepted and parsed — `tz.profile({ ablate: 'props' })` is what a hand types at a
+        // console, and making the caller import the parser to type it would be a trap.
+        const ablate = asAblation(overrides.ablate !== undefined ? overrides.ablate : profileRequest.ablate);
+        const culled = [];
+        ablationChecks = [];
+        running = true;
+        renderRequested = true;
+        try {
+          if (selfTest?.kind === 'busy') busyMs = selfTest.busyMs;
+          if (selfTest?.kind === 'nocull') {
+            for (const root of [worldRoot, authoredRoot, vegetationRoot, dynamicRoot]) {
+              root?.traverse((object) => {
+                if (object.frustumCulled) { culled.push(object); object.frustumCulled = false; }
+              });
+            }
+          }
+          /*
+           * A NULL EXPERIMENT MUST NOT PRODUCE A REPORT.
+           *
+           * `?profileAblate=shadow` on a default load has nothing to remove: the freeze IS the
+           * shipped behaviour, so arm A and arm B are both frozen, `heldThroughout` is true in both
+           * (the flag cannot tell the arms apart), and a fully-formed report comes out attributing
+           * ~0 ms to a pass that was never switched off. A reader who does not know why concludes
+           * the measured win was imaginary and reverts a change worth ~6 ms of frame time. So this
+           * refuses, and names the load that still discriminates.
+           */
+          if (ablate?.targets?.includes('shadow') && sunShadow.live === false) {
+            throw new Error('?profileAblate=shadow has nothing to remove on this load — the shipped'
+              + ' build already freezes the depth map (sun.shadow.autoUpdate is false). Reload with'
+              + ' ?shadows=live&profileAblate=shadow to measure the shadow pass.');
+          }
+          if (ablate?.kind === 'ablate') activeAblation = await armAblation(ablate);
+          const presets = PROFILE_PRESETS.filter((preset) => options.presets.includes(preset.name));
+          const results = [];
+          for (const preset of presets) {
+            onProgress?.(`${preset.name}: measuring`);
+            // eslint-disable-next-line no-await-in-loop -- presets are measured one at a time on purpose
+            results.push(await runPreset(preset, options));
+          }
+          const veg = authoredVegetationRenderStats();
+          const report = buildProfileReport({
+            at: new Date().toISOString(),
+            request: { ...profileRequest, presets: [...profileRequest.presets] },
+            build: {
+              href: location.href,
+              // In a production build this is the CONTENT-HASHED chunk name, so two reports can be
+              // told apart by the code that produced them rather than by when they were taken.
+              moduleUrl: import.meta.url,
+              threeVersion: THREE.REVISION,
+              renderer: 'three',
+              mode: import.meta.env?.DEV === true ? 'dev' : 'release',
+              gate: { ...rendererGate },
+              look, relief, fx: { ...fx },
+            },
+            environment: {
+              ...describeGpu(),
+              backend: status.backend,
+              forceWebGL,
+              viewportWidth: container.clientWidth,
+              viewportHeight: container.clientHeight,
+              windowInnerWidth: window.innerWidth,
+              windowInnerHeight: window.innerHeight,
+              devicePixelRatio: window.devicePixelRatio ?? null,
+              // The renderer CLAMPS the device ratio to 1.5 (`setPixelRatio` at construction), so a
+              // report that only recorded `window.devicePixelRatio` would overstate the pixels
+              // actually shaded on a 2x display by 78%.
+              rendererPixelRatio: renderer.getPixelRatio?.() ?? null,
+              drawingBufferWidth: renderer.domElement?.width ?? null,
+              drawingBufferHeight: renderer.domElement?.height ?? null,
+              userAgent: navigator.userAgent,
+              hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+              deviceMemoryGb: navigator.deviceMemory ?? null,
+              // Both answers, because they can differ: the feature can be advertised at boot and
+              // still never complete a resolve, which is exactly what headless SwiftShader does.
+              // Reporting only the final value would have read as "this browser has no timer".
+              timestampFeatureAtBoot: gpu.supportedAtBoot,
+              timestampFeature: gpu.supported,
+              // `null` on WebGPU: the extension is a WebGL concept and the backend has no such
+              // field, so `false` would have been an assertion about a question that cannot be put.
+              disjointExtensionPresent,
+            },
+            /*
+             * WHICH SHADOW POLICY PRODUCED THESE NUMBERS.
+             *
+             * Since 2026-09-03 the shadow policy is the single largest term in `render` (12.45 ->
+             * 6.50 ms at founder-a). A report that cannot say whether the freeze was on is not
+             * self-describing — the exact property `buildProfileReport` otherwise enforces by
+             * throwing — and two reports compared next week would have their difference attributed
+             * to something else entirely. It records the EFFECTIVE parsed state, never the URL.
+             */
+            shadows: { ...sunShadow.stats() },
+            layers: {
+              overlayItems: overlayItems.length,
+              markerRows: (() => { try { return src.markers?.().length ?? null; } catch { return null; } })(),
+              labelRows: (() => { try { return src.labels?.().length ?? null; } catch { return null; } })(),
+              questPoints: (() => { try { return src.quests?.().points?.length ?? null; } catch { return null; } })(),
+              livePlayers: (() => { try { return src.players?.().length ?? null; } catch { return null; } })(),
+              markerTier: currentMarkerTier(),
+            },
+            vegetation: {
+              // The single field that decides whether this report describes the shipped forest.
+              // Every measurement previously recorded in this repo was taken with it false.
+              mounted: veg?.mount?.phase === 'mounted' && veg?.mode === 'authored',
+              mountPhase: veg?.mount?.phase ?? null,
+              mountElapsedMs: veg?.mount?.elapsedMs ?? null,
+              mode: veg?.mode ?? null,
+              distribution: veg?.distribution ?? null,
+              warnings: veg?.warnings ?? null,
+              liveBuckets: veg?.authored?.liveBuckets ?? null,
+              families: veg?.authored?.families ?? null,
+            },
+            waterfall: profileWaterfall?.describe(performance.now() - bootAt) ?? null,
+            presets: results,
+            selfTest,
+            // The spec the URL asked for, PLUS what the scene said back: which targets were found,
+            // and whether each was still switched off at the end of every preset. `heldThroughout`
+            // is a measurement, not a promise — a false there puts a warning at the top of `notes`.
+            ablation: activeAblation && ablate?.kind === 'ablate'
+              ? {
+                ...ablate,
+                targets: [...ablate.targets],
+                unknown: [...ablate.unknown],
+                pixelChanging: [...ablate.pixelChanging],
+                applied: activeAblation.applied.map((row) => ({ ...row })),
+                verified: ablationChecks.map((row) => ({ ...row })),
+                heldThroughout: ablationChecks.length > 0 && ablationChecks.every((row) => row.held),
+              }
+              : null,
+            notes: [
+              'Frames were rendered CONTINUOUSLY for the duration of this run. This app renders on demand, so these numbers are the cost of a frame, not the rate at which the app submits frames.',
+              'drawCalls/triangles come from the render-frame latch — renderer.info sampled immediately after render() — and describe the last frame of the sampling window at that preset.',
+              gpu.supported
+                ? 'GPU frame time came from three\'s timestamp query pool. three returns its PREVIOUS value on a disjoint or an in-flight resolve, so gpuTiming.health.adjacentDuplicates is the signal that a number may be stale.'
+                : 'NO GPU TIMER. gpuFrameMs is null at every preset; CPU frame time has not been substituted for it.',
+              ...(Array.isArray(options.extraNotes) ? options.extraNotes : []),
+            ],
+          });
+          lastReport = report;
+          return report;
+        } finally {
+          busyMs = 0;
+          for (const object of culled) object.frustumCulled = true;
+          // Restored on EVERY exit, including a throw. An ablation that leaked past its run would
+          // make the next run — the baseline arm of an A/B series — silently ablated too.
+          activeAblation?.restore();
+          activeAblation = null;
+          overlayVariant = 'interleaved';
+          overlayProbe = null;
+          collector = null;
+          running = false;
+          applyView(restoreView, true);
+          inFlight = null;
+          onProgress?.(null);
+        }
+      })();
+      return inFlight;
+    }
+
+    /**
+     * A/B/A/B in ONE page load — the strong form of the comparison.
+     *
+     * Separate page loads differ in shader compilation, pipeline caches and texture residency, and
+     * the GPU numbers this project has recorded moved 1-4 ms run to run for no attributable reason.
+     * A 2 ms delta across two loads is therefore not evidence. Alternating arms inside one load
+     * holds all of that constant, and repeating each arm is what gives the comparison a noise floor
+     * to measure its own delta against — `describeAblationSeries` refuses to call a delta
+     * attributed unless it exceeds the widest within-arm spread.
+     *
+     * Arm A is unablated and arm B is ablated, always in that order, so a monotonic drift (thermal
+     * throttling, a background tab) shows up as A and B both moving rather than as a fake delta.
+     */
+    async function runSeries(overrides = {}) {
+      const ablate = asAblation(overrides.ablate !== undefined ? overrides.ablate : profileRequest.ablate);
+      if (ablate?.kind !== 'ablate') {
+        throw new Error('an A/B series needs an ablation to alternate; reload with ?profileAblate=shadow (or props, rocks, or a comma-separated combination)');
+      }
+      const repeats = Math.min(6, Math.max(1, Math.round(Number(overrides.repeats ?? 2) || 2)));
+      const runs = [];
+      for (let cycle = 0; cycle < repeats; cycle += 1) {
+        for (const arm of ['A', 'B']) {
+          onProgress?.(`A/B series: cycle ${cycle + 1}/${repeats}, arm ${arm}${arm === 'B' ? ` (${ablate.targets.join(', ')})` : ' (unablated)'}`);
+          // eslint-disable-next-line no-await-in-loop -- the arms are alternated on purpose
+          const report = await run({
+            ...overrides,
+            ablate: arm === 'A' ? null : ablate,
+            extraNotes: [`A/B SERIES, arm ${arm}, cycle ${cycle + 1} of ${repeats}. Read this run against its siblings in the same series, never on its own.`],
+          });
+          runs.push({ arm, cycle: cycle + 1, report });
+        }
+      }
+      lastSeries = Object.freeze({
+        schema: PROFILE_SERIES_SCHEMA,
+        at: new Date().toISOString(),
+        ablation: { ...ablate, targets: [...ablate.targets], pixelChanging: [...ablate.pixelChanging] },
+        repeats,
+        order: Object.freeze(runs.map((entry) => entry.arm)),
+        comparison: describeAblationSeries(runs),
+        runs: Object.freeze(runs),
+      });
+      return lastSeries;
+    }
+
+    return {
+      renderProfiled,
+      event,
+      run,
+      runSeries,
+      shadowPixelCheck,
+      get report() { return lastReport; },
+      get series() { return lastSeries; },
+      get busy() { return Boolean(inFlight); },
+      set onProgress(fn) { onProgress = fn; },
+      gpuAvailable: () => gpu.supported,
+      gpuReason: () => gpu.reason,
+    };
+  }
+
+  if (profileRequest.armed) frameProfiler = createRenderProfiler();
+
+  /**
+   * The profiler's own chrome: a corner panel, and only for a visitor who typed `?profile=`.
+   *
+   * Not the CUSTOMS TRUTH strip and not gated like it. That strip was removed from the live page
+   * because it appeared uninvited over the middle of the map and said something a visitor could not
+   * act on; this is a control surface someone asked for by URL, and it sits in a corner. It is
+   * built inside `container` rather than inside `overlay`, because `.tz-three-overlay` is
+   * `pointer-events: none` and this has a button on it.
+   *
+   * Styled inline on purpose: a panel that exists only under a query parameter should not be able
+   * to be broken by an unrelated edit to src/style.css, and should leave no trace when off.
+   */
+  let profilePanel = null;
+  let profilePanelInterval = 0;
+  if (frameProfiler) {
+    profilePanel = document.createElement('div');
+    profilePanel.className = 'tz-three-profile';
+    profilePanel.style.cssText = 'position:absolute;left:10px;bottom:10px;z-index:9;max-width:min(46ch,46vw);max-height:60%;overflow:auto;padding:8px 10px;border-radius:5px;background:rgba(8,10,12,.88);color:#dfe6ec;font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 4px 14px rgba(0,0,0,.5);pointer-events:auto;white-space:pre-wrap';
+    const title = document.createElement('div');
+    title.textContent = 'RENDER PROFILER';
+    title.style.cssText = 'font-weight:700;letter-spacing:.08em;margin-bottom:4px';
+    const body = document.createElement('div');
+    const runButton = document.createElement('button');
+    runButton.type = 'button';
+    runButton.textContent = 'Run baseline';
+    runButton.style.cssText = 'margin-top:6px;margin-right:6px;padding:4px 9px;border-radius:4px;border:1px solid #4a5560;background:#1b2026;color:inherit;font:inherit;cursor:pointer';
+    // Only when an ablation was asked for: A/B/A/B in this page load, which is stronger evidence
+    // than two loads compared by hand because it holds shader and pipeline warmup constant.
+    const abButton = document.createElement('button');
+    abButton.type = 'button';
+    abButton.textContent = 'Run A/B/A/B';
+    abButton.style.cssText = runButton.style.cssText;
+    abButton.hidden = profileRequest.ablate?.kind !== 'ablate';
+    const copyButton = document.createElement('button');
+    copyButton.type = 'button';
+    copyButton.textContent = 'Download JSON';
+    copyButton.disabled = true;
+    copyButton.style.cssText = runButton.style.cssText;
+    profilePanel.append(title, body, runButton, abButton, copyButton);
+    container.append(profilePanel);
+
+    const describeReadiness = () => {
+      const veg = authoredVegetationRenderStats();
+      const mounted = veg?.mount?.phase === 'mounted' && veg?.mode === 'authored';
+      return [
+        `backend      ${status.backend}${forceWebGL ? ' (forced)' : ''}`,
+        `gpu timer    ${frameProfiler.gpuAvailable() ? 'YES' : `NO — ${frameProfiler.gpuReason() ?? 'unavailable'}`}`,
+        // The line that decides whether a run is worth taking. 60-85 s, never awaited.
+        `vegetation   ${mounted ? 'MOUNTED — ready' : `${veg?.mount?.phase ?? 'not started'} — WAIT, this is not the shipped forest yet`}`,
+        `presets      ${profileRequest.presets.join(', ')}`,
+        `frames       ${profileRequest.warmupFrames} warm-up discarded, ${profileRequest.sampleFrames} sampled, ${profileRequest.reflowFrames}x2 reflow probe`,
+        profileRequest.selfTest ? `SELF-TEST    ${profileRequest.selfTest.label} — NOT A BASELINE` : null,
+        // Two classes, spelled differently on purpose: one claims the picture is unchanged and the
+        // other deliberately changes it. A reader must not have to infer which they are looking at.
+        profileRequest.ablate?.kind === 'ablate'
+          ? `ABLATION     ${profileRequest.ablate.targets.join(', ')} — ${profileRequest.ablate.pixelIdentical ? 'PIXEL-IDENTICAL BY HYPOTHESIS (verify it)' : `PIXELS CHANGE ON PURPOSE (${profileRequest.ablate.pixelChanging.join(', ')})`} — NOT A BASELINE`
+          : null,
+        profileRequest.ablate?.kind === 'unknown' ? `ignored      ${profileRequest.ablate.label}` : null,
+        profileRequest.ablate?.unknown?.length ? `ignored      unknown ablation targets: ${profileRequest.ablate.unknown.join(', ')}` : null,
+        profileRequest.unknownPresets.length ? `ignored      unknown presets: ${profileRequest.unknownPresets.join(', ')}` : null,
+      ].filter(Boolean).join('\n');
+    };
+    let profilePanelTail = null;
+    const paintPanel = (extra) => { body.textContent = `${describeReadiness()}${extra ? `\n\n${extra}` : ''}`; };
+    paintPanel(null);
+    // The readiness block above changes while the vegetation pack loads, so it is repainted — but
+    // never while a run is in flight, because a `textContent` write is layout the measurement would
+    // then be paying for.
+    profilePanelInterval = setInterval(() => { if (!frameProfiler.busy) paintPanel(profilePanelTail); }, 700);
+    frameProfiler.onProgress = (text) => { if (text) paintPanel(text); };
+
+    /** The last thing either button produced, for `Download JSON` — a report OR a series. */
+    let downloadable = null;
+    const ms = (summary) => (summary ? `${summary.median.toFixed(2)}/${summary.p95.toFixed(2)}` : 'no samples');
+    runButton.addEventListener('click', async () => {
+      runButton.disabled = abButton.disabled = true;
+      paintPanel('running…');
+      try {
+        const report = await frameProfiler.run();
+        const rows = report.presets.map((p) => (p.ok
+          ? `${p.name.padEnd(13)} cpu ${ms(p.cpuFrameMs)} ms (med/p95) · gpu ${p.gpuFrameMs ? `${p.gpuFrameMs.median.toFixed(2)} ms` : 'null'} · ${p.renderInfo?.drawCalls ?? '?'} calls · ${p.renderInfo?.triangles ?? '?'} tris`
+          : `${p.name.padEnd(13)} FAILED — ${p.error}`));
+        profilePanelTail = `${rows.join('\n')}\n\nDownload the JSON — the panel is a summary, the file is the measurement.`;
+        paintPanel(profilePanelTail);
+        downloadable = { kind: 'profile', value: report };
+        copyButton.disabled = false;
+      } catch (error) {
+        profilePanelTail = `RUN FAILED — ${String(error?.message ?? error)}`;
+        paintPanel(profilePanelTail);
+      } finally {
+        runButton.disabled = false;
+        abButton.disabled = abButton.hidden;
+      }
+    });
+
+    /*
+     * A/B/A/B, and a panel summary that reports the VERDICT rather than only the delta.
+     *
+     * A delta printed on its own invites the reader to believe it. `describeAblationSeries` knows
+     * the widest spread each arm produced when nothing changed, so the line says whether the delta
+     * cleared that or sat inside it — which is the only question this series was run to answer.
+     */
+    abButton.addEventListener('click', async () => {
+      runButton.disabled = abButton.disabled = true;
+      paintPanel('A/B series: this runs the whole preset set twice per arm…');
+      try {
+        const series = await frameProfiler.runSeries();
+        const lines = [];
+        for (const [preset, metrics] of Object.entries(series.comparison.presets)) {
+          lines.push(`${preset}  (A = unablated, B = ${series.ablation.targets.join('+')})`);
+          for (const metric of ['cpuFrameMedianMs', 'renderPhaseMedianMs', 'gpuFrameMedianMs', 'drawCalls', 'frameCalls']) {
+            const row = metrics[metric];
+            if (row?.delta === null || row?.delta === undefined) continue;
+            const noise = row.withinArmSpread === null ? 'no noise floor' : `±${row.withinArmSpread.toFixed(2)} within-arm`;
+            lines.push(`  ${metric.padEnd(20)} A ${row.aMedian.toFixed(2)} → B ${row.bMedian.toFixed(2)}  Δ ${row.delta >= 0 ? '+' : ''}${row.delta.toFixed(2)}  (${noise})`);
+            lines.push(`  ${''.padEnd(20)} ${row.verdict}`);
+          }
+        }
+        profilePanelTail = `${lines.join('\n')}\n\nDownload the JSON — the series file holds every run.`;
+        paintPanel(profilePanelTail);
+        downloadable = { kind: 'series', value: series };
+        copyButton.disabled = false;
+      } catch (error) {
+        profilePanelTail = `A/B SERIES FAILED — ${String(error?.message ?? error)}`;
+        paintPanel(profilePanelTail);
+      } finally {
+        runButton.disabled = false;
+        abButton.disabled = false;
+      }
+    });
+    copyButton.addEventListener('click', () => {
+      const payload = downloadable ?? (frameProfiler.report ? { kind: 'profile', value: frameProfiler.report } : null);
+      if (!payload) return;
+      const blob = new Blob([JSON.stringify(payload.value, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const stamp = String(payload.value.at ?? new Date().toISOString()).replace(/[:.]/g, '-');
+      link.download = `tz-render-${payload.kind === 'series' ? 'ablation-series' : 'profile'}-${stamp}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+    });
+  }
 
   let frames = 0, fps = null, fpsWindowAt = performance.now(), stopped = false;
   /**
@@ -4495,10 +6221,11 @@ export async function createView3d(container, mapData, src) {
     }
     if (!renderRequested && settleFrames <= 0) return;
     renderRequested = false;
-    controls.update();
-    updateUnderstoryLod();
-    updateOverlayPositions();
-    renderer.render(scene, camera);
+    // ONE branch. The `else` arm is the frame exactly as it was before the profiler existed; the
+    // `if` arm calls the same four functions in the same order with `performance.mark()` between
+    // them, and `scripts/render-profiler.test.mjs` pins that by reading this source.
+    if (frameProfiler) frameProfiler.renderProfiled();
+    else renderOneFrame();
     renderFrameLatch = latchRenderFrame(renderFrameLatch, sampleRenderFrame(renderer.info, performance.now()));
     if (settleFrames > 0) {
       settleFrames--;
@@ -4506,13 +6233,53 @@ export async function createView3d(container, mapData, src) {
     }
     frames++;
     const now = performance.now();
-    if (status.firstFrameMs == null) status.firstFrameMs = Math.round(now - bootAt);
+    if (status.firstFrameMs == null) { status.firstFrameMs = Math.round(now - bootAt); wfMark('firstRender'); }
     if (now - fpsWindowAt >= 1000) {
       fps = Math.round(frames * 1000 / (now - fpsWindowAt));
       frames = 0; fpsWindowAt = now;
     }
   }
   animate();
+
+  /*
+   * THE STALE-SHADOW AUDIT — `?shadowAudit=1`, dev instrument, never on the shipped path.
+   *
+   * A dropped `sunShadow.invalidate(...)` is invisible: the frame renders, every count is green, and
+   * the only symptom is a shadow of geometry that is no longer there. That is precisely the
+   * handoff-§7 shape, so this converts it into something loud. Each tick it fingerprints the caster
+   * set (`shadowCasterFingerprint`) and compares it with the fingerprint taken on the frame that
+   * baked the depth map; a difference with no invalidation behind it is reported to the console and
+   * published in `renderStats().shadows.audit`.
+   *
+   * It runs in its OWN rAF loop, deliberately: `animate()` and `renderOneFrame()` are the shipped
+   * frame, pinned line-for-line by `scripts/render-profiler.test.mjs`, and an instrument that had to
+   * be spliced into them would be paying for itself on every frame of every visitor's session. The
+   * loop is registered after `animate()`, so within a tick the audit observes a frame three has
+   * already rendered and `matrixWorld` is current.
+   */
+  const shadowAudit = shadowRequest.audit
+    ? createShadowCasterAudit({
+      controller: sunShadow,
+      fingerprint: () => shadowCasterFingerprint(scene, { light: sun }),
+      onDefect: (defect) => console.error(
+        '[three-poc] STALE SHADOW: the shadow-casting set changed with no invalidation.'
+        + ` Casters baked ${defect.baked.casters}, now ${defect.observed.casters}`
+        + ` (delta ${defect.casterDelta} — ${JSON.stringify(defect.byKind)}).`
+        + ` Last invalidation: ${JSON.stringify(defect.lastInvalidation)}.`
+        + ' Something mutated a caster without calling sunShadow.invalidate() — see'
+        + ' src/shadow-invalidation.js SHADOW_INVALIDATION_REASONS.',
+        defect,
+      ),
+    })
+    : null;
+  if (shadowAudit) {
+    const auditTick = () => {
+      if (stopped) return;
+      shadowAudit.observe();
+      requestAnimationFrame(auditTick);
+    };
+    requestAnimationFrame(auditTick);
+  }
 
   const resize = new ResizeObserver(() => {
     const width = Math.max(1, container.clientWidth), height = Math.max(1, container.clientHeight);
@@ -4534,8 +6301,16 @@ export async function createView3d(container, mapData, src) {
     getLook: () => look,
     setFx: (next) => { fx = { ...updateThreeFx(fx, next), fog: false }; applyLook(); return { ...fx }; },
     getFx: () => ({ ...fx }),
+    // An extract's element no longer spells its own name in text — it carries a letter badge plus a
+    // name chip, and in a real DOM `textContent` would concatenate the SVG's letter with the name
+    // ("D" + "Dorms V-Ex"). Match on the spec the item was built from, which is the string the
+    // marker data actually holds.
     focusExtract: (name) => {
-      for (const item of overlayItems) item.element.classList.toggle('focused', item.kind === 'extract' && item.element.textContent === name);
+      const wanted = safeText(name);
+      for (const item of overlayItems) {
+        const own = safeText(item.spec ? item.spec.label : item.element.textContent);
+        item.element.classList.toggle('focused', item.kind === 'extract' && own === wanted);
+      }
     },
     setView: (patch = {}) => applyView(patch),
     project: (x, z, dy = 0.7) => {
@@ -4543,6 +6318,46 @@ export async function createView3d(container, mapData, src) {
       if (!(v.z > -1 && v.z < 1)) return null;
       return [(v.x + 1) * container.clientWidth / 2, (-v.y + 1) * container.clientHeight / 2];
     },
+    /**
+     * The render profiler, or a refusal that says how to arm it.
+     *
+     * `null` would have been the easy answer for an unarmed page and the wrong one: the GPU timer
+     * is a renderer-construction parameter, so "profiling is off" and "profiling cannot be turned
+     * on from here" are the same state and a reader has to be told which. `?profile=1` is the whole
+     * answer, and it is a RELOAD, not a toggle.
+     */
+    profile: (overrides) => {
+      if (!frameProfiler) {
+        return Promise.reject(new Error('the render profiler was not armed at boot; reload with ?profile=1 (the GPU timer is a renderer-construction parameter and cannot be enabled later)'));
+      }
+      return frameProfiler.run(overrides);
+    },
+    /**
+     * A/B/A/B in one page load. Same refusal as `profile()`, plus one of its own: without an
+     * ablation there is nothing to alternate, and the error says which URL to reload with.
+     */
+    profileAB: (overrides) => {
+      if (!frameProfiler) {
+        return Promise.reject(new Error('the render profiler was not armed at boot; reload with ?profile=1&profileAblate=shadow'));
+      }
+      return frameProfiler.runSeries(overrides);
+    },
+    /**
+     * TWO verdicts, ASYNC — `await tz.profileShadowPixels()`.
+     *
+     * `residentMapWasCurrent` is the P1 defect check (was the depth map on screen stale?) and is
+     * meaningful on the shipped frozen load. `freezeIsPixelFree` is the original hypothesis and
+     * wants `?shadows=live`. It renders one frame per arm, one arm per rAF tick, and voids itself if
+     * either control fails — two identical renders that hash differently (the scene is moving), or a
+     * camera nudge that does not (the readback is blind).
+     */
+    profileShadowPixels: () => {
+      if (!frameProfiler) throw new Error('the render profiler was not armed at boot; reload with ?profile=1');
+      return frameProfiler.shadowPixelCheck();
+    },
+    profileReport: () => frameProfiler?.report ?? null,
+    profileSeries: () => frameProfiler?.series ?? null,
+    profileArmed: () => Boolean(frameProfiler),
     renderStats: () => ({
       map: 'customs', renderer: 'three', backend: status.backend, scope: status.scope, look, relief, fx: { ...fx }, fps,
       // WHAT THE FRAME SAYS ABOUT ITSELF, whether or not it is allowed to say it on screen.
@@ -4573,6 +6388,10 @@ export async function createView3d(container, mapData, src) {
       groundAtlas: status.groundAtlas, exactTerrain: status.exactTerrain,
       exactVegetation: status.exactVegetation,
       vegetation: authoredVegetationRenderStats(),
+      // The sun's depth map: frozen or live, how many times it has been invalidated and by what.
+      // `byReason` is the invalidation list actually exercised by this session, which is the only
+      // way to tell a lane that never fires from one that fires and is not counted.
+      shadows: { ...sunShadow.stats(), audit: shadowAudit ? shadowAudit.stats() : { armed: false } },
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
       railway: { ...railwayRenderStats },
@@ -4588,11 +6407,18 @@ export async function createView3d(container, mapData, src) {
       provisional: true,
     }),
     diagnostics: () => ({
-      scope: THREE_POC_SCOPE, backend: status.backend, gate: { ...rendererGate }, authored: status.manifest,
+      // `scope` names the OVERLAY gate (bbox + source + margin), because that is what decides
+      // whether a label, marker, extract or quest pin is drawn. `railwayGeometryScope` is the
+      // separate proof-of-concept cell that still clips the rail mesh, reported so the two cannot
+      // be confused for one another again.
+      scope: { ...overlayScope, id: `customs-overlay-${overlayScope.source}` },
+      railwayGeometryScope: THREE_POC_SCOPE,
+      backend: status.backend, gate: { ...rendererGate }, authored: status.manifest,
       truth: { ...truthStripCopy, shown: diagnosticReadoutsVisible },
       groundAtlas: status.groundAtlas, exactTerrain: status.exactTerrain,
       exactVegetation: status.exactVegetation,
       vegetation: authoredVegetationRenderStats(),
+      shadows: { ...sunShadow.stats(), audit: shadowAudit ? shadowAudit.stats() : { armed: false } },
       sources: { buildings: data.buildings?.length ?? 0, props: data.props?.length ?? 0, trees: data.trees?.length ?? 0, exactVegetation: exactVegetationPlan?.renderedCount ?? 0, understory: data.understory?.length ?? 0, rocks: data.rocks?.length ?? 0, water: data.water?.length ?? 0, floorSurfaces: data.floorSurfaces?.length ?? 0 },
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
@@ -4608,6 +6434,9 @@ export async function createView3d(container, mapData, src) {
     dispose: () => {
       stopped = true;
       clearInterval(vegetationChipInterval);
+      if (profilePanelInterval) clearInterval(profilePanelInterval);
+      frameProfiler = null;
+      profilePanel = null;
       localTerrainAbort.abort();
       authoredStreamer.dispose();
       authoredAbort.abort();

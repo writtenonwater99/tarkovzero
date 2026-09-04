@@ -470,13 +470,23 @@ function fit3dZoom(rotationX = CAM.rotationX, rotationOrbit = CAM.rotationOrbit)
  */
 function syncFitBox() { setFitBox(fit3dBox()); }
 syncFitBox();
-/** Restore the default 3D framing: contain the footprint at the oblique default, on the safe rect. */
-function fit3d() {
+/**
+ * The default 3D framing as a VALUE — contain the footprint at the oblique default, on the safe
+ * rect. Split out from `fit3d()` so the render profiler's `cover-fit` preset can be the app's own
+ * fit rather than a second copy of it that drifts; a preset that no longer means what the visitor's
+ * first frame means would measure the wrong frame and never say so.
+ */
+function fit3dView() {
   syncFitBox();
   const zoom = fit3dZoom(CAM.rotationX, CAM.rotationOrbit);
-  if (zoom == null) return;
+  if (zoom == null) return null;
   const c = footprintCentre();
-  set3d({ target: target3dFor(c.x, c.z, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit });
+  return { target: target3dFor(c.x, c.z, zoom, CAM.rotationX, CAM.rotationOrbit), zoom, rotationX: CAM.rotationX, rotationOrbit: CAM.rotationOrbit };
+}
+/** Restore the default 3D framing: contain the footprint at the oblique default, on the safe rect. */
+function fit3d() {
+  const view = fit3dView();
+  if (view) set3d(view);
 }
 
 // View permalink: #zoom/x/z (game coords); otherwise fit the whole map to the window.
@@ -1426,10 +1436,18 @@ async function setView(mode) {
         players: () => [...live.players.values()],
         quests: () => quests.deckData(),
         onQuestClick: (obj) => quests.onDeckClick(obj),
-        // The 3D labels are seated in screen space against the same rect the 2D ones are, so the
-        // diorama's names are pushed out from under the toolbar/dock/omnibox instead of drawn
-        // under them (QA D3/D4). Handed as a function: the dock moves without the map moving.
+        // The deck.gl diorama's NAMES are seated in screen space against the same rect the 2D ones
+        // are, so they are pushed out from under the toolbar/dock instead of drawn under them
+        // (QA D3/D4). Handed as a function: the dock moves without the map moving. The Three
+        // renderer ignores it for MARKS — a mark is a claim about a place on the ground, and
+        // moving one to dodge chrome is what made the founder's icons ride the camera (2026-09-03,
+        // src/three-world.js anchorOverlayMark).
         safeRect: avoidRect,
+        // The app's own whole-map framing, as a value. Read only by the render profiler's
+        // `cover-fit` preset (src/render-profiler.js), so a baseline is taken at the framing a
+        // visitor actually arrives on rather than at a pose copied into the renderer and left to
+        // rot. The deck.gl renderer ignores it.
+        fitView: fit3dView,
         onViewChange: (v) => {
           v3 = { ...v3, ...v };
           mirror2d();
@@ -1591,8 +1609,38 @@ window.tz = {
    * the measurement hook behind the View panel's Effects row.
    */
   renderFx: (key) => { if (key !== undefined) setFx(key); return { ...fx }; },
-  /** QA hook: draw count, GPU/CPU frame time and texture bytes for the live 3D frame. */
+  /**
+   * QA hook: the live 3D frame's draw count, resident geometry/texture counts and gate state.
+   *
+   * It carries NO frame time on the Three path and never has — `fps` is the rate at which the app
+   * chose to submit, not the cost of a frame. For frame time, reload with `?profile=1` and use
+   * `tz.profile()` below (docs/PROFILING.md).
+   */
   renderStats: () => view3d?.renderStats?.() ?? null,
+  /**
+   * The render profiler (docs/PROFILING.md). `tz.profile()` runs the whole baseline — every camera
+   * preset, warm-up discarded, median and p95 — and resolves with the report; `tz.profileReport()`
+   * returns the last one. Both need `?profile=1` in the URL at LOAD time: the GPU timer is a
+   * renderer-construction parameter and cannot be switched on afterwards.
+   */
+  profile: (overrides) => (view3d?.profile
+    ? view3d.profile(overrides)
+    : Promise.reject(new Error('the render profiler lives on the Three renderer; open Customs with ?profile=1'))),
+  profileReport: () => view3d?.profileReport?.() ?? null,
+  /**
+   * The attribution spikes (docs/PROFILING.md §3a). `?profileAblate=shadow|props|rocks` switches a
+   * named piece of the frame off so its cost is MEASURED rather than inferred; `tz.profileAB()`
+   * alternates ablated and unablated runs inside ONE page load, which holds shader compilation and
+   * texture residency constant in a way that comparing two loads cannot. `tz.profileShadowPixels()`
+   * is the check that the frozen shadow map really did draw the same picture.
+   */
+  profileAB: (overrides) => (view3d?.profileAB
+    ? view3d.profileAB(overrides)
+    : Promise.reject(new Error('the ablation harness lives on the Three renderer; open Customs with ?profile=1&profileAblate=shadow'))),
+  profileSeries: () => view3d?.profileSeries?.() ?? null,
+  profileShadowPixels: () => (view3d?.profileShadowPixels
+    ? view3d.profileShadowPixels()
+    : { ok: false, reason: 'the render profiler lives on the Three renderer; open Customs with ?profile=1' }),
   /** QA hook: the box a fit frames into — the stage minus the chip band and the omnibox band. */
   safeRect,
   /** QA hook: the part of the stage nothing floats over (safeRect minus the toolbar and dock). */

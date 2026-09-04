@@ -71,10 +71,20 @@ const GLYPH = {
 // where colour is the only channel left (`desaturate()` below pulls each 55% toward its own luma,
 // so the dot tier is the number that actually matters):
 //
-//   badge tier  min RGB distance 103.8 · luma spread 72.9   (was 5.5 / 14.1)
-//   dot tier    min RGB distance  56.9 · luma spread 64.5   (was 3.0 / 12.2)
+//   MEASURED on the three loot hues:
+//     badge tier  min RGB distance 103.8 · luma spread 72.9   (was 5.5 / 14.1)
+//     dot tier    min RGB distance  56.9 · luma spread 64.5   (was 3.0 / 12.2)
+//   ENFORCED FLOOR (`FLOOR` in scripts/icons-test.mjs), which is a different thing and lower:
+//     badge min 90 · badge luma spread 55 · dot min 45 · dot luma spread 45
 //
-// `scripts/icons-test.mjs` asserts both floors; the OLD seven fail them by an order of magnitude.
+// The two are stated apart deliberately. Collapsing them into one sentence is what let a later brief
+// repeat "the documented floors (badge 103.8, dot 56.9)" as if those were the numbers CI enforces:
+// a pair measuring 95 would then read as a failure to a human and as a pass to the suite. The floors
+// are set below the measurement on purpose — raising `badgeMin` above 88.6 would correctly fail
+// `extract-pmc` vs `extract-transit`, which is a real, accepted, shape-backstopped pair.
+//
+// `scripts/icons-test.mjs` asserts the enforced floors; the OLD seven fail them by an order of
+// magnitude, and it proves that in-process rather than asking anyone to take it on trust.
 // The per-item distinction is NOT lost — it moves off the map face into the data: the marker keeps
 // its own name ("Duffle bag", "Medbag SMU06"), the hover label and the popup print it, and the
 // `terms` array below keeps "safe", "keys", "bodies" and friends findable in the omnibox.
@@ -83,10 +93,28 @@ export const KINDS = {
   'extract-scav':    { label: 'Scav extracts',      glyph: 'gi_exit',  color: '#E0872B', shape: 'sq'  },
   'extract-shared':  { label: 'Shared extracts',    glyph: 'gi_exit',      color: '#2DBE6C', color2: '#E0872B', shape: 'sq' },
   'extract-transit': { label: 'Transits',           glyph: 'gi_transit',   color: '#3A96BA', shape: 'sq'  },
-  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'gi_gasmask',   color: '#7fa0b4', shape: 'sh' },
+  // THE FOUR SHIELDS, RE-CUT (2026-09-03). Measured before this pass: the closest badge pair was
+  // sniper #e2793f vs boss #d24a4a at **50.9** in RGB and the closest dot pair (scav vs sniper) was
+  // **39.0** — under
+  // half the loot floor, on four near-white silhouettes that differ only by artwork at 22 px. The
+  // 3D overlay draws these over brown-olive terrain at `--marker-opacity:.72`, which is where they
+  // collapsed into one pale blob. Four hue families now, one per decision:
+  //   pmc     deep steel blue   the other players
+  //   scav    khaki tan         UNCHANGED — it already cleared the floor against everything but orange
+  //   sniper  deep maroon       a shot you do not see coming
+  //   boss    orchid            the one that is not like the others
+  // Orange had to leave: tan and orange are the same hue, and no amount of value separation gets a
+  // scav shield and a sniper shield apart at the dot tier. See `badgeSvg`'s GLYPH_HALO — the shields
+  // also gained an ink outline, because colour alone was never going to carry four near-white
+  // silhouettes. `scripts/icons-test.mjs` asserts both floors and proves the OLD four fail them.
+  'spawn-pmc':       { label: 'PMC spawns',         glyph: 'gi_gasmask',   color: '#2C6FAE', shape: 'sh' },
   'spawn-scav':      { label: 'Scav spawns',        glyph: 'gi_hood',   color: '#c9a463', shape: 'sh' },
-  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'gi_crosshair',     color: '#e2793f', shape: 'sh' },
-  'spawn-boss':      { label: 'Boss spawns',        glyph: 'gi_crownskull',   color: '#d24a4a', shape: 'sh' },
+  'spawn-sniper':    { label: 'Sniper scav spawns', glyph: 'gi_crosshair',     color: '#9E2F26', shape: 'sh' },
+  // Magenta rather than violet: measured off the live frame, a violet boss shield sat only 60 RGB
+  // from the `hazard` purple diamond, and a cross-family near-miss is what shape is a backstop
+  // FOR, not a licence for. #C74FAE puts 70 between them and widens every spawn pair at the dot
+  // tier at the same time (min 60.6 -> 61.9).
+  'spawn-boss':      { label: 'Boss spawns',        glyph: 'gi_crownskull',   color: '#C74FAE', shape: 'sh' },
   'stash':           { label: 'Stashes',            glyph: 'gi_lockedchest', color: '#77845A', shape: 'sq' },
   'loot-consumables': { label: 'Meds & ammo',       glyph: 'gi_medicalpack', color: '#3C8D80', shape: 'ci',
     terms: ['med', 'meds', 'medical', 'medcase', 'medbag', 'ammo', 'grenade', 'ration', 'food', 'consumable'] },
@@ -95,9 +123,13 @@ export const KINDS = {
   'loot-gear':       { label: 'Gear & bodies',      glyph: 'gi_cargocrate',  color: '#8E4F3E', shape: 'ci',
     terms: ['weapon', 'weapon box', 'gun', 'crate', 'crates', 'bag', 'bags', 'duffle', 'body', 'bodies', 'dead', 'corpse', 'gear'] },
   'hazard':          { label: 'Hazards',            glyph: 'gi_radioactive',   color: '#8258A6', shape: 'dia' },
-  'weapon':          { label: 'Stationary weapons', glyph: 'gi_sentry',    color: '#6E6860', shape: 'dia' },
+  // THE TWO GREY DIAMONDS, SPLIT (2026-09-03). `weapon` #6E6860 and `lock` #808682 were **48.8**
+  // apart in RGB — the same diamond, the same value, both sitting on Customs' grey concrete, and
+  // the only thing telling them apart was a sentry-gun vs a padlock at 22 px. They are now opposite
+  // ends of the value axis and read as their own materials: oiled gun steel, galvanised padlock.
+  'weapon':          { label: 'Stationary weapons', glyph: 'gi_sentry',    color: '#4A403A', shape: 'dia' },
   'switch':          { label: 'Switches / levers',  glyph: 'gi_lever',     color: '#D6B236', shape: 'dia' },
-  'lock':            { label: 'Locks',              glyph: 'gi_padlock',      color: '#808682', shape: 'dia' },
+  'lock':            { label: 'Locks',              glyph: 'gi_padlock',      color: '#B9C4C0', shape: 'dia' },
   // Quest objectives are their own class: a hexagon nobody else uses, so a quest pin never reads
   // as an extract or a loot chip. Colour is overridden per selected quest (see `tint`).
   'quest-objective': { label: 'Quest objectives',   glyph: 'gi_flagobjective', color: '#D8A32B', shape: 'hex' },
@@ -280,6 +312,44 @@ const REQ_MARK = {
 // Where the glyph sits inside each shape. A shield's usable area is higher and narrower than a
 // circle's, so one shared transform would push the spawn art through the point.
 const GLYPH_FIT = { sq: 'translate(4.6 4.6) scale(.62)', ci: 'translate(4.6 4.6) scale(.62)', hex: 'translate(4.9 4.9) scale(.59)', dia: 'translate(5.2 5.2) scale(.57)', sh: 'translate(4.9 3.9) scale(.59)' };
+/*
+ * THE INK HALO (2026-09-03) — shields and diamonds only.
+ *
+ * The one-tone stencil rule says the glyph is always the same near-white. That works over a
+ * mid-value plate and fails at both ends of the value axis: a near-white crosshair on a pale tan
+ * scav shield is a white-on-white silhouette, and the whole reason the four spawns read as one
+ * blob at 22 px. The fix is not a second glyph tone — it is a KEYLINE, the same ink the plate's
+ * own border uses, drawn under the glyph so the silhouette has an edge whatever the plate is
+ * doing. It is what lets `lock` be pale steel and `weapon` be near-black in the same family.
+ *
+ * Squares (extracts/stashes), circles (loot) and the quest hexagon are deliberately NOT haloed:
+ * their plates are mid-value by construction and the founder approved that look as it stands.
+ *
+ * The width is in the ART's own 512-unit space, because `A()` wraps every glyph in
+ * `scale(0.046875)` and a stroke-width set outside it is still resolved on the path. 64 units ->
+ * 64 * 0.046875 * 0.59 ≈ 1.77 badge units ≈ 1.6 px on a 22 px shield, half of which sits outside
+ * the silhouette: enough to give the glyph an edge, not enough to close the crosshair's arms.
+ */
+/*
+ * WHICH FAMILIES ARE HALOED, AND WHY IT IS KEYED ON SHAPE RATHER THAN ON MEASURED PLATE VALUE.
+ *
+ * The defect the halo fixes is a property of the COLOUR (a near-white glyph on a light plate), not
+ * of the shape — so keying on shape is a decision, not a derivation, and two of the three excluded
+ * families do contain light plates: `quest-objective` #D8A32B and `loot-valuables` #CBA33C keep the
+ * bare look at the two kinds a player most needs to read. That is the founder's approved look as it
+ * stands, so it is recorded here as an explicit accepted trade rather than left implicit.
+ *
+ * `scripts/icons-test.mjs` measures every plate's contrast against `STENCIL` and asserts the haloed
+ * SET matches this one, printing the numbers. So the day a palette move creates a third low-contrast
+ * plate, the suite says which kind and by how much instead of staying silent.
+ */
+export const GLYPH_HALO = new Set(['sh', 'dia']);
+export const HALO_W = 64;
+export const glyphInk = (shape, art) => (GLYPH_HALO.has(shape)
+  ? `<g fill='${KEY}' stroke='${KEY}' stroke-width='${HALO_W}' stroke-linejoin='round' opacity='.85'>${art}</g>`
+  : '') + `<g fill='${STENCIL}'>${art}</g>`;
+/** The badge palette's two fixed tones, exported so a test can measure contrast against them. */
+export const BADGE_TONES = Object.freeze({ ink: KEY, stencil: STENCIL, cream: CREAM });
 function badgeSvg(k0, letter, level = 'surface', tint = null, req = null) {
   const k = tint ? { ...k0, color: tint, color2: null } : k0;
   const path = k.shape === 'hex' ? HEX : k.shape === 'sh' ? SHIELD : null;
@@ -301,7 +371,7 @@ function badgeSvg(k0, letter, level = 'surface', tint = null, req = null) {
   const lb = letter ? letterBox(letter, hasChip) : null;
   const inner = letter
     ? `<text x='12' y='${lb.base}' text-anchor='middle'${lb.len ? ` textLength='${lb.len}' lengthAdjust='spacingAndGlyphs'` : ''} font-family='IBM Plex Sans Condensed, Arial Narrow, sans-serif' font-weight='700' font-size='${lb.size}' fill='${STENCIL}'>${letter}</text>`
-    : `<g fill='${STENCIL}' transform='${GLYPH_FIT[k.shape] ?? GLYPH_FIT.sq}'>${GLYPH[k.glyph]}</g>`;
+    : `<g transform='${GLYPH_FIT[k.shape] ?? GLYPH_FIT.sq}'>${glyphInk(k.shape, GLYPH[k.glyph])}</g>`;
   // An underground badge must remain recognisable even when its colour is muted by
   // the marker-opacity setting: dashed extract outline + a universal down/stairs cue. The outline
   // is drawn UNDER the letter — it is the plate's border, and it used to cross the glyphs.
@@ -339,12 +409,61 @@ export function desaturate(hex, amount = 0.55, dim = 0.92) {
   const mix = (c) => (c + (l - c) * amount) * dim;
   return `#${hex2(mix(r))}${hex2(mix(g))}${hex2(mix(b))}`;
 }
-/** The dot colour for a kind, as CSS hex / as an RGB array for deck.gl. */
-export const dotColor = (kind) => desaturate(KINDS[kind]?.color ?? '#808682');
+/**
+ * The dot colour for a kind, as CSS hex / as an RGB array for deck.gl.
+ *
+ * IT THROWS ON AN UNKNOWN KIND, exactly as `iconHtml` does. Until 2026-09-03 it fell back to
+ * `desaturate('#808682')` — the RETIRED `lock` grey — so the same input crashed loudly at the badge
+ * tier and drew a plausible grey circle at the dot tier. A kind that went missing from `KINDS` (a
+ * rename, a bad `LEGACY_KIND` migration) therefore vanished into legitimate-looking dots at exactly
+ * the zoom where a reviewer is looking at the whole map, and only became visible on zooming in far
+ * enough to hit the badge. That is this repo's recurring failure shape, and its own rule applies:
+ * fail where the bad value is, rather than quietly inheriting one and being believed.
+ *
+ * `src/marker-overlay.js` already refuses rather than guesses (`if (!KINDS[kind]) return null`);
+ * this is the icons module stopping undercutting it for every other caller.
+ */
+export function dotColor(kind) {
+  const k = KINDS[kind];
+  if (!k) throw new Error(`unknown marker kind: ${String(kind)}`);
+  return desaturate(k.color);
+}
 export const dotRgb = (kind) => rgbOf(dotColor(kind));
-/** 6 px desaturated dot in the category colour — no glyph, no letter, no label. */
+/*
+ * THE DOT KEEPS ITS FAMILY (2026-09-03).
+ *
+ * The dot tier used to be one CSS box per kind — `background: <colour>` on a `.mk-dot` div — so at
+ * 6 px every marker on the map was the same mark and family disambiguation collapsed onto colour
+ * at exactly the zoom where colour is least reliable (55% desaturated, over terrain, at
+ * `--marker-opacity`). Shape is the ONE channel that survives a 6 px mark: a diamond and a circle
+ * differ in silhouette even when both are mud.
+ *
+ * So the dot is now the family's own outline, drawn as a 12-unit SVG scaled to `size`, with the
+ * plate's ink as a keyline exactly as the badge has. Colour still says WHICH kind; shape says
+ * which FAMILY, and the two are independent again. The paths are the badge shapes reduced to a
+ * 12-unit box — not new artwork, and nothing here re-draws a glyph.
+ */
+const DOT_SHAPE = {
+  sq:  `<rect x='1.5' y='1.5' width='9' height='9' rx='2'/>`,
+  ci:  `<circle cx='6' cy='6' r='4.6'/>`,
+  dia: `<path d='M6 1 11 6 6 11 1 6z'/>`,
+  sh:  `<path d='M6 1.1 10.6 2.8v3.8c0 2.3-2.2 3.6-4.6 4.3-2.4-.7-4.6-2-4.6-4.3V2.8z'/>`,
+  hex: `<path d='M6 1 10.3 3.5v5L6 11 1.7 8.5v-5z'/>`,
+};
+/**
+ * 6 px desaturated mark in the category colour, cut to the FAMILY shape — no glyph, no letter.
+ *
+ * Throws on an unknown kind (via `dotColor`), so the dot tier and the badge tier now agree about
+ * what an unknown kind is. A `?? 'ci'` here would have drawn a circle for it, which is a real loot
+ * family.
+ */
 export function dotHtml(kind, size = 6) {
-  return `<div class="mk-dot" style="width:${size}px;height:${size}px;background:${dotColor(kind)}"></div>`;
+  const shape = KINDS[kind]?.shape;
+  if (!shape) throw new Error(`unknown marker kind: ${String(kind)}`);
+  return `<div class="mk-dot mk-dot-${shape}" style="width:${size}px;height:${size}px">`
+    + `<svg viewBox="0 0 12 12" width="${size}" height="${size}">`
+    + `<g fill="${dotColor(kind)}" stroke="${KEY}" stroke-width="1.5" stroke-linejoin="round">${DOT_SHAPE[shape]}</g>`
+    + `</svg></div>`;
 }
 
 /* -------------------------------------------------------------- clustering --- */

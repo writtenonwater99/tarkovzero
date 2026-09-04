@@ -25,25 +25,45 @@ const near = (name, got, want, tol = 1e-9) => check(name, Math.abs(got - want) <
 /* ------------------------------------------------------------ thresholds */
 console.log('tier thresholds (metres per pixel)');
 {
-  eq('boundaries are dot|icon then icon|full', BOUNDS.join(','), '0.33,0.165');
+  eq('boundaries are dot|icon then icon|full', BOUNDS.join(','), '0.465,0.165');
   eq('tiers run coarse to fine', TIERS.join(','), 'dot,icon,full');
 
   // The zoom stops a 1400x985 window actually lands on for Customs (sx = 0.239).
   const mpp = (zoom) => 1 / (0.239 * Math.pow(2, zoom));
   eq('Customs at cover-fit (2.92) is dot', tierOf(mpp(2.92)), 'dot');
-  eq('half a zoom in (3.42) is still dot', tierOf(mpp(3.42)), 'dot');
+  eq('half a zoom in (3.42) is icon', tierOf(mpp(3.42)), 'icon');
   eq('one zoom in (3.92) is icon', tierOf(mpp(3.92)), 'icon');
   eq('one and a half (4.42) is still icon', tierOf(mpp(4.42)), 'icon');
   eq('two zooms in (4.92) is full', tierOf(mpp(4.92)), 'full');
   eq('max zoom (7) is full', tierOf(mpp(7)), 'full');
 
-  // Other maps get the same treatment for the same physical scale — that is the whole point of
-  // cutting on m/px instead of on a zoom number.
-  eq('Woods at cover-fit (1.005 m/px) is dot', tierOf(1.005), 'dot');
-  eq('Reserve at cover-fit (0.423 m/px) is dot', tierOf(0.423), 'dot');
+  /*
+   * THE FOUNDER'S TWO CAMERAS, 2026-09-03. He reported #3.48/257.7/-42.3 as unreadable ("pmc
+   * spawns and other icons are hard to see") and #3.92/257.9/-22.1 as right ("at this distance
+   * they are fine. so bring the same size for the other one"), so the ONE thing this ladder owes
+   * him is that the two land in the same tier. They are permalink zooms, which are 2D zooms, and
+   * Customs' CRS scale is 0.239 — the same mpp() above. Before the boundary moved, 3.48 was `dot`
+   * (0.375 m/px > 0.33) and 3.92 was `icon`: two different sizes, which is the whole report.
+   *
+   * Asserted through tier() from BOTH directions, not tierOf(): a size that depends on whether he
+   * zoomed in or out to get there is the same bug wearing a hysteresis band.
+   */
+  eq('founder #3.48 is icon, arriving from dot', tier(mpp(3.48), 'dot'), 'icon');
+  eq('founder #3.48 is icon, arriving from icon', tier(mpp(3.48), 'icon'), 'icon');
+  eq('founder #3.92 is icon, arriving from dot', tier(mpp(3.92), 'dot'), 'icon');
+  eq('founder #3.92 is icon, arriving from full', tier(mpp(3.92), 'full'), 'icon');
+  eq('the two cameras he compared are the same tier',
+    tier(mpp(3.48), 'dot') === tier(mpp(3.92), 'dot'), true);
 
-  eq('just above the dot boundary', tierOf(0.3301), 'dot');
-  eq('on the dot boundary is icon', tierOf(0.33), 'icon');
+  // Other maps get the same treatment for the same physical scale — that is the whole point of
+  // cutting on m/px instead of on a zoom number. Reserve's cover fit moved into `icon` when the
+  // dot|icon boundary went out one stop (2026-09-03): 0.423 m/px is a badge-reading scale, and the
+  // rule is physical, so a small map reaches it at its own fit.
+  eq('Woods at cover-fit (1.005 m/px) is dot', tierOf(1.005), 'dot');
+  eq('Reserve at cover-fit (0.423 m/px) is icon', tierOf(0.423), 'icon');
+
+  eq('just above the dot boundary', tierOf(0.4651), 'dot');
+  eq('on the dot boundary is icon', tierOf(0.465), 'icon');
   eq('just above the full boundary', tierOf(0.1651), 'icon');
   eq('on the full boundary is full', tierOf(0.165), 'full');
   eq('a 3D zoom of 3 (0.125 m/px) is full', tierOf(1 / Math.pow(2, 3)), 'full');
@@ -57,13 +77,13 @@ console.log('');
 console.log('hysteresis (±10% dead band around each boundary)');
 {
   eq('the margin is 10%', HYSTERESIS, 0.1);
-  const hi = 0.33 * 1.1, lo = 0.33 * 0.9;           // 0.363 / 0.297
+  const hi = 0.465 * 1.1, lo = 0.465 * 0.9;         // 0.5115 / 0.4185
   const hi2 = 0.165 * 1.1, lo2 = 0.165 * 0.9;       // 0.1815 / 0.1485
 
-  eq('inside the band, coming from dot, stays dot', tier(0.32, 'dot'), 'dot');
-  eq('inside the band, coming from icon, stays icon', tier(0.34, 'icon'), 'icon');
+  eq('inside the band, coming from dot, stays dot', tier(0.45, 'dot'), 'dot');
+  eq('inside the band, coming from icon, stays icon', tier(0.48, 'icon'), 'icon');
   eq('same value, two different answers — that IS the hysteresis',
-    `${tier(0.32, 'dot')}/${tier(0.32, 'icon')}`, 'dot/icon');
+    `${tier(0.45, 'dot')}/${tier(0.45, 'icon')}`, 'dot/icon');
 
   check('zooming in only becomes icon 10% past the boundary', tier(lo + 1e-9, 'dot') === 'dot' && tier(lo - 1e-9, 'dot') === 'icon');
   check('zooming out only becomes dot 10% past the boundary', tier(hi - 1e-9, 'icon') === 'icon' && tier(hi + 1e-9, 'icon') === 'dot');
@@ -75,7 +95,7 @@ console.log('hysteresis (±10% dead band around each boundary)');
   eq('an unknown previous tier behaves like a fresh read', tier(0.2, 'nonsense'), 'icon');
 
   // Idempotence matters: main.js and map3d.js both fold the same m/px in on one camera change.
-  for (const m of [0.55, 0.391, 0.33, 0.32, 0.276, 0.18, 0.165, 0.138, 0.05]) {
+  for (const m of [0.55, 0.465, 0.45, 0.391, 0.33, 0.32, 0.276, 0.18, 0.165, 0.138, 0.05]) {
     const once = tier(m, 'dot'), twice = tier(m, once);
     check(`idempotent at ${m}`, once === twice, `${once} then ${twice}`);
   }
@@ -89,7 +109,7 @@ console.log('hysteresis (±10% dead band around each boundary)');
 
   // The shared tier used by both views.
   setTier('dot');
-  eq('updateTier folds through the shared state', updateTier(0.32), 'dot');
+  eq('updateTier folds through the shared state', updateTier(0.45), 'dot');
   eq('and holds it', currentTier(), 'dot');
   eq('until the value clears the band', updateTier(0.2), 'icon');
   setTier('dot');
@@ -163,13 +183,17 @@ console.log('count bubbles by tier');
   check('every tier answers the question', TIERS.every((t) => typeof countsVisible(t) === 'boolean'));
   check('a dot cluster is bigger than a lone dot', CLUSTER_DOT_PX > 6);
 
-  // The tiers a cover-fit viewport actually lands in, on every map we ship: all three are `dot`,
-  // so a fit-zoom screenshot must contain no bubble at all.
-  for (const [map, mpp] of [['Customs', 0.552], ['Reserve', 0.423], ['Woods', 1.005]]) {
+  // The tiers a cover-fit viewport actually lands in. Customs and Woods open in `dot`, so their
+  // fit-zoom screenshots must contain no bubble at all. Reserve's fit is 0.423 m/px, which the
+  // 2026-09-03 boundary move puts in `icon` — it is a small map, and the ladder is cut on physical
+  // scale, so its fit is genuinely a badge-reading distance. Asserted rather than lamented.
+  for (const [map, mpp] of [['Customs', 0.552], ['Woods', 1.005]]) {
     eq(`${map} at cover-fit draws no bubble`, countsVisible(tierOf(mpp)), false);
   }
-  // One full zoom in from Customs' fit is `icon` — that is where the counts come back.
-  eq('one zoom into Customs brings them back', countsVisible(tierOf(0.276)), true);
+  eq('Reserve at cover-fit is close enough to read bubbles', countsVisible(tierOf(0.423)), true);
+  // Half a zoom in from Customs' fit is `icon` — that is where the counts come back.
+  eq('half a zoom into Customs brings them back', countsVisible(tierOf(0.391)), true);
+  eq('one zoom into Customs keeps them', countsVisible(tierOf(0.276)), true);
 }
 
 /* -------------------------------------------------------------- summary */
