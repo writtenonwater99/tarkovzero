@@ -153,6 +153,74 @@ export function canShowDiagnosticReadouts({ dev, hostname } = {}) {
   return dev === true && isLoopbackHostname(hostname);
 }
 
+/**
+ * The three URL switches that are INSTRUMENTS: each one deliberately makes the frame something
+ * other than the frame a visitor came for. The value is what it does, quoted into the refusal, so
+ * a reader who meets the message months from now does not have to find this file to know why.
+ */
+export const SCENE_MUTATING_INSTRUMENTS = Object.freeze({
+  profileAblate: 'hides caster geometry (?profileAblate=props|rocks set propGroup/rockGroup.visible = false) or re-times the shadow pass — the picture is deliberately NOT the shipped one',
+  profileSelfTest: 'makes the frame deliberately worse to prove the instrument discriminates (busy:N burns main-thread milliseconds; nocull disables frustum culling on every world root)',
+  shadowAudit: 'runs a second requestAnimationFrame loop that fingerprints every shadow caster on every tick — a visitor pays for it and cannot read it',
+});
+
+/** The flag names of (e), in the order a reader meets them in docs/PROFILING.md §4. */
+export const SCENE_MUTATING_INSTRUMENT_FLAGS = Object.freeze(Object.keys(SCENE_MUTATING_INSTRUMENTS));
+
+/**
+ * (e) May a DEV INSTRUMENT CHANGE WHAT THE FRAME DRAWS?
+ *
+ * Founder, 2026-09-03, at the push to production: keep `?profile=1` public — his RTX 5080 is the
+ * only real GPU in this project and a baseline of the live site can only be taken on the live site
+ * — but `?profileAblate=`, `?profileSelfTest=` and `?shadowAudit=` "are instruments, never a
+ * candidate optimisation, and they have no business on a public map".
+ *
+ * LOOPBACK ONLY, AND DELIBERATELY NOT `dev`. This is the one input that separates (e) from (b) and
+ * (c), and it is not a convenience:
+ *
+ *   - `docs/PROFILING.md` §3a's "exact sequence to run" is four loads of
+ *     `http://127.0.0.1:4173/?profile=1&profileAblate=…` — a RELEASE `vite preview`, because a dev
+ *     bundle is a different bundle (and `src/roadmap.js:37` throws in one under `vite preview`).
+ *   - every fidelity proof this repo owns (`.e2e/p1v-capture.mjs`, `.e2e/p1-shadow-capture.mjs`,
+ *     `.e2e/p1-ablation-ab.mjs`) serves a `vite build` output on 127.0.0.1 and asks for
+ *     `?shadowAudit=1` / `?profileAblate=shadow`.
+ *
+ * `dev === true && isLoopbackHostname(hostname)` — the shape (b) and (c) use — is FALSE in exactly
+ * that configuration, so reusing it would not have gated the instruments, it would have deleted
+ * them: no ablation could ever again be run on the only real GPU in the project, and the P1
+ * pixel-identity harness would stop being able to arm its own audit. That is the same mistake
+ * gating `?profile=1` behind (c) would have been, one layer down.
+ *
+ * What it therefore answers, and all it answers: is this page being served to the machine that is
+ * developing it? `tarkovzero.com`, a Vercel preview URL and a LAN address are all `false`.
+ *
+ * A REFUSAL IS LOUD, NEVER A NO-OP. `src/map3d-three.js` pairs every `false` here with
+ * `sceneMutatingInstrumentRefusal()` — a `console.error` at boot, a REFUSED line on the profiler
+ * panel, a `refused` row in `renderStats()`, and a THROW from `tz.profile()` / `tz.profileAB()`
+ * rather than a report. This project's documented failure mode (handoff §7, eight instances) is a
+ * system reporting success while something silently fell back; an ablation that was asked for and
+ * quietly not applied, in a report that still says "ABLATION RUN", would be the ninth.
+ */
+export function canRunSceneMutatingInstruments({ hostname } = {}) {
+  return isLoopbackHostname(hostname);
+}
+
+/**
+ * The sentence a refused instrument prints — one function so the console, the panel, the published
+ * state and the thrown error cannot drift apart, and so the message always says three things: that
+ * NOTHING was applied, what the flag would have done, and where it still runs.
+ */
+export function sceneMutatingInstrumentRefusal(flag, { hostname } = {}) {
+  const host = normalizeHostname(hostname) || 'this host';
+  const what = SCENE_MUTATING_INSTRUMENTS[flag] ?? 'changes what the frame draws';
+  return `?${flag} is a DEV INSTRUMENT and is REFUSED on "${host}". NOTHING WAS APPLIED — no picture`
+    + ` or number from this load is instrumented, and any that says otherwise is wrong. It ${what}.`
+    + ' It runs on a loopback host only (http://127.0.0.1:4173/ — a release `vite preview` counts,'
+    + ' and is where the real-GPU runs are taken).'
+    + ' ?profile=1, ?profilePresets=, ?profileFrames=, tz.profile() and ?shadows=live are NOT gated'
+    + ' and still work here.';
+}
+
 /** `'three'` or `'deck'` for question (a). The renderer selector `src/main.js` calls. */
 export function resolveRendererMode(options) {
   return canRunThreeRenderer(options) ? 'three' : 'deck';
@@ -186,6 +254,9 @@ export function describeRendererGate({ dev, hostname, mapKey, rendererRequest } 
     // (c) — whether the truth strip and the vegetation notice are DRAWN. Never whether their state
     // is computed or published: `renderStats().truth` carries it either way.
     diagnosticReadouts: canShowDiagnosticReadouts({ dev, hostname }),
+    // (e) — whether an instrument may CHANGE what the frame draws. Published because a report or a
+    // screenshot has to be able to say whether an ablation could even have applied on this host.
+    sceneMutatingInstruments: canRunSceneMutatingInstruments({ hostname }),
     localEnhancementReason: localEnhancements
       ? 'dev-loopback'
       : dev === true

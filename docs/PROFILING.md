@@ -10,6 +10,66 @@ a baseline every later optimisation gets judged against.
 
 ---
 
+## 0. WHICH OF THESE FLAGS EXIST IN PRODUCTION — read this before typing one
+
+Settled by the founder on 2026-09-03, at the push that makes `tarkovzero.com` this code. Two lists,
+and the line between them is not "is it a developer thing", it is **what the flag does to the
+picture a visitor is looking at**.
+
+**PUBLIC — works on `tarkovzero.com`, on a preview URL, on loopback, everywhere:**
+
+| flag | why it is public |
+|---|---|
+| `?profile=1` (+ `?profilePresets=`, `?profileFrames=`, `?profileWarmup=`, `?profileReflowFrames=`) | A baseline of the live site can only be taken **on the live site**, and the founder's RTX 5080 is the only real GPU in this project. It reads the frame the visitor is already being served, publishes nothing local, draws one corner panel nobody else asked for, and costs **6.35 ns per rendered frame** when off (§6). |
+| `tz.profile()`, `tz.profileReport()`, `tz.profileSeries()`, `tz.profileArmed()`, the panel, **Download JSON** | The same instrument, from the console. Same argument. |
+| `?shadows=live` | **Pixel-identical by proof** (§3c: 0 px against a stale control that moves 20,746–209,745 px). It does not change what is drawn, it spends more GPU to draw the same thing — worst case slower, never wrong. It is also the one-line rollback if a frozen shadow ever misbehaves in the wild, and a user who hits a shadow artefact should have a way around it. |
+| `?threeBackend=webgl2` | Picks a backend the app already ships; changes no geometry. |
+
+**DEV-ONLY — refused off a loopback host, loudly:**
+
+| flag | what it does to the picture |
+|---|---|
+| `?profileAblate=props\|rocks\|shadow` | Sets `propGroup.visible` / `rockGroup.visible` **false** — the map is drawn with its props or its rocks missing. An instrument, never a candidate optimisation: the app is supposed to draw them. |
+| `?profileSelfTest=busy:N\|nocull` | Burns up to 200 ms of main thread per frame, or disables frustum culling on every world root. It makes the frame deliberately worse to prove the instrument discriminates. |
+| `?shadowAudit=1` | Runs a **second `requestAnimationFrame` loop** that fingerprints every shadow caster on every tick. A visitor pays for it and cannot read the answer. |
+
+**Where "dev-only" means, exactly:** `hostname` is `localhost`, `127.0.0.1` or `::1` — question (e)
+of `src/renderer-gate.js`, `canRunSceneMutatingInstruments()`. It is **loopback, not `dev`**, and
+that is deliberate: §3a's four-load ablation sequence is run against a release `vite preview` on
+`http://127.0.0.1:4173/`, and every fidelity harness in `.e2e/` serves a `vite build` output on
+127.0.0.1 with `?shadowAudit=1` armed. Gating on `import.meta.env.DEV` would not have gated these
+instruments, it would have **deleted** them from the only configuration a real-GPU run can happen
+in — the same mistake putting `?profile=1` behind `canShowDiagnosticReadouts()` would have been.
+
+**A refused flag is loud, never a quiet no-op.** Type `?profileAblate=props` on `tarkovzero.com` and
+you get, on four channels at once:
+
+```
+console      [three-poc] ?profileAblate is a DEV INSTRUMENT and is REFUSED on "tarkovzero.com".
+             NOTHING WAS APPLIED — no picture or number from this load is instrumented, and any
+             that says otherwise is wrong. …It runs on a loopback host only…
+panel        REFUSED      ?profileAblate — <the same sentence>
+tz.profile() throws that sentence instead of returning a report
+renderStats  instruments: { sceneMutatingAllowed: false, refused: [{ flag: 'profileAblate', … }] }
+```
+
+`renderStats().shadows.audit` says `{ armed: false, refused: true, reason: … }` rather than the old
+`{ armed: false }`, which collapsed "nobody asked" and "the gate said no" into one reading. This
+project's documented failure mode (handoff §7, eight instances) is a system reporting success while
+something silently fell back; an ablation that was asked for, quietly not applied, and then stamped
+`ABLATION RUN — PIXELS DELIBERATELY REMOVED` on a report full of plain baseline numbers would have
+been the ninth.
+
+**Refused at runtime, not removed from the bundle** — stated because the difference matters if you
+are auditing what ships. Measured on a release build (`vite build`, chunk `map3d-three-*.js`): the
+gate is `canRunSceneMutatingInstruments({hostname:location.hostname})` evaluated in the browser, and
+the instrument bodies are still in the chunk, unreachable. A build-time `import.meta.env.DEV` branch
+would tree-shake them out, and it was rejected for the reason two paragraphs up: the release bundle
+is exactly the bundle the ablations and the fidelity proofs have to run in on 127.0.0.1. There is no
+build that is both "the artefact under test" and "stripped of the instruments that test it".
+
+---
+
 ## 1. The run, in order
 
 ### Step 0 — check nothing else is holding the port
@@ -222,6 +282,11 @@ the thing off costs one page load.
 ?profileAblate=rocks         rockGroup.visible = false
 ?profileAblate=props,rocks   both — commas combine, order does not matter
 ```
+
+> **These four run on a LOOPBACK HOST ONLY** — `localhost` / `127.0.0.1` / `::1`, question (e) of
+> `src/renderer-gate.js`, §0. A release `vite preview` on 127.0.0.1 counts and is exactly where the
+> sequence below is meant to be run, so nothing about this procedure changed. On `tarkovzero.com`
+> the flag is refused on four channels and `tz.profile()` throws instead of returning a report.
 
 **Two classes, and they are not the same kind of evidence.**
 
@@ -475,7 +540,7 @@ with a reason that is not on it throws rather than quietly doing nothing.
 | `authored-vegetation-repack` | `repackAuthoredVegetationNow()` | conditional on `authoredVegetationCastsShadows`, read from the **constructed runtime's** normalised policy at the mount swap — NOT from the module default. `createCustomsAuthoredVegetationRuntime()` accepts a `shadowPolicy` override the renderer's gate would never see, and a gate reading the constant would sit false while lod-0 buckets cast and changed every 4 m |
 | `authored-asset-attach` / `-detach` | the streamer's `onCastersChanged`, via the `AUTHORED_ASSET_SHADOW_REASON` table | one authored GLB enters or leaves `authoredRoot`; `seatAuthoredInstance()` writes `castShadow` from the manifest. A table, not a ternary, so an unrecognised kind reaches the closed enum's throw instead of being filed under `attach` |
 | `renderer-context-restored` | the `webglcontextrestored` listener and the WebGPU `device.lost` promise, at construction | **the one stale path no fingerprint can see.** A context/device loss reallocates the depth texture EMPTY without touching a caster, so live it re-bakes next frame and nobody notices, while frozen it never re-bakes at all — the scene loses every sun shadow for the rest of the session with the audit reporting `clean` forever, because the caster set genuinely did not change. A failure mode the freeze itself introduces |
-| `profiler-ablation` | `applyAblation()` / `armAblation()` / `shadowPixelCheck()` | `?profileAblate=props\|rocks` sets `propGroup.visible` / `rockGroup.visible` false, and both are caster groups. Un-declared, that drew prop shadows on ground with no props — the literal stale-shadow signature, produced by the instrument built to measure the freeze, and reachable in production because `?profile=1` is deliberately not behind `canShowDiagnosticReadouts()`. Invalidates on **both** edges |
+| `profiler-ablation` | `applyAblation()` / `armAblation()` / `shadowPixelCheck()` | `?profileAblate=props\|rocks` sets `propGroup.visible` / `rockGroup.visible` false, and both are caster groups. Un-declared, that drew prop shadows on ground with no props — the literal stale-shadow signature, produced by the instrument built to measure the freeze. It WAS reachable in production, because `?profile=1` is deliberately not behind `canShowDiagnosticReadouts()` and the ablation rode in on it; since 2026-09-03 evening `?profileAblate=` is question (e), loopback-only (§0), so the reachable-in-production half of this row is closed — the invalidation stays, because it is still reachable on every loopback load. Invalidates on **both** edges |
 | `sun` | declared, **RESERVED and unused** | nothing moves the sun today. The name exists so the day something does, it is already spelled — and it is now listed in an explicit `RESERVED_UNUSED_REASONS` allowlist in `scripts/three-renderer-test.mjs`, which asserts the enum in BOTH directions. A member with no call site is a coverage claim that does not exist; reserving one costs a line in that test, which is the point |
 
 Two deliberate NON-entries, and the reason each is safe:
@@ -596,6 +661,11 @@ untested — nothing in a screenshot can see it.
 
 ### `?shadows=live` — the escape hatch, and the control arm
 
+**It stays PUBLIC** (founder, 2026-09-03, with the ablations gated around it — §0). It is the one
+flag in this document that changes the frame and is still not an instrument: it is pixel-identical
+by proof, so its worst case is a slower map, never a wrong one, and the flags that were gated all
+have a worst case of *a wrong picture that looks right*. That is the whole line between the lists.
+
 It restores three's per-frame behaviour exactly. Three things use it:
 
 1. **The fidelity proof.** `.e2e/p1-shadow-capture.mjs` captures the same build twice — once with the
@@ -613,22 +683,30 @@ It restores three's per-frame behaviour exactly. Three things use it:
 
 ## 4. Every knob
 
-| parameter | default | what it does |
-|---|---|---|
-| `?profile=1` | off | arms the profiler and the GPU timer. `0`/`false`/`off`/`no` turn it back off. |
-| `?profileFrames=N` | 180 | sampled frames per preset (10–2000) |
-| `?profileWarmup=N` | 30 | frames discarded before sampling (0–600) |
-| `?profileReflowFrames=N` | 60 | overlay-probe frames per variant; `0` skips the probe |
-| `?profilePresets=a,b` | all four | which presets to run. An unknown name is reported and the full set is kept. |
-| `?profileSelfTest=busy:N` | none | inject N ms into the overlay pass (max 200) |
-| `?profileSelfTest=nocull` | none | disable frustum culling on the world roots for the run |
-| `?shadows=live` | off | put three's per-frame shadow map back. The control arm of §3c's pixel proof, the load on which `?profileAblate=shadow` still discriminates, and the rollback |
-| `?shadowAudit=1` | off | arm the stale-shadow audit — §3c. Dev instrument; it runs in its own rAF loop and touches neither `animate()` nor `renderOneFrame()` |
-| `?profileAblate=shadow` | none | render the sun's shadow map once, then freeze it. **Since 2026-09-03 this is already the shipped behaviour**, so on a default load it removes nothing and the A/B correctly attributes nothing; pair it with `?shadows=live` to measure the pass again — §3a, §3c |
-| `?profileAblate=props` | none | `propGroup.visible = false`. **Changes pixels on purpose** |
-| `?profileAblate=rocks` | none | `rockGroup.visible = false`. **Changes pixels on purpose** |
-| `?profileAblate=a,b` | none | combine any of the three. Unknown names are reported and dropped, never silently ignored |
-| `?threeBackend=webgl2` | off | force the WebGL2 fallback — the profiler follows it and says so |
+`where` is question (e) of `src/renderer-gate.js` — see §0. **PUBLIC** works on `tarkovzero.com`;
+**loopback** is refused anywhere else, loudly, and never silently ignored.
+
+| parameter | where | default | what it does |
+|---|---|---|---|
+| `?profile=1` | PUBLIC | off | arms the profiler and the GPU timer. `0`/`false`/`off`/`no` turn it back off. |
+| `?profileFrames=N` | PUBLIC | 180 | sampled frames per preset (10–2000) |
+| `?profileWarmup=N` | PUBLIC | 30 | frames discarded before sampling (0–600) |
+| `?profileReflowFrames=N` | PUBLIC | 60 | overlay-probe frames per variant; `0` skips the probe |
+| `?profilePresets=a,b` | PUBLIC | all four | which presets to run. An unknown name is reported and the full set is kept. |
+| `?profileSelfTest=busy:N` | **loopback** | none | inject N ms into the overlay pass (max 200) |
+| `?profileSelfTest=nocull` | **loopback** | none | disable frustum culling on the world roots for the run |
+| `?shadows=live` | PUBLIC | off | put three's per-frame shadow map back. The control arm of §3c's pixel proof, the load on which `?profileAblate=shadow` still discriminates, and the rollback. Pixel-identical by proof, so it is a safety valve rather than an instrument — §0 |
+| `?shadowAudit=1` | **loopback** | off | arm the stale-shadow audit — §3c. It runs in its own rAF loop and touches neither `animate()` nor `renderOneFrame()`; off loopback it is refused and `renderStats().shadows.audit.refused` says so |
+| `?profileAblate=shadow` | **loopback** | none | render the sun's shadow map once, then freeze it. **Since 2026-09-03 this is already the shipped behaviour**, so on a default load it removes nothing and `run()` refuses; pair it with `?shadows=live` to measure the pass again — §3a, §3c |
+| `?profileAblate=props` | **loopback** | none | `propGroup.visible = false`. **Changes pixels on purpose** |
+| `?profileAblate=rocks` | **loopback** | none | `rockGroup.visible = false`. **Changes pixels on purpose** |
+| `?profileAblate=a,b` | **loopback** | none | combine any of the three. Unknown names are reported and dropped, never silently ignored |
+| `?threeBackend=webgl2` | PUBLIC | off | force the WebGL2 fallback — the profiler follows it and says so |
+
+Two refusals can look alike and are not: `?profileAblate=shadow` on a **loopback** load throws
+because the depth map is already frozen and the experiment would be null (§3a's box), while any
+`?profileAblate=` on a **public** host throws because question (e) refused the instrument. Both
+messages name themselves; read which one you got.
 
 Any `?profileAblate=` also puts a **Run A/B/A/B** button on the panel. That is the one to press;
 see §3a for why comparing two separate page loads is weaker evidence.
@@ -721,9 +799,21 @@ above are what prove that nothing was added to the per-item loop, where a real c
 | `scripts/render-profiler.test.mjs` | `npm run test:render-profiler` |
 | `src/main.js` | `tz.profile()`, `tz.profileReport()`, and `fitView` for the `cover-fit` preset |
 
-**On the gate:** the profiler is deliberately *not* behind `canShowDiagnosticReadouts()` and does not
-import `src/renderer-gate.js`. That predicate is dev + loopback, and both configurations where a
-real-GPU baseline can be taken — a release `vite preview` on 127.0.0.1, and the live site on your
-machine — answer it `false`. It publishes nothing local: every number describes the frame the visitor
-is already being served. The full argument is in `src/render-profiler.js`'s header, and a test pins
-that it stays separate.
+**On the gate — two separate questions, and they are not the same one.**
+
+*The profiler itself* is deliberately *not* behind `canShowDiagnosticReadouts()` and
+`src/render-profiler.js` does not import `src/renderer-gate.js`. That predicate is dev + loopback,
+and both configurations where a real-GPU baseline can be taken — a release `vite preview` on
+127.0.0.1, and the live site on your machine — answer it `false`. It publishes nothing local: every
+number describes the frame the visitor is already being served. The full argument is in
+`src/render-profiler.js`'s header, and a test pins that it stays separate.
+
+*The scene-mutating instruments* — `?profileAblate=`, `?profileSelfTest=`, `?shadowAudit=` — are
+question **(e)**, `canRunSceneMutatingInstruments({ hostname })` in `src/renderer-gate.js`: loopback
+only, taking no `dev` at all (§0 has the reasoning and the refusal's four channels). It is its own
+predicate with its own body, like (b) and (c), and `scripts/three-renderer-test.mjs` refuses any
+attempt to implement one of the three by delegating to another — handoff §4's rule, now covering
+four questions instead of three. The wiring is pinned in `scripts/render-profiler.test.mjs`: the
+refusal must be the statement immediately *before* the first line that applies a self-test, it must
+throw rather than drop the flag, and `?profile=1` and `?shadows=live` must reach the renderer
+ungated. Every one of those assertions was mutation-proved red and restored green.

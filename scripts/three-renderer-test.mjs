@@ -22,9 +22,10 @@ import {
 import { buildOpenFrameBuildingAsset, buildPropAsset, propAssetKind, propDimensions } from '../src/three-prop-assets.js';
 import { BRIDGE_STRUCTURE, bridgeApproachPlan, bridgeStructurePlan, bridgeStructureProfile } from '../src/bridge-structure.js';
 import {
-  DECK_RENDERER_REQUEST, RENDERER_REQUESTS, THREE_RENDERER_MAPS,
-  assertThreeRenderer, canLoadLocalGameDerivedAssets, canRunThreeRenderer, canShowDiagnosticReadouts,
-  describeRendererGate,
+  DECK_RENDERER_REQUEST, RENDERER_REQUESTS, SCENE_MUTATING_INSTRUMENT_FLAGS, THREE_RENDERER_MAPS,
+  assertThreeRenderer, canLoadLocalGameDerivedAssets, canRunSceneMutatingInstruments,
+  canRunThreeRenderer, canShowDiagnosticReadouts,
+  describeRendererGate, sceneMutatingInstrumentRefusal,
   isKnownRendererRequest, isLoopbackHostname, normalizeHostname, normalizeRendererRequest,
   resolveRendererMode,
 } from '../src/renderer-gate.js';
@@ -3017,6 +3018,92 @@ test('(c) hiding the banner does not move the boundary, and vice versa', async (
   );
 });
 
+/* ── (e) the scene-mutating instruments come off the live page ───────────────────────────────── */
+//
+// Founder, 2026-09-03, at the push to production: `?profile=1` stays public — it reads the frame a
+// visitor is already being served, and his RTX 5080 is the only real GPU this project has, so a
+// baseline of the live site can only be taken on the live site. `?profileAblate=`,
+// `?profileSelfTest=` and `?shadowAudit=` do NOT: they hide caster groups, burn main-thread
+// milliseconds, disable frustum culling and run a second rAF loop over every caster.
+
+test('(e) scene-mutating instruments are LOOPBACK-only — and that is NOT the readout gate', () => {
+  for (const hostname of ['localhost', '127.0.0.1', '::1', '[::1]', 'LOCALHOST']) {
+    assert.equal(canRunSceneMutatingInstruments({ hostname }), true, hostname);
+  }
+  // Every host a visitor can reach. A Vercel preview URL is production for this purpose.
+  for (const hostname of ['tarkovzero.com', 'tarkovzero.vercel.app', '192.168.1.4', 'localhost.evil.com', '']) {
+    assert.equal(canRunSceneMutatingInstruments({ hostname }), false, hostname);
+  }
+  assert.equal(canRunSceneMutatingInstruments({}), false);
+  assert.equal(canRunSceneMutatingInstruments(), false);
+
+  /*
+   * THE DISCRIMINATING CASE, and the reason (e) exists as its own predicate.
+   *
+   * A release `vite preview` on 127.0.0.1 is where docs/PROFILING.md §3a's four ablation loads are
+   * run on the 5080, and where every fidelity harness in .e2e/ serves a `vite build` output and
+   * asks for `?shadowAudit=1`. (b) and (c) are BOTH false there. Implementing (e) with their
+   * `dev === true &&` shape would not have gated the instruments, it would have deleted them.
+   */
+  const releasePreview = { dev: false, hostname: '127.0.0.1' };
+  assert.equal(canRunSceneMutatingInstruments(releasePreview), true, 'the release preview is where the real-GPU runs happen');
+  assert.equal(canShowDiagnosticReadouts(releasePreview), false);
+  assert.equal(canLoadLocalGameDerivedAssets(releasePreview), false);
+  // …and no `dev` value can buy an instrument on a public host, in either direction.
+  for (const dev of [true, false, undefined, 'true', 1]) {
+    assert.equal(canRunSceneMutatingInstruments({ dev, hostname: 'tarkovzero.com' }), false, `dev=${String(dev)}`);
+  }
+});
+
+test('(e) the instrument gate is its own predicate, and does not delegate to (b) or (c)', async () => {
+  // Handoff §4: *"a source-pinned test refuses any attempt to implement one of these gates by
+  // delegating to another."* Three questions, three bodies, and the inputs are what keep them
+  // apart: (e) never sees `dev`, so it cannot quietly acquire the release-build behaviour of (c).
+  const gate = await readFile(new URL('../src/renderer-gate.js', import.meta.url), 'utf8');
+  assert.match(
+    gate,
+    /export function canRunSceneMutatingInstruments\(\{ hostname \} = \{\}\) \{\n\s*return isLoopbackHostname\(hostname\);\n\}/,
+    'the instrument predicate must be its own function taking only the hostname',
+  );
+  assert.doesNotMatch(
+    gate,
+    /canRunSceneMutatingInstruments\(\{[^}]*\bdev\b/,
+    'no `dev` input may reach (e) — a dev conjunction would delete the instruments from the release preview',
+  );
+  for (const delegation of [
+    /canRunSceneMutatingInstruments\s*=\s*canShowDiagnosticReadouts/,
+    /canRunSceneMutatingInstruments\s*=\s*canLoadLocalGameDerivedAssets/,
+    /canShowDiagnosticReadouts\s*=\s*canRunSceneMutatingInstruments/,
+    /canLoadLocalGameDerivedAssets\s*=\s*canRunSceneMutatingInstruments/,
+    /return canShowDiagnosticReadouts\(\{ hostname \}\);/,
+    /return canLoadLocalGameDerivedAssets\(\{ hostname \}\);/,
+  ]) assert.doesNotMatch(gate, delegation, `gate (e) must not be implemented as ${delegation}`);
+  // The two flags the founder KEPT public must not have acquired a gate on the way past.
+  assert.doesNotMatch(gate, /'profile'|profile=1'|'shadows'/, 'neither ?profile=1 nor ?shadows=live is a question this module answers');
+});
+
+test('(e) a refusal says NOTHING WAS APPLIED, what was refused, and where it still runs', () => {
+  assert.deepEqual([...SCENE_MUTATING_INSTRUMENT_FLAGS], ['profileAblate', 'profileSelfTest', 'shadowAudit']);
+  for (const flag of SCENE_MUTATING_INSTRUMENT_FLAGS) {
+    const message = sceneMutatingInstrumentRefusal(flag, { hostname: 'tarkovzero.com' });
+    // The four things a reader meeting this message in a console months from now needs.
+    assert.match(message, new RegExp(`\\?${flag}\\b`), 'it must name the flag that was refused');
+    assert.match(message, /tarkovzero\.com/, 'it must name the host that refused it');
+    assert.match(message, /NOTHING WAS APPLIED/, 'the whole point: this is not a quiet no-op');
+    assert.match(message, /127\.0\.0\.1/, 'it must name where the instrument still runs');
+    // …and it must not leave the reader thinking the profiler itself is gone.
+    assert.match(message, /\?profile=1[\s\S]*NOT gated/);
+    assert.match(message, /\?shadows=live/);
+  }
+  // Each flag says what IT would have done — a generic sentence would make three refusals identical
+  // and tell a reader nothing about which instrument they lost.
+  assert.match(sceneMutatingInstrumentRefusal('profileAblate', { hostname: 'x.com' }), /hides caster geometry/);
+  assert.match(sceneMutatingInstrumentRefusal('profileSelfTest', { hostname: 'x.com' }), /deliberately worse/);
+  assert.match(sceneMutatingInstrumentRefusal('shadowAudit', { hostname: 'x.com' }), /requestAnimationFrame loop/);
+  // An unknown flag still produces a refusal rather than an exception or an empty sentence.
+  assert.match(sceneMutatingInstrumentRefusal('somethingNew', {}), /REFUSED on "this host"/);
+});
+
 test('(c) the state behind the hidden banner is still composed, in full, everywhere', () => {
   // The rule the founder set and the one this file's header is about: hide the pixels, keep the
   // measurement. `customsTruthStripCopy()` is pure and takes no environment at all — there is no
@@ -3117,8 +3204,17 @@ test('describeRendererGate names WHY local data is out of reach, so a frame can 
     // (founder, 2026-09-02: "remove the notification boxes in the middle about the build").
     // Their state is still published: `renderStats().truth` carries the same composed strip.
     diagnosticReadouts: false,
+    // (e) — no instrument may change what this frame draws. `?profileAblate=`, `?profileSelfTest=`
+    // and `?shadowAudit=` are refused loudly here; `?profile=1` and `?shadows=live` are not gated.
+    sceneMutatingInstruments: false,
     localEnhancementReason: 'release-build',
   });
+  // The release preview on loopback: the ONE configuration where (e) differs from (c), and the one
+  // every real-GPU ablation run and every .e2e fidelity capture is taken in.
+  const preview = describeRendererGate({ dev: false, hostname: '127.0.0.1', mapKey: 'customs' });
+  assert.equal(preview.sceneMutatingInstruments, true);
+  assert.equal(preview.diagnosticReadouts, false);
+  assert.equal(preview.localEnhancements, false);
   assert.equal(
     describeRendererGate({ dev: true, hostname: '192.168.1.4', mapKey: 'customs', rendererRequest: 'three' })
       .localEnhancementReason,

@@ -869,3 +869,126 @@ test('the batched overlay variant exists only as an instrument', () => {
   assert.doesNotMatch(animate[0], /updateOverlayPositionsBatched/);
   assert.match(renderer, /function updateOverlayPositionsBatched\(\)/);
 });
+
+/* ------------------------------------------ (e) the instruments are gated, the profiler is not -- */
+/*
+ * Founder's ruling, 2026-09-03, at the push that makes tarkovzero.com this code:
+ *
+ *   KEEP public   `?profile=1` (with `?profilePresets=`, `tz.profile()`, the panel, the JSON
+ *                 export) and `?shadows=live`. A baseline of the live site can only be taken on the
+ *                 live site, and `?shadows=live` is a proven-pixel-identical escape hatch.
+ *   GATE          `?profileAblate=`, `?profileSelfTest=`, `?shadowAudit=`. They hide caster groups,
+ *                 burn main-thread time, disable frustum culling and run a second rAF loop. They
+ *                 are instruments, never a candidate optimisation.
+ *
+ * The predicate is question (e) of `src/renderer-gate.js`, LOOPBACK-only, and its behaviour is
+ * proved in `scripts/three-renderer-test.mjs`. What is proved HERE is the wiring, source-pinned the
+ * same way "zero cost when off" is: that the refusal happens BEFORE the instrument is applied, on
+ * every route into it, and that the profiler itself did not get gated with it.
+ */
+
+test('(e) the gated instruments are refused BEFORE they are applied, on every route in', () => {
+  // The gate is question (e), read once, from the hostname and from nothing else.
+  assert.match(renderer, /const sceneInstrumentsAllowed = canRunSceneMutatingInstruments\(\{ hostname: location\.hostname \}\);/);
+  assert.doesNotMatch(rendererCode, /canRunSceneMutatingInstruments\(\{[^}]*\bdev\b/);
+
+  /*
+   * THE ORDER IS THE ASSERTION. `run()` is the one place both routes meet — the URL's
+   * `profileRequest.ablate` and the console's `tz.profile({ ablate: 'props' })` — and the refusal
+   * has to sit above the first line that applies anything. Below it, the run would complete and
+   * stamp `notes[0] = 'ABLATION RUN — PIXELS DELIBERATELY REMOVED (props)'` on a report whose
+   * numbers are a plain baseline: handoff §7's ninth instance, manufactured by this gate.
+   */
+  const run = /async function run\(overrides = \{\}\) \{[\s\S]*?\n    \}\n\n    \/\*\*/.exec(renderer);
+  assert.ok(run, 'run() must exist');
+  assert.match(
+    run[0],
+    /if \(!sceneInstrumentsAllowed\) \{\s*\n\s*if \(ablate\?\.kind === 'ablate'\) throw new Error\(refuseInstrument\('profileAblate'\)\);\s*\n\s*if \(selfTest\) throw new Error\(refuseInstrument\('profileSelfTest'\)\);\s*\n\s*\}\s*\n\s*if \(selfTest\?\.kind === 'busy'\) busyMs = selfTest\.busyMs;/,
+    'the refusal must be the statement immediately before the first line that applies a self-test',
+  );
+  // It THROWS. A dropped flag is the silent fallback this project keeps failing by.
+  assert.doesNotMatch(run[0], /if \(!sceneInstrumentsAllowed\) \{\s*\n\s*(?:ablate|selfTest) = null/);
+  // …and it is inside the try, so the `finally` still restores the view and clears `inFlight`.
+  const tryAt = run[0].indexOf('try {');
+  assert.ok(tryAt > 0 && run[0].indexOf('if (!sceneInstrumentsAllowed)') > tryAt, 'a throw outside the try would wedge the profiler');
+
+  // The A/B series refuses UP FRONT: arm A is the unablated one, so without this the page would
+  // spend minutes measuring a baseline before discovering it can never take arm B.
+  const series = /async function runSeries\(overrides = \{\}\) \{[\s\S]*?\n    \}\n/.exec(renderer);
+  assert.ok(series, 'runSeries() must exist');
+  assert.match(series[0], /if \(!sceneInstrumentsAllowed\) throw new Error\(refuseInstrument\('profileAblate'\)\);/);
+  assert.ok(
+    series[0].indexOf('sceneInstrumentsAllowed') < series[0].indexOf('for (let cycle'),
+    'the refusal must precede the first arm',
+  );
+
+  // `?shadowAudit=1` has no run to throw from — it is armed at boot or never — so the arming
+  // itself carries the gate, and the refusal is announced beside it.
+  assert.match(renderer, /if \(shadowRequest\.audit && !sceneInstrumentsAllowed\) refuseInstrument\('shadowAudit'\);\n\s*const shadowAudit = shadowRequest\.audit && sceneInstrumentsAllowed\n\s*\? createShadowCasterAudit\(\{/);
+});
+
+test('(e) a refused instrument is never silent — four channels, one message', () => {
+  /*
+   * "A gated flag must FAIL LOUDLY and legibly when used in production, never silently no-op. A
+   * user or you, months from now, must not think an ablation applied when it did not."
+   *
+   * Console at boot, a REFUSED line on the panel, a row in renderStats(), and a throw instead of a
+   * report — all four from `sceneMutatingInstrumentRefusal()`, so they cannot drift apart.
+   */
+  const refuse = /const refuseInstrument = \(flag\) => \{[\s\S]*?\n  \};/.exec(renderer);
+  assert.ok(refuse, 'refuseInstrument() must exist');
+  assert.match(refuse[0], /sceneMutatingInstrumentRefusal\(flag, \{ hostname: location\.hostname \}\)/);
+  assert.match(refuse[0], /console\.error\(`\[three-poc\] \$\{message\}`\)/, 'channel 1: the console, at boot');
+  assert.match(refuse[0], /refusedInstruments\.push\(\{ flag, message \}\)/);
+  assert.match(refuse[0], /return message;/, 'the same sentence is what the throw carries');
+
+  // Channel 2: the panel prints it, and the ABLATION / SELF-TEST lines that would contradict it are
+  // suppressed on a refused load — one line per flag, never two saying different things.
+  assert.match(renderer, /\.\.\.refusedInstruments\.map\(\(row\) => `REFUSED\s+\?\$\{row\.flag\} — \$\{row\.message\}`\)/);
+  assert.match(renderer, /profileRequest\.selfTest && sceneInstrumentsAllowed \?/);
+  assert.match(renderer, /profileRequest\.ablate\?\.kind === 'ablate' && sceneInstrumentsAllowed/);
+  assert.match(
+    renderer,
+    /abButton\.hidden = profileRequest\.ablate\?\.kind !== 'ablate' \|\| !sceneInstrumentsAllowed;/,
+    'a button that can only throw is a promise the page cannot keep',
+  );
+
+  // Channel 3: the published state. A downloaded report, a screenshot or an `.e2e` capture taken on
+  // a public host carries the evidence that its flags did nothing.
+  assert.match(renderer, /instruments: \{\s*\n\s*sceneMutatingAllowed: sceneInstrumentsAllowed,\s*\n\s*refused: refusedInstruments\.map\(\(row\) => \(\{ \.\.\.row \}\)\),\s*\n\s*\}/);
+  // `{ armed: false }` collapsed "nobody asked" and "the gate said no" into one reading. It cannot.
+  const auditState = /const shadowAuditState = \(\) => \{[\s\S]*?\n  \};/.exec(renderer);
+  assert.ok(auditState, 'shadowAuditState() must exist');
+  assert.match(auditState[0], /if \(shadowRequest\.audit\) \{\s*\n\s*return \{ armed: false, refused: true, reason:/);
+  assert.match(auditState[0], /return \{ armed: false, refused: false, reason: null \};/);
+  assert.doesNotMatch(renderer, /audit: shadowAudit \? shadowAudit\.stats\(\) : \{ armed: false \}/,
+    'the old two-readings-in-one shape must not come back');
+});
+
+test('(e) ?profile=1 and ?shadows=live are NOT gated — the instrument gate did not eat them', async () => {
+  /*
+   * The failure mode of this change, stated as its own test. The profiler exists BECAUSE the
+   * founder's 5080 is the only real GPU in the project and the live site is one of the two places a
+   * baseline can be taken; `?shadows=live` is pixel-identical by proof and is the rollback if a
+   * frozen shadow ever misbehaves in the wild. A gate that also took those out would be a
+   * regression dressed as hardening.
+   */
+  assert.match(renderer, /if \(profileRequest\.armed\) frameProfiler = createRenderProfiler\(\);/);
+  assert.doesNotMatch(rendererCode, /profileRequest\.armed && sceneInstrumentsAllowed/);
+  assert.doesNotMatch(rendererCode, /sceneInstrumentsAllowed && profileRequest\.armed/);
+  // The GPU timer is still armed from the URL alone — it is a renderer-construction parameter and
+  // cannot be turned on later, so a gate here would be unrecoverable rather than merely wrong.
+  assert.match(renderer, /new THREE\.WebGPURenderer\(\{ antialias: true, forceWebGL, trackTimestamp: profileRequest\.armed \}\)/);
+  // The panel is built for anyone who typed `?profile=`, on any host.
+  assert.match(renderer, /let profilePanelInterval = 0;\n\s*if \(frameProfiler\) \{/);
+
+  // `?shadows=live` reaches the controller unconditionally: it is the escape hatch AND the control
+  // arm of the pixel-identity proof, and both uses die if a host can refuse it.
+  assert.match(renderer, /const sunShadow = createShadowController\(\{\n\s*shadow: sun\.shadow,\n\s*live: shadowRequest\.live,/);
+  assert.doesNotMatch(rendererCode, /live: shadowRequest\.live && sceneInstrumentsAllowed/);
+  assert.doesNotMatch(rendererCode, /shadowRequest\.live && sceneInstrumentsAllowed/);
+  // The pure parser still answers the URL and nothing else; only `audit` is gated downstream.
+  const shadow = await readFile(new URL('../src/shadow-invalidation.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(shadow, /canRunSceneMutatingInstruments|sceneInstrumentsAllowed|renderer-gate/,
+    'the shadow module parses what was ASKED FOR; authorising it is the renderer\'s job, not the parser\'s');
+});

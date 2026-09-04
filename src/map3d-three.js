@@ -107,7 +107,10 @@ import {
   planCustomsAssetFrame,
   resolveProceduralSuppression,
 } from './customs-asset-runtime.js';
-import { assertThreeRenderer, describeRendererGate } from './renderer-gate.js';
+import {
+  assertThreeRenderer, canRunSceneMutatingInstruments, describeRendererGate,
+  sceneMutatingInstrumentRefusal,
+} from './renderer-gate.js';
 // The frame-time instrument (src/render-profiler.js). Its predicate is its own — see that module's
 // header for why `?profile=` is deliberately NOT question (c) of the renderer gate: the two places
 // the baseline has to be taken (a release `vite preview` on loopback, and the live site on the
@@ -1305,6 +1308,37 @@ export async function createView3d(container, mapData, src) {
    * A profiler that can only be armed at boot is the price of a GPU number that is real.
    */
   const profileRequest = parseProfileRequest(location.search);
+  /*
+   * Question (e): may an instrument CHANGE WHAT THE FRAME DRAWS? Loopback only.
+   *
+   * Founder, 2026-09-03, at the push that makes tarkovzero.com this code: `?profile=1` stays public
+   * (it reads the frame the visitor is already being served, and his 5080 is the only real GPU this
+   * project has), and `?profileAblate=`, `?profileSelfTest=`, `?shadowAudit=` do not — they hide
+   * caster groups, burn main-thread time, disable culling and run a second rAF loop. See
+   * `src/renderer-gate.js` (e) for why this predicate is LOOPBACK and takes no `dev`: the release
+   * `vite preview` on 127.0.0.1 is where every real-GPU run and every fidelity proof is taken, and
+   * a `dev &&` conjunction would have deleted the instruments rather than gated them.
+   *
+   * REFUSED IS NOT OFF. Every refusal below is announced four ways — console.error here, a REFUSED
+   * line on the profiler panel, a row in `renderStats().instruments`, and a THROW from the run
+   * rather than a report — because the failure this repo keeps having (handoff §7) is a system
+   * reporting success while something silently fell back.
+   */
+  const sceneInstrumentsAllowed = canRunSceneMutatingInstruments({ hostname: location.hostname });
+  /** `{ flag, message }` per refused instrument, in the order they were asked for. */
+  const refusedInstruments = [];
+  const refuseInstrument = (flag) => {
+    const message = sceneMutatingInstrumentRefusal(flag, { hostname: location.hostname });
+    if (!refusedInstruments.some((row) => row.flag === flag)) refusedInstruments.push({ flag, message });
+    console.error(`[three-poc] ${message}`);
+    return message;
+  };
+  if (!sceneInstrumentsAllowed) {
+    // Announced at BOOT, before a run is pressed, because the panel and the report are downstream of
+    // a decision the visitor already made in the address bar.
+    if (profileRequest.ablate?.kind === 'ablate') refuseInstrument('profileAblate');
+    if (profileRequest.selfTest) refuseInstrument('profileSelfTest');
+  }
   const profileWaterfall = profileRequest.armed ? createWaterfall() : null;
   // Bound once each, so the OFF path is an empty function call and not a `performance.now()` that
   // is computed and thrown away at a dozen mount sites.
@@ -5402,9 +5436,11 @@ export async function createView3d(container, mapData, src) {
          * map does not re-render on its own. Without these two calls `?profileAblate=props` on a
          * default load draws prop shadows on ground with no props — the literal stale-shadow
          * signature, manufactured by the instrument built to measure the freeze — and the restored
-         * arm then draws props against a depth map baked while they were hidden. It is also
-         * reachable in production: `?profile=1` is deliberately not behind
-         * `canShowDiagnosticReadouts()` (evening handoff §5.5).
+         * arm then draws props against a depth map baked while they were hidden. It USED to be
+         * reachable in production too — the ablation rode in on `?profile=1`, which is deliberately
+         * not behind `canShowDiagnosticReadouts()`. Since 2026-09-03 evening `?profileAblate=` is
+         * question (e) of `src/renderer-gate.js` and loopback-only, so that half is closed; the
+         * invalidation stays because every loopback load still reaches this line.
          */
         sunShadow.invalidate('profiler-ablation');
         restorers.push(() => {
@@ -5843,6 +5879,24 @@ export async function createView3d(container, mapData, src) {
         running = true;
         renderRequested = true;
         try {
+          /*
+           * QUESTION (e), AT THE ONE PLACE BOTH ROUTES PASS THROUGH.
+           *
+           * The URL is not the only way in: `tz.profile({ ablate: 'props' })` and `tz.profileAB()`
+           * hand the spec straight to `run()` past `profileRequest`, and `runSeries()` re-enters
+           * here once per arm. So the check sits on the RESOLVED spec, after the overrides have
+           * been folded in, and it THROWS.
+           *
+           * It throws rather than dropping the flag because a dropped flag is the failure mode this
+           * whole file is written against: the run would otherwise complete, stamp
+           * `notes[0] = 'ABLATION RUN — PIXELS DELIBERATELY REMOVED (props)'` from the parsed spec,
+           * and hand back a report that reads as an attribution of props whose numbers are a plain
+           * baseline. A reader — or this agent in three months — would size P3 against it.
+           */
+          if (!sceneInstrumentsAllowed) {
+            if (ablate?.kind === 'ablate') throw new Error(refuseInstrument('profileAblate'));
+            if (selfTest) throw new Error(refuseInstrument('profileSelfTest'));
+          }
           if (selfTest?.kind === 'busy') busyMs = selfTest.busyMs;
           if (selfTest?.kind === 'nocull') {
             for (const root of [worldRoot, authoredRoot, vegetationRoot, dynamicRoot]) {
@@ -6011,6 +6065,10 @@ export async function createView3d(container, mapData, src) {
       if (ablate?.kind !== 'ablate') {
         throw new Error('an A/B series needs an ablation to alternate; reload with ?profileAblate=shadow (or props, rocks, or a comma-separated combination)');
       }
+      // Question (e), UP FRONT. `run()` refuses arm B too, but arm A is the unablated one: without
+      // this the series would spend minutes measuring a baseline and only then discover it can
+      // never take the arm the comparison exists for.
+      if (!sceneInstrumentsAllowed) throw new Error(refuseInstrument('profileAblate'));
       const repeats = Math.min(6, Math.max(1, Math.round(Number(overrides.repeats ?? 2) || 2)));
       const runs = [];
       for (let cycle = 0; cycle < repeats; cycle += 1) {
@@ -6086,7 +6144,9 @@ export async function createView3d(container, mapData, src) {
     abButton.type = 'button';
     abButton.textContent = 'Run A/B/A/B';
     abButton.style.cssText = runButton.style.cssText;
-    abButton.hidden = profileRequest.ablate?.kind !== 'ablate';
+    // …and never on a host where question (e) refuses the ablation: a button that can only throw is
+    // a promise the page cannot keep. The refusal itself is already loud in three other places.
+    abButton.hidden = profileRequest.ablate?.kind !== 'ablate' || !sceneInstrumentsAllowed;
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
     copyButton.textContent = 'Download JSON';
@@ -6105,12 +6165,19 @@ export async function createView3d(container, mapData, src) {
         `vegetation   ${mounted ? 'MOUNTED — ready' : `${veg?.mount?.phase ?? 'not started'} — WAIT, this is not the shipped forest yet`}`,
         `presets      ${profileRequest.presets.join(', ')}`,
         `frames       ${profileRequest.warmupFrames} warm-up discarded, ${profileRequest.sampleFrames} sampled, ${profileRequest.reflowFrames}x2 reflow probe`,
-        profileRequest.selfTest ? `SELF-TEST    ${profileRequest.selfTest.label} — NOT A BASELINE` : null,
+        // Both of these describe a run that WILL happen. On a host where question (e) said no they
+        // would be a claim about an instrument that is not armed, so the REFUSED lines below say it
+        // instead — one line per flag, never two lines contradicting each other.
+        profileRequest.selfTest && sceneInstrumentsAllowed ? `SELF-TEST    ${profileRequest.selfTest.label} — NOT A BASELINE` : null,
         // Two classes, spelled differently on purpose: one claims the picture is unchanged and the
         // other deliberately changes it. A reader must not have to infer which they are looking at.
-        profileRequest.ablate?.kind === 'ablate'
+        profileRequest.ablate?.kind === 'ablate' && sceneInstrumentsAllowed
           ? `ABLATION     ${profileRequest.ablate.targets.join(', ')} — ${profileRequest.ablate.pixelIdentical ? 'PIXEL-IDENTICAL BY HYPOTHESIS (verify it)' : `PIXELS CHANGE ON PURPOSE (${profileRequest.ablate.pixelChanging.join(', ')})`} — NOT A BASELINE`
           : null,
+        // Question (e). Printed ABOVE the numbers and in the same block as the ablation line,
+        // because "you asked for an instrument and this load does not have it" has to be read
+        // before anything below it is believed.
+        ...refusedInstruments.map((row) => `REFUSED      ?${row.flag} — ${row.message}`),
         profileRequest.ablate?.kind === 'unknown' ? `ignored      ${profileRequest.ablate.label}` : null,
         profileRequest.ablate?.unknown?.length ? `ignored      unknown ablation targets: ${profileRequest.ablate.unknown.join(', ')}` : null,
         profileRequest.unknownPresets.length ? `ignored      unknown presets: ${profileRequest.unknownPresets.join(', ')}` : null,
@@ -6257,7 +6324,14 @@ export async function createView3d(container, mapData, src) {
    * loop is registered after `animate()`, so within a tick the audit observes a frame three has
    * already rendered and `matrixWorld` is current.
    */
-  const shadowAudit = shadowRequest.audit
+  /*
+   * QUESTION (e) AGAIN, and this one has no run to throw from: `?shadowAudit=1` is armed at boot or
+   * never. So the refusal is the `console.error` from `refuseInstrument()` plus a REFUSED state in
+   * `renderStats().shadows.audit` — `{ armed: false }` alone would read as "nobody asked", which is
+   * exactly the silence this gate must not produce.
+   */
+  if (shadowRequest.audit && !sceneInstrumentsAllowed) refuseInstrument('shadowAudit');
+  const shadowAudit = shadowRequest.audit && sceneInstrumentsAllowed
     ? createShadowCasterAudit({
       controller: sunShadow,
       fingerprint: () => shadowCasterFingerprint(scene, { light: sun }),
@@ -6280,6 +6354,19 @@ export async function createView3d(container, mapData, src) {
     };
     requestAnimationFrame(auditTick);
   }
+  /**
+   * What `renderStats().shadows.audit` says when the audit is not running — and there are two
+   * different reasons for that, which a single `{ armed: false }` collapsed into one. `refused` is
+   * the reading that says the visitor ASKED and question (e) said no, so a JSON capture taken on a
+   * public host can never be read as an audited one.
+   */
+  const shadowAuditState = () => {
+    if (shadowAudit) return shadowAudit.stats();
+    if (shadowRequest.audit) {
+      return { armed: false, refused: true, reason: sceneMutatingInstrumentRefusal('shadowAudit', { hostname: location.hostname }) };
+    }
+    return { armed: false, refused: false, reason: null };
+  };
 
   const resize = new ResizeObserver(() => {
     const width = Math.max(1, container.clientWidth), height = Math.max(1, container.clientHeight);
@@ -6371,6 +6458,14 @@ export async function createView3d(container, mapData, src) {
       // is the single field that says "this frame is public data" — every degraded-looking
       // vegetation/terrain field below has to be read against it.
       gate: { ...rendererGate },
+      // QUESTION (e), AS MEASURED, not as asked. `refused` is a list of instruments this visitor
+      // typed and did not get: a capture, a screenshot or a downloaded report taken on a public
+      // host carries the evidence that its flags did nothing, in the same object as everything else
+      // it claims. `?profile=1` is NOT in here — it is not gated and never was.
+      instruments: {
+        sceneMutatingAllowed: sceneInstrumentsAllowed,
+        refused: refusedInstruments.map((row) => ({ ...row })),
+      },
       // `info.render.calls` is CUMULATIVE `renderer.render()` invocations since page load on the
       // WebGPU renderer (Renderer.js), not per-frame draw calls; the per-frame counter is
       // `info.render.drawCalls` (Info.js). Reading `.calls` reported a frame counter, which made
@@ -6391,7 +6486,7 @@ export async function createView3d(container, mapData, src) {
       // The sun's depth map: frozen or live, how many times it has been invalidated and by what.
       // `byReason` is the invalidation list actually exercised by this session, which is the only
       // way to tell a lane that never fires from one that fires and is not counted.
-      shadows: { ...sunShadow.stats(), audit: shadowAudit ? shadowAudit.stats() : { armed: false } },
+      shadows: { ...sunShadow.stats(), audit: shadowAuditState() },
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },
       railway: { ...railwayRenderStats },
@@ -6418,7 +6513,7 @@ export async function createView3d(container, mapData, src) {
       groundAtlas: status.groundAtlas, exactTerrain: status.exactTerrain,
       exactVegetation: status.exactVegetation,
       vegetation: authoredVegetationRenderStats(),
-      shadows: { ...sunShadow.stats(), audit: shadowAudit ? shadowAudit.stats() : { armed: false } },
+      shadows: { ...sunShadow.stats(), audit: shadowAuditState() },
       sources: { buildings: data.buildings?.length ?? 0, props: data.props?.length ?? 0, trees: data.trees?.length ?? 0, exactVegetation: exactVegetationPlan?.renderedCount ?? 0, understory: data.understory?.length ?? 0, rocks: data.rocks?.length ?? 0, water: data.water?.length ?? 0, floorSurfaces: data.floorSurfaces?.length ?? 0 },
       floorSurfaces: { ...surfaceRenderStats, stableIds: [...new Set(surfaceRenderStats.stableIds)] },
       groundcover: { ...understoryRenderStats },

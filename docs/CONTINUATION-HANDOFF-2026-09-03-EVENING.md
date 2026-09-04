@@ -261,9 +261,18 @@ that phase also covers traversal, culling, shadow command encoding, binding and 
    empty for **all 1,367** stash markers across three maps. The founder's 65 survey photos are
    rail-yard rolling stock, and raw captures are categorically unpromotable. Options: per-*type*
    wiki illustration (~4–8 h, ships) or his own photos (localhost only, forever).
-5. **Profiler gating.** It is deliberately NOT behind `canShowDiagnosticReadouts()` (dev+loopback),
-   because both places a real baseline can be taken answer that `false`. It has its own predicate
-   with a test pinning them apart. Consequence: on production, `?profile=1` exposes render stats.
+5. ~~**Profiler gating.**~~ **SETTLED 2026-09-03, at the push.** `?profile=1` stays PUBLIC — it is
+   deliberately NOT behind `canShowDiagnosticReadouts()` (dev+loopback), because both places a real
+   baseline can be taken answer that `false`, and it has its own predicate with a test pinning them
+   apart. Consequence, accepted: on production, `?profile=1` exposes render stats. `?shadows=live`
+   stays public too (pixel-identical by proof, and the rollback if a frozen shadow ever misbehaves).
+   What DID move: `?profileAblate=`, `?profileSelfTest=` and `?shadowAudit=` are now question (e) of
+   `src/renderer-gate.js` — `canRunSceneMutatingInstruments({ hostname })`, **loopback only, taking
+   no `dev`**, because §3a's ablation sequence and every `.e2e/` fidelity harness run a release
+   `vite preview` on 127.0.0.1. Refused off loopback on four channels (console, panel, a throw
+   instead of a report, `renderStats().instruments`), never a silent no-op. It is a RUNTIME refusal:
+   the bodies are still in the chunk, unreachable, because the release bundle is also the bundle the
+   instruments have to run in on loopback. Full statement: `docs/PROFILING.md` §0.
 6. **Latent, preserved on purpose:** a mark whose box overlaps the frame but whose anchor point is
    off-screen stays hidden until the anchor comes on. Asymmetric; changing it would move pixels.
 
